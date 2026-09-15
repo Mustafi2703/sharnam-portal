@@ -54,7 +54,7 @@ type BidPackage = {
   } | null;
 };
 
-const SHOW_DEV_BID_TOOLS = true;
+const SHOW_DEV_BID_TOOLS = false;
 
 function formatINR(n: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
@@ -65,7 +65,7 @@ type BidWorkflowStep = "configure" | "publish" | "collect" | "compare" | "award"
 const BID_WORKFLOW_STEPS: { id: BidWorkflowStep; label: string; hint: string }[] = [
   { id: "configure", label: "Configure", hint: "Project · work packages · vendors" },
   { id: "publish", label: "Publish", hint: "Open bid & notify bidders" },
-  { id: "collect", label: "Collect BOQs", hint: "Separate SPDC BOQ per vendor × package — Qty + Rate" },
+  { id: "collect", label: "Collect BOQs", hint: "8 work packages · vendor fills rate only (qty from budget)" },
   { id: "compare", label: "Compare", hint: "Refresh comparative statement" },
   { id: "award", label: "Award", hint: "Select L1 & close package" },
 ];
@@ -149,6 +149,7 @@ export default function CrmBidComparePage() {
   const [dueDate, setDueDate] = useState("");
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
   const [showSharePoint, setShowSharePoint] = useState(false);
+  const [showBidExtras, setShowBidExtras] = useState(false);
   const [actionError, setActionError] = useState<ActionReason | null>(null);
   const [clearConfirm, setClearConfirm] = useState("");
 
@@ -415,6 +416,16 @@ export default function CrmBidComparePage() {
       }),
     }));
   }, [detail, detailDisciplines, matrixDisciplines]);
+
+  const summaryVendorGap = useMemo(() => {
+    const summaryLabels = detail?.summary?.vendorLabels || [];
+    if (!summaryLabels.length) return null;
+    const slotLabels = new Set(detail?.vendorBoqs?.map((b) => b.vendorLabel) || []);
+    const inSummaryOnly = summaryLabels.filter((v) => !slotLabels.has(v));
+    const inSlotsOnly = [...slotLabels].filter((v) => !summaryLabels.includes(v));
+    if (!inSummaryOnly.length && !inSlotsOnly.length) return null;
+    return { inSummaryOnly, inSlotsOnly };
+  }, [detail]);
 
   async function openBidPackage() {
     if (!selectedId) return;
@@ -772,8 +783,10 @@ export default function CrmBidComparePage() {
 
   return (
     <div className="crm-bid-page space-y-3">
-      <p className="text-xs text-steel-muted max-w-3xl leading-relaxed px-0.5">
-        R2 comparative bids per project. Add vendors from <strong className="text-ink">CRM → Vendors</strong>, open the package, collect BOQs, refresh comparative, award L1. Company master stays on CRM directory tabs only.
+      <p className="text-xs text-steel-muted max-w-3xl leading-relaxed px-0.5 shrink-0">
+        R2 comparative bids per project — one BOQ file per work package (CCV, Electrical Lab, Admin Building, etc.).
+        Import budget on Cost → Monitoring first; bid templates pull item, section, UOM, and qty from monitoring. Vendors fill{" "}
+        <strong className="text-ink">rate only</strong>; refresh comparative for L1 award.
       </p>
       <Card className="!p-3">
         <div className="flex flex-wrap items-end gap-2">
@@ -833,7 +846,7 @@ export default function CrmBidComparePage() {
         <p className={`text-sm shrink-0 px-0.5 ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>
       )}
 
-      {(showNewBidForm || detail) && (
+      {(showNewBidForm || detail || setupProjectId) && (
         <BidDeskStepper active={bidWorkflowStep} complete={detail?.status === "Awarded"} />
       )}
 
@@ -902,11 +915,12 @@ export default function CrmBidComparePage() {
               </p>
               {!disciplines.length ? (
                 <p className="text-xs text-amber-800 border border-amber-200 rounded-lg p-2 bg-amber-50">
-                  No work packages on this project yet. Add packages (Civil, PEB, MEP, etc.) on{" "}
+                  No work packages on this project yet. On{" "}
                   <Link to={`/crm/setup?projectId=${form.projectId}&step=project`} className="text-brand font-semibold">
                     Project setup
-                  </Link>{" "}
-                  first — not the R2 sheet list (CCV, Electrical Lab, etc.).
+                  </Link>
+                  , keep the eight R2 packages (CCV, Electrical Lab, Admin Building, Security, Cooling Tower, Weigh
+                  Bridge, U.G Tank + Pump Room, Entrance Gate), then sync budget monitoring on Cost.
                 </p>
               ) : (
               <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1">
@@ -931,15 +945,8 @@ export default function CrmBidComparePage() {
               )}
             </div>
             <p className="text-xs text-steel-muted">
-              Each vendor uploads one BOQ per work package using the{" "}
-              <button
-                type="button"
-                className="text-brand font-semibold underline-offset-2 hover:underline"
-                onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-              >
-                Comparative Statement R2 (.xlsx)
-              </button>{" "}
-              sample format.
+              Each vendor gets one BOQ per selected work package — lines from project budget monitoring (item, section,
+              UOM, qty). Vendor fills <strong className="text-ink">rate</strong> only; comparative uses qty × rate.
             </p>
             <div>
               <p className="text-xs font-semibold text-steel-muted mb-1">
@@ -1097,9 +1104,10 @@ export default function CrmBidComparePage() {
                   </p>
                 </Card>
               )}
-              <Card>
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                  <div>
+              <div className="crm-bid-desk__section">
+              <Card className="!p-4">
+                <div className="crm-bid-desk__section-head">
+                  <div className="min-w-0">
                     <h3 className="font-semibold">{detail.title}</h3>
                     <p className="text-xs text-steel-muted mt-0.5">
                       {detail.project?.code ? (
@@ -1113,8 +1121,11 @@ export default function CrmBidComparePage() {
                         </span>
                       )}
                     </p>
+                    {detail.project?.name && (
+                      <p className="text-[11px] text-steel-muted mt-1 line-clamp-2">{detail.project.name}</p>
+                    )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 shrink-0">
                     {(detail.status === "Draft" || detail.status === "Open") && (
                       <Button type="button" disabled={busy} onClick={() => void openBidPackage()}>
                         {detail.status === "Draft" ? "Open bid & notify bidders" : "Resend bid invites"}
@@ -1128,11 +1139,6 @@ export default function CrmBidComparePage() {
                     <Button type="button" variant="secondary" disabled={busy} onClick={() => void recomputeComparative()}>
                       Refresh comparative
                     </Button>
-                    {SHOW_DEV_BID_TOOLS && canManage && (
-                      <Button type="button" variant="secondary" disabled={busy} onClick={() => void simulateR2Boqs()}>
-                        Load test BOQs from R2
-                      </Button>
-                    )}
                     {canManage && token && (
                       <BidManageActions
                         bid={{
@@ -1173,7 +1179,7 @@ export default function CrmBidComparePage() {
                   ];
                   if (!noEmail.length && !accessSlip.length) return null;
                   return (
-                    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1">
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1">
                       {noEmail.length > 0 && (
                         <p>
                           <strong>No email on file:</strong> {noEmail.join(", ")}. Add an email on the vendor card before they can receive a login.
@@ -1192,57 +1198,134 @@ export default function CrmBidComparePage() {
                     </div>
                   );
                 })()}
-
-                {/* Package progress meter — visible at a glance so PMC knows
-                    what's still missing before the comparison can be locked. */}
-                {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
-                  <div className="mb-4 space-y-3">
-                    <CrmComparativeRegister
-                      summary={detail.summary}
-                      summarySheetId={detail.summarySheetId}
-                      masterSheetId={detail.comparativeSheetId}
-                      revisionLabel={detail.revisionLabel}
-                    />
-
-                    {vendorTotals.length > 1 && detail.status !== "Awarded" && (
-                      <div className="p-3 border border-brand/30 rounded-xl bg-brand-soft/30">
-                        <p className="text-xs font-mono uppercase text-steel-muted mb-2">Award recommendation</p>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          {vendorTotals.map((v) => (
-                            <div key={v.label} className="flex items-center gap-1.5">
-                              <span className={`text-xs px-2 py-1 rounded-full border ${v.isLowest ? "bg-ok text-white border-ok" : "border-line text-steel-muted"}`}>
-                                {v.label} · {formatINR(v.total)} {v.isLowest && "· L1"}
-                              </span>
-                              <Button
-                                type="button"
-                                variant={v.isLowest ? "primary" : "secondary"}
-                                className="!text-xs !py-1"
-                                disabled={busy}
-                                onClick={() => void awardVendor(v.label)}
-                              >
-                                Award
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {detail.notes && (
-                  <p className="text-xs text-steel-muted mb-3 border-l-2 border-brand pl-2">{detail.notes}</p>
+                  <p className="text-xs text-steel-muted mt-3 border-l-2 border-brand pl-2">{detail.notes}</p>
                 )}
+              </Card>
 
-                <div className="mb-4 rounded-xl border border-brand/30 bg-brand-soft/20 p-3 space-y-4">
-                  <p className="text-xs font-semibold text-ink">Add vendors and discipline sheets to this bid</p>
+              {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
+                <Card className="!p-4 min-w-0">
+                  {summaryVendorGap && (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                      {summaryVendorGap.inSummaryOnly.length > 0 && (
+                        <>
+                          Comparative lists{" "}
+                          <strong>{summaryVendorGap.inSummaryOnly.join(", ")}</strong> but they have no BOQ slots on this
+                          package — use <strong>Add bidders</strong> below, then refresh comparative.
+                        </>
+                      )}
+                      {summaryVendorGap.inSummaryOnly.length > 0 && summaryVendorGap.inSlotsOnly.length > 0 ? " " : null}
+                      {summaryVendorGap.inSlotsOnly.length > 0 && (
+                        <>
+                          BOQ matrix includes{" "}
+                          <strong>{summaryVendorGap.inSlotsOnly.join(", ")}</strong> not yet in section totals — upload
+                          BOQs and click Refresh comparative.
+                        </>
+                      )}
+                    </p>
+                  )}
+                  <CrmComparativeRegister
+                    summary={detail.summary}
+                    summarySheetId={detail.summarySheetId}
+                    masterSheetId={detail.comparativeSheetId}
+                    revisionLabel={detail.revisionLabel}
+                  />
+
+                  {vendorTotals.length > 1 && detail.status !== "Awarded" && (
+                    <div className="mt-3 p-3 border border-brand/30 rounded-xl bg-brand-soft/30">
+                      <p className="text-xs font-mono uppercase text-steel-muted mb-2">Award recommendation</p>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        {vendorTotals.map((v) => (
+                          <div key={v.label} className="flex items-center gap-1.5">
+                            <span className={`text-xs px-2 py-1 rounded-full border ${v.isLowest ? "bg-ok text-white border-ok" : "border-line text-steel-muted"}`}>
+                              {v.label} · {formatINR(v.total)} {v.isLowest && "· L1"}
+                            </span>
+                            <Button
+                              type="button"
+                              variant={v.isLowest ? "primary" : "secondary"}
+                              className="!text-xs !py-1"
+                              disabled={busy}
+                              onClick={() => void awardVendor(v.label)}
+                            >
+                              Award
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {vendorMatrix.length > 0 && (
+                <Card className="!p-4 min-w-0">
+                  <div className="flex flex-wrap gap-1 mb-3" role="tablist" aria-label="Discipline BOQ">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeDiscipline === "all"}
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border ${
+                        activeDiscipline === "all" ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
+                      }`}
+                      onClick={() => setActiveDiscipline("all")}
+                    >
+                      All disciplines
+                    </button>
+                    {detailDisciplines.map((d) => (
+                      <button
+                        key={d.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeDiscipline === d.key}
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border max-w-[180px] truncate ${
+                          activeDiscipline === d.key ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
+                        }`}
+                        onClick={() => setActiveDiscipline(d.key)}
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                  <CrmBidVendorMatrix
+                    disciplines={matrixDisciplines.length ? matrixDisciplines : detailDisciplines}
+                    vendorMatrix={vendorMatrix}
+                    grandTotals={detail.summary?.grandTotals}
+                    lowestVendor={detail.summary?.lowestVendor}
+                    onManageSlot={openSlotPanel}
+                    onCopyLink={copyVendorLink}
+                  />
+                  {selectedId && detail.project?.code && token && (
+                    <div className="mt-4">
+                      {!showSharePoint ? (
+                        <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowSharePoint(true)}>
+                          Show SharePoint BOQ tree
+                        </Button>
+                      ) : (
+                        <CrmBidSharePointPanel token={token} bidPackageId={selectedId} />
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              <Card className="!p-0 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left text-xs font-semibold text-ink hover:bg-sand/30"
+                  onClick={() => setShowBidExtras((v) => !v)}
+                >
+                  <span>Add bidders & discipline BOQ slots</span>
+                  <span className="text-steel-muted font-normal">{showBidExtras ? "Hide" : "Show"}</span>
+                </button>
+                {showBidExtras && (
+                  <div className="px-4 pb-4 space-y-4 border-t border-line">
                     <div>
-                      <p className="text-[11px] text-steel-muted mb-2">
+                      <p className="text-[11px] text-steel-muted mb-2 pt-3">
                         Pick from{" "}
                         <Link to="/crm/directory/vendors" className="text-brand font-semibold">
                           CRM vendor directory
                         </Link>
-                        . Open bids email new bidders automatically.
+                        . New bidders get empty BOQ slots — no auto-fill; they upload rates or fill online.
                       </p>
                       <div className="flex flex-wrap gap-2 mb-2 max-h-28 overflow-y-auto">
                         {vendorsNotOnPackage.map((v) => (
@@ -1303,59 +1386,10 @@ export default function CrmBidComparePage() {
                         Add selected disciplines
                       </Button>
                     </div>
-                </div>
-
-                {vendorMatrix.length > 0 && (
-                  <div className="mb-4 w-full min-w-0 overflow-x-auto">
-                    <div className="flex flex-wrap gap-1 mb-3" role="tablist" aria-label="Discipline BOQ">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeDiscipline === "all"}
-                        className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border ${
-                          activeDiscipline === "all" ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
-                        }`}
-                        onClick={() => setActiveDiscipline("all")}
-                      >
-                        All disciplines
-                      </button>
-                      {detailDisciplines.map((d) => (
-                        <button
-                          key={d.key}
-                          type="button"
-                          role="tab"
-                          aria-selected={activeDiscipline === d.key}
-                          className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border max-w-[180px] truncate ${
-                            activeDiscipline === d.key ? "bg-procore-navy text-white border-procore-navy" : "bg-paper border-line"
-                          }`}
-                          onClick={() => setActiveDiscipline(d.key)}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
-                    <CrmBidVendorMatrix
-                      disciplines={matrixDisciplines.length ? matrixDisciplines : detailDisciplines}
-                      vendorMatrix={vendorMatrix}
-                      grandTotals={detail.summary?.grandTotals}
-                      lowestVendor={detail.summary?.lowestVendor}
-                      onManageSlot={openSlotPanel}
-                      onCopyLink={copyVendorLink}
-                    />
-                    {selectedId && detail.project?.code && token && (
-                      <div className="mt-4">
-                        {!showSharePoint ? (
-                          <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowSharePoint(true)}>
-                            Show SharePoint BOQ tree
-                          </Button>
-                        ) : (
-                          <CrmBidSharePointPanel token={token} bidPackageId={selectedId} />
-                        )}
-                      </div>
-                    )}
                   </div>
                 )}
               </Card>
+              </div>
 
               {slotPanel && selectedId && (
                 <Card>
@@ -1365,7 +1399,7 @@ export default function CrmBidComparePage() {
                         {slotPanel.slot.vendorLabel} · {disciplineLabel(disciplines, slotPanel.slot.discipline)}
                       </h4>
                       <p className="text-xs text-steel-muted">
-                        Separate BOQ per contractor × work package. Download SPDC sample, fill Qty + Rate, or edit in portal — comparative updates for office.
+                        Separate BOQ per contractor × work package. Lines from budget monitoring — vendor fills rate only, or upload filled Excel.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1448,12 +1482,25 @@ export default function CrmBidComparePage() {
               )}
             </>
           ) : (
-            <Card>
-              <p className="text-sm text-steel-muted">
-                Select a bid package. Each vendor uploads one Excel per work package (Civil, PEB, MEP, etc.) —
-                same structure as Comparative Statement R2.
-              </p>
-            </Card>
+            <div className="crm-bid-desk__empty">
+              <div className="text-4xl" aria-hidden>
+                📋
+              </div>
+              <p className="font-semibold text-ink text-sm">Bid workflow</p>
+              <ol className="text-xs text-steel-muted space-y-1 max-w-md text-left list-decimal list-inside">
+                <li>Pick a project above (or choose one from the left rail).</li>
+                <li>Create an R2 bid — eight work packages, one BOQ file each.</li>
+                <li>Vendors fill rates; qty and items come from budget monitoring.</li>
+                <li>Refresh comparative and award L1.</li>
+              </ol>
+              {setupProjectId ? (
+                <Button type="button" onClick={() => openNewBidSetup({ projectId: setupProjectId })}>
+                  + New bid for this project
+                </Button>
+              ) : (
+                <p className="text-xs">Choose a project in the dropdown to start.</p>
+              )}
+            </div>
           )}
           </div>
         </div>

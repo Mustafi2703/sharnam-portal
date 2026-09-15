@@ -1,5 +1,5 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import {
@@ -8,19 +8,6 @@ import {
   type CrmProjectRow,
 } from "../../components/CrmProjectsRegister";
 import { Button, Card, Input } from "../../components/ui";
-
-const EMPTY = {
-  code: "",
-  name: "",
-  clientName: "",
-  clientContactName: "",
-  clientEmail: "",
-  clientPhone: "",
-  clientAddress: "",
-  location: "",
-  designConsultant: "",
-  contractorName: "",
-};
 
 type QuotationLinkRow = {
   id: string;
@@ -31,13 +18,9 @@ type QuotationLinkRow = {
 
 export default function CrmProjectsPage() {
   const { token, user } = useAuth();
-  const [params, setParams] = useSearchParams();
   const canManage = user?.role === "admin" || user?.role === "office";
-  const showCreate = params.get("create") === "1";
 
   const [projects, setProjects] = useState<CrmProjectRow[]>([]);
-  const [selected, setSelected] = useState<CrmProjectRow | null>(null);
-  const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [deleteProject, setDeleteProject] = useState<CrmProjectRow | null>(null);
@@ -47,7 +30,6 @@ export default function CrmProjectsPage() {
     if (!token) return;
     const rows = await api<CrmProjectRow[]>("/api/projects", { token });
     setProjects(rows);
-    setSelected((cur) => (cur ? rows.find((p) => p.id === cur.id) || cur : rows[0] || null));
   }, [token]);
 
   const [proposalByProjectId, setProposalByProjectId] = useState<Record<string, CrmProjectProposalLink>>({});
@@ -79,30 +61,6 @@ export default function CrmProjectsPage() {
     [deleteProject, proposalByProjectId],
   );
 
-  async function createProject(e: FormEvent) {
-    e.preventDefault();
-    if (!token) return;
-    setBusy(true);
-    setMsg("");
-    try {
-      const created = await api<CrmProjectRow>("/api/projects", {
-        method: "POST",
-        token,
-        body: JSON.stringify(form),
-      });
-      setForm(EMPTY);
-      setParams({}, { replace: true });
-      await load();
-      setSelected(created);
-      setMsg(`Project ${created.code} saved. Opening the project card…`);
-      window.location.assign(`/crm/setup?projectId=${created.id}&step=project`);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-5 p-4 sm:p-5 pb-8 min-w-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -110,8 +68,9 @@ export default function CrmProjectsPage() {
           <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · projects</p>
           <h2 className="font-display text-lg text-ink">Projects register</h2>
           <p className="text-xs text-steel-muted mt-1 max-w-2xl leading-relaxed">
-            Delivery jobs and client cards. Award a proposal to land here as Planning, or create a project directly.
-            Select a row for the client card — use <strong className="font-semibold text-ink">Edit setup</strong> for parties and staff,{" "}
+            Delivery jobs and client cards. Award a proposal to land here as Planning, or use{" "}
+            <strong className="font-semibold text-ink">New project</strong> to open the project setup card directly.
+            Use <strong className="font-semibold text-ink">Edit setup</strong> for parties and staff,{" "}
             <strong className="font-semibold text-ink">Open desk</strong> when live.
           </p>
           {!canManage && (
@@ -120,8 +79,8 @@ export default function CrmProjectsPage() {
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
-            <Link to="/crm/projects?create=1">
-              <Button type="button" variant="secondary" className="!text-xs">
+            <Link to="/crm/setup">
+              <Button type="button" className="!text-xs">
                 + New project
               </Button>
             </Link>
@@ -140,40 +99,9 @@ export default function CrmProjectsPage() {
         </p>
       )}
 
-      {showCreate && canManage && (
-        <Card className="!p-4 space-y-3 border-brand/30">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-sm">New delivery project</h3>
-              <p className="text-xs text-steel-muted">Creates the project row. Next: Project setup for matrix and team.</p>
-            </div>
-            <Button type="button" variant="ghost" className="!text-xs" onClick={() => setParams({}, { replace: true })}>
-              Close
-            </Button>
-          </div>
-          <form className="grid sm:grid-cols-2 gap-2" onSubmit={createProject}>
-            <Input required placeholder="Project code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-            <Input required placeholder="Project name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Input placeholder="Client organisation" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
-            <Input required placeholder="Client location (site / city)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <Input placeholder="Client contact" value={form.clientContactName} onChange={(e) => setForm({ ...form, clientContactName: e.target.value })} />
-            <Input type="email" placeholder="Client email" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
-            <Input placeholder="Client phone" value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} />
-            <Input placeholder="Client office address" value={form.clientAddress} onChange={(e) => setForm({ ...form, clientAddress: e.target.value })} />
-            <Input placeholder="Design consultant" value={form.designConsultant} onChange={(e) => setForm({ ...form, designConsultant: e.target.value })} />
-            <Input placeholder="Main contractor" value={form.contractorName} onChange={(e) => setForm({ ...form, contractorName: e.target.value })} />
-            <Button type="submit" className="sm:col-span-2" disabled={busy}>
-              Create project
-            </Button>
-          </form>
-        </Card>
-      )}
-
       <CrmProjectsRegister
         projects={projects}
         canWrite={canManage}
-        selectedId={selected?.id || null}
-        onSelect={setSelected}
         proposalByProjectId={proposalByProjectId}
         onDelete={(p) => {
           setDeleteProject(p);
@@ -221,7 +149,6 @@ export default function CrmProjectsPage() {
                     });
                     setMsg(`Deleted ${deleteProject.code}.`);
                     setDeleteProject(null);
-                    setSelected(null);
                     await load();
                     await loadProposals();
                   } catch (err) {

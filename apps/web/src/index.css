@@ -492,17 +492,15 @@ html.is-standalone-form #root {
   overflow: auto;
   padding: 0.75rem 1rem 1rem;
 }
-.crm-nav-divider {
-  width: 1px;
-  height: 1.25rem;
-  background: var(--color-line);
-  margin: 0 0.125rem;
-  align-self: center;
-  flex-shrink: 0;
+.crm-shell:has(.crm-bid-page) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem 0.75rem;
 }
 .crm-bid-page {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(720px, calc(100vh - 11rem));
   min-width: 0;
   width: 100%;
   display: flex;
@@ -512,7 +510,7 @@ html.is-standalone-form #root {
 .crm-bid-desk {
   display: flex;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(560px, 62vh);
   min-width: 0;
   width: 100%;
   border: 1px solid var(--color-line);
@@ -556,6 +554,90 @@ html.is-standalone-form #root {
   padding: 0.625rem 0.75rem;
   border-bottom: 1px solid var(--color-line);
   background: var(--color-paper);
+}
+.crm-bid-desk__empty {
+  flex: 1 1 auto;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--color-steel-muted);
+}
+/* Bid desk — wide comparative / matrix tables scroll inside panels (desktop) */
+.crm-bid-desk .register-sheet-frame {
+  flex: none !important;
+  min-height: 12rem !important;
+  max-height: min(28rem, 42vh) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.crm-bid-desk .sheet-register__scroll,
+.crm-bid-desk .register-scroll-area {
+  flex: 1 1 auto !important;
+  min-height: 10rem !important;
+  max-height: none !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+}
+.crm-bid-desk .sheet-register__table--comparative th:first-child,
+.crm-bid-desk .sheet-register__table--comparative td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--color-paper);
+  box-shadow: 1px 0 0 var(--color-line);
+  min-width: 4rem;
+}
+.crm-bid-desk .sheet-register__table--comparative th:nth-child(2),
+.crm-bid-desk .sheet-register__table--comparative td:nth-child(2) {
+  position: sticky;
+  left: 4rem;
+  z-index: 2;
+  background: var(--color-paper);
+  box-shadow: 1px 0 0 var(--color-line);
+  min-width: 12rem;
+  max-width: 16rem;
+  white-space: normal;
+}
+.crm-bid-desk .sheet-register__table--comparative thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: color-mix(in srgb, var(--color-sand) 70%, var(--color-paper));
+}
+.crm-bid-desk .sheet-register__table--comparative thead th:first-child,
+.crm-bid-desk .sheet-register__table--comparative thead th:nth-child(2) {
+  z-index: 4;
+}
+.crm-bid-desk .sheet-register__table th,
+.crm-bid-desk .sheet-register__table td {
+  white-space: nowrap;
+}
+.crm-bid-desk__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.crm-bid-desk__section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.crm-nav-divider {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--color-line);
+  margin: 0 0.125rem;
+  align-self: center;
+  flex-shrink: 0;
 }
 @media (max-width: 1023px) {
   .crm-bid-desk {

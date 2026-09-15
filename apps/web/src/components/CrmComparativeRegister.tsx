@@ -72,7 +72,7 @@ export function CrmComparativeRegister({
         rowCount={summary.sectionTotals.length + 1}
         className="min-h-[200px]"
       >
-        <table className="sheet-register__table min-w-[720px]">
+        <table className="sheet-register__table sheet-register__table--comparative min-w-[720px]">
           <thead>
             <tr>
               <th className="w-16">Sec</th>

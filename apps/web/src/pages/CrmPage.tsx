@@ -387,7 +387,7 @@ export default function CrmPage() {
               </Link>
               <Link to="/crm/setup">
                 <Button type="button" variant="secondary">
-                  Standalone project setup →
+                  + New project →
                 </Button>
               </Link>
             </div>

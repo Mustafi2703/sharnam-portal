@@ -19,6 +19,7 @@ import {
 import { mockOneDrive } from "./mockOneDrive.js";
 import { CRM_SHAREPOINT, syncBufferToProjectSharePoint } from "./crmSharePoint.js";
 import { recomputeAndSyncBidPackage } from "./crmBidRecompute.js";
+import { loadMonitoringBoqTemplate } from "./monitoringBoqTemplate.js";
 
 const VENDOR_RATE_FACTOR: Record<string, number> = {
   "M/s Bhavna Infra": 1,
@@ -187,15 +188,20 @@ export async function ensureVendorBoqSheet(
 
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: bidPackageId },
-    select: { title: true, disciplinesJson: true },
+    select: { title: true, disciplinesJson: true, projectId: true },
   });
   if (!pkg) throw new Error("Bid package not found");
   const disciplines = parseDisciplinesJson(pkg.disciplinesJson);
   const disc = disciplineCatalogEntry(slot.discipline, disciplines);
+  const fromMonitoring = pkg.projectId
+    ? await loadMonitoringBoqTemplate(prisma, pkg.projectId, slot.discipline, disciplines)
+    : null;
   const imported = importR2WorkbookFromFile();
   const template = imported.disciplineTemplates[slot.discipline];
   let parsed: ImportedSheet;
-  if (template?.rows?.length) {
+  if (fromMonitoring?.rows?.length) {
+    parsed = fromMonitoring;
+  } else if (template?.rows?.length) {
     parsed = blankVendorRates(template);
   } else {
     const r2Path = resolveR2TemplatePath();
@@ -211,7 +217,9 @@ export async function ensureVendorBoqSheet(
       category: "CRM Vendor BOQ",
       headersJson: JSON.stringify(parsed.headers),
       rowsJson: JSON.stringify(parsed.rows),
-      sourceFile: "Comparative Statement - R2.xlsx (vendor template)",
+      sourceFile: fromMonitoring?.rows?.length
+        ? "Project budget monitoring (SPDC Budget)"
+        : "Comparative Statement - R2.xlsx (vendor template)",
       createdById: officeUserId,
     },
   });

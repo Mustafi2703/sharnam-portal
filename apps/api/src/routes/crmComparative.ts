@@ -38,6 +38,7 @@ import {
   recomputeAndSyncBidPackage,
   vendorCanEditBoqSheet,
 } from "../services/crmBidRecompute.js";
+import { loadMonitoringBoqTemplate } from "../services/monitoringBoqTemplate.js";
 import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
 
 export const crmComparativeRouter = Router();
@@ -1240,7 +1241,7 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
   try {
     const pkg = await prisma.crmBidPackage.findUnique({
       where: { id: req.params.id },
-      include: { project: { select: { code: true, name: true } } },
+      include: { project: { select: { id: true, code: true, name: true } } },
     });
     if (!pkg) return res.status(404).json({ error: "bid package not found" });
 
@@ -1263,6 +1264,10 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
     const safeVendor = slot.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
     const fileName = `SPDC-BOQ-${slot.discipline}-${safeVendor}.xlsx`;
 
+    const monitoringSheet = pkg.project?.id
+      ? await loadMonitoringBoqTemplate(prisma, pkg.project.id, slot.discipline, disciplines)
+      : null;
+
     const buffer = buildVendorBoqTemplateXlsx({
       disciplineKey: slot.discipline,
       vendorLabel: slot.vendorLabel,
@@ -1271,6 +1276,7 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
       pkgTitle: pkg.title,
       revisionLabel: pkg.revisionLabel || "R2",
       disciplines,
+      sheet: monitoringSheet || undefined,
     });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

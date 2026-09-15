@@ -13,6 +13,7 @@ import {
   blankVendorRates,
   type ComparativeSummary,
 } from "./comparativeStatement.js";
+import { loadMonitoringBoqTemplate } from "./monitoringBoqTemplate.js";
 
 function numCell(cell?: SheetCell): number {
   const n = Number(cell?.computed ?? cell?.raw ?? 0);
@@ -158,7 +159,7 @@ export async function ensureVendorBoqTemplateSheets(
   const imported = importR2WorkbookFromFile(undefined, vendorNames);
   const pkg = await prisma.crmBidPackage.findUnique({
     where: { id: pkgId },
-    select: { title: true },
+    select: { title: true, projectId: true },
   });
   if (!pkg) return 0;
 
@@ -168,14 +169,19 @@ export async function ensureVendorBoqTemplateSheets(
   for (const slot of slots) {
     if (slot.sheetId) continue;
     const disc = disciplineCatalogEntry(slot.discipline, disciplines);
+    const fromMonitoring = pkg.projectId
+      ? await loadMonitoringBoqTemplate(prisma, pkg.projectId, slot.discipline, disciplines)
+      : null;
     const template = imported.disciplineTemplates[slot.discipline];
-    const parsed = template?.rows?.length
-      ? blankVendorRates(template)
-      : {
-          headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
-          rows: [] as SheetCell[][],
-          sheetName: disc?.sheetName || slot.discipline,
-        };
+    const parsed = fromMonitoring?.rows?.length
+      ? fromMonitoring
+      : template?.rows?.length
+        ? blankVendorRates(template)
+        : {
+            headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
+            rows: [] as SheetCell[][],
+            sheetName: disc?.sheetName || slot.discipline,
+          };
 
     const boqSheet = await prisma.customSheet.create({
       data: {
@@ -183,7 +189,9 @@ export async function ensureVendorBoqTemplateSheets(
         category: "CRM Vendor BOQ",
         headersJson: JSON.stringify(parsed.headers),
         rowsJson: JSON.stringify(parsed.rows),
-        sourceFile: "Comparative Statement - R2.xlsx (template)",
+        sourceFile: fromMonitoring?.rows?.length
+          ? "Project budget monitoring (SPDC Budget)"
+          : "Comparative Statement - R2.xlsx (template)",
         createdById,
       },
     });
