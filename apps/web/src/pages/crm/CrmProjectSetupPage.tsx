@@ -12,6 +12,7 @@ import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
+import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../../lib/workPackages";
 
 type ProjectRow = {
   id: string;
@@ -216,14 +217,9 @@ export default function CrmProjectSetupPage() {
     setStaffIds(
       s.members.filter((m) => isSpdcStaffMember(m)).map((m) => m.userId).filter(Boolean)
     );
-    void api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
+    void api<{ workPackages?: string | string[] }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
-        try {
-          const parsed = p.workPackages ? JSON.parse(p.workPackages) : [];
-          setProjectPackages(Array.isArray(parsed) ? parsed : []);
-        } catch {
-          setProjectPackages([]);
-        }
+        setProjectPackages(sanitizeProjectWorkPackages(parseWorkPackagesField(p.workPackages)));
       })
       .catch(() => setProjectPackages([]));
   }, [token, projectId]);
@@ -265,7 +261,7 @@ export default function CrmProjectSetupPage() {
           contractorName: createForm.contractorName || firstContractor?.name || "",
           pmcName: createForm.pmcName || firstPmc?.name || "SPDC",
           vendorIds: [...consultantIds, ...pmcIds, ...contractorIds, ...(clientId ? [clientId] : [])],
-          workPackages: projectPackages,
+          workPackages: sanitizeProjectWorkPackages(projectPackages),
           memberIds: staffIds.filter((id) => {
             const u = users.find((x) => x.id === id);
             return u && isSpdcStaffUser(u);
@@ -321,7 +317,7 @@ export default function CrmProjectSetupPage() {
           startDate: details.startDate || null,
           endDate: details.endDate || null,
           status: details.status || "Planning",
-          workPackages: projectPackages,
+          workPackages: sanitizeProjectWorkPackages(projectPackages),
         }),
       });
       await api(`/api/projects/${projectId}/assign-parties`, {

@@ -10,6 +10,41 @@ function isBidDisciplineCatalogName(name: string) {
   return R2_BID_LABELS.has(name.trim().toLowerCase());
 }
 
+/** Remove R2 comparative bid sheet names that were mistakenly saved as work packages. */
+export function sanitizeProjectWorkPackages(raw: string[] | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw || []) {
+    const p = String(item || "").trim();
+    if (!p || isBidDisciplineCatalogName(p)) continue;
+    const key = p.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out.sort();
+}
+
+export async function repairProjectWorkPackagesIfNeeded(projectId: string, rawJson?: string | null) {
+  let raw: string[] = [];
+  try {
+    const parsed = JSON.parse(rawJson || "[]");
+    raw = Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    raw = [];
+  }
+  const cleaned = sanitizeProjectWorkPackages(raw);
+  const stored = JSON.stringify(raw);
+  const next = JSON.stringify(cleaned);
+  if (stored !== next) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { workPackages: next },
+    });
+  }
+  return cleaned;
+}
+
 /** Org-wide default catalogue — generic trades, not Sanika R2 bid sheet names. */
 export const SPDC_DEFAULT_WORK_PACKAGES = [
   "Civil",
@@ -60,7 +95,7 @@ export async function getWorkPackageCatalog(): Promise<string[]> {
   for (const p of projects) {
     try {
       const parsed = JSON.parse(p.workPackages || "[]");
-      if (Array.isArray(parsed)) fromProjects.push(...parsed.map(String));
+      if (Array.isArray(parsed)) fromProjects.push(...sanitizeProjectWorkPackages(parsed.map(String)));
     } catch {
       /* ignore */
     }
@@ -100,7 +135,7 @@ export function parseProjectWorkPackages(raw?: string | null): string[] {
   if (!raw) return [];
   try {
     const p = JSON.parse(raw);
-    return Array.isArray(p) ? p.map(String).filter(Boolean) : [];
+    return sanitizeProjectWorkPackages(Array.isArray(p) ? p.map(String) : []);
   } catch {
     return [];
   }

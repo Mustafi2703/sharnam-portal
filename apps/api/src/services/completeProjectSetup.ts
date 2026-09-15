@@ -126,12 +126,8 @@ export async function getProjectSetupStatus(projectId: string) {
   });
   if (!project) return null;
 
-  let packages: string[] = [];
-  try {
-    packages = JSON.parse(project.workPackages || "[]");
-  } catch {
-    packages = [];
-  }
+  const { repairProjectWorkPackagesIfNeeded } = await import("./workPackageCatalog.js");
+  const packages = await repairProjectWorkPackagesIfNeeded(projectId, project.workPackages);
 
   const [memberCount, vendorCount, matrixCount, contactCount] = await Promise.all([
     prisma.projectMember.count({ where: { projectId } }),

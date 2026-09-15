@@ -860,7 +860,13 @@ projectsRouter.get("/:id", async (req: AuthedRequest, res) => {
   if (!(await viewerCanSeeProject(req.user!, project.id))) {
     return res.status(404).json({ error: "Not found" });
   }
-  res.json(projectPayloadForRole(project as unknown as Record<string, unknown>, req.user!.role));
+  const { repairProjectWorkPackagesIfNeeded } = await import("../services/workPackageCatalog.js");
+  const cleanedPackages = await repairProjectWorkPackagesIfNeeded(project.id, project.workPackages);
+  const payload = projectPayloadForRole(
+    { ...project, workPackages: JSON.stringify(cleanedPackages) } as unknown as Record<string, unknown>,
+    req.user!.role
+  );
+  res.json(payload);
 });
 
 projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -968,11 +974,13 @@ projectsRouter.patch("/:id/work-packages", requireRoles("admin", "office"), asyn
 
   try {
     const { disciplinesFromWorkPackages } = await import("../services/comparativeStatement.js");
-    const bidDisciplinesJson = list.length ? JSON.stringify(disciplinesFromWorkPackages(list)) : "[]";
+    const { sanitizeProjectWorkPackages } = await import("../services/workPackageCatalog.js");
+    const cleaned = sanitizeProjectWorkPackages(list);
+    const bidDisciplinesJson = cleaned.length ? JSON.stringify(disciplinesFromWorkPackages(cleaned)) : "[]";
     const updated = await prisma.project.update({
       where: { id: project.id },
       data: {
-        workPackages: JSON.stringify(list),
+        workPackages: JSON.stringify(cleaned),
         bidDisciplinesJson,
       },
       select: { id: true, code: true, workPackages: true },
@@ -983,7 +991,7 @@ projectsRouter.patch("/:id/work-packages", requireRoles("admin", "office"), asyn
       entityId: project.id,
       meta: { count: list.length, packages: list.slice(0, 12) },
     });
-    res.json({ ok: true, workPackages: list, project: updated });
+    res.json({ ok: true, workPackages: cleaned, project: updated });
   } catch (err) {
     console.warn("[project] work-packages:", err instanceof Error ? err.message : err);
     return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save work packages" });
@@ -1034,7 +1042,7 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     const existing = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!existing) return res.status(404).json({ error: "Project not found" });
 
-    const workPackagesList = Array.isArray(workPackages)
+    let workPackagesList: string[] | null = Array.isArray(workPackages)
       ? (workPackages as unknown[]).map(String).map((s) => s.trim()).filter(Boolean)
       : typeof workPackages === "string" && workPackages.trim()
         ? (() => {
@@ -1049,6 +1057,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     let bidDisciplinesPatch: string | undefined;
     if (workPackagesList !== null) {
       const { disciplinesFromWorkPackages } = await import("../services/comparativeStatement.js");
+      const { sanitizeProjectWorkPackages } = await import("../services/workPackageCatalog.js");
+      workPackagesList = sanitizeProjectWorkPackages(workPackagesList);
       bidDisciplinesPatch = workPackagesList.length
         ? JSON.stringify(disciplinesFromWorkPackages(workPackagesList))
         : "[]";

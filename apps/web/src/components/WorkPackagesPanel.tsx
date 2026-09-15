@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Button, Card, Input } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
+import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../lib/workPackages";
 
 const FALLBACK_PACKAGES = ["Civil", "PEB", "MEP", "Fire Fighting", "Electrical", "Plumbing", "HVAC", "Landscape"];
 
@@ -18,22 +19,8 @@ const HIDDEN_BID_LABELS = new Set([
   "entrance gate",
 ]);
 
-function parseWorkPackagesField(raw: unknown): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
-  if (typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.map(String).map((s) => s.trim()).filter(Boolean) : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
 function catalogNames(names: string[]) {
-  return names.filter((p) => p && !HIDDEN_BID_LABELS.has(p.trim().toLowerCase()));
+  return sanitizeProjectWorkPackages(names).filter((p) => !HIDDEN_BID_LABELS.has(p.trim().toLowerCase()));
 }
 
 type Props = {
@@ -82,13 +69,14 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
     }
     api<{ workPackages?: string | string[] }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
-        setInternal(parseWorkPackagesField(p.workPackages));
+        setInternal(sanitizeProjectWorkPackages(parseWorkPackagesField(p.workPackages)));
       })
       .catch(() => setInternal([]));
   }, [projectId, token, selected]);
 
   async function persist(next: string[]) {
-    setPackages(next);
+    const cleaned = sanitizeProjectWorkPackages(next);
+    setPackages(cleaned);
     if (!projectId) return;
     setBusy(true);
     setMsg("");
@@ -96,10 +84,10 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
       await api(`/api/projects/${projectId}/work-packages`, {
         method: "PATCH",
         token,
-        body: JSON.stringify({ workPackages: next }),
+        body: JSON.stringify({ workPackages: cleaned }),
       });
       setMsg("Packages saved on this project.");
-      onSaved?.(next);
+      onSaved?.(cleaned);
       await loadCatalog();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
