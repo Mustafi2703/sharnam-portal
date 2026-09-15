@@ -368,7 +368,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   /** Project + CRM use locked tool shell; master scrolls in the app frame like dashboard. */
   const deskFullBleed = inProject || inCrm;
   const deskWideCanvas = inMaster;
-  const toolWin = isToolWindow(location.search);
+  const toolWin = isToolWindow(location.search, location.pathname);
   const embed = isEmbedView(location.search);
   const [projects, setProjects] = useState<Proj[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -409,6 +409,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       document.body.style.overflow = prevOverflow;
     };
   }, [drawerOpen]);
+
+  useEffect(() => {
+    if (toolWin) return;
+    document.documentElement.classList.remove("is-tool-window");
+    document.body.classList.remove("is-tool-window");
+  }, [toolWin]);
 
   /** Keep left nav + top bar accent in sync with the open module (green base). */
   useEffect(() => {

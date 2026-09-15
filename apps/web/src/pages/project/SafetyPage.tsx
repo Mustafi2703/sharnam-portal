@@ -171,7 +171,7 @@ export default function SafetyPage() {
         dense
         eyebrow="Safety module"
         title={sheetView.label}
-        subtitle={`${sheetView.sheet} — seeded from client Safety Dashboard / Safety NCR workbooks.`}
+        subtitle={`${sheetView.sheet} — Safety Dashboard / Safety NCR register layout.`}
       />
 
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1">

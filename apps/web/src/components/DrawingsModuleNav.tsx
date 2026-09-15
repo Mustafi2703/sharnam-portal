@@ -18,7 +18,7 @@ export function DrawingsModuleNav({ projectId, accent = "#2563EB" }: { projectId
       {items.map((item) => {
         const href = `/projects/${projectId}/${item.to}${item.query ? `?${item.query}` : ""}`;
         const active = drawingsNavActive(item.key, location.pathname, location.search);
-        const inWin = isToolWindow(location.search);
+        const inWin = isToolWindow(location.search, location.pathname);
         return (
           <a
             key={item.key}

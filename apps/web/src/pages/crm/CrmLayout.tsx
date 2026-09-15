@@ -33,7 +33,7 @@ export default function CrmLayout() {
   const portalHome = homePathForUser(user);
   const isVendor = user?.role === "vendor";
   const tools = isVendor ? CRM_VENDOR_TOOLS : CRM_TOOLS;
-  const inWin = isToolWindow(loc.search);
+  const inWin = isToolWindow(loc.search, loc.pathname);
   const onHub = loc.pathname === "/crm" || loc.pathname === "/crm/";
   const vendorDesk = params.get("desk") || "";
 

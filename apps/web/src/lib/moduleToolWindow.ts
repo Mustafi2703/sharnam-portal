@@ -4,8 +4,13 @@ import { isStandaloneFormPath } from "./standaloneFormWindow";
 
 export const TOOL_WIN_PARAM = "win";
 
-export function isToolWindow(search = typeof window !== "undefined" ? window.location.search : ""): boolean {
-  if (typeof window !== "undefined" && isStandaloneFormPath(window.location.pathname)) return false;
+export function isToolWindow(
+  search = typeof window !== "undefined" ? window.location.search : "",
+  pathname = typeof window !== "undefined" ? window.location.pathname : ""
+): boolean {
+  if (isStandaloneFormPath(pathname)) return false;
+  const inToolShell = pathname.startsWith("/projects/") || pathname.startsWith("/crm");
+  if (!inToolShell) return false;
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   if (params.get(TOOL_WIN_PARAM) === "1") return true;
   return typeof window !== "undefined" && Boolean(window.opener && !window.opener.closed);

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
@@ -15,9 +15,6 @@ import { CRM_BID_DISCIPLINES } from "../../lib/crmBidDisciplines";
 import { WprTrackerRegisters } from "../../components/WprTrackerRegisters";
 import { isToolWindow } from "../../lib/moduleToolWindow";
 import { ToolLink } from "../../components/ToolLink";
-
-/** Dev-only — hide re-seed buttons in production demo builds. */
-const SHOW_DEMO_CONTROLS = import.meta.env.DEV;
 
 const SCURVE_DISCIPLINES = [{ key: "OVERALL", label: "Overall project" }, ...CRM_BID_DISCIPLINES.map((d) => ({ key: d.key, label: d.label }))];
 
@@ -57,6 +54,7 @@ function inr(n: number) {
 
 export default function ProgressPage() {
   const { id } = useParams();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
@@ -65,7 +63,7 @@ export default function ProgressPage() {
   const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | "boq" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
   const [msProject, setMsProject] = useState<any>(null);
-  const [msBusy, setMsBusy] = useState<"seed" | "import" | "xml" | null>(null);
+  const [msBusy, setMsBusy] = useState<"import" | "xml" | null>(null);
   const msImportRef = useRef<HTMLInputElement>(null);
   const [scurveDiscipline, setScurveDiscipline] = useState("OVERALL");
   const [scurvePoints, setScurvePoints] = useState<any[]>([]);
@@ -575,24 +573,6 @@ export default function ProgressPage() {
     }
   }
 
-  async function seedDemoSchedule() {
-    if (!id || !canEdit) return;
-    setMsBusy("seed");
-    setMsg("");
-    try {
-      const out = await api<{ taskCount: number; scurvePoints: number }>(
-        `/api/progress/${id}/ms-project/seed-demo`,
-        { method: "POST", token }
-      );
-      setMsg(`Demo schedule loaded — ${out.taskCount} tasks · ${out.scurvePoints} S-curve weeks (feeds DPR + WPR).`);
-      await Promise.all([load(), loadMsProject()]);
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Demo schedule load failed");
-    } finally {
-      setMsBusy(null);
-    }
-  }
-
   async function downloadMsProjectXml() {
     if (!id) return;
     setMsBusy("xml");
@@ -702,9 +682,9 @@ export default function ProgressPage() {
   return (
     <div className="progress-module page-scroll-full w-full min-w-0 space-y-5 pb-8">
       <div className="w-full shrink-0">
-        {!isToolWindow() && (
-        <Link to={`/projects/${id}`} className="text-sm text-brand font-medium">
-          ← Project
+        {!isToolWindow(location.search, location.pathname) && (
+        <Link to={`/projects/${id}/hub/progress`} className="text-sm text-brand font-medium">
+          ← Progress hub
         </Link>
         )}
         <PageHeader
@@ -769,7 +749,7 @@ export default function ProgressPage() {
                   </p>
                 )}
               </div>
-              {!isToolWindow() && (
+              {!isToolWindow(location.search, location.pathname) && (
               <Link to={`/projects/${id}/hub/progress`} className="text-sm font-semibold text-brand">
                 All Progress tools →
               </Link>
@@ -834,7 +814,7 @@ export default function ProgressPage() {
                     </span>
                   </div>
                 ))}
-                {!data.hindrances?.length && <p className="text-steel-muted text-sm py-2">No hindrances seeded.</p>}
+                {!data.hindrances?.length && <p className="text-steel-muted text-sm py-2">No hindrances logged yet.</p>}
               </div>
             </Card>
             <Card className="min-w-0 overflow-hidden flex flex-col">
@@ -857,7 +837,7 @@ export default function ProgressPage() {
                       </span>
                     </div>
                   ))}
-                {!data.risks?.length && <p className="text-steel-muted text-sm py-2">No risks seeded.</p>}
+                {!data.risks?.length && <p className="text-steel-muted text-sm py-2">No risks logged yet.</p>}
               </div>
             </Card>
           </div>
@@ -871,7 +851,7 @@ export default function ProgressPage() {
             rowCount={data.milestones?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setMileAddOpen(true) : undefined}
-            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy}
             message={msg || undefined}
@@ -1351,7 +1331,7 @@ export default function ProgressPage() {
             canEdit={canEdit}
             onAddRow={canEdit ? () => setSorAddOpen(true) : undefined}
             addRowLabel="+ Add SOR row"
-            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void runResyncSor() : undefined}
+            onGenerate={undefined}
             generateLabel="Load Monthly Dashboard"
             busy={resyncBusy}
             uploadHint="SOR Log from Monthly Progress Dashboard.xlsx — Sr.no, Observation, Total, Open, Close, Closure Rate."
@@ -1401,7 +1381,7 @@ export default function ProgressPage() {
                 {!data.sorStats.length && (
                   <tr>
                     <td colSpan={6} className="py-6 px-3 text-steel-muted">
-                      No monthly SOR rows — re-seed from Monthly Progress Dashboard.
+                      No monthly SOR rows yet — add one above or import from your progress workbook.
                     </td>
                   </tr>
                 )}
@@ -1419,7 +1399,7 @@ export default function ProgressPage() {
             rowCount={data.hindrances?.length}
             canEdit={canEdit}
             onAddRow={() => setHindranceModalOpen(true)}
-            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy || !!paBusy}
             message={msg}
@@ -1510,7 +1490,7 @@ export default function ProgressPage() {
             rowCount={data.risks?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setRiskAddOpen(true) : undefined}
-            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy}
             message={msg || undefined}
@@ -1595,7 +1575,7 @@ export default function ProgressPage() {
             rowCount={data.legalApprovals?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setLegalAddOpen(true) : undefined}
-            onGenerate={canResyncExcel && SHOW_DEMO_CONTROLS ? () => void loadAllProgressTemplates(true) : undefined}
+            onGenerate={undefined}
             generateLabel="Load SPDC template"
             busy={registerSyncBusy}
             message={msg || undefined}
@@ -1674,11 +1654,8 @@ export default function ProgressPage() {
                   Built from MS Project task baseline + % complete. Same weekly rows feed DPR dashboard charts and WPR progress slides.
                 </p>
               </div>
-              {canEdit && SHOW_DEMO_CONTROLS && (
+              {canEdit && (
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={!!msBusy} onClick={() => void seedDemoSchedule()}>
-                    {msBusy === "seed" ? "Loading…" : "Load demo schedule"}
-                  </Button>
                   <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
                     {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
                   </Button>
@@ -1716,11 +1693,11 @@ export default function ProgressPage() {
             ) : (
               <div className="text-center py-8 border border-dashed border-line rounded-lg space-y-3">
                 <p className="text-sm text-steel-muted px-4">
-                  No S-curve yet — import client XML (File → Save As → XML in MS Project) or ask office to load the demo schedule.
+                  No S-curve yet — import MS Project XML (File → Save As → XML in MS Project).
                 </p>
-                {canEdit && SHOW_DEMO_CONTROLS && (
-                  <Button type="button" onClick={() => void seedDemoSchedule()} disabled={!!msBusy}>
-                    {msBusy === "seed" ? "Loading…" : "Load demo schedule"}
+                {canEdit && (
+                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
+                    {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
                   </Button>
                 )}
               </div>

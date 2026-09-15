@@ -48,7 +48,7 @@ export function ModuleToolNav({
       {items.map((t) => {
         const href = moduleToolHref(projectId, t.to, t.query);
         const on = isToolActive(t, location.pathname, location.search, projectId);
-        const inWin = isToolWindow(location.search);
+        const inWin = isToolWindow(location.search, location.pathname);
         return (
           <a
             key={`${t.to}-${t.query || ""}-${t.label}`}

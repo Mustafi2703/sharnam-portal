@@ -87,7 +87,7 @@ export function DirectoryMySignaturePanel({ projectId, token, compact }: Props) 
           ? `/api/directory/project/${projectId}/members/${slot.id}/signature`
           : `/api/directory/project/${projectId}/vendors/${slot.id}/signature`;
       await api(path, { method: "POST", token, body: fd });
-      setMsg("Signature saved to DMS — will appear on branded Excel exports.");
+      setMsg("Signature saved to SharePoint — will appear on branded Excel exports.");
       setOpenKey(null);
       setPendingFile(null);
       await load();
@@ -98,7 +98,19 @@ export function DirectoryMySignaturePanel({ projectId, token, compact }: Props) 
     }
   }
 
-  if (!slots.length) return null;
+  if (!slots.length) {
+    return (
+      <Card className="!p-4 border-line bg-sand/40">
+        <h3 className="font-semibold text-sm">Your signature</h3>
+        <p className="text-xs text-steel-muted mt-1">
+          Ask office to add you to this project directory, then upload your sign-off PNG here (stored in SharePoint).
+        </p>
+        <Link to={`/projects/${projectId}/directory`} className="text-xs font-semibold text-brand mt-2 inline-block">
+          Open directory →
+        </Link>
+      </Card>
+    );
+  }
 
   const missing = slots.filter((s) => !s.signatureUrl).length;
 
@@ -108,7 +120,7 @@ export function DirectoryMySignaturePanel({ projectId, token, compact }: Props) 
         <div>
           <h3 className="font-semibold text-sm">{compact ? "My sign-off" : "Your signatures"}</h3>
           <p className="text-xs text-steel-muted mt-1">
-            Draw or upload PNG — stored in project DMS and used on checklist / RFI / report exports.
+            Draw or upload PNG — saved to project SharePoint ({`Directory_Signatures`}) and used on checklist / RFI / report exports.
             {missing > 0 && (
               <span className="text-brand font-semibold">
                 {" "}
@@ -167,7 +179,7 @@ export function DirectoryMySignaturePanel({ projectId, token, compact }: Props) 
                 />
                 <div className="flex gap-2 mt-2">
                   <Button type="button" disabled={!pendingFile || busy} onClick={() => save(s)}>
-                    {busy ? "Saving…" : "Save to DMS"}
+                    {busy ? "Saving…" : "Save to SharePoint"}
                   </Button>
                   <Button type="button" variant="secondary" onClick={() => setOpenKey(null)}>
                     Cancel

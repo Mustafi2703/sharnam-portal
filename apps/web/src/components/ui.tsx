@@ -65,7 +65,7 @@ export function PageHeader({
   dense?: boolean;
 }) {
   const location = useLocation();
-  const toolWin = isToolWindow(location.search);
+  const toolWin = isToolWindow(location.search, location.pathname);
   const isDense = dense || toolWin;
   return (
     <header

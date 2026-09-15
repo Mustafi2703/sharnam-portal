@@ -7,6 +7,7 @@ import { Badge, Button, Card, Stat } from "../../components/ui";
 import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ToolLink } from "../../components/ToolLink";
+import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { ProjectManageActions, type ManageableProject } from "../../components/ProjectManageActions";
 
 export default function ProjectHomePage() {
@@ -55,6 +56,12 @@ export default function ProjectHomePage() {
 
   const s = overview?.stats || {};
   const pt = progress?.totals || {};
+  const hasProgressData =
+    (pt.milestones ?? 0) > 0 ||
+    (pt.openHindrance ?? 0) > 0 ||
+    (pt.openRisk ?? 0) > 0 ||
+    (safety?.totals?.records ?? 0) > 0 ||
+    (progress?.charts?.milestoneByStatus || []).some((x: { value?: number }) => Number(x.value) > 0);
 
   const tools = isVendor
     ? [
@@ -104,36 +111,64 @@ export default function ProjectHomePage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-brand mb-1">
             {isVendor ? "Contractor project desk" : isClient ? "Client project desk" : "Project overview"}
           </p>
           <h2 className="font-display text-2xl">{isClient || isVendor ? "Project desk" : projectCard?.name || "Project overview"}</h2>
           {projectCard?.code ? <p className="font-mono text-xs text-steel-muted mt-1">{projectCard.code}</p> : null}
         </div>
-        {canUpload && (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/dpr-maker`)}>
-              Open DPR maker
+      </div>
+
+      {canUpload && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/dpr-maker`)}>
+            Open DPR maker
+          </Button>
+          <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/wpr-maker`)}>
+            Open WPR maker
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings`)}>
+            Drawings
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/inspections`)}>
+            Quality
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/comms`)}>
+            Comms
+          </Button>
+          {canManageProject && (
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/setup`)}>
+              Project setup
             </Button>
-            <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/wpr-maker`)}>
-              Open WPR maker
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings`)}>
-              Drawings
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/inspections`)}>
-              Quality
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/comms`)}>
-              Comms
-            </Button>
-            {canManageProject && (
-              <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/setup`)}>
-                Project setup
-              </Button>
-            )}
-            {canManageProject && projectCard && token ? (
+          )}
+        </div>
+      )}
+      {isVendor && (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" className="!text-xs" onClick={() => navigate("/crm/vendor-bids")}>
+            Bid management
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/checklist`)}>
+            Checklists
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/rfis`)}>
+            RFIs
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/hub/quality`)}>
+            Quality
+          </Button>
+        </div>
+      )}
+
+      {id && token && <DirectoryMySignaturePanel projectId={id} token={token} compact />}
+
+      {canManageProject && id && (
+        <div className="grid lg:grid-cols-[1fr_auto] gap-4 items-start">
+          <WorkPackagesPanel token={token} projectId={id} />
+          {projectCard && token ? (
+            <Card className="!p-4 shrink-0">
+              <h3 className="font-semibold text-sm mb-2">Project admin</h3>
               <ProjectManageActions
                 project={projectCard}
                 token={token}
@@ -145,26 +180,10 @@ export default function ProjectHomePage() {
                   }
                 }}
               />
-            ) : null}
-          </div>
-        )}
-        {isVendor && (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" className="!text-xs" onClick={() => navigate("/crm/vendor-bids")}>
-              Bid management
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/checklist`)}>
-              Checklists
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/rfis`)}>
-              RFIs
-            </Button>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/hub/quality`)}>
-              Quality
-            </Button>
-          </div>
-        )}
-      </div>
+            </Card>
+          ) : null}
+        </div>
+      )}
 
       {!isClient && !isVendor && (
         <div className="space-y-2">
@@ -180,8 +199,6 @@ export default function ProjectHomePage() {
         </div>
       )}
 
-      {canManageProject && id && <WorkPackagesPanel token={token} projectId={id} />}
-
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Published drawings" value={s.publishedDrawings ?? "—"} hint={`${s.drawings ?? 0} total`} />
         <Stat label="Open RFIs" value={s.openRfis ?? "—"} />
@@ -192,7 +209,7 @@ export default function ProjectHomePage() {
         />
       </div>
 
-      {(progress || safety) && (
+      {(progress || safety) && hasProgressData && (
         <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] via-white to-[#F0F4F3] p-4 sm:p-5 space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -236,6 +253,24 @@ export default function ProjectHomePage() {
             </Card>
           </div>
         </div>
+      )}
+
+      {!isClient && !isVendor && !hasProgressData && (
+        <Card className="border-dashed border-line bg-sand/30 !p-6 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-2">Empty canvas</p>
+          <h3 className="font-display text-lg text-ink">No progress or safety data yet</h3>
+          <p className="text-sm text-steel-muted mt-2 max-w-lg mx-auto">
+            New projects start blank. Add milestones, hindrances, or safety records from the module hubs when you begin tracking.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/hub/progress`)}>
+              Progress hub
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/hub/safety`)}>
+              Safety hub
+            </Button>
+          </div>
+        </Card>
       )}
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">

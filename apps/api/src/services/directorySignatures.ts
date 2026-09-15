@@ -281,11 +281,36 @@ export function canEditVendorSignature(
   return false;
 }
 
+export async function ensureSignatureMember(
+  prisma: PrismaClient,
+  projectId: string,
+  user: { id: string; email: string; role: string; vendorId?: string | null }
+) {
+  const existing = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId: user.id } },
+  });
+  if (existing) return existing;
+
+  const { viewerCanSeeProject } = await import("./projectVisibility.js");
+  const canSee = await viewerCanSeeProject(user, projectId);
+  if (!canSee) return null;
+
+  return prisma.projectMember.create({
+    data: {
+      projectId,
+      userId: user.id,
+      role: ["admin", "office"].includes(user.role) ? "lead" : "member",
+    },
+  });
+}
+
 export async function getMyDirectorySignatureSlots(
   prisma: PrismaClient,
   projectId: string,
   user: { id: string; email: string; role: string; vendorId?: string | null }
 ): Promise<MySignatureSlots> {
+  await ensureSignatureMember(prisma, projectId, user);
+
   const [member, vendors] = await Promise.all([
     prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId: user.id } },

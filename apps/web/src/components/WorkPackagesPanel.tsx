@@ -18,6 +18,20 @@ const HIDDEN_BID_LABELS = new Set([
   "entrance gate",
 ]);
 
+function parseWorkPackagesField(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String).map((s) => s.trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function catalogNames(names: string[]) {
   return names.filter((p) => p && !HIDDEN_BID_LABELS.has(p.trim().toLowerCase()));
 }
@@ -66,14 +80,9 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
       setInternal([]);
       return;
     }
-    api<{ workPackages?: string }>(`/api/projects/${projectId}`, { token })
+    api<{ workPackages?: string | string[] }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
-        try {
-          const parsed = p.workPackages ? JSON.parse(p.workPackages) : [];
-          setInternal(Array.isArray(parsed) ? parsed.map(String) : []);
-        } catch {
-          setInternal([]);
-        }
+        setInternal(parseWorkPackagesField(p.workPackages));
       })
       .catch(() => setInternal([]));
   }, [projectId, token, selected]);
@@ -84,7 +93,7 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
     setBusy(true);
     setMsg("");
     try {
-      await api(`/api/projects/${projectId}/settings`, {
+      await api(`/api/projects/${projectId}/work-packages`, {
         method: "PATCH",
         token,
         body: JSON.stringify({ workPackages: next }),
@@ -143,7 +152,7 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
       if (projectPackages.includes(name)) {
         setPackages(nextProject);
         if (projectId) {
-          await api(`/api/projects/${projectId}/settings`, {
+          await api(`/api/projects/${projectId}/work-packages`, {
             method: "PATCH",
             token,
             body: JSON.stringify({ workPackages: nextProject }),

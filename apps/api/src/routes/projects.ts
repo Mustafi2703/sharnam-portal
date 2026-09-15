@@ -6,7 +6,7 @@ import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER, PROJECT_LIBRARY_FOLDERS } from "../services/graph.js";
 import { consumeDrawingUnlockToken } from "../services/drawingUnlock.js";
 import { audit } from "../services/audit.js";
-import { purgeProjectChildren } from "../services/purgeProject.js";
+import { purgeProjectChildren, purgeProjectModuleData } from "../services/purgeProject.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const drawingUpload = upload.fields([
@@ -892,6 +892,35 @@ projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: Authe
   res.json({ ok: true, id: project.id, code: project.code });
 });
 
+projectsRouter.post("/:id/purge-modules", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const confirmCode = String(req.body?.confirmCode || req.query.confirmCode || "").trim();
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, code: true, name: true },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  if (!confirmCode || confirmCode.toUpperCase() !== project.code.toUpperCase()) {
+    return res.status(400).json({ error: `Type the project code ${project.code} to confirm clearing module data.` });
+  }
+  try {
+    await prisma.$transaction(async (tx) => {
+      await purgeProjectModuleData(tx, project.id);
+    }, { timeout: 60_000, maxWait: 10_000 });
+  } catch (err) {
+    console.warn("[project] purge-modules:", err instanceof Error ? err.message : err);
+    return res.status(409).json({
+      error: err instanceof Error ? err.message : "Could not clear module data for this project.",
+    });
+  }
+  await audit("project.purge_modules", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { code: project.code, name: project.name },
+  });
+  res.json({ ok: true, id: project.id, code: project.code });
+});
+
 projectsRouter.get("/:id/sheet-pack", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
@@ -913,6 +942,52 @@ projectsRouter.post("/:id/provision-sheets", requireRoles("admin", "office", "em
     meta: { force, steps: out.steps.map((s) => ({ key: s.key, ok: s.ok, skipped: s.skipped })) },
   });
   res.json(out);
+});
+
+projectsRouter.patch("/:id/work-packages", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, code: true },
+  });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+
+  let list: string[] = [];
+  const raw = req.body?.workPackages;
+  if (Array.isArray(raw)) {
+    list = (raw as unknown[]).map(String).map((s) => s.trim()).filter(Boolean);
+  } else if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed.map(String).map((s) => s.trim()).filter(Boolean);
+    } catch {
+      return res.status(400).json({ error: "workPackages must be a JSON array of package names" });
+    }
+  } else {
+    return res.status(400).json({ error: "workPackages array required" });
+  }
+
+  try {
+    const { disciplinesFromWorkPackages } = await import("../services/comparativeStatement.js");
+    const bidDisciplinesJson = list.length ? JSON.stringify(disciplinesFromWorkPackages(list)) : "[]";
+    const updated = await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        workPackages: JSON.stringify(list),
+        bidDisciplinesJson,
+      },
+      select: { id: true, code: true, workPackages: true },
+    });
+    await audit("project.work_packages", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: project.id,
+      meta: { count: list.length, packages: list.slice(0, 12) },
+    });
+    res.json({ ok: true, workPackages: list, project: updated });
+  } catch (err) {
+    console.warn("[project] work-packages:", err instanceof Error ? err.message : err);
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Could not save work packages" });
+  }
 });
 
 projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
@@ -956,13 +1031,27 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
   };
   let project;
   try {
+    const existing = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!existing) return res.status(404).json({ error: "Project not found" });
+
     const workPackagesList = Array.isArray(workPackages)
-      ? (workPackages as unknown[]).map(String).filter(Boolean)
-      : null;
+      ? (workPackages as unknown[]).map(String).map((s) => s.trim()).filter(Boolean)
+      : typeof workPackages === "string" && workPackages.trim()
+        ? (() => {
+            try {
+              const parsed = JSON.parse(workPackages);
+              return Array.isArray(parsed) ? parsed.map(String).map((s) => s.trim()).filter(Boolean) : null;
+            } catch {
+              return null;
+            }
+          })()
+        : null;
     let bidDisciplinesPatch: string | undefined;
-    if (workPackagesList?.length) {
+    if (workPackagesList !== null) {
       const { disciplinesFromWorkPackages } = await import("../services/comparativeStatement.js");
-      bidDisciplinesPatch = JSON.stringify(disciplinesFromWorkPackages(workPackagesList));
+      bidDisciplinesPatch = workPackagesList.length
+        ? JSON.stringify(disciplinesFromWorkPackages(workPackagesList))
+        : "[]";
     }
     project = await prisma.project.update({
       where: { id: req.params.id },
@@ -996,8 +1085,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
         pmcName: pmcName !== undefined ? pmcName : undefined,
         startDate: dateOrNull(startDate),
         endDate: dateOrNull(endDate),
-        workPackages: workPackagesList ? JSON.stringify(workPackagesList) : undefined,
-        ...(bidDisciplinesPatch ? { bidDisciplinesJson: bidDisciplinesPatch } : {}),
+        workPackages: workPackagesList !== null ? JSON.stringify(workPackagesList) : undefined,
+        ...(bidDisciplinesPatch !== undefined ? { bidDisciplinesJson: bidDisciplinesPatch } : {}),
       },
     });
   } catch (err) {

@@ -94,7 +94,7 @@ model Project {
   /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
   enabledModules          String    @default("[\"drawings\",\"dms\",\"quality\",\"safety\",\"inspection\",\"progress\",\"comms\",\"auditKpi\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
-  workPackages            String    @default("[\"Civil\",\"PEB\"]") @db.Text
+  workPackages            String    @default("[]") @db.Text
   /// Default R2 bid disciplines for CRM packages on this project (JSON array of {key,label,sheetName})
   bidDisciplinesJson      String?   @db.Text
   createdAt               DateTime  @default(now())

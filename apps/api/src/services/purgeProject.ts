@@ -6,12 +6,16 @@ async function ids(rows: Promise<{ id: string }[]>) {
   return (await rows).map((r) => r.id);
 }
 
+type PurgeOpts = {
+  /** Keep directory, vendors, and communication matrix on the project card. */
+  keepSetup?: boolean;
+};
+
 /**
- * Remove every row that blocks Project delete.
- * MySQL often has Restrict FKs even when Prisma says Cascade, so we delete
- * children first instead of relying on ON DELETE CASCADE.
+ * Remove module transactional rows for a project.
+ * When keepSetup is true, members, vendors, and comms matrix stay — only fills/registers go.
  */
-export async function purgeProjectChildren(tx: Db, projectId: string) {
+async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: PurgeOpts) {
   const where = { projectId };
 
   const drawingIds = await ids(tx.drawing.findMany({ where, select: { id: true } }));
@@ -111,10 +115,12 @@ export async function purgeProjectChildren(tx: Db, projectId: string) {
 
   await tx.checklistAssignment.deleteMany({ where });
   await tx.documentFolder.deleteMany({ where });
-  await tx.projectMember.deleteMany({ where });
-  await tx.projectVendor.deleteMany({ where });
-  await tx.communicationMatrix.deleteMany({ where });
-  await tx.communicationContact.deleteMany({ where });
+  if (!opts?.keepSetup) {
+    await tx.projectMember.deleteMany({ where });
+    await tx.projectVendor.deleteMany({ where });
+    await tx.communicationMatrix.deleteMany({ where });
+    await tx.communicationContact.deleteMany({ where });
+  }
   await tx.communicationLog.deleteMany({ where });
   await tx.costBudgetLine.deleteMany({ where });
   await tx.costMonitoringLine.deleteMany({ where });
@@ -159,7 +165,22 @@ export async function purgeProjectChildren(tx: Db, projectId: string) {
   await tx.wprSnapshot.deleteMany({ where });
   await tx.customSheet.deleteMany({ where });
   await tx.attendance.deleteMany({ where });
+}
 
+/** Clear seeded module fills while keeping the project card, directory, and vendors. */
+export async function purgeProjectModuleData(tx: Db, projectId: string) {
+  await purgeProjectTransactionalData(tx, projectId, { keepSetup: true });
+}
+
+/**
+ * Remove every row that blocks Project delete.
+ * MySQL often has Restrict FKs even when Prisma says Cascade, so we delete
+ * children first instead of relying on ON DELETE CASCADE.
+ */
+export async function purgeProjectChildren(tx: Db, projectId: string) {
+  await purgeProjectTransactionalData(tx, projectId);
+
+  const where = { projectId };
   await tx.lead.updateMany({ where, data: { projectId: null } });
   await tx.deal.updateMany({ where, data: { projectId: null } });
   await tx.quotation.updateMany({ where, data: { projectId: null } });

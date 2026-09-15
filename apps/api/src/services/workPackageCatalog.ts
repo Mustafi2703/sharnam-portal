@@ -97,11 +97,11 @@ export async function removeWorkPackageCatalogEntry(name: string): Promise<strin
 }
 
 export function parseProjectWorkPackages(raw?: string | null): string[] {
-  if (!raw) return ["Civil", "PEB"];
+  if (!raw) return [];
   try {
     const p = JSON.parse(raw);
-    return Array.isArray(p) ? p.map(String).filter(Boolean) : ["Civil", "PEB"];
+    return Array.isArray(p) ? p.map(String).filter(Boolean) : [];
   } catch {
-    return ["Civil", "PEB"];
+    return [];
   }
 }

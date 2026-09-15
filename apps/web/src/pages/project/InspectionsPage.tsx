@@ -145,7 +145,7 @@ export default function InspectionsPage() {
     selected.status !== "Closed" &&
     (canManage || selected.assignedToId === user?.id || selected.assignedTo?.id === user?.id);
   const pageTitle = sheetView.label;
-  const pageSubtitle = `${sheetView.sheet} — seeded from client Quality Dashboard / NCR / Cube workbooks. Checklist fills map to DPR Quality section.`;
+  const pageSubtitle = `${sheetView.sheet} — Quality Dashboard / NCR / Cube register layout. Checklist fills map to DPR Quality section.`;
 
   const isQualityRegister = QUALITY_REGISTER_SHEETS.has(sheetKey);
   const useQualityPageScroll = QUALITY_PAGE_SCROLL_SHEETS.has(sheetKey);
@@ -451,7 +451,7 @@ export default function InspectionsPage() {
                 {!dash?.ncrs?.length && (
                   <tr>
                     <td colSpan={canManage ? 7 : 6} className="empty text-left">
-                      No NCR rows yet — run <code className="text-xs">npm run db:seed-quality-safety-demo</code> or raise one above.
+                      No NCR rows yet — raise one above.
                     </td>
                   </tr>
                 )}
