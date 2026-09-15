@@ -16,7 +16,7 @@ import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { downloadAuthFile } from "../lib/downloadReport";
-import { costNeedsFullSync, DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
+import { DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs" | "bbs-master";
@@ -98,7 +98,6 @@ export default function CostPage() {
   const [billsData, setBillsData] = useState<{ bills: any[]; totals: any } | null>(null);
   const [parties, setParties] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
-  const autoSyncRef = useRef(false);
   const [syncing, setSyncing] = useState(false);
   const [sheetDate, setSheetDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -291,18 +290,6 @@ export default function CostPage() {
       setSyncing(false);
     }
   }
-
-  /** Auto-load full SPDC budget when registers are empty or partial (QAP/Cube pattern). */
-  useEffect(() => {
-    if (!summary || !canEdit || autoSyncRef.current || syncing) return;
-    if (!costNeedsFullSync(summary.totals)) return;
-    autoSyncRef.current = true;
-    void (async () => {
-      const out = await syncFullTemplate(true);
-      if (!out) autoSyncRef.current = false;
-      else if (tab !== "monitoring") setTab("monitoring", DEFAULT_COST_MONITORING_PKG);
-    })();
-  }, [summary, canEdit, id, token]);
 
   async function uploadBoqOrWorkbook(file: File, openPackage?: string) {
     if (!id || !canEdit) return;

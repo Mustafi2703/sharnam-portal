@@ -132,7 +132,7 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
           <Card className="space-y-3">
             <h3 className="font-display text-xl">Clear module data for {project.code}?</h3>
             <p className="text-sm text-steel-muted">
-              Removes drawings, fills, progress, cost, DPR/WPR, and other module registers. Keeps the project card, directory, vendors, and communication matrix. Type <strong>{project.code}</strong> to confirm.
+              Removes drawings, drawing register, fills, progress, cost, DPR/WPR, CRM bids, and other module registers. Keeps the project card, directory, vendors, and communication matrix. Registers stay empty until you manually load a template. Type <strong>{project.code}</strong> to confirm.
             </p>
             <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={project.code} />
             {err ? <p className="text-sm text-danger">{err}</p> : null}

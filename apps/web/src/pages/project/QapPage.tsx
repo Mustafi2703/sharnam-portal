@@ -36,7 +36,6 @@ export default function QapPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  const autoSyncRef = useRef(false);
   const canManage = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
 
   const load = async () => {
@@ -75,32 +74,6 @@ export default function QapPage() {
   useEffect(() => {
     void load();
   }, [id, token]);
-
-  /** Auto-load full Week 50 template when register is empty, partial, or legacy. */
-  useEffect(() => {
-    if (!id || !canManage || !dash) return;
-    const rows = (dash.qap || []) as Parameters<typeof qapNeedsFullResync>[0];
-    if (!qapNeedsFullResync(rows)) return;
-    if (autoSyncRef.current) return;
-    autoSyncRef.current = true;
-    void (async () => {
-      setBusy(true);
-      try {
-        const out = await api<{ imported: number; weekLabel: string }>(
-          `/api/checklist/project/${id}/qap/sync-template`,
-          { method: "POST", token }
-        );
-        setMsg(`Loaded ${out.imported} QAP lines from Week 50 template (${out.weekLabel}) and saved the sheet to Drive.`);
-        setWeekFilter(out.weekLabel);
-        await load();
-      } catch (err) {
-        autoSyncRef.current = false;
-        setMsg(err instanceof Error ? err.message : "Load Week 50 template failed — use toolbar");
-      } finally {
-        setBusy(false);
-      }
-    })();
-  }, [dash, id, canManage, token]);
 
   const weeks = useMemo(() => {
     const set = new Set<string>();

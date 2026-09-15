@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { api } from "../api";
 import { groupCubeRows, fmtCubeDate, orderCubeSpecimens, specimenPhase, type CubeRow } from "../lib/cubeRegister";
 import { cubeResultRowClass, fmtRegisterNum } from "../lib/inspectionRequestForms";
@@ -42,15 +42,6 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
     to: "",
     q: "",
   });
-  const autoSyncRef = useRef(false);
-
-  useEffect(() => {
-    if (!canEdit || autoSyncRef.current || !projectId) return;
-    const spdcLike = rows.filter((r) => r.castDate && r.grade).length;
-    if (rows.length >= 100 && spdcLike >= 80) return;
-    autoSyncRef.current = true;
-    void syncTemplate(true);
-  }, [canEdit, rows.length, projectId]);
 
   const grades = useMemo(() => {
     const set = new Set<string>();
@@ -113,7 +104,6 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
       }
       await onChanged();
     } catch (err) {
-      autoSyncRef.current = false;
       if (!silent) setMsg(err instanceof Error ? err.message : "Sync failed");
     } finally {
       if (!silent) setBusy(false);
@@ -276,7 +266,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
 
       {localRows.length === 0 && !busy && !syncing && (
         <Card className="!p-3 border-amber-200 bg-amber-50 text-sm text-amber-900 shrink-0">
-          Cube register is empty — loading SPDC template automatically, or click <strong>Load SPDC cube template</strong> in the register header.
+          Cube register is empty — click <strong>Load SPDC cube template</strong> in the register header when you want the SPDC format.
         </Card>
       )}
 

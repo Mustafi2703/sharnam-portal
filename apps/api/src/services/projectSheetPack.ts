@@ -74,7 +74,20 @@ export async function provisionProjectSheetPack(
   const force = Boolean(opts?.force);
   const steps: PackStep[] = [];
 
-  const [monitoring, qap, cube, hira, activity, milestones, hindrance] = await Promise.all([
+  const [
+    monitoring,
+    qap,
+    cube,
+    hira,
+    activity,
+    milestones,
+    hindrance,
+    drawings,
+    registerLines,
+    checklistAssignments,
+    progressRisk,
+    progressLegal,
+  ] = await Promise.all([
     prisma.costMonitoringLine.count({ where: { projectId } }),
     prisma.qapActivity.count({ where: { projectId } }),
     prisma.cubeTest.count({ where: { projectId } }),
@@ -82,6 +95,11 @@ export async function provisionProjectSheetPack(
     prisma.progressActivityLine.count({ where: { projectId } }),
     prisma.progressMilestone.count({ where: { projectId } }),
     prisma.progressHindrance.count({ where: { projectId } }),
+    prisma.drawing.count({ where: { projectId } }),
+    prisma.drawingRegisterLine.count({ where: { projectId } }),
+    prisma.checklistAssignment.count({ where: { projectId } }),
+    prisma.progressRisk.count({ where: { projectId } }),
+    prisma.progressLegalApproval.count({ where: { projectId } }),
   ]);
 
   async function step(
@@ -131,7 +149,7 @@ export async function provisionProjectSheetPack(
     return (out as { imported?: number }).imported ?? 0;
   });
 
-  await step("catalog", "quality", false, async () => {
+  await step("catalog", "quality", checklistAssignments >= 5, async () => {
     const { syncQualityChecklistCatalog } = await import("./qualityChecklistCatalog.js");
     const out = await syncQualityChecklistCatalog(projectId);
     return (out as { assigned?: number }).assigned ?? 0;
@@ -160,13 +178,13 @@ export async function provisionProjectSheetPack(
     return out.imported;
   });
 
-  await step("drawings", "progress", false, async () => {
+  await step("drawings", "progress", drawings >= 1 || registerLines >= 1, async () => {
     const { syncDrawingRegisterToProject } = await import("./drawingRegisterSheets.js");
     const out = await syncDrawingRegisterToProject(projectId, userId);
     return out.drawings;
   });
 
-  await step("risk-legal", "progress", false, async () => {
+  await step("risk-legal", "progress", progressRisk >= 1 && progressLegal >= 1, async () => {
     const { syncRiskFromTemplate, syncLegalFromTemplate } = await import("./progressRegistersImport.js");
     const risk = await syncRiskFromTemplate(projectId, { force });
     const legal = await syncLegalFromTemplate(projectId, { force });

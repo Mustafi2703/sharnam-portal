@@ -87,7 +87,7 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
   }
   if (bidIds.length) {
     await tx.crmVendorBoq.deleteMany({ where: { bidPackageId: { in: bidIds } } });
-    await tx.crmBidPackage.updateMany({ where, data: { projectId: null } });
+    await tx.crmBidPackage.deleteMany({ where: { id: { in: bidIds } } });
   }
   if (batchIds.length) {
     await tx.boqItem.deleteMany({ where: { batchId: { in: batchIds } } });

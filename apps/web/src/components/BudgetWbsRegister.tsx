@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { api, formatINR } from "../api";
 import { Button, Card, Input, Select, TextArea } from "./ui";
 import { SheetAddKindBar } from "./SheetAddKindBar";
@@ -86,14 +86,6 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const autoSyncRef = useRef(false);
-
-  useEffect(() => {
-    if (!canEdit || autoSyncRef.current || !projectId) return;
-    if (rows.length >= 5) return;
-    autoSyncRef.current = true;
-    void syncTemplate(true);
-  }, [canEdit, rows.length, projectId]);
 
   async function syncTemplate(silent = false) {
     setBusy(true);

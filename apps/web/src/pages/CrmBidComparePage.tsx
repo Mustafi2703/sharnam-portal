@@ -2,14 +2,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, Select } from "../components/ui";
-import { FilePickButton } from "../components/FilePickButton";
-import { CrmComparativeRegister } from "../components/CrmComparativeRegister";
-import { CrmBidVendorMatrix } from "../components/CrmBidVendorMatrix";
-import { CrmBidBoqRegister } from "../components/CrmBidBoqRegister";
+import { Button, Card, Input, Select } from "../components/ui";
 import { SearchableCheckboxList } from "../components/SearchableCheckboxList";
-import { downloadAuthFile } from "../lib/downloadReport";
-import { BidManageActions } from "../components/BidManageActions";
+import { CrmBidCompareDesk } from "../components/CrmBidCompareDesk";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../components/ActionReasonDialog";
 import { isVendorOrContractor } from "../lib/vendorTypes";
 
@@ -101,6 +96,8 @@ export default function CrmBidComparePage() {
   const [dueDate, setDueDate] = useState("");
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
   const [actionError, setActionError] = useState<ActionReason | null>(null);
+  const [mainTab, setMainTab] = useState<"overview" | "comparative" | "matrix" | "manage">("overview");
+  const [pkgFilter, setPkgFilter] = useState("");
 
   function showActionError(title: string, err: unknown) {
     const reason = actionReasonFromError(title, err);
@@ -117,6 +114,37 @@ export default function CrmBidComparePage() {
     if (!setupProjectId) return packages;
     return packages.filter((p) => (p.project?.id || p.projectId) === setupProjectId);
   }, [packages, setupProjectId]);
+
+  const filteredPackages = useMemo(() => {
+    const q = pkgFilter.trim().toLowerCase();
+    if (!q) return packagesForDesk;
+    return packagesForDesk.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        (p.project?.code || "").toLowerCase().includes(q) ||
+        p.status.toLowerCase().includes(q)
+    );
+  }, [packagesForDesk, pkgFilter]);
+
+  const workflowStep = useMemo(() => {
+    if (!setupProjectId) return 0;
+    if (!detail) return 1;
+    if (detail.status === "Draft") return 2;
+    const done = detail.uploadProgress?.done ?? 0;
+    const total = detail.uploadProgress?.total ?? 0;
+    const pct = total ? Math.round((100 * done) / total) : 0;
+    if (pct < 100) return 3;
+    const hasCompare =
+      detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0;
+    if (!hasCompare) return 4;
+    if (detail.status === "Awarded") return 6;
+    return 5;
+  }, [setupProjectId, detail]);
+
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === setupProjectId),
+    [projects, setupProjectId]
+  );
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -167,6 +195,7 @@ export default function CrmBidComparePage() {
     setShowNewBidForm(false);
     setSlotPanel(null);
     setUploadFile(null);
+    setMainTab("overview");
     const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
     nav(`/crm/bids/${id}${q}`, { replace: true });
   }
@@ -194,6 +223,7 @@ export default function CrmBidComparePage() {
   }
 
   function openSlotPanel(slot: VendorBoqSlot, tab: "edit" | "upload") {
+    setMainTab("matrix");
     setSlotPanel({ slot, tab });
     if (tab === "upload") setUploadFile(null);
   }
@@ -611,516 +641,254 @@ export default function CrmBidComparePage() {
         <p className={`text-sm shrink-0 px-0.5 ${actionError ? "text-danger" : "text-ok"}`}>{msg}</p>
       )}
 
-      {showNewBidForm && (
-        <Card className="max-w-3xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <h2 className="font-semibold text-sm">New R2 bid package</h2>
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowNewBidForm(false)}>
-              Cancel
-            </Button>
-          </div>
-          <form className="space-y-3" onSubmit={createPackage}>
-            {!form.projectId ? (
-              <label className="text-xs font-semibold text-steel-muted block">
-                Project
-                <Select
-                  className="mt-1"
-                  value={form.projectId}
-                  onChange={(e) => {
-                    const pid = e.target.value;
-                    const p = projects.find((x) => x.id === pid);
-                    setForm({
-                      ...form,
-                      projectId: pid,
-                      title: form.title || (p ? `${p.name} — comparative bid` : ""),
-                    });
-                  }}
-                  required
-                >
-                  <option value="">Select project…</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} · {p.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            ) : (
-              <p className="text-xs text-steel-muted">
-                Project: <span className="font-mono font-semibold text-ink">{projects.find((p) => p.id === form.projectId)?.code}</span>
-              </p>
-            )}
-            <Input
-              required
-              placeholder="Package title (e.g. Civil & structural works)"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-            <div className="grid sm:grid-cols-2 gap-2">
-              <Input
-                placeholder="Revision"
-                value={form.revisionLabel}
-                onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
-              />
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+      <CrmBidCompareDesk
+        token={token}
+        canManage={canManage}
+        busy={busy}
+        setupProjectId={setupProjectId}
+        activeProject={activeProject}
+        projects={projects}
+        packagesForDesk={packagesForDesk}
+        filteredPackages={filteredPackages}
+        pkgFilter={pkgFilter}
+        onPkgFilter={setPkgFilter}
+        selectedId={selectedId}
+        detail={detail}
+        mainTab={mainTab}
+        onMainTab={setMainTab}
+        workflowStep={workflowStep}
+        uploadedPct={uploadedPct}
+        onProjectChange={(id) => {
+          const q = new URLSearchParams(searchParams);
+          if (id) q.set("projectId", id);
+          else q.delete("projectId");
+          setSearchParams(q, { replace: true });
+          setSelectedId(null);
+          setDetail(null);
+          setShowNewBidForm(false);
+          if (!id) nav("/crm/bids", { replace: true });
+        }}
+        onNewBid={() => {
+          if (!setupProjectId) {
+            showActionNeed("Pick a project", "Choose a project in the left rail, then create a new bid.");
+            return;
+          }
+          openNewBidSetup({ projectId: setupProjectId });
+        }}
+        onSelectPackage={selectPackage}
+        onOpenBid={() => void openBidPackage()}
+        onRefreshCompare={() => void recomputeComparative()}
+        onAward={(label) => void awardVendor(label)}
+        vendorTotals={vendorTotals}
+        vendorMatrix={vendorMatrix}
+        detailDisciplines={detailDisciplines}
+        summaryVendorGap={summaryVendorGap}
+        formatINR={formatINR}
+        disciplineLabel={disciplineLabel}
+        openSlotPanel={openSlotPanel}
+        copyVendorLink={copyVendorLink}
+        slotPanel={slotPanel}
+        onCloseSlot={() => {
+          setSlotPanel(null);
+          setUploadFile(null);
+        }}
+        uploadFile={uploadFile}
+        onUploadFile={setUploadFile}
+        onUploadBoq={uploadBoq}
+        onSlotTab={(tab) => {
+          setSlotPanel((prev) => (prev ? { ...prev, tab } : null));
+          if (tab === "upload") setUploadFile(null);
+        }}
+        onSlotSaved={() => {
+          if (selectedId) {
+            void loadDetail(selectedId);
+            void load();
+          }
+        }}
+        accessSlip={accessSlip}
+        showNewBidForm={showNewBidForm}
+        onCloseNewBid={() => setShowNewBidForm(false)}
+        newBidForm={
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="font-semibold text-sm">New bid package</h2>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setShowNewBidForm(false)}>
+                Cancel
+              </Button>
             </div>
-            <div>
-              <p className="text-xs font-semibold text-steel-muted mb-1">
-                Work packages (bid disciplines)
-                {disciplineSource === "work_packages" && (
-                  <span className="font-normal text-steel-muted"> · from project card</span>
-                )}
-                {disciplineSource === "saved" && (
-                  <span className="font-normal text-steel-muted"> · saved on project</span>
-                )}
-              </p>
-              {!disciplines.length ? (
-                <p className="text-xs text-amber-800 border border-amber-200 rounded-lg p-2 bg-amber-50">
-                  No work packages on this project yet. Tick packages on{" "}
-                  <Link to={`/crm/setup?projectId=${form.projectId}&step=project`} className="text-brand font-semibold">
-                    Project setup
-                  </Link>{" "}
-                  (Civil, PEB, MEP, etc.), then create the bid.
-                </p>
+            <form className="space-y-3" onSubmit={createPackage}>
+              {!form.projectId ? (
+                <label className="text-xs font-semibold text-steel-muted block">
+                  Project
+                  <Select
+                    className="mt-1"
+                    value={form.projectId}
+                    onChange={(e) => {
+                      const pid = e.target.value;
+                      const p = projects.find((x) => x.id === pid);
+                      setForm({
+                        ...form,
+                        projectId: pid,
+                        title: form.title || (p ? `${p.name} — comparative bid` : ""),
+                      });
+                    }}
+                    required
+                  >
+                    <option value="">Select project…</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} · {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
               ) : (
-              <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1">
+                <p className="text-xs text-steel-muted">
+                  Project: <span className="font-mono font-semibold text-ink">{projects.find((p) => p.id === form.projectId)?.code}</span>
+                </p>
+              )}
+              <Input
+                required
+                placeholder="Package title (e.g. Civil works — Phase 1)"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+              <div className="grid sm:grid-cols-2 gap-2">
+                <Input
+                  placeholder="Revision"
+                  value={form.revisionLabel}
+                  onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
+                />
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-steel-muted mb-1">
+                  Work packages
+                  {disciplineSource === "work_packages" && <span className="font-normal"> · from project card</span>}
+                </p>
+                {!disciplines.length ? (
+                  <p className="text-xs text-amber-800 border border-amber-200 rounded-lg p-2 bg-amber-50">
+                    Tick packages on{" "}
+                    <Link to={`/crm/setup?projectId=${form.projectId}&step=project`} className="text-brand font-semibold">
+                      Project setup
+                    </Link>{" "}
+                    first.
+                  </p>
+                ) : (
+                  <div className="max-h-32 overflow-y-auto border rounded-xl p-2 space-y-1">
+                    {disciplines.map((d) => (
+                      <label key={d.key} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={form.disciplineKeys.includes(d.key)}
+                          onChange={(e) => {
+                            setForm({
+                              ...form,
+                              disciplineKeys: e.target.checked
+                                ? [...form.disciplineKeys, d.key]
+                                : form.disciplineKeys.filter((x) => x !== d.key),
+                            });
+                          }}
+                        />
+                        {d.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-steel-muted mb-1">
+                  Vendors{" "}
+                  <Link to="/crm/directory/vendors" className="text-brand font-semibold">
+                    (CRM directory)
+                  </Link>
+                </p>
+                <SearchableCheckboxList
+                  items={bidderItems}
+                  selectedIds={form.vendorIds}
+                  onChange={(vendorIds) => setForm({ ...form, vendorIds })}
+                  placeholder="Search vendor…"
+                  emptyMessage="Add contractors on CRM → Vendors first."
+                />
+              </div>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Creating…" : "Create bid package"}
+              </Button>
+            </form>
+          </>
+        }
+        leads={leads}
+        onBidChanged={async () => {
+          if (detail) {
+            await loadDetail(detail.id);
+            await load();
+          }
+        }}
+        onBidDeleted={() => {
+          setSelectedId(null);
+          setDetail(null);
+          const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
+          nav(`/crm/bids${q}`, { replace: true });
+        }}
+        managePanel={
+          <div className="crm-bid-manage-grid">
+            <Card className="!p-4">
+              <h4 className="font-semibold text-sm mb-1">Add bidders</h4>
+              <p className="text-xs text-steel-muted mb-3">Creates BOQ slots and portal logins when email is on file.</p>
+              <SearchableCheckboxList
+                items={vendorsNotOnPackage.map((v) => ({
+                  id: v.id,
+                  label: v.name,
+                  sublabel: v.partyType || "Vendor",
+                  trade: v.trade,
+                }))}
+                selectedIds={addVendorIds}
+                onChange={setAddVendorIds}
+                placeholder="Search contractor…"
+                emptyMessage="All CRM contractors are already on this bid."
+              />
+              <Button type="button" className="mt-3 !text-xs" disabled={busy || !addVendorIds.length} onClick={() => void addVendorsToPackage()}>
+                Add selected bidders
+              </Button>
+            </Card>
+            <Card className="!p-4">
+              <h4 className="font-semibold text-sm mb-1">Add discipline sheets</h4>
+              <p className="text-xs text-steel-muted mb-3">Adds a BOQ column for every vendor on this package.</p>
+              <div className="max-h-36 overflow-y-auto border rounded-xl p-2 space-y-1 mb-3">
                 {disciplines.map((d) => (
                   <label key={d.key} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={form.disciplineKeys.includes(d.key)}
+                      checked={addDiscKeys.includes(d.key)}
                       onChange={(e) => {
-                        setForm({
-                          ...form,
-                          disciplineKeys: e.target.checked
-                            ? [...form.disciplineKeys, d.key]
-                            : form.disciplineKeys.filter((x) => x !== d.key),
-                        });
+                        setAddDiscKeys(
+                          e.target.checked ? [...addDiscKeys, d.key] : addDiscKeys.filter((k) => k !== d.key)
+                        );
                       }}
                     />
                     {d.label}
                   </label>
                 ))}
               </div>
-              )}
-            </div>
-            <p className="text-xs text-steel-muted">
-              Each vendor gets one BOQ per selected work package — lines from project budget monitoring (item, section,
-              UOM, qty). Vendor fills <strong className="text-ink">rate</strong> only; comparative uses qty × rate.
-            </p>
-            <div>
-              <p className="text-xs font-semibold text-steel-muted mb-1">
-                Vendors / contractors{" "}
-                <Link to="/crm/directory/vendors" className="text-brand font-semibold">
-                  (CRM directory)
-                </Link>
-              </p>
-              <SearchableCheckboxList
-                items={bidderItems}
-                selectedIds={form.vendorIds}
-                onChange={(vendorIds) => setForm({ ...form, vendorIds })}
-                placeholder="Search vendor…"
-                emptyMessage="No vendors yet — add contractors on CRM → Vendors, or assign them on the project directory."
-              />
-            </div>
-            <Button type="submit" disabled={busy}>
-              {busy ? "Creating…" : "Create bid"}
-            </Button>
-          </form>
-        </Card>
-      )}
-
-      <div className="crm-bid-desk">
-        <aside className="crm-bid-desk__rail">
-          <div className="crm-bid-desk__rail-head space-y-2">
-            <label className="text-[10px] font-semibold text-steel-muted block">
-              Project
-              <select
-                className="mt-1 w-full border border-line rounded-lg px-2 py-1.5 text-xs bg-white"
-                value={setupProjectId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  const q = new URLSearchParams(searchParams);
-                  if (id) q.set("projectId", id);
-                  else q.delete("projectId");
-                  setSearchParams(q, { replace: true });
-                  setSelectedId(null);
-                  setDetail(null);
-                  setShowNewBidForm(false);
-                  if (!id) nav("/crm/bids", { replace: true });
-                }}
-              >
-                <option value="">All projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                className="!text-xs flex-1"
-                onClick={() => {
-                  if (!setupProjectId) {
-                    showActionNeed("Pick a project", "Choose a project above, then create a new bid.");
-                    return;
-                  }
-                  openNewBidSetup({ projectId: setupProjectId });
-                }}
-              >
-                + New bid
-              </Button>
-              <Button
-                variant="secondary"
-                type="button"
-                className="!text-xs"
-                onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-              >
-                R2 sample
-              </Button>
-            </div>
-            <p className="text-[10px] text-steel-muted font-mono uppercase tracking-wide">
-              {packagesForDesk.length} package(s)
-            </p>
-          </div>
-          <ul className="crm-bid-desk__rail-list divide-y">
-              {packagesForDesk.map((p) => {
-                const pct = p.uploadProgress
-                  ? Math.round((100 * (p.uploadProgress.done || 0)) / Math.max(1, p.uploadProgress.total || 0))
-                  : 0;
-                return (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      className={`w-full text-left px-4 py-3 hover:bg-brand-soft/40 ${selectedId === p.id ? "bg-brand-soft/60" : ""}`}
-                      onClick={() => selectPackage(p.id)}
-                    >
-                      <div className="font-medium text-sm flex items-center gap-2">
-                        <span className="truncate">{p.title}</span>
-                        {p.status === "Awarded" && <Badge tone="ok">Awarded</Badge>}
-                        {p.status === "Draft" && <Badge tone="warn">Draft</Badge>}
-                        {p.status === "Evaluation" && <Badge tone="brand">Evaluation</Badge>}
-                      </div>
-                      <div className="text-xs text-steel-muted mt-0.5">
-                        {p.project?.code ? `${p.project.code} · ` : ""}
-                        {p.revisionLabel} · {p.status}
-                      </div>
-                      <div className="mt-1.5 h-1.5 rounded-full bg-line overflow-hidden">
-                        <div
-                          className={`h-full ${pct === 100 ? "bg-ok" : "bg-brand"}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="text-[10px] text-steel-muted mt-0.5">
-                        BOQs {p.uploadProgress?.done ?? 0} / {p.uploadProgress?.total ?? 0}
-                        {pct === 100 ? " · ready to compare" : pct > 0 ? " · in progress" : " · awaiting uploads"}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-              {!packages.length && (
-                <li className="px-4 py-8 text-sm text-steel-muted text-center space-y-3">
-                  <div className="text-4xl">📊</div>
-                  <p className="font-semibold text-ink">No bid packages yet.</p>
-                  <Button type="button" onClick={() => openNewBidSetup()}>
-                    Open a bid →
-                  </Button>
-                </li>
-              )}
-          </ul>
-        </aside>
-
-        <div className="crm-bid-desk__main">
-          <div className="space-y-4">
-          {detail ? (
-            <>
-              {detail.status === "Draft" && (
-                <Card className="!p-4 border-amber-300 bg-amber-50/70">
-                  <p className="text-sm text-ink">
-                    <strong>Draft package</strong> — bidders cannot upload yet. Click{" "}
-                    <strong>Open bid &amp; notify bidders</strong> to email portal logins and unlock vendor uploads.
-                  </p>
-                </Card>
-              )}
-              <div className="crm-bid-desk__section">
-              <Card className="!p-4">
-                <div className="crm-bid-desk__section-head">
-                  <div className="min-w-0">
-                    <h3 className="font-semibold">{detail.title}</h3>
-                    <p className="text-xs text-steel-muted mt-0.5">
-                      {detail.project?.code ? (
-                        <span className="font-mono">{detail.project.code}</span>
-                      ) : null}
-                      {detail.project?.code ? " · " : ""}
-                      {detail.revisionLabel} · <Badge>{detail.status}</Badge>
-                      {detail.uploadProgress && (
-                        <span className="ml-2">
-                          {detail.uploadProgress.done}/{detail.uploadProgress.total} discipline BOQs uploaded
-                        </span>
-                      )}
-                    </p>
-                    {detail.project?.name && (
-                      <p className="text-[11px] text-steel-muted mt-1 line-clamp-2">{detail.project.name}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 shrink-0">
-                    {(detail.status === "Draft" || detail.status === "Open") && (
-                      <Button type="button" disabled={busy} onClick={() => void openBidPackage()}>
-                        {detail.status === "Draft" ? "Open bid" : "Resend invites"}
-                      </Button>
-                    )}
-                    <Button type="button" variant="secondary" disabled={busy} onClick={() => void recomputeComparative()}>
-                      Refresh R2
-                    </Button>
-                    {canManage && token && (
-                      <BidManageActions
-                        bid={{
-                          id: detail.id,
-                          title: detail.title,
-                          status: detail.status,
-                          revisionLabel: detail.revisionLabel,
-                          notes: detail.notes,
-                          dueDate: detail.dueDate,
-                          projectId: detail.project?.id || detail.projectId,
-                          leadId: detail.lead?.id || detail.leadId,
-                          awardedVendorId: detail.awardedVendorId,
-                        }}
-                        token={token}
-                        projects={projects}
-                        leads={leads}
-                        onChanged={async () => {
-                          await loadDetail(detail.id);
-                          await load();
-                        }}
-                        onDeleted={() => {
-                          setSelectedId(null);
-                          setDetail(null);
-                          const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
-                          nav(`/crm/bids${q}`, { replace: true });
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
-                {(() => {
-                  const noEmail = [
-                    ...new Map(
-                      (detail.vendorBoqs || [])
-                        .filter((b) => !b.vendor?.email)
-                        .map((b) => [b.vendorLabel, b.vendorLabel])
-                    ).values(),
-                  ];
-                  if (!noEmail.length && !accessSlip.length) return null;
-                  return (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1">
-                      {noEmail.length > 0 && (
-                        <p>
-                          <strong>No email on file:</strong> {noEmail.join(", ")}. Add an email on the vendor card before they can receive a login.
-                        </p>
-                      )}
-                      {accessSlip.length > 0 && (
-                        <div>
-                          <p className="font-semibold uppercase tracking-wide text-steel-muted">Access slip — give these to vendors</p>
-                          {accessSlip.map((s) => (
-                            <p key={s.email} className="font-mono">
-                              {s.vendor} · {s.email} · {s.tempPassword}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                {detail.notes && (
-                  <p className="text-xs text-steel-muted mt-3 border-l-2 border-brand pl-2">{detail.notes}</p>
-                )}
-              </Card>
-
-              {detail.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length > 0 && (
-                <Card className="!p-4 min-w-0">
-                  {summaryVendorGap && (
-                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-                      {summaryVendorGap.inSummaryOnly.length > 0 && (
-                        <>
-                          Comparative lists{" "}
-                          <strong>{summaryVendorGap.inSummaryOnly.join(", ")}</strong> but they have no BOQ slots on this
-                          package — use <strong>Add bidders</strong> below, then refresh comparative.
-                        </>
-                      )}
-                      {summaryVendorGap.inSummaryOnly.length > 0 && summaryVendorGap.inSlotsOnly.length > 0 ? " " : null}
-                      {summaryVendorGap.inSlotsOnly.length > 0 && (
-                        <>
-                          BOQ matrix includes{" "}
-                          <strong>{summaryVendorGap.inSlotsOnly.join(", ")}</strong> not yet in section totals — upload
-                          BOQs and click Refresh comparative.
-                        </>
-                      )}
-                    </p>
-                  )}
-                  <CrmComparativeRegister
-                    summary={detail.summary}
-                    summarySheetId={detail.summarySheetId}
-                    masterSheetId={detail.comparativeSheetId}
-                    revisionLabel={detail.revisionLabel}
-                  />
-
-                  {vendorTotals.length > 1 && detail.status !== "Awarded" && (
-                    <div className="mt-3 p-3 border border-brand/30 rounded-xl bg-brand-soft/30">
-                      <p className="text-xs font-mono uppercase text-steel-muted mb-2">Award recommendation</p>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        {vendorTotals.map((v) => (
-                          <div key={v.label} className="flex items-center gap-1.5">
-                            <span className={`text-xs px-2 py-1 rounded-full border ${v.isLowest ? "bg-ok text-white border-ok" : "border-line text-steel-muted"}`}>
-                              {v.label} · {formatINR(v.total)} {v.isLowest && "· L1"}
-                            </span>
-                            <Button
-                              type="button"
-                              variant={v.isLowest ? "primary" : "secondary"}
-                              className="!text-xs !py-1"
-                              disabled={busy}
-                              onClick={() => void awardVendor(v.label)}
-                            >
-                              Award
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              )}
-
-              {vendorMatrix.length > 0 && (
-                <Card className="!p-4 min-w-0">
-                  <CrmBidVendorMatrix
-                    disciplines={detailDisciplines}
-                    vendorMatrix={vendorMatrix}
-                    grandTotals={detail.summary?.grandTotals}
-                    lowestVendor={detail.summary?.lowestVendor}
-                    onManageSlot={openSlotPanel}
-                    onCopyLink={copyVendorLink}
-                  />
-                </Card>
-              )}
-              </div>
-
-              {slotPanel && selectedId && (
-                <Card>
-                  <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                    <div>
-                      <h4 className="font-semibold text-sm">
-                        {slotPanel.slot.vendorLabel} · {disciplineLabel(disciplines, slotPanel.slot.discipline)}
-                      </h4>
-                      <p className="text-xs text-steel-muted">
-                        Separate BOQ per contractor × work package. Lines from budget monitoring — vendor fills rate only, or upload filled Excel.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!text-xs"
-                        onClick={() =>
-                          void downloadAuthFile(
-                            `/api/crm/bid-packages/${selectedId}/vendor-boq/${slotPanel.slot.id}/template.xlsx`,
-                            token,
-                            `SPDC-BOQ-${slotPanel.slot.discipline}-${slotPanel.slot.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40)}.xlsx`,
-                          )
-                        }
-                      >
-                        Download SPDC BOQ
-                      </Button>
-                      <Button
-                      type="button"
-                      variant="ghost"
-                      className="!text-xs"
-                      onClick={() => {
-                        setSlotPanel(null);
-                        setUploadFile(null);
-                      }}
-                    >
-                      Close
-                    </Button>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <Button
-                      type="button"
-                      variant={slotPanel.tab === "edit" ? "primary" : "secondary"}
-                      className="!text-xs"
-                      onClick={() => setSlotPanel((prev) => (prev ? { ...prev, tab: "edit" } : null))}
-                    >
-                      Edit in portal
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={slotPanel.tab === "upload" ? "primary" : "secondary"}
-                      className="!text-xs"
-                      onClick={() => {
-                        setSlotPanel((prev) => (prev ? { ...prev, tab: "upload" } : null));
-                        setUploadFile(null);
-                      }}
-                    >
-                      Upload Excel
-                    </Button>
-                  </div>
-                  {slotPanel.tab === "edit" ? (
-                    <CrmBidBoqRegister
-                      token={token!}
-                      bidPackageId={selectedId}
-                      slotId={slotPanel.slot.id}
-                      title={`${slotPanel.slot.vendorLabel} — ${disciplineLabel(disciplines, slotPanel.slot.discipline)}`}
-                      sheetLabel={disciplineLabel(disciplines, slotPanel.slot.discipline)}
-                      canEdit={canManage}
-                      onSaved={() => {
-                        void loadDetail(selectedId);
-                        void load();
-                      }}
-                      onClose={() => {
-                        setSlotPanel(null);
-                        setUploadFile(null);
-                      }}
-                    />
-                  ) : (
-                    <form className="space-y-3" onSubmit={uploadBoq}>
-                      <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
-                        {uploadFile ? uploadFile.name : "Choose Excel BOQ"}
-                      </FilePickButton>
-                      <Button type="submit" disabled={!uploadFile || busy}>
-                        {busy ? "Uploading…" : "Upload BOQ"}
-                      </Button>
-                    </form>
-                  )}
-                </Card>
-              )}
-            </>
-          ) : (
-            <div className="crm-bid-desk__empty">
-              <div className="text-4xl" aria-hidden>
-                📋
-              </div>
-              <p className="font-semibold text-ink text-sm">Bid workflow</p>
-              <ol className="text-xs text-steel-muted space-y-1 max-w-md text-left list-decimal list-inside">
-                <li>Pick a project in the left rail.</li>
-                <li>+ New bid — select vendors and work packages from the project card.</li>
-                <li>Open bid, then vendors upload BOQs or fill rates online.</li>
-                <li>Refresh R2 comparative and award L1.</li>
-              </ol>
-              {setupProjectId ? (
-                <Button type="button" onClick={() => openNewBidSetup({ projectId: setupProjectId })}>
-                  + New bid for this project
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  className="flex-1 min-w-[140px] !text-xs"
+                  placeholder="Custom discipline"
+                  value={customDiscLabel}
+                  onChange={(e) => setCustomDiscLabel(e.target.value)}
+                />
+                <Button type="button" variant="secondary" className="!text-xs" onClick={() => void addCustomDiscipline()}>
+                  Add custom
                 </Button>
-              ) : (
-                <p className="text-xs">Choose a project in the dropdown to start.</p>
-              )}
-            </div>
-          )}
+              </div>
+              <Button type="button" className="mt-3 !text-xs" disabled={busy || !addDiscKeys.length} onClick={() => void addDisciplinesToPackage()}>
+                Add discipline BOQs
+              </Button>
+            </Card>
           </div>
-        </div>
-      </div>
+        }
+      />
+
       <ActionReasonDialog reason={actionError} onClose={() => setActionError(null)} />
     </div>
   );
