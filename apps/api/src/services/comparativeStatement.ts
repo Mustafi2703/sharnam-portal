@@ -364,8 +364,18 @@ export function parseDisciplineBoqSheet(
   const aoa = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1, defval: "" }) as unknown[][];
   let headerIdx = aoa.findIndex((r) => {
     const line = r.map((c) => String(c).toLowerCase()).join(" ");
-    return line.includes("sr") && line.includes("description");
+    const hasDesc = line.includes("description") || line.includes("particular");
+    const hasSr = line.includes("sr") || line.includes("item no") || line.includes("s.no");
+    const hasQty = line.includes("qty") || line.includes("quantity");
+    const hasUnit = line.includes("unit") || line.includes("uom");
+    return (hasSr && hasDesc) || (hasDesc && hasQty && hasUnit);
   });
+  if (headerIdx < 0) {
+    headerIdx = aoa.findIndex((r) => {
+      const line = r.map((c) => String(c).toLowerCase()).join(" ");
+      return line.includes("description") && (line.includes("rate") || line.includes("qty"));
+    });
+  }
   if (headerIdx < 0) headerIdx = 4;
 
   const headers = (aoa[headerIdx] || []).map((c, i) => (String(c).trim() ? String(c) : `Column ${i + 1}`));

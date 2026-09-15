@@ -1029,7 +1029,10 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
   if (qtn.status === "Awarded" && (qtn.awardedProjectId || qtn.projectId)) {
     const projectId = qtn.awardedProjectId || qtn.projectId;
     const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
-    return res.json({ quotation: qtn, projectId, project, alreadyAwarded: true });
+    if (project) {
+      return res.json({ quotation: qtn, projectId, project, alreadyAwarded: true });
+    }
+    // Awarded but linked project was purged — recreate below.
   }
 
   const lead = qtn.lead;
