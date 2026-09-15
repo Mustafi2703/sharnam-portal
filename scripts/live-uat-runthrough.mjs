@@ -79,13 +79,13 @@ async function main() {
   console.log("\n4) CRM + HRMS browser walk (manual checklist)");
   console.log("   Office login:", EMAIL, "/", PASS);
   console.log("   ─ HRMS desk");
-  console.log("     •", `${BASE}/hrm/users` — confirm no @sharnam.demo rows");
-  console.log("     •", `${BASE}/hrm/recruitment` — empty or your fresh requisition");
-  console.log("     •", `${BASE}/hrm/onboarding` — no Riya Shah FLOW demo");
+  console.log("     •", `${BASE}/hrm/users - confirm no @sharnam.demo rows`);
+  console.log("     •", `${BASE}/hrm/recruitment - empty or your fresh requisition`);
+  console.log("     •", `${BASE}/hrm/onboarding - no Riya Shah FLOW demo`);
   console.log("   ─ CRM desk");
-  console.log("     •", `${BASE}/crm/setup` — pick project, tick work packages only");
-  console.log("     •", `${BASE}/crm/bids` — new bid flow (tabs: Overview / Comparative / Matrix / Manage)");
-  console.log("   ─ Project modules (Voltamp should be empty until you load templates)");
+  console.log("     •", `${BASE}/crm/setup - pick project, tick work packages only`);
+  console.log("     •", `${BASE}/crm/bids - new bid flow (Overview / Comparative / Matrix / Manage)`);
+  console.log("   ─ Project modules (Voltamp empty until you load templates)");
   if (voltamp) {
     console.log("     • Drawings:", `${BASE}/projects/${voltamp.id}/drawings/register`);
     console.log("     • Cost:", `${BASE}/projects/${voltamp.id}/cost`);
