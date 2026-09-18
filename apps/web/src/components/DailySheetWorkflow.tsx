@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Button } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
+import { canBulkProvisionSheets } from "../lib/productionUi";
 
 type PackCheck = {
   key: string;
@@ -57,8 +58,7 @@ export function DailySheetWorkflow({
   const [localBusy, setLocalBusy] = useState(false);
   const [localMsg, setLocalMsg] = useState("");
 
-  const roleCanProvision = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
-  const allowProvision = canProvision ?? roleCanProvision;
+  const allowProvision = canProvision ?? canBulkProvisionSheets(user?.role);
 
   useEffect(() => {
     if (pack || checks?.length) return;

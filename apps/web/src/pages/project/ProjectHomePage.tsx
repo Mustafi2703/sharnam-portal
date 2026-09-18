@@ -9,6 +9,7 @@ import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ToolLink } from "../../components/ToolLink";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { ProjectManageActions, type ManageableProject } from "../../components/ProjectManageActions";
+import { canBulkProvisionSheets } from "../../lib/productionUi";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -120,30 +121,6 @@ export default function ProjectHomePage() {
         </div>
       </div>
 
-      {canUpload && (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/dpr-maker`)}>
-            Open DPR maker
-          </Button>
-          <Button type="button" className="!text-xs" onClick={() => navigate(`/projects/${id}/wpr-maker`)}>
-            Open WPR maker
-          </Button>
-          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/drawings`)}>
-            Drawings
-          </Button>
-          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/inspections`)}>
-            Quality
-          </Button>
-          <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/comms`)}>
-            Comms
-          </Button>
-          {canManageProject && (
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => navigate(`/projects/${id}/setup`)}>
-              Project setup
-            </Button>
-          )}
-        </div>
-      )}
       {isVendor && (
         <div className="flex flex-wrap gap-2">
           <Button type="button" className="!text-xs" onClick={() => navigate("/crm/vendor-bids")}>
@@ -191,7 +168,7 @@ export default function ProjectHomePage() {
             projectId={id!}
             pack={pack?.summary}
             checks={pack?.checks}
-            canProvision={!!canUpload}
+            canProvision={canBulkProvisionSheets(user?.role)}
             busy={packBusy}
             onProvision={() => void provisionSheets()}
           />

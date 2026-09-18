@@ -600,6 +600,23 @@ export async function downloadDriveFile(itemPath: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
+/**
+ * Convert an Office file in SharePoint to PDF via Microsoft Graph.
+ * Works on Hostinger Node hosting — no LibreOffice or Docker required.
+ */
+export async function convertDriveItemToPdf(driveId: string, itemId: string): Promise<Buffer> {
+  const token = await getAccessToken();
+  const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content?format=pdf`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Graph PDF convert failed (${res.status}): ${text.slice(0, 240)}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
 export function sharePointPathFromWebUrl(webUrl: string): string | null {
   try {
     const decoded = decodeURIComponent(webUrl);

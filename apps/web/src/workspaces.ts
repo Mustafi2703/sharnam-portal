@@ -41,15 +41,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     {
       to: "drawings/register",
       label: "Master drawing register",
-      blurb: "DCI master register from DRAWING REGISTER - 01.xlsx.",
+      blurb: "DCI master register from DRAWING REGISTER - 01.xlsx — includes week KPI dashboard.",
       sheet: "Master Drawing Register",
-    },
-    {
-      to: "drawings/register",
-      label: "Register dashboard",
-      query: "sheet=",
-      blurb: "Drawing register week KPIs.",
-      sheet: "DRAWING REGISTER - 01.xlsx · Dashboard",
     },
     {
       to: "drawings/library",
@@ -673,13 +666,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Project CAPEX / monthly budget",
       query: "tab=budget",
       blurb: "CAPEX is the project budget. Upload the SPDC budget workbook each month.",
-      sheet: "SPDC_Budget · Budget",
-    },
-    {
-      to: "cost",
-      label: "Budget WBS",
-      query: "tab=budget",
-      blurb: "Same register as Project CAPEX — monthly workbook upload.",
       sheet: "SPDC_Budget · Budget",
     },
     {

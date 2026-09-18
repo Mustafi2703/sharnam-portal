@@ -51,6 +51,15 @@ Generate from local `.env`: `bash scripts/export-hostinger-env.sh`
 4. CRM: save proposal status, project card (should be fast)
 5. CRM Launch step only: ISO folders (~1 minute)
 6. HRMS: open recruitment desk, `riya.shah@sharnam.demo` profile
+7. WPR Maker → Download **PPTX** (client template) and **PDF** (SharePoint convert — needs step 2)
+
+## WPR PPTX + PDF (no VPS)
+
+- **PPTX** uses `templates/SPDC_WPR_CLIENT_REFERENCE.pptx` from the repo (deployed with the app).
+- **PDF** uploads the filled deck to SharePoint; Microsoft Graph converts it — **no LibreOffice or Docker**.
+- Requires `MOCK_ONEDRIVE=false` and working SharePoint (smoke test #2).
+- Optional: `CLOUDCONVERT_API_KEY` if Graph convert ever fails.
+- See `docs/WPR_EXPORT.md`.
 
 ## Do not set
 

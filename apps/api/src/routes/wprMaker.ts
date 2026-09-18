@@ -413,7 +413,49 @@ wprMakerRouter.get("/:projectId/download.pptx", async (req, res) => {
   const fname = `WPR-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.pptx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.setHeader("X-Wpr-Export", process.env.WPR_PPTX_LEGACY === "1" ? "generated" : "template");
   res.send(buf);
+});
+
+/** PDF — filled client template PPTX converted via LibreOffice or Gotenberg. */
+wprMakerRouter.get("/:projectId/download.pdf", async (req, res) => {
+  const projectId = req.params.projectId;
+  const range = rangeFromQuery(req.query as Record<string, unknown>);
+  const pack = await buildWprExportPack(projectId, range);
+  if (!pack) return res.status(404).json({ error: "project not found" });
+  const { convertWprPptxToPdf } = await import("../services/wprPdf.js");
+  const pptx = await buildWprPptx({
+    header: pack.header,
+    sections: pack.sections,
+    charts: pack.charts,
+    packExtras: pack.packExtras || undefined,
+  });
+  try {
+    const { buffer, engine } = await convertWprPptxToPdf(pptx, pack.project.code);
+    const fname = `WPR-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+    res.setHeader("X-Wpr-Pdf-Engine", engine);
+    res.send(buffer);
+  } catch (err) {
+    res.status(503).json({
+      error: err instanceof Error ? err.message : "PDF conversion unavailable",
+      hint: "On Hostinger: ensure MOCK_ONEDRIVE=false and Azure Graph credentials are set (SharePoint converts PPTX→PDF). See docs/WPR_EXPORT.md.",
+    });
+  }
+});
+
+wprMakerRouter.get("/:projectId/export-status", async (req, res) => {
+  const { wprTemplateAvailable } = await import("../services/wprPptxTemplate.js");
+  const { pdfEngineAvailable, pdfEngineHint } = await import("../services/wprPdf.js");
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  res.json({
+    templatePptx: wprTemplateAvailable(),
+    pdfEngine: await pdfEngineAvailable(project?.code),
+    pdfEngineKind: pdfEngineHint(),
+    legacyPptx: process.env.WPR_PPTX_LEGACY === "1",
+    hosting: "hostinger-node",
+  });
 });
 
 wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
@@ -455,7 +497,20 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
   const pptxBuf = await buildWprPptx({ header, sections, charts, packExtras: pack.packExtras || undefined });
   const pptxSaved = await mockOneDrive.upload(project.code, folder, pptxFname, pptxBuf);
 
-  const publishedUrl = saved.sharePointUrl || saved.url || pptxSaved.sharePointUrl || pptxSaved.url || null;
+  let pdfPath: string | null = null;
+  let pdfUrl: string | null = null;
+  try {
+    const { convertWprPptxToPdf } = await import("../services/wprPdf.js");
+    const { buffer: pdfBuf } = await convertWprPptxToPdf(pptxBuf, project.code);
+    const pdfFname = `WPR-${project.code}-${dateStr}.pdf`;
+    const pdfSaved = await mockOneDrive.upload(project.code, folder, pdfFname, pdfBuf);
+    pdfPath = pdfSaved.path;
+    pdfUrl = pdfSaved.sharePointUrl || pdfSaved.url || null;
+  } catch (pdfErr) {
+    console.warn("[wpr] PDF on publish skipped:", pdfErr instanceof Error ? pdfErr.message : pdfErr);
+  }
+
+  const publishedUrl = saved.sharePointUrl || saved.url || pptxSaved.sharePointUrl || pptxSaved.url || pdfUrl || null;
 
   const updated = await prisma.wprSnapshot.update({
     where: { id: existing!.id },
@@ -471,7 +526,14 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
     userId: req.user!.id,
     entity: "WprSnapshot",
     entityId: existing!.id,
-    meta: { weekEnding: dateStr, path: saved.path, url: publishedUrl, pptxPath: pptxSaved.path, provider: saved.provider },
+    meta: {
+      weekEnding: dateStr,
+      path: saved.path,
+      url: publishedUrl,
+      pptxPath: pptxSaved.path,
+      pdfPath,
+      provider: saved.provider,
+    },
   });
 
   res.json({
@@ -484,6 +546,8 @@ wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
     sharePointUrl: publishedUrl,
     pptxPath: pptxSaved.path,
     pptxUrl: pptxSaved.url,
+    pdfPath,
+    pdfUrl,
     provider: saved.provider,
     url: saved.url,
   });

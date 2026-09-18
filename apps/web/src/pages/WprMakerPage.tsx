@@ -475,9 +475,26 @@ export default function WprMakerPage() {
     setBusy(true);
     try {
       await downloadWithAuth(url, token, fname);
-      setMsg("WPR PowerPoint downloaded — includes native charts (S-curve, milestones, manpower, cashflow, quality, safety).");
+      setMsg("WPR PowerPoint downloaded — client template deck with your week data on the cover and register slides.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadPdf() {
+    if (!pack) return;
+    const qs = new URLSearchParams({ end: weekEnd, preset: rangePreset });
+    if (rangePreset === "custom" && pack.weekStart) qs.set("start", pack.weekStart.slice(0, 10));
+    const url = `${apiBase()}/api/wpr-maker/${projectId}/download.pdf?${qs}`;
+    const fname = `WPR-${pack.projectCode}-${weekEnd}.pdf`;
+    setBusy(true);
+    try {
+      await downloadWithAuth(url, token, fname);
+      setMsg("WPR PDF downloaded — converted from the client template PowerPoint.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "PDF download failed — on Hostinger ensure MOCK_ONEDRIVE=false and SharePoint Graph is configured (see docs/WPR_EXPORT.md).");
     } finally {
       setBusy(false);
     }
@@ -539,6 +556,7 @@ export default function WprMakerPage() {
             <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadXlsx} disabled={busy}>XLSX</button>
             <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadClientXlsx} disabled={busy}>Client</button>
             <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadPptx} disabled={busy}>PPTX</button>
+            <button type="button" className="text-sm font-semibold text-brand underline px-1" onClick={downloadPdf} disabled={busy}>PDF</button>
           </div>
         </div>
 

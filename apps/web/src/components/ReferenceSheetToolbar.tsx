@@ -1,6 +1,7 @@
 import { formatUiText } from "../lib/formatUiText";
 import { useAuth } from "../auth";
 import { canBrowseSharePoint } from "../lib/driveAccess";
+import { canLoadSheetTemplates } from "../lib/productionUi";
 import { FilePickButton } from "./FilePickButton";
 import { Button } from "./ui";
 
@@ -63,6 +64,7 @@ export function ReferenceSheetToolbar({
 }: ReferenceSheetToolbarProps) {
   const { user } = useAuth();
   const showDrive = canBrowseSharePoint(user?.role);
+  const showTemplateLoad = onGenerate && canLoadSheetTemplates(user?.role);
   return (
     <div className="sheet-actions-bar shrink-0 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
       <div className="min-w-0 text-left">
@@ -135,7 +137,7 @@ export function ReferenceSheetToolbar({
             {formatUiText(addRowLabel)}
           </Button>
         )}
-        {onGenerate && (
+        {showTemplateLoad && (
           <Button type="button" onClick={onGenerate} disabled={busy}>
             {busy ? "Saving…" : formatUiText(generateLabel)}
           </Button>

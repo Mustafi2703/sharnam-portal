@@ -140,7 +140,7 @@ export default function App() {
       <Route path="/login/client" element={<PortalLoginPage portalKey="client" />} />
       <Route path="/login/hr" element={<PortalLoginPage portalKey="hr" />} />
       <Route path="/login/stakeholder" element={<PortalLoginPage portalKey="stakeholder" />} />
-      <Route path="/login/employee" element={<PortalLoginPage portalKey="employee" />} />
+      <Route path="/login/employee" element={<Navigate to="/login/hr" replace state={{ retiredPortal: "joiner" }} />} />
       <Route path="/login/:portalKey" element={<DynamicPortalLoginRoute />} />
 
       <Route

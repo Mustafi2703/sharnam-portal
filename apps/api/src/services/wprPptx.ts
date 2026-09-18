@@ -757,6 +757,20 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
 }
 
 export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
+  if (process.env.WPR_PPTX_LEGACY !== "1") {
+    try {
+      const { buildWprPptxFromTemplate, wprTemplateAvailable } = await import("./wprPptxTemplate.js");
+      if (wprTemplateAvailable()) {
+        return await buildWprPptxFromTemplate(pack);
+      }
+    } catch (err) {
+      console.warn("[wpr] template PPTX export failed — using generated deck:", err instanceof Error ? err.message : err);
+    }
+  }
+  return buildWprPptxGenerated(pack);
+}
+
+async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
   const rangeStart = pack.header.weekStart?.slice(0, 10) || new Date().toISOString().slice(0, 10);
   const rangeEnd = pack.header.weekEnd?.slice(0, 10) || rangeStart;
   const charts =

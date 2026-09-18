@@ -1,6 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../auth";
+import { canLoadSheetTemplates } from "../lib/productionUi";
 import { UploadModal } from "./UploadModal";
 import { Button, Card, Input } from "./ui";
 
@@ -44,6 +46,8 @@ export function CostStructureSetupPanel({
   onMessage,
   primary,
 }: Props) {
+  const { user } = useAuth();
+  const canLoadTemplate = canLoadSheetTemplates(user?.role);
   const [structureName, setStructureName] = useState("New structure");
   const [localBusy, setLocalBusy] = useState(false);
   const [structureModalOpen, setStructureModalOpen] = useState(false);
@@ -216,13 +220,15 @@ export function CostStructureSetupPanel({
 
         {canEdit && (
           <div className="px-4 py-4 border-b border-line grid sm:grid-cols-3 gap-4 shrink-0">
-            <Card className="!p-4 space-y-2 bg-paper">
-              <div className="text-[10px] uppercase font-semibold text-steel-muted">Step 1 · Full template</div>
-              <p className="text-xs text-steel-muted">Budget WBS + all Monitoring + MB + BBS + cashflow from server file.</p>
-              <Button type="button" disabled={isBusy} onClick={() => void loadFullTemplate()}>
-                {isBusy ? "Loading…" : "Load SPDC_Budget_Arvind 49.xls"}
-              </Button>
-            </Card>
+            {canLoadTemplate ? (
+              <Card className="!p-4 space-y-2 bg-paper">
+                <div className="text-[10px] uppercase font-semibold text-steel-muted">Step 1 · Full template</div>
+                <p className="text-xs text-steel-muted">Budget WBS + all Monitoring + MB + BBS + cashflow from server file.</p>
+                <Button type="button" disabled={isBusy} onClick={() => void loadFullTemplate()}>
+                  {isBusy ? "Loading…" : "Load SPDC_Budget_Arvind 49.xls"}
+                </Button>
+              </Card>
+            ) : null}
             <Card className="!p-4 space-y-2 bg-paper">
               <div className="text-[10px] uppercase font-semibold text-steel-muted">Step 2 · New structure</div>
               <p className="text-xs text-steel-muted">Add a package with a monitoring BOQ workbook (sections preserved).</p>
@@ -331,7 +337,7 @@ export function CostStructureSetupPanel({
                       "No structure rows"
                     ) : (
                       <>
-                        No cost sheets yet — click <strong>Load SPDC_Budget_Arvind 49.xls</strong> above, or open{" "}
+                        No cost sheets yet — upload a structure BOQ or import MB/BBS sheets, or ask an admin to load the SPDC budget template.
                         <Link to={`/projects/${projectId}/cost?tab=boq`} className="text-brand font-semibold">
                           Structure upload
                         </Link>

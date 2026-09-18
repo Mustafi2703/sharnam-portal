@@ -10,6 +10,8 @@ import { Badge, Button, Card, Select } from "./ui";
 import { RegisterFilterBar } from "./RegisterFilterBar";
 import { RegisterBrandHeader } from "./RegisterBrandHeader";
 import type { RegisterBrandProject } from "./RegisterBrandHeader";
+import { useAuth } from "../auth";
+import { canLoadSheetTemplates } from "../lib/productionUi";
 
 export type { CubeRow };
 
@@ -29,6 +31,8 @@ type Props = {
 
 /** SPDC CUBE REGISTER — full scroll sheet, inline editable cells, master-register add form. */
 export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, project, addOpen, onAddClose, onProjectUpdated }: Props) {
+  const { user } = useAuth();
+  const canLoadTemplate = canLoadSheetTemplates(user?.role);
   const { localRows, mergeRow } = useLocalRegisterRows(rows);
   const [form, setForm] = useState(emptyCube());
   const [msg, setMsg] = useState("");
@@ -266,7 +270,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
 
       {localRows.length === 0 && !busy && !syncing && (
         <Card className="!p-3 border-amber-200 bg-amber-50 text-sm text-amber-900 shrink-0">
-          Cube register is empty — click <strong>Load SPDC cube template</strong> in the register header when you want the SPDC format.
+          Cube register is empty — add rows manually{canLoadTemplate ? " or load the SPDC cube template (admin)" : ""}.
         </Card>
       )}
 
@@ -312,9 +316,11 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
               <Button type="button" className="!text-xs" disabled={busy || syncing} onClick={() => void addGroup()}>
                 New cube group
               </Button>
-              <Button type="button" variant="secondary" className="!text-xs" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
-                Load SPDC cube template
-              </Button>
+              {canLoadTemplate ? (
+                <Button type="button" variant="secondary" className="!text-xs" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
+                  Load SPDC cube template
+                </Button>
+              ) : null}
             </div>
           )}
         </div>

@@ -80,7 +80,6 @@ export function homePathForUser(
   if (user.role === "site_employee") return "/attendance";
   if (user.role === "employee") {
     if (user.vendorId) return "/stakeholder";
-    if (user.joiningOfferId) return `/hrm/onboarding/${user.joiningOfferId}`;
     return "/dashboard";
   }
   if (user.role === "client") return "/dashboard";

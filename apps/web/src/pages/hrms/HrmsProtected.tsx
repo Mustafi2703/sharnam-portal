@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth";
 import { homePathForUser, isJoiningEmployee } from "../../lib/portalAccounts";
+import { Card } from "../../components/ui";
 
-/** HRMS — HR desk + new joiners on pre-joining / onboarding only. */
+/** HRMS — HR desk only. Pre-joining and onboarding are completed by HR, not a separate joiner portal. */
 export default function HrmsProtected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -16,15 +17,24 @@ export default function HrmsProtected({ children }: { children: ReactNode }) {
     );
   }
   if (!user) {
-    if (loc.pathname.startsWith("/hrm/onboarding")) {
-      return <Navigate to="/login/employee" replace />;
-    }
-    return <Navigate to="/login/hr" replace />;
+    return <Navigate to="/login/hr" replace state={{ from: loc.pathname }} />;
   }
 
   if (isJoiningEmployee(user)) {
-    if (loc.pathname.startsWith("/hrm/onboarding")) return <>{children}</>;
-    return <Navigate to={`/hrm/onboarding/${user.joiningOfferId}`} replace />;
+    return (
+      <div className="max-w-lg mx-auto py-12 px-4">
+        <Card className="!p-6 space-y-3">
+          <h1 className="font-display text-xl text-ink">Pre-joining handled by HR</h1>
+          <p className="text-sm text-steel-muted leading-relaxed">
+            SPDC HR completes document collection, appointment letter, and Day 1 onboarding with you directly.
+            You do not need a separate portal login before joining.
+          </p>
+          <p className="text-sm text-steel-muted">
+            After your joining date, HR will share your staff login for site and office tools.
+          </p>
+        </Card>
+      </div>
+    );
   }
 
   if (user.role !== "admin" && user.role !== "office") {

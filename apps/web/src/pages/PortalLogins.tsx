@@ -62,13 +62,13 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   },
   employee: {
     key: "employee", title: "New joiner", shortLabel: "New joiner",
-    headline: "Pre-joining desk",
-    subtitle: "After offer acceptance — upload documents, track pre-joining steps, then Day 1 onboarding when HR opens it.",
+    headline: "Portal retired",
+    subtitle: "Pre-joining and onboarding are handled by SPDC HR — no separate candidate login. HR staff sign in at HR Team.",
     demoEmail: "riya.shah@sharnam.demo", allowedRoles: ["employee"],
-    points: ["Upload PAN / Aadhaar / bank", "Pre-joining checklist", "Appointment letter when HR completes"],
-    cta: "Sign in", tone: "#4F46E5", icon: "EM",
-    landingPath: "/hrm/onboarding", workspaceKey: null, group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "Sign in with the email on your offer letter. Default password Demo@1234 unless HR changed it."],
+    points: ["HR runs pre-joining", "Documents via HR desk", "Staff login after joining"],
+    cta: "Use HR desk", tone: "#4F46E5", icon: "EM",
+    landingPath: "/login/hr", workspaceKey: null, group: "role",
+    policies: [...SHARNAM_PORTAL_POLICIES, "The new-joiner portal is retired. Contact HR for pre-joining steps."],
   },
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
@@ -167,7 +167,6 @@ export function consumeLoginLanding(fallback = "/dashboard") {
 export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
   "office",
   "hr",
-  "employee",
   "stakeholder",
   "vendor",
   "client",

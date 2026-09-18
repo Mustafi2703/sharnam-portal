@@ -167,6 +167,13 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
+    if (portal === "employee") {
+      return res.status(403).json({
+        error:
+          "The new-joiner portal is retired. SPDC HR handles pre-joining and onboarding. Sign in at the HR desk if you are HR staff, or use Office / Site after HR issues your login.",
+      });
+    }
+
     if (portal === "vendor" && !user.vendorId) {
       const company = await findContractorByEmail(user.email);
       if (company) {
