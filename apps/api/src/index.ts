@@ -9,7 +9,7 @@ import cors from "cors";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 dotenv.config();
-import { applyDatabaseUrl } from "../../../scripts/resolve-database-url.mjs";
+import { applyDatabaseUrl } from "./resolveDatabaseUrl.js";
 applyDatabaseUrl();
 import { authRouter, rolesRouter, usersRouter } from "./routes/auth.js";
 import { projectsRouter, dmsRouter, drawingsRouter } from "./routes/projects.js";

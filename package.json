@@ -32,6 +32,7 @@
     "hrms:letters-smoke": "tsx scripts/hrms-letters-smoke.mts",
     "hrms:letters-offline": "tsx scripts/hrms-letters-offline.mts",
     "hrms:sync-formats": "tsx scripts/sync-hrms-formats-sharepoint.mts",
+    "hrms:letters-live": "tsx scripts/hrms-letters-live.mts",
     "db:seed-payslips": "tsx seed/payslipStaffDemo.ts",
     "db:prune-demo-users": "tsx seed/prune-demo-users.ts",
     "db:seed-uat-live": "tsx seed/uatLiveProject.ts",

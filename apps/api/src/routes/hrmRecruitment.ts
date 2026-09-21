@@ -877,12 +877,6 @@ hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office", "hr"),
       create: { offerId: row.id },
       update: {},
     });
-    try {
-      const { provisionJoiningPortalLogin } = await import("../services/joiningPortal.js");
-      await provisionJoiningPortalLogin(row.id);
-    } catch (err) {
-      console.warn("[hrms] joining portal provision:", err instanceof Error ? err.message : err);
-    }
   }
   if (nextStatus === "Joined") {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Joined" } });
@@ -995,12 +989,25 @@ hrmRecruitmentRouter.post(
     if (!files.length) return res.status(400).json({ error: "Upload at least one file" });
     const category = String(req.body.category || "Pre-join");
     let userId = offer.onboard?.userId || null;
-    if (!userId) {
-      const { provisionJoiningPortalLogin } = await import("../services/joiningPortal.js");
-      const login = await provisionJoiningPortalLogin(offer.id);
-      userId = login?.userId || null;
+    if (!userId && offer.candidate?.email) {
+      const linked = await prisma.user.findUnique({
+        where: { email: offer.candidate.email.trim().toLowerCase() },
+        select: { id: true },
+      });
+      userId = linked?.id || null;
+      if (userId) {
+        await prisma.onboardingChecklist.upsert({
+          where: { offerId: offer.id },
+          create: { offerId: offer.id, userId },
+          update: { userId },
+        });
+      }
     }
-    if (!userId) return res.status(400).json({ error: "Could not link employee vault" });
+    if (!userId) {
+      return res.status(400).json({
+        error: "No staff login linked to this offer. Create or assign the employee in HR → Users before filing pre-join documents.",
+      });
+    }
 
     const {
       employeeVaultRelPath,
