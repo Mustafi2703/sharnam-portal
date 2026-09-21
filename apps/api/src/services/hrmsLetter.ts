@@ -71,16 +71,6 @@ export function resolveHrmsLetterDocxPath(kind: string): string | null {
     const specific = path.join(base, `${kind}.docx`);
     if (fs.existsSync(specific)) return specific;
   }
-  if (kind === "Appointment" || kind === "Offer" || kind === "Promotion") {
-    const shared = [
-      path.join(process.cwd(), "module_prompts/Sharnam_modules_docs 2/SPDC_Letter_of_Appointment.docx"),
-      path.join(process.cwd(), "Sharnam_modules_docs", "SPDC_Letter_of_Appointment.docx"),
-      path.join(process.cwd(), "apps/api/formats/hrms", "Appointment.docx"),
-    ];
-    for (const p of shared) {
-      if (fs.existsSync(p)) return p;
-    }
-  }
   return null;
 }
 
@@ -108,6 +98,81 @@ function formatInr(v: unknown): string {
 function numOrNull(v: unknown): number | null {
   const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Pull employee profile + project into letter data when employeeUserId is linked. Form values win. */
+export async function enrichHrmsLetterDataFromProfile(
+  row: Pick<
+    HrmsDocument,
+    "employeeUserId" | "employeeName" | "candidateEmail" | "designation" | "department" | "effectiveDate"
+  >,
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (!row.employeeUserId) return data;
+  const [user, profile] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: row.employeeUserId },
+      select: { fullName: true, email: true, phone: true, memberships: { include: { project: { select: { name: true } } }, take: 1 } },
+    }),
+    prisma.employeeProfile.findUnique({ where: { userId: row.employeeUserId } }),
+  ]);
+  if (!user && !profile) return data;
+
+  let reportingManager = "";
+  if (profile?.reportingManagerId) {
+    const mgr = await prisma.user.findUnique({ where: { id: profile.reportingManagerId }, select: { fullName: true } });
+    reportingManager = mgr?.fullName || "";
+  }
+
+  const projectName = user?.memberships?.[0]?.project?.name || "";
+  const pick = (key: string, ...vals: unknown[]) => {
+    const cur = data[key];
+    if (cur != null && String(cur).trim()) return data;
+    const hit = vals.find((v) => v != null && String(v).trim());
+    if (hit != null) data[key] = hit;
+    return data;
+  };
+
+  pick("employeeName", row.employeeName, user?.fullName);
+  pick("candidateName", row.employeeName, user?.fullName);
+  pick("candidateEmail", row.candidateEmail, user?.email, profile?.personalEmail);
+  pick("personalEmail", profile?.personalEmail, user?.email);
+  pick("phone", user?.phone, profile?.personalPhone);
+  pick("mobile", user?.phone, profile?.personalPhone);
+  pick("designation", row.designation, profile?.designation);
+  pick("department", row.department, profile?.department);
+  pick("empCode", profile?.empCode);
+  pick("gender", profile?.gender);
+  pick("pan", profile?.panNumber);
+  pick("panNumber", profile?.panNumber);
+  pick("address", profile?.addressCurrent, profile?.addressPermanent);
+  pick("addressAsPerRecords", profile?.addressCurrent, profile?.addressPermanent);
+  pick("candidateAddress", profile?.addressCurrent);
+  pick("permanentAddress", profile?.addressPermanent, profile?.addressCurrent);
+  pick("postExitAddress", profile?.addressCurrent, profile?.addressPermanent);
+  pick("bankName", profile?.bankName);
+  pick("bank", profile?.bankName);
+  pick("reportingManager", reportingManager);
+  pick("reportingTo", reportingManager);
+  pick("projectName", projectName);
+  pick("project", projectName);
+  pick("clientProject", projectName);
+  pick("ctcAnnual", profile?.ctcAnnual);
+  pick("fixedCtcAnnual", profile?.ctcAnnual);
+  pick("joinDate", profile?.joinDate, row.effectiveDate);
+  pick("effectiveDate", row.effectiveDate, profile?.joinDate);
+  pick("nomineeName", profile?.nomineeName);
+  pick("fatherOrSpouseName", profile?.nomineeName);
+
+  if (profile?.dateOfBirth) {
+    const dob = new Date(profile.dateOfBirth);
+    if (!Number.isNaN(dob.getTime())) {
+      const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000));
+      pick("age", age > 0 ? String(age) : "");
+    }
+  }
+
+  return data;
 }
 
 /** Map form + row into every placeholder the SPDC templates use. */
@@ -146,7 +211,11 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
     previousCtc: formatInr(data.previousCtc ?? data.oldCtcAnnual ?? ""),
     newCtc: formatInr(data.newCtc ?? data.newCtcAnnual ?? ctcRaw),
     empCode: String(data.empCode || "To be assigned on joining"),
-    address: String(data.address || "____________"),
+    address: String(data.address || data.addressAsPerRecords || data.candidateAddress || "____________"),
+    pan: String(data.pan || data.panNumber || "____________"),
+    gender: data.gender,
+    mobile: String(data.mobile || data.phone || "____________"),
+    projectName: String(data.projectName || data.project || "As assigned"),
     probationMonths: String(data.probationMonths || "6"),
     refNo: row.refNo,
     kind: row.kind,
@@ -343,6 +412,20 @@ function defaultBody(kind: string, ctx: Record<string, unknown>): string {
            from ${escapeHtml(fmtDate(ctx.joiningDate as Date | string | null))} until ${effective}, holding the position of
            <strong>${designation}</strong> in the ${department} function. During the tenure the employee's conduct and
            performance were found to be satisfactory.</p>
+      `;
+    case "NdaJoining":
+      return `
+        <h1 class="title">Non-Disclosure Agreement — At Joining</h1>
+        <p>Dear ${name},</p>
+        <p>This undertaking is issued alongside your appointment as <strong>${designation}</strong> with effect from ${effective}.
+           You agree to keep all SPDC and client confidential information secure for the duration of employment and thereafter.</p>
+      `;
+    case "NdaPostEmployment":
+      return `
+        <h1 class="title">Non-Disclosure Reminder — Post Employment</h1>
+        <p>Dear ${name},</p>
+        <p>This letter confirms that your confidentiality obligations to Sharnam Project Development Consultants &amp; Co.
+           continue after your last working day (${effective}). Do not use or disclose drawings, BOQ, rates, RA bills, or claims.</p>
       `;
     default:
       return `
@@ -565,6 +648,7 @@ export async function generateHrmsLetter(row: HrmsDocument) {
   } catch {
     ctx = {};
   }
+  ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
   const merged = letterMergeContext(row, ctx);
   const personFolder = hrPersonFolder(String(merged.employeeName || ""));
   const letterFolder = `${HRMS_LETTERS_FOLDER}/${personFolder}`;
@@ -624,12 +708,9 @@ export async function generateHrmsLetter(row: HrmsDocument) {
   const docxPath = resolveHrmsLetterDocxPath(row.kind);
   if (docxPath) {
     const templateBuf = fs.readFileSync(docxPath);
-    let docxBuf = templateBuf;
-    if (row.kind === "Appointment" || row.kind === "Offer" || row.kind === "Promotion") {
-      const { buildAppointmentDocxReplacements, fillAppointmentDocx } = await import("./hrmsAppointmentDocx.js");
-      const replacements = buildAppointmentDocxReplacements(row, merged, ctcBreakdown);
-      docxBuf = Buffer.from(await fillAppointmentDocx(templateBuf, replacements));
-    }
+    const { buildHrmsDocxTokenMap, fillHrmsDocx } = await import("./hrmsDocxFill.js");
+    const tokens = buildHrmsDocxTokenMap(row, merged, ctcBreakdown);
+    const docxBuf = await fillHrmsDocx(templateBuf, tokens);
     const docxSaved = await uploadHrmsFile(
       uploadFolders,
       `${row.kind}-${safeRef}.docx`,

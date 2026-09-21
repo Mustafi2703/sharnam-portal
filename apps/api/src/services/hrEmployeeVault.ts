@@ -21,6 +21,7 @@ const HR_COMPANY_FOLDERS = [
   `${HR_VAULT_TREE_ROOT}/06.01_Letters`,
   `${HR_VAULT_TREE_ROOT}/06.02_Employee_Files`,
   `${HR_VAULT_TREE_ROOT}/06.03_Payslips`,
+  `${HR_VAULT_TREE_ROOT}/06.04_Letter_Templates`,
 ] as const;
 
 const VAULT_SUBFOLDERS = ["Letters", "Onboarding", "Documents"] as const;

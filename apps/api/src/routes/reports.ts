@@ -2475,6 +2475,8 @@ const HRMS_DOC_KINDS = [
   "Promotion",
   "Warning",
   "Experience",
+  "NdaJoining",
+  "NdaPostEmployment",
 ] as const;
 type HrmsDocKind = (typeof HRMS_DOC_KINDS)[number];
 
@@ -2495,6 +2497,8 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
     Promotion: "PR",
     Warning: "WR",
     Experience: "EC",
+    NdaJoining: "NJ",
+    NdaPostEmployment: "NP",
   };
   return `SPDC/HR/${codeMap[kind]}/${yn}-${nx}/${seq}`;
 }
@@ -2589,7 +2593,14 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
       status: "Generated",
     },
   });
-  if (updated.employeeUserId && (updated.kind === "Appointment" || updated.kind === "Offer" || updated.kind === "Promotion")) {
+  if (
+    updated.employeeUserId &&
+    (updated.kind === "Appointment" ||
+      updated.kind === "Offer" ||
+      updated.kind === "Promotion" ||
+      updated.kind === "NdaJoining" ||
+      updated.kind === "NdaPostEmployment")
+  ) {
     const fileUrl = updated.sharePointUrl || updated.generatedPdfUrl || "";
     const { attachHrmsLetterToEmployeeVault } = await import("../services/hrmsLetter.js");
     await attachHrmsLetterToEmployeeVault(updated, { fileUrl, storagePath: updated.storagePath, signed: false });

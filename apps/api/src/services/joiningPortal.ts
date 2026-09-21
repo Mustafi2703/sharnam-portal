@@ -1,11 +1,10 @@
 /**
- * New joiner portal — after offer acceptance, provision employee login and pre-joining desk.
+ * HR pre-joining helpers — appointment-letter gates and offer access for HR staff.
+ * Candidate self-service / new-joiner portal login has been removed.
  */
-import bcrypt from "bcryptjs";
 import type { PreJoiningChecklist } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import type { AuthUser } from "@sharnam/shared";
-import { portalForRole } from "@sharnam/shared";
 
 /** Steps 1–4 + IT / email / ID before HR generates the appointment letter. */
 export function isPreJoinReadyForAppointmentLetter(preJoin: PreJoiningChecklist | null | undefined) {
@@ -68,66 +67,9 @@ export async function canAccessOffer(user: Pick<AuthUser, "id" | "email" | "role
   return offer.candidate.email?.trim().toLowerCase() === user.email.trim().toLowerCase();
 }
 
-/** Create / link employee portal login when offer is accepted. */
-export async function provisionJoiningPortalLogin(offerId: string) {
-  const offer = await prisma.offer.findUnique({
-    where: { id: offerId },
-    include: { candidate: true, preJoin: true, onboard: true },
-  });
-  if (!offer?.candidate?.email) return null;
-
-  const email = offer.candidate.email.trim().toLowerCase();
-  const passwordHash = await bcrypt.hash(process.env.SEED_PASSWORD || "Demo@1234", 10);
-  const user = await prisma.user.upsert({
-    where: { email },
-    create: {
-      email,
-      fullName: offer.candidate.fullName,
-      role: "employee",
-      portal: portalForRole("employee"),
-      passwordHash,
-      isActive: true,
-      phone: offer.candidate.phone || null,
-    },
-    update: {
-      fullName: offer.candidate.fullName,
-      isActive: true,
-      phone: offer.candidate.phone || undefined,
-    },
-  });
-
-  await prisma.onboardingChecklist.upsert({
-    where: { offerId: offer.id },
-    create: { offerId: offer.id, userId: user.id },
-    update: { userId: user.id },
-  });
-
-  const pendingCode = `PENDING-${offer.offerNo.replace(/[^A-Za-z0-9]/g, "").slice(0, 16)}`;
-  await prisma.employeeProfile.upsert({
-    where: { userId: user.id },
-    create: {
-      userId: user.id,
-      empCode: pendingCode,
-      designation: offer.designation,
-      department: offer.department,
-      joinDate: offer.joiningDate,
-    },
-    update: {
-      designation: offer.designation,
-      department: offer.department,
-      joinDate: offer.joiningDate,
-    },
-  });
-
-  try {
-    const { ensureEmployeeVault } = await import("./hrEmployeeVault.js");
-    const profile = await prisma.employeeProfile.findFirst({ where: { userId: user.id } });
-    await ensureEmployeeVault({ userId: user.id, fullName: user.fullName, email, profile });
-  } catch (err) {
-    console.warn("[joining] vault provision skipped:", err instanceof Error ? err.message : err);
-  }
-
-  return { userId: user.id, email: user.email };
+/** Retired — HR desk runs pre-joining; no candidate portal login is provisioned. */
+export async function provisionJoiningPortalLogin(_offerId: string) {
+  return null;
 }
 
 const HR_PREJOIN_KEYS = new Set([

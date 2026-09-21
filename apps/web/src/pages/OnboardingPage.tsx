@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
-import { canManageHrms, isJoiningEmployee } from "../lib/portalAccounts";
+import { canManageHrms } from "../lib/portalAccounts";
 
 /**
  * Onboarding hub — top level shows all offers past "Accepted" with a live pre-join +
@@ -21,7 +21,6 @@ function OnboardingList() {
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    if (isJoiningEmployee(user)) return;
     (async () => {
       try {
         const list = await api<any[]>("/api/hrm/offers", { token });
@@ -33,17 +32,6 @@ function OnboardingList() {
       }
     })();
   }, [token, user]);
-
-  if (isJoiningEmployee(user)) {
-    return (
-      <Card className="!p-6 space-y-2">
-        <p className="font-semibold text-ink">Pre-joining is managed by HR</p>
-        <p className="text-sm text-steel-muted">
-          Candidates do not use a separate joiner login. HR completes pre-joining and onboarding from the HR desk.
-        </p>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -94,20 +82,6 @@ function OfferOnboardingPage() {
   const { offerId } = useParams();
   const { token, user } = useAuth();
   const canHrWrite = canManageHrms(user);
-
-  if (isJoiningEmployee(user)) {
-    return (
-      <Card className="!p-6 space-y-2">
-        <p className="font-semibold text-ink">Pre-joining is managed by HR</p>
-        <p className="text-sm text-steel-muted">
-          Candidates do not use a separate joiner login. HR completes pre-joining and onboarding from the HR desk.
-        </p>
-        <Link to="/hrm/onboarding" className="text-xs text-brand font-semibold underline inline-block">
-          ← Back to onboarding list
-        </Link>
-      </Card>
-    );
-  }
 
   const [offer, setOffer] = useState<any | null>(null);
   const [preJoin, setPreJoin] = useState<any | null>(null);
@@ -322,17 +296,6 @@ function OfferOnboardingPage() {
   const onboardDone = onboard ? onboardItems.filter((i) => onboard[i.key]).length : 0;
   const preTotal = 9;
   const onboardTotal = onboardItems.length;
-
-  if (user && isJoiningEmployee(user)) {
-    return (
-      <Card className="!p-6 space-y-2">
-        <p className="font-semibold text-ink">Pre-joining is managed by HR</p>
-        <p className="text-sm text-steel-muted">
-          Candidates do not use a separate joiner login. HR completes pre-joining and onboarding from the HR desk.
-        </p>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-6">

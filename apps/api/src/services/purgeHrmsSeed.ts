@@ -36,17 +36,7 @@ export async function purgeHrmsSeedData(tx: Db, actorUserId?: string): Promise<P
   });
   result.leaveRequests = leave.count;
 
-  const docs = await tx.hrmsDocument.deleteMany({
-    where: {
-      OR: [
-        { refNo: { startsWith: "HB-DEMO" } },
-        { refNo: { contains: "FLOW" } },
-        { dataJson: { contains: "hrms-demo-seed" } },
-        { dataJson: { contains: "HRMS flow demo" } },
-        { employeeName: "Demo Employee" },
-      ],
-    },
-  });
+  const docs = await tx.hrmsDocument.deleteMany({});
   result.hrmsDocuments = docs.count;
 
   const reqRows = await tx.manpowerRequisition.findMany({

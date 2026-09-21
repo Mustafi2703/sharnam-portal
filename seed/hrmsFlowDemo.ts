@@ -65,10 +65,15 @@ export async function seedHrmsFlowDemo(prisma: PrismaClient) {
         department: "Projects",
         designation: "Senior Site Engineer",
         joinDate,
+        gender: "Female",
+        panNumber: "ABCPR1234F",
+        addressCurrent: "Flat 402, Sharnam Heights, Vadodara — 390007",
+        addressPermanent: "Flat 402, Sharnam Heights, Vadodara — 390007",
         personalEmail: HRMS_FLOW.email,
         personalPhone: HRMS_FLOW.phone,
         ctcAnnual: newCtc,
         reportingManagerId: actor.id,
+        nomineeName: "Rajesh Shah",
       },
     });
   } else {
@@ -80,10 +85,15 @@ export async function seedHrmsFlowDemo(prisma: PrismaClient) {
         department: "Projects",
         designation: "Senior Site Engineer",
         joinDate,
+        gender: "Female",
+        panNumber: "ABCPR1234F",
+        addressCurrent: "Flat 402, Sharnam Heights, Vadodara — 390007",
+        addressPermanent: "Flat 402, Sharnam Heights, Vadodara — 390007",
         personalEmail: HRMS_FLOW.email,
         personalPhone: HRMS_FLOW.phone,
         ctcAnnual: newCtc,
         reportingManagerId: actor.id,
+        nomineeName: "Rajesh Shah",
       },
     });
   }

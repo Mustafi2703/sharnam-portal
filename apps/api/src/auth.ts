@@ -81,9 +81,7 @@ export function toAuthUser(
   };
 }
 
-export async function joiningMetaForUser(userId: string, email: string) {
-  const { findActiveJoiningForUser, isPreJoinComplete } = await import("./services/joiningPortal.js");
-  const offer = await findActiveJoiningForUser(userId, email);
-  if (!offer) return { joiningOfferId: null, preJoinComplete: false };
-  return { joiningOfferId: offer.id, preJoinComplete: isPreJoinComplete(offer.preJoin) };
+/** New-joiner self-service portal removed — HR desk runs pre-joining. */
+export async function joiningMetaForUser(_userId: string, _email: string) {
+  return { joiningOfferId: null, preJoinComplete: false };
 }

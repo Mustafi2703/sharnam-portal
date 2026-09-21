@@ -1,0 +1,40 @@
+---
+description: End-of-session WhatsApp daily update when user says "last prompt"
+alwaysApply: true
+---
+
+# Daily WhatsApp update (trigger: "last prompt")
+
+When the user says **"last prompt"** (or clearly ends a dev session and asks for a daily update), respond with a **WhatsApp-ready message** they can copy-paste and share.
+
+## Output rules
+
+1. **One block only** — plain text, no markdown headers, no code fences.
+2. **Short and scannable** — bullets with emoji sparingly (✅ 🔜 ⚠️).
+3. **Client-friendly** — outcome-focused, minimal jargon; skip file paths and internal tool names.
+4. **Honest status** — separate *Done today*, *In progress*, *Pending / next*, *Blockers* only when relevant.
+5. **Include date** at the top (e.g. `Sharnam Portal — Daily update | 21 Sep 2026`).
+6. **Do not commit or push** unless explicitly asked in that same message.
+
+## Template
+
+```
+Sharnam Portal — Daily update | <date>
+
+✅ Done today
+• <outcome 1>
+• <outcome 2>
+
+🔜 Next (when we resume)
+• <next item 1>
+• <next item 2>
+
+⚠️ Blockers (only if any)
+• <blocker>
+```
+
+Keep to ~5–8 bullets total unless the user asks for detail.
+
+## Scope
+
+Summarize work from the **current conversation/session** (and uncommitted git changes if relevant). If nothing was shipped, say so and list what was explored or drafted.

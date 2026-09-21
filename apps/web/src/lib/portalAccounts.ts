@@ -86,10 +86,6 @@ export function homePathForUser(
   return "/dashboard";
 }
 
-export function isJoiningEmployee(user?: Pick<AuthUser, "role" | "vendorId" | "joiningOfferId"> | null) {
-  return !!user && user.role === "employee" && !user.vendorId && !!user.joiningOfferId;
-}
-
 export function canManageHrms(user?: { role?: string | null; hrDeskOnly?: boolean } | null) {
   if (!user) return false;
   if (user.hrDeskOnly) return true;

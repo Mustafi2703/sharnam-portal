@@ -60,16 +60,6 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
     landingPath: "/attendance", workspaceKey: "comms", group: "role",
     policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before other site tools."],
   },
-  employee: {
-    key: "employee", title: "New joiner", shortLabel: "New joiner",
-    headline: "Portal retired",
-    subtitle: "Pre-joining and onboarding are handled by SPDC HR — no separate candidate login. HR staff sign in at HR Team.",
-    demoEmail: "riya.shah@sharnam.demo", allowedRoles: ["employee"],
-    points: ["HR runs pre-joining", "Documents via HR desk", "Staff login after joining"],
-    cta: "Use HR desk", tone: "#4F46E5", icon: "EM",
-    landingPath: "/login/hr", workspaceKey: null, group: "role",
-    policies: [...SHARNAM_PORTAL_POLICIES, "The new-joiner portal is retired. Contact HR for pre-joining steps."],
-  },
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
     headline: "Vendor / contractor portal",
@@ -179,7 +169,6 @@ const PORTAL_HERO: Record<string, string> = {
   master: "/auth/hero-master.jpg",
   office: "/auth/hero-office.jpg",
   site: "/auth/hero-site.jpg",
-  employee: "/auth/hero-employee.jpg",
   vendor: "/auth/hero-vendor.jpg",
   client: "/auth/hero-client.jpg",
   drawings: "/auth/hero-drawings.jpg",
@@ -196,7 +185,6 @@ function portalHero(key: string) {
 
 function portalDisplayName(key: string, shortLabel: string) {
   if (key === "vendor") return "Vendor";
-  if (key === "employee") return "New joiner";
   if (key === "stakeholder") return "Stakeholders";
   if (key === "office") return "Office & Admin";
   if (key === "hr") return "HR Team";
@@ -417,9 +405,6 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     const staffEmployee = user.role === "employee" && !user.vendorId;
     if (cfg.key === "stakeholder" && staffEmployee) {
       return <Navigate to={homePathForUser(user)} replace />;
-    }
-    if (cfg.key === "employee" && consultant) {
-      return <Navigate to="/stakeholder" replace />;
     }
     if ((cfg.key === "office" || cfg.key === "hr") && consultant) {
       return <Navigate to="/stakeholder" replace />;
