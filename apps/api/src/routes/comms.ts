@@ -53,6 +53,31 @@ commsRouter.get("/contacts/:projectId", async (req, res) => {
   res.json(rows);
 });
 
+commsRouter.get("/contacts/:projectId/export.xlsx", requireRoles("admin", "office", "employee"), async (req, res) => {
+  const kind = String(req.query.kind || "TECHNICAL").toUpperCase();
+  const { buildMatrixXlsx } = await import("../services/matrixExport.js");
+  try {
+    const buf = await buildMatrixXlsx(req.params.projectId, kind);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="communication-matrix-${kind.toLowerCase()}.xlsx"`);
+    res.send(buf);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Export failed" });
+  }
+});
+
+commsRouter.get("/contacts/:projectId/export.html", requireRoles("admin", "office", "employee"), async (req, res) => {
+  const kind = String(req.query.kind || "TECHNICAL").toUpperCase();
+  const { buildMatrixHtml } = await import("../services/matrixExport.js");
+  try {
+    const html = await buildMatrixHtml(req.params.projectId, kind);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Export failed" });
+  }
+});
+
 commsRouter.post("/contacts/:projectId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const count = await prisma.communicationContact.count({
     where: { projectId: req.params.projectId, matrixKind: req.body.matrixKind || "TECHNICAL" },

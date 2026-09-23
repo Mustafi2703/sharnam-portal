@@ -1,82 +1,26 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
 import HrmsPageHero from "./HrmsPageHero";
-
-/**
- * HRMS letter desk — Appointment / Promotion / Relieving / Exit / Offer / Confirmation.
- * Two ways to add a document:
- *   1. Fill the form and click "Generate" — the system builds:
- *      • editable .docx (SPDC Letter of Appointment template)
- *      • print-ready HTML letter (print → Save as PDF)
- *      • Annexure I .xlsx (CTC calculator) when CTC is on the form
- *   2. Upload the signed / scanned copy back after issuance.
- */
-
-type DocKind =
-  | "Appointment"
-  | "Offer"
-  | "Relieving"
-  | "Exit"
-  | "AssetReturn"
-  | "Confirmation"
-  | "Promotion"
-  | "Warning"
-  | "Experience"
-  | "NdaJoining"
-  | "NdaPostEmployment";
-
-type DocRow = {
-  id: string;
-  kind: DocKind;
-  refNo: string;
-  employeeName: string;
-  designation: string | null;
-  department: string | null;
-  effectiveDate: string | null;
-  issueDate: string;
-  status: string;
-  dataJson: string;
-  generatedDocxUrl: string | null;
-  generatedPdfUrl: string | null;
-  uploadedFileUrl: string | null;
-  sharePointUrl: string | null;
-  createdBy?: { fullName?: string; email?: string } | null;
-};
-
-const KIND_OPTIONS: { key: DocKind; label: string; hint: string }[] = [
-  { key: "Appointment", label: "Appointment letter", hint: "17-clause SPDC letter of appointment + Annexures I–III" },
-  { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date" },
-  { key: "Relieving", label: "Relieving letter", hint: "Issued on last working day after clearance" },
-  { key: "Exit", label: "Exit letter", hint: "Formal separation intimation & exit checklist trigger" },
-  { key: "AssetReturn", label: "Asset submission letter", hint: "IT + admin asset return acknowledgement" },
-  { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services" },
-  { key: "Promotion", label: "Letter of promotion", hint: "SPDC branded promotion with name, previous/new role, and revised CTC" },
-  { key: "Warning", label: "Warning / concern letter", hint: "Notice of concern with corrective actions" },
-  { key: "Experience", label: "Experience certificate", hint: "Tenure and role certificate on request" },
-  { key: "NdaJoining", label: "NDA at joining", hint: "Confidentiality undertaking signed on appointment" },
-  { key: "NdaPostEmployment", label: "NDA post-employment", hint: "Post-exit confidentiality reminder" },
-];
-
-function annexureXlsxUrl(row: DocRow): string | null {
-  try {
-    const data = row.dataJson ? (JSON.parse(row.dataJson) as { annexureXlsxUrl?: string }) : {};
-    if (data.annexureXlsxUrl) return data.annexureXlsxUrl;
-  } catch {
-    /* fall through */
-  }
-  const legacy = row.generatedDocxUrl || "";
-  return legacy.toLowerCase().includes(".xlsx") ? legacy : null;
-}
-
-function editableDocxUrl(row: DocRow): string | null {
-  const url = row.generatedDocxUrl || "";
-  if (!url || url.toLowerCase().includes(".xlsx")) return null;
-  return url;
-}
+import {
+  ONBOARDING_LETTER_PACK,
+  KIND_OPTIONS,
+  type DocKind,
+  type DocRow,
+  type OfferRow,
+  type StaffRow,
+  annexureXlsxUrl,
+  applySubjectKey,
+  buildSubjectOptions,
+  createBodyFromForm,
+  docMatchesSubject,
+  editableDocxUrl,
+  emptyLetterForm,
+  subjectKeyFromForm,
+} from "./hrmsLetterDesk";
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
@@ -86,117 +30,28 @@ export default function HrmsDocumentsPage() {
   const [msg, setMsg] = useState("");
   const initialKind = searchParams.get("kind");
   const [kindFilter, setKindFilter] = useState<"all" | DocKind>(
-    initialKind && KIND_OPTIONS.some((k) => k.key === initialKind) ? (initialKind as DocKind) : "Appointment",
+    initialKind && KIND_OPTIONS.some((k) => k.key === initialKind) ? (initialKind as DocKind) : "all",
   );
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
 
-  const [staff, setStaff] = useState<
-    Array<{ id: string; fullName: string; email: string; phone?: string; profile?: any; memberships?: Array<{ project?: { name?: string } }> }>
-  >([]);
-  const [offers, setOffers] = useState<Array<{ id: string; designation: string; department?: string; ctcAnnual?: number; joiningDate?: string; location?: string; reportingManager?: string; candidate?: { fullName: string; email?: string } }>>([]);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [offers, setOffers] = useState<OfferRow[]>([]);
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewTitle, setPreviewTitle] = useState("");
-  const [form, setForm] = useState({
-    kind: "Appointment" as DocKind,
-    employeeUserId: "",
-    employeeName: "",
-    designation: "",
-    department: "",
-    candidateEmail: "",
-    effectiveDate: "",
-    ctcAnnual: "",
-    reportingManager: "",
-    location: "SPDC Corporate Office, Vadodara",
-    previousDesignation: "",
-    previousCtc: "",
-    reason: "",
-    assets: "",
-    serials: "",
-    empCode: "",
-    pan: "",
-    gender: "",
-    address: "",
-    mobile: "",
-    projectName: "",
-    issueInBrief: "",
-    impact: "",
-    correctiveAction: "",
-  });
+  const [packBusy, setPackBusy] = useState(false);
+  const [form, setForm] = useState(emptyLetterForm());
+  const [showDetails, setShowDetails] = useState(false);
 
-  function applyStaffToForm(emp: (typeof staff)[0] | undefined) {
-    if (!emp) return;
-    const mgr = emp.profile?.reportingManagerId
-      ? staff.find((s) => s.id === emp.profile.reportingManagerId)?.fullName || form.reportingManager
-      : form.reportingManager;
-    const project = emp.memberships?.[0]?.project?.name || form.projectName;
-    setForm({
-      ...form,
-      employeeUserId: emp.id,
-      employeeName: emp.fullName || form.employeeName,
-      candidateEmail: emp.email || emp.profile?.personalEmail || form.candidateEmail,
-      designation: emp.profile?.designation || form.designation,
-      previousDesignation: emp.profile?.designation || form.previousDesignation,
-      department: emp.profile?.department || form.department,
-      ctcAnnual: emp.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.ctcAnnual,
-      previousCtc: emp.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.previousCtc,
-      effectiveDate: emp.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : form.effectiveDate,
-      reportingManager: mgr,
-      empCode: emp.profile?.empCode || form.empCode,
-      pan: emp.profile?.panNumber || form.pan,
-      gender: emp.profile?.gender || form.gender,
-      address: emp.profile?.addressCurrent || emp.profile?.addressPermanent || form.address,
-      mobile: emp.phone || emp.profile?.personalPhone || form.mobile,
-      projectName: project,
-    });
-  }
-
-  function letterDataPayload() {
-    return {
-      candidateName: form.employeeName,
-      joinDate: form.effectiveDate,
-      fixedCtcAnnual: form.ctcAnnual,
-      ctcAnnual: form.ctcAnnual,
-      location: form.location,
-      reportingManager: form.reportingManager,
-      previousDesignation: form.previousDesignation,
-      previousCtc: form.previousCtc,
-      newDesignation: form.designation,
-      newCtc: form.ctcAnnual,
-      reason: form.reason,
-      assets: form.assets,
-      serials: form.serials,
-      empCode: form.empCode,
-      pan: form.pan,
-      panNumber: form.pan,
-      gender: form.gender,
-      address: form.address,
-      addressAsPerRecords: form.address,
-      candidateAddress: form.address,
-      permanentAddress: form.address,
-      phone: form.mobile,
-      mobile: form.mobile,
-      projectName: form.projectName,
-      project: form.projectName,
-      issueInBrief: form.issueInBrief || form.reason,
-      impact: form.impact,
-      correctiveAction: form.correctiveAction,
-      facts: form.issueInBrief || form.reason,
-      separationReason: form.reason || "resignation",
-      natureOfWork: "site supervision, planning, quality control and billing verification",
-      period: form.effectiveDate ? `${form.effectiveDate} to ${form.effectiveDate}` : "",
-    };
-  }
+  const subjectKey = subjectKeyFromForm(form);
+  const subjectOptions = useMemo(() => buildSubjectOptions(staff, offers), [staff, offers]);
 
   const load = useCallback(async () => {
     try {
       const [list, people, offersList] = await Promise.all([
         api<DocRow[]>("/api/hrm/hrms-documents", { token }),
-        api<Array<{ id: string; fullName: string; email: string; phone?: string; profile?: any; memberships?: Array<{ project?: { name?: string } }> }>>(
-          "/api/hrm/employees",
-          { token },
-        ).catch(() => []),
-        api<Array<{ id: string; designation: string; department?: string; ctcAnnual?: number; joiningDate?: string; location?: string; reportingManager?: string; candidate?: { fullName: string; email?: string } }>>("/api/hrm/offers", { token }).catch(() => []),
+        api<StaffRow[]>("/api/hrm/employees", { token }).catch(() => []),
+        api<OfferRow[]>("/api/hrm/offers", { token }).catch(() => []),
       ]);
       setRows(list);
       setStaff(people);
@@ -210,35 +65,118 @@ export default function HrmsDocumentsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const offerId = searchParams.get("offerId");
+    const userId = searchParams.get("employeeUserId");
+    if (offerId && offers.some((o) => o.id === offerId)) {
+      setForm((f) => applySubjectKey(`offer:${offerId}`, staff, offers, f));
+    } else if (userId && staff.some((s) => s.id === userId)) {
+      setForm((f) => applySubjectKey(`staff:${userId}`, staff, offers, f));
+    }
+  }, [searchParams, staff, offers]);
+
+  const subjectRows = useMemo(
+    () => (subjectKey && form.employeeName ? rows.filter((r) => docMatchesSubject(r, form)) : []),
+    [rows, subjectKey, form],
+  );
+
   const visible = useMemo(() => (kindFilter === "all" ? rows : rows.filter((r) => r.kind === kindFilter)), [rows, kindFilter]);
 
-  async function create(e: FormEvent) {
-    e.preventDefault();
+  const registerVisible = useMemo(() => {
+    if (subjectKey && form.employeeName) return visible.filter((r) => docMatchesSubject(r, form));
+    return visible;
+  }, [visible, subjectKey, form]);
+
+  function setSubjectKey(key: string) {
+    setForm((f) => applySubjectKey(key, staff, offers, f));
+  }
+
+  async function previewKind(kind: DocKind) {
+    if (!form.employeeName.trim()) {
+      setMsg("Select a person first.");
+      return;
+    }
     setMsg("");
     try {
-      const body = {
-        kind: form.kind,
-        employeeUserId: form.employeeUserId || null,
-        employeeName: form.employeeName,
-        designation: form.designation,
-        department: form.department,
-        candidateEmail: form.candidateEmail,
-        effectiveDate: form.effectiveDate || null,
-        data: letterDataPayload(),
-      };
+      const body = { ...createBodyFromForm({ ...form, kind }), kind };
+      const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Preview failed");
+      }
+      setPreviewHtml(await res.text());
+      setPreviewTitle(`${KIND_OPTIONS.find((k) => k.key === kind)?.label || kind} · ${form.employeeName}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Preview failed");
+    }
+  }
+
+  async function generateKind(kind: DocKind) {
+    if (!form.employeeName.trim()) {
+      setMsg("Select a person first.");
+      return;
+    }
+    setMsg("");
+    try {
+      const body = { ...createBodyFromForm({ ...form, kind }), kind };
       const created = await api<DocRow>("/api/hrm/hrms-documents", {
         method: "POST",
         token,
         body: JSON.stringify(body),
       });
       await api(`/api/hrm/hrms-documents/${created.id}/generate`, { method: "POST", token });
-      setMsg(`${created.kind} · ${created.refNo} generated and filed under 06.02 Employee Files / ${form.employeeName}.`);
-      setForm({ ...form, employeeUserId: "", employeeName: "", candidateEmail: "", effectiveDate: "", reason: "", assets: "", serials: "" });
+      setMsg(`${created.kind} · ${created.refNo} generated and filed.`);
       await load();
       await openPreview(created.id, `${created.kind} · ${created.refNo}`);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Create failed");
+      setMsg(err instanceof Error ? err.message : "Generate failed");
     }
+  }
+
+  async function generateOnboardingPack() {
+    if (!form.employeeName.trim()) {
+      setMsg("Select a person first.");
+      return;
+    }
+    setPackBusy(true);
+    setMsg("");
+    const made: string[] = [];
+    try {
+      for (const kind of ONBOARDING_LETTER_PACK) {
+        const existing = subjectRows.find((r) => r.kind === kind && r.status !== "Cancelled");
+        if (existing) continue;
+        const body = { ...createBodyFromForm({ ...form, kind }), kind };
+        const created = await api<DocRow>("/api/hrm/hrms-documents", {
+          method: "POST",
+          token,
+          body: JSON.stringify(body),
+        });
+        await api(`/api/hrm/hrms-documents/${created.id}/generate`, { method: "POST", token });
+        made.push(`${kind} · ${created.refNo}`);
+      }
+      if (!made.length) {
+        setMsg("Onboarding pack already on file for this person — open previews below or pick another letter type.");
+      } else {
+        setMsg(`Generated ${made.length} letter(s): ${made.join("; ")}`);
+      }
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Pack generate failed");
+    } finally {
+      setPackBusy(false);
+    }
+  }
+
+  async function create(e: FormEvent) {
+    e.preventDefault();
+    await generateKind(form.kind);
   }
 
   async function openPreview(id: string, title: string) {
@@ -294,18 +232,18 @@ export default function HrmsDocumentsPage() {
     <div className="space-y-4">
       <HrmsPageHero
         eyebrow="Documents · Letters"
-        title="HR letters register"
-        subtitle="SPDC Word templates (Offer through NDA) are filled from the form, previewed here, and filed to SharePoint under 06.02 Employee Files. Upload the signed scan after issuance."
+        title="HR letter desk"
+        subtitle="Pick one person (offer or onboarded staff). Preview names and CTC on the letterhead, then generate the onboarding pack or individual letters — filed to SharePoint under 06.02 Employee Files."
         workflow={
           <>
             <span>
-              <strong className="text-ink font-semibold">1.</strong> Pick staff or offer
+              <strong className="text-ink font-semibold">1.</strong> Select person once
             </span>
             <span>
-              <strong className="text-ink font-semibold">2.</strong> Generate &amp; file
+              <strong className="text-ink font-semibold">2.</strong> Preview
             </span>
             <span>
-              <strong className="text-ink font-semibold">3.</strong> Preview / download .docx
+              <strong className="text-ink font-semibold">3.</strong> Generate pack / letter
             </span>
             <span>
               <strong className="text-ink font-semibold">4.</strong> Upload signed copy
@@ -313,10 +251,20 @@ export default function HrmsDocumentsPage() {
           </>
         }
       />
+
+      {form.offerId ? (
+        <p className="text-xs text-steel-muted px-1">
+          Pre-join checklist:{" "}
+          <Link to={`/hrm/onboarding/${form.offerId}`} className="text-brand font-semibold underline">
+            Open onboarding for this offer
+          </Link>
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2 text-xs">
-          <label className="text-steel-muted uppercase font-mono">Filter</label>
-          <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as any)}>
+          <label className="text-steel-muted uppercase font-mono">Register filter</label>
+          <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as "all" | DocKind)}>
             <option value="all">All kinds</option>
             {KIND_OPTIONS.map((k) => (
               <option key={k.key} value={k.key}>
@@ -329,199 +277,179 @@ export default function HrmsDocumentsPage() {
       </div>
 
       {canManage && (
-        <Card className="!p-4 space-y-3">
-          <h3 className="font-semibold text-sm">Issue a new letter</h3>
-          <form onSubmit={create} className="grid md:grid-cols-3 gap-3 text-sm">
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Kind</span>
-              <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as DocKind })}>
-                {KIND_OPTIONS.map((k) => (
-                  <option key={k.key} value={k.key}>
-                    {k.label}
+        <Card className="!p-4 space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="space-y-1 flex-1 min-w-[240px]">
+              <span className="text-[11px] text-steel-muted uppercase font-mono">Person (select once)</span>
+              <Select value={subjectKey} onChange={(e) => setSubjectKey(e.target.value)}>
+                <option value="">— Choose accepted offer or staff —</option>
+                {subjectOptions.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
                   </option>
                 ))}
               </Select>
             </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">From accepted offer</span>
-              <Select
-                value=""
-                onChange={(e) => {
-                  const o = offers.find((x) => x.id === e.target.value);
-                  if (!o) return;
-                  setForm({
-                    ...form,
-                    kind: "Offer",
-                    employeeName: o.candidate?.fullName || form.employeeName,
-                    candidateEmail: o.candidate?.email || form.candidateEmail,
-                    designation: o.designation || form.designation,
-                    department: o.department || form.department,
-                    ctcAnnual: o.ctcAnnual ? String(o.ctcAnnual) : form.ctcAnnual,
-                    effectiveDate: o.joiningDate ? String(o.joiningDate).slice(0, 10) : form.effectiveDate,
-                    location: o.location || form.location,
-                    reportingManager: o.reportingManager || form.reportingManager,
-                  });
-                }}
-              >
-                <option value="">Pick candidate offer to fill name, CTC, joining…</option>
-                {offers.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.candidate?.fullName || o.id} · {o.designation}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Staff (fills the form)</span>
-              <Select
-                value={form.employeeUserId}
-                onChange={(e) => {
-                  const emp = staff.find((s) => s.id === e.target.value);
-                  applyStaffToForm(emp);
-                }}
-              >
-                <option value="">Type name below, or pick staff</option>
-                {staff.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName}
-                    {s.profile?.empCode ? ` · ${s.profile.empCode}` : ""}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Employee / candidate name</span>
-              <Input required value={form.employeeName} onChange={(e) => setForm({ ...form, employeeName: e.target.value })} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Email (candidate)</span>
-              <Input type="email" value={form.candidateEmail} onChange={(e) => setForm({ ...form, candidateEmail: e.target.value })} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">
-                {form.kind === "Promotion" ? "New designation" : "Designation"}
-              </span>
-              <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Function / department</span>
-              <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">
-                {form.kind === "Relieving" || form.kind === "Exit" ? "Last working day" : "Effective / joining date"}
-              </span>
-              <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
-            </label>
-            {(form.kind === "Appointment" || form.kind === "Offer" || form.kind === "Promotion") && (
-              <>
-                {form.kind === "Promotion" && (
-                  <>
-                    <label className="space-y-1">
-                      <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation</span>
-                      <Input value={form.previousDesignation} onChange={(e) => setForm({ ...form, previousDesignation: e.target.value })} />
+            {subjectKey ? (
+              <div className="text-xs text-steel-muted pb-1">
+                <strong className="text-ink">{form.employeeName}</strong>
+                {form.designation ? ` · ${form.designation}` : ""}
+                {form.ctcAnnual ? ` · CTC ₹${Number(form.ctcAnnual).toLocaleString("en-IN")}` : ""}
+                {form.effectiveDate ? ` · ${form.effectiveDate}` : ""}
+              </div>
+            ) : null}
+          </div>
+
+          {subjectKey ? (
+            <>
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Onboarding letter pack</h3>
+                <p className="text-[11px] text-steel-muted mb-3">
+                  Offer, appointment, NDA at joining, and confirmation — preview any row, then generate missing letters in one go.
+                </p>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {ONBOARDING_LETTER_PACK.map((kind) => {
+                    const existing = subjectRows.find((r) => r.kind === kind);
+                    const meta = KIND_OPTIONS.find((k) => k.key === kind)!;
+                    return (
+                      <div key={kind} className="rounded-lg border border-line p-3 bg-sand/30 space-y-2">
+                        <div className="font-medium text-xs">{meta.label}</div>
+                        <Badge tone={existing ? "ok" : "brand"}>{existing ? existing.refNo : "Not generated"}</Badge>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            className="text-[11px] px-2 py-0.5 rounded border border-line hover:bg-paper"
+                            onClick={() => void previewKind(kind)}
+                          >
+                            Preview
+                          </button>
+                          {!existing ? (
+                            <button
+                              type="button"
+                              className="text-[11px] px-2 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/5"
+                              onClick={() => void generateKind(kind)}
+                            >
+                              Generate
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-[11px] px-2 py-0.5 rounded border border-line hover:bg-paper"
+                              onClick={() => void openPreview(existing.id, `${kind} · ${existing.refNo}`)}
+                            >
+                              Open
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" disabled={packBusy} onClick={() => void generateOnboardingPack()}>
+                    {packBusy ? "Generating…" : "Generate missing onboarding letters"}
+                  </Button>
+                </div>
+              </div>
+
+              <details open={showDetails} onToggle={(e) => setShowDetails((e.target as HTMLDetailsElement).open)}>
+                <summary className="cursor-pointer text-sm font-semibold text-ink">Other letter types &amp; edit fields</summary>
+                <form onSubmit={create} className="grid md:grid-cols-3 gap-3 text-sm mt-3 pt-3 border-t border-line">
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-steel-muted uppercase font-mono">Kind</span>
+                    <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as DocKind })}>
+                      {KIND_OPTIONS.map((k) => (
+                        <option key={k.key} value={k.key}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-[11px] text-steel-muted uppercase font-mono">Effective / joining date</span>
+                    <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
+                  </label>
+                  {(form.kind === "Appointment" || form.kind === "Offer" || form.kind === "Promotion") && (
+                    <>
+                      {form.kind === "Promotion" && (
+                        <>
+                          <label className="space-y-1">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation</span>
+                            <Input value={form.previousDesignation} onChange={(e) => setForm({ ...form, previousDesignation: e.target.value })} />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
+                            <Input value={form.previousCtc} onChange={(e) => setForm({ ...form, previousCtc: e.target.value })} />
+                          </label>
+                        </>
+                      )}
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">
+                          {form.kind === "Promotion" ? "Revised CTC (INR p.a.)" : "Fixed CTC (INR p.a.)"}
+                        </span>
+                        <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Reporting manager</span>
+                        <Input value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
+                      </label>
+                      <label className="space-y-1 md:col-span-2">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Base location</span>
+                        <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                      </label>
+                    </>
+                  )}
+                  {form.kind === "AssetReturn" && (
+                    <>
+                      <label className="space-y-1 md:col-span-2">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Assets returned</span>
+                        <Input placeholder="Laptop, mobile, ID card…" value={form.assets} onChange={(e) => setForm({ ...form, assets: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Serials / asset tags</span>
+                        <Input value={form.serials} onChange={(e) => setForm({ ...form, serials: e.target.value })} />
+                      </label>
+                    </>
+                  )}
+                  {(form.kind === "Warning" || form.kind === "Exit") && (
+                    <label className="space-y-1 md:col-span-3">
+                      <span className="text-[11px] text-steel-muted uppercase font-mono">
+                        {form.kind === "Warning" ? "Concern / remarks" : "Reason for exit"}
+                      </span>
+                      <TextArea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
                     </label>
-                    <label className="space-y-1">
-                      <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
-                      <Input value={form.previousCtc} onChange={(e) => setForm({ ...form, previousCtc: e.target.value })} />
-                    </label>
-                  </>
-                )}
-                <label className="space-y-1">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">
-                    {form.kind === "Promotion" ? "Revised CTC (INR p.a.)" : "Fixed CTC (INR p.a.)"}
-                  </span>
-                  <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Reporting manager</span>
-                  <Input value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Base location</span>
-                  <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-                </label>
-              </>
-            )}
-            {form.kind === "AssetReturn" && (
-              <>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Assets returned</span>
-                  <Input placeholder="Laptop, mobile, ID card, SIM…" value={form.assets} onChange={(e) => setForm({ ...form, assets: e.target.value })} />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Serials / asset tags</span>
-                  <Input value={form.serials} onChange={(e) => setForm({ ...form, serials: e.target.value })} />
-                </label>
-              </>
-            )}
-            {(form.kind === "Warning" || form.kind === "Exit") && (
-              <label className="space-y-1 md:col-span-3">
-                <span className="text-[11px] text-steel-muted uppercase font-mono">
-                  {form.kind === "Warning" ? "Concern / remarks" : "Reason for exit"}
-                </span>
-                <TextArea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
-              </label>
-            )}
-            {form.kind === "Warning" && (
-              <>
-                <label className="space-y-1 md:col-span-3">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Issue in brief</span>
-                  <TextArea rows={2} value={form.issueInBrief} onChange={(e) => setForm({ ...form, issueInBrief: e.target.value })} />
-                </label>
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Impact</span>
-                  <Input value={form.impact} onChange={(e) => setForm({ ...form, impact: e.target.value })} />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] text-steel-muted uppercase font-mono">Corrective action</span>
-                  <Input value={form.correctiveAction} onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })} />
-                </label>
-              </>
-            )}
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Emp code</span>
-              <Input value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">PAN</span>
-              <Input value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} />
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Gender</span>
-              <Select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-                <option value="">—</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </Select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Mobile</span>
-              <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-            </label>
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Project / client</span>
-              <Input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} />
-            </label>
-            <label className="space-y-1 md:col-span-3">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Address (as per records)</span>
-              <TextArea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-            </label>
-            <div className="md:col-span-3 flex flex-wrap items-center gap-2">
-              <Button type="submit">Generate &amp; file</Button>
-              <span className="text-[11px] text-steel-muted">
-                Ref will be auto-issued as <code>SPDC/HR/&lt;code&gt;/YY-NX/&lt;seq&gt;</code>.
-              </span>
-            </div>
-          </form>
+                  )}
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-steel-muted uppercase font-mono">Emp code</span>
+                    <Input value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
+                  </label>
+                  <label className="space-y-1 md:col-span-2">
+                    <span className="text-[11px] text-steel-muted uppercase font-mono">Address</span>
+                    <TextArea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                  </label>
+                  <div className="md:col-span-3 flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="secondary" onClick={() => void previewKind(form.kind)}>
+                      Preview this kind
+                    </Button>
+                    <Button type="submit">Generate &amp; file</Button>
+                  </div>
+                </form>
+              </details>
+            </>
+          ) : (
+            <p className="text-sm text-steel-muted">Select an accepted offer or onboarded staff member to preview and generate letters.</p>
+          )}
         </Card>
       )}
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b border-line bg-sand/40 flex items-center justify-between">
           <div>
-            <div className="font-semibold text-sm">Letters register · {visible.length}</div>
-            <div className="text-[11px] text-steel-muted">Letter: print HTML to PDF. Edit the .docx in Word. CTC breakdown is a separate Annexure I spreadsheet.</div>
+            <div className="font-semibold text-sm">
+              Letters register · {registerVisible.length}
+              {subjectKey ? " (this person)" : ""}
+            </div>
+            <div className="text-[11px] text-steel-muted">Print HTML to PDF · edit .docx in Word · Annexure I when CTC is set.</div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -539,7 +467,7 @@ export default function HrmsDocumentsPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((r) => (
+              {registerVisible.map((r) => (
                 <tr key={r.id} className="border-t border-line align-top">
                   <td className="p-2 font-mono text-[11px]">{r.refNo}</td>
                   <td>{r.kind}</td>
@@ -563,11 +491,6 @@ export default function HrmsDocumentsPage() {
                     {annexureXlsxUrl(r) && (
                       <a href={mediaUrl(annexureXlsxUrl(r)!)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
                         Annexure I · CTC (.xlsx)
-                      </a>
-                    )}
-                    {r.sharePointUrl && r.sharePointUrl !== r.generatedPdfUrl && (
-                      <a href={mediaUrl(r.sharePointUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Drive copy
                       </a>
                     )}
                     {r.uploadedFileUrl && (
@@ -606,10 +529,10 @@ export default function HrmsDocumentsPage() {
                   </td>
                 </tr>
               ))}
-              {!visible.length && (
+              {!registerVisible.length && (
                 <tr>
                   <td colSpan={8} className="py-4 text-center text-steel-muted">
-                    No letters yet — issue one above.
+                    {subjectKey ? "No letters for this person yet — use the pack above." : "No letters yet — select a person above."}
                   </td>
                 </tr>
               )}

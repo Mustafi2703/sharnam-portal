@@ -653,6 +653,7 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
       clientPhone: true,
       clientAddress: true,
       clientGst: true,
+      clientLogoUrl: true,
       designConsultant: true,
       contractorName: true,
       pmcName: true,

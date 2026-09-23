@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { SPDC_OFFICE_ADDRESS } from "@sharnam/shared";
 import { Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
 import { downloadAuthFile } from "../lib/downloadReport";
 
@@ -30,6 +31,11 @@ type Quotation = {
   id: string;
   quotationNo: string;
   clientName: string;
+  clientAddress?: string | null;
+  clientGst?: string | null;
+  scopeSummary?: string | null;
+  totalValue?: number | null;
+  validityDays?: number | null;
   status: string;
   projectId?: string | null;
   awardedProjectId?: string | null;
@@ -75,6 +81,15 @@ export default function QuotationMakerPage() {
   const [saved, setSaved] = useState<Quotation | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [details, setDetails] = useState({
+    quotationNo: "",
+    clientName: "",
+    clientAddress: SPDC_OFFICE_ADDRESS,
+    clientGst: "",
+    scopeSummary: "",
+    totalValue: "",
+    validityDays: "30",
+  });
 
   useEffect(() => {
     if (!isEditing) nav("/crm/proposals", { replace: true });
@@ -86,10 +101,46 @@ export default function QuotationMakerPage() {
       const q = await api<Quotation>(`/api/crm/quotations/${id}`, { token });
       setSaved(q);
       setStatus(q.status);
+      setDetails({
+        quotationNo: q.quotationNo || "",
+        clientName: q.clientName || "",
+        clientAddress: q.clientAddress || SPDC_OFFICE_ADDRESS,
+        clientGst: q.clientGst || "",
+        scopeSummary: q.scopeSummary || "",
+        totalValue: q.totalValue != null ? String(q.totalValue) : "",
+        validityDays: q.validityDays != null ? String(q.validityDays) : "30",
+      });
     })().catch((err) => setMsg(err instanceof Error ? err.message : "Load failed"));
   }, [id, token, isEditing]);
 
   if (!isEditing) return null;
+
+  async function saveDetails() {
+    if (!saved) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const r = await api<Quotation>(`/api/crm/quotations/${saved.id}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          quotationNo: details.quotationNo.trim(),
+          clientName: details.clientName.trim(),
+          clientAddress: details.clientAddress.trim(),
+          clientGst: details.clientGst.trim() || null,
+          scopeSummary: details.scopeSummary.trim() || null,
+          totalValue: details.totalValue ? Number(details.totalValue) : 0,
+          validityDays: details.validityDays ? Number(details.validityDays) : 30,
+        }),
+      });
+      setSaved(r);
+      setMsg("Proposal details saved — download .docx or open SharePoint to refresh Word.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function saveStatus() {
     if (!saved) return;
@@ -231,6 +282,27 @@ export default function QuotationMakerPage() {
       </div>
 
       {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+
+      {saved && canWrite && (
+        <Card className="!p-4 space-y-3">
+          <h3 className="font-semibold text-sm">Proposal details (portal form)</h3>
+          <p className="text-[11px] text-steel-muted">
+            Client address defaults to the SPDC Vadodara office — update for the client site. Saved fields feed exports and SharePoint metadata.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-3 text-sm">
+            <Input placeholder="Quotation no." value={details.quotationNo} onChange={(e) => setDetails({ ...details, quotationNo: e.target.value })} />
+            <Input placeholder="Client name" value={details.clientName} onChange={(e) => setDetails({ ...details, clientName: e.target.value })} />
+            <Input className="sm:col-span-2" placeholder="Client address" value={details.clientAddress} onChange={(e) => setDetails({ ...details, clientAddress: e.target.value })} />
+            <Input placeholder="Client GSTIN" value={details.clientGst} onChange={(e) => setDetails({ ...details, clientGst: e.target.value })} />
+            <Input placeholder="Validity (days)" value={details.validityDays} onChange={(e) => setDetails({ ...details, validityDays: e.target.value })} />
+            <Input placeholder="Total value (INR)" value={details.totalValue} onChange={(e) => setDetails({ ...details, totalValue: e.target.value })} />
+            <TextArea className="sm:col-span-2" rows={3} placeholder="Scope summary" value={details.scopeSummary} onChange={(e) => setDetails({ ...details, scopeSummary: e.target.value })} />
+          </div>
+          <Button type="button" disabled={saving} onClick={() => void saveDetails()}>
+            Save proposal details
+          </Button>
+        </Card>
+      )}
 
       {saved && (
         <div className="grid lg:grid-cols-[1fr_340px] gap-4">

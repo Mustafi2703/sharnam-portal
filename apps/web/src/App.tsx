@@ -27,7 +27,6 @@ import { homePathForUser } from "./lib/portalAccounts";
 import CrmPage from "./pages/CrmPage";
 import CrmBidComparePage from "./pages/CrmBidComparePage";
 import CrmVendorBidsPage from "./pages/CrmVendorBidsPage";
-import HrmPage from "./pages/HrmPage";
 import HrmsProtected from "./pages/hrms/HrmsProtected";
 import HrmsLayout from "./pages/hrms/HrmsLayout";
 import HrmsShell from "./pages/hrms/HrmsShell";
@@ -179,7 +178,7 @@ export default function App() {
         }
       >
         <Route element={<HrmsLayout />}>
-          <Route index element={<HrmPage />} />
+          <Route index element={<Navigate to="/hrm/recruitment" replace />} />
           <Route path="recruitment" element={<RecruitmentPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="onboarding/:offerId" element={<OnboardingPage />} />

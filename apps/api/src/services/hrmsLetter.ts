@@ -534,6 +534,39 @@ export function renderHrmsLetterHtml(row: HrmsDocument) {
   return assembleHtml(row, letterMergeContext(row, ctx));
 }
 
+/** Draft preview from the letter desk form — no DB row or SharePoint write. */
+export async function previewHrmsLetterDraft(input: {
+  kind: string;
+  employeeName: string;
+  employeeUserId?: string | null;
+  candidateEmail?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  effectiveDate?: Date | string | null;
+  data?: Record<string, unknown>;
+}): Promise<string> {
+  const dataJson = JSON.stringify(input.data && typeof input.data === "object" ? input.data : {});
+  const row = {
+    id: "preview",
+    kind: input.kind,
+    refNo: "SPDC/HR/PREVIEW/DRAFT",
+    employeeUserId: input.employeeUserId || null,
+    employeeName: input.employeeName,
+    candidateEmail: input.candidateEmail || null,
+    designation: input.designation || null,
+    department: input.department || null,
+    effectiveDate: input.effectiveDate ? new Date(input.effectiveDate) : null,
+    issueDate: new Date(),
+    dataJson,
+    status: "Draft",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as HrmsDocument;
+  let ctx: Record<string, unknown> = input.data && typeof input.data === "object" ? { ...input.data } : {};
+  ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
+  return assembleHtml(row, letterMergeContext(row, ctx));
+}
+
 export function renderHrPolicyAcknowledgement(ctx: {
   employeeName: string;
   designation?: string;

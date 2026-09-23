@@ -474,7 +474,10 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
 hrmRecruitmentRouter.get("/offers", async (_req, res) => {
   await safeHrmList("offers", () =>
     prisma.offer.findMany({
-      include: { candidate: { select: { fullName: true, email: true, phone: true } } },
+      include: {
+        candidate: { select: { fullName: true, email: true, phone: true } },
+        onboard: { select: { userId: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     res

@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { SPDC_OFFICE_FOOTER } from "@sharnam/shared";
 import { sharnamLogoDataUri } from "./brandedExport.js";
 
 export type QuotationRow = { description: string; unit: string; qty: number; rate: number; amount: number };
@@ -173,7 +174,7 @@ export function renderQuotationHtml(doc: QuotationDoc): string {
     </div>
     <div class="foot">
       <span>Confidential — Commercial · Sharnam Project Development Consultants &amp; Co.</span>
-      <span>First Floor, Status Plaza, Vadodara · +91 81607 57201</span>
+      <span>${esc(SPDC_OFFICE_FOOTER)}</span>
     </div>
   </div>
 </body>

@@ -341,8 +341,8 @@ function OfferOnboardingPage() {
           ) : null}
           {canHrWrite ? (
             <>
-              <Link to="/hrm/documents">
-                <Button variant="secondary">Letters register</Button>
+              <Link to={`/hrm/documents?offerId=${offerId}`}>
+                <Button variant="secondary">Letter desk</Button>
               </Link>
               <Link to="/hrm/onboarding">
                 <Button variant="secondary">Back to list</Button>

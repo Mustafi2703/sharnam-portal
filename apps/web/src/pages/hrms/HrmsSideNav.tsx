@@ -34,7 +34,7 @@ export default function HrmsSideNav({
   return (
     <div className="side-nav__inner">
       <div className="side-nav__head">
-        <Link to="/hrm" className="side-nav__brand" onClick={onNavigate} aria-label="HRMS home">
+        <Link to="/hrm/recruitment" className="side-nav__brand" onClick={onNavigate} aria-label="HRMS home">
           <img src="/logo-transparent.png" alt="Sharnam" className="side-nav__logo" width={240} height={116} />
         </Link>
         <span className="side-nav__role-badge" aria-label="HR desk">

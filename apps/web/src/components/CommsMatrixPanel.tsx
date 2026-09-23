@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
+import { downloadAuthFile } from "../lib/downloadReport";
 import {
   EMPTY_MATRIX_FORM,
   MatrixPartyFields,
@@ -246,6 +247,41 @@ export function CommsMatrixPanel({
             {contacts.length ? "Reload From BPCL Excel" : "Load BPCL Excel"}
           </Button>
         )}
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          onClick={() =>
+            void downloadAuthFile(
+              `/api/comms/contacts/${projectId}/export.xlsx?kind=${matrixKind}`,
+              token,
+              `${projectId}-matrix-${matrixKind.toLowerCase()}.xlsx`,
+            )
+          }
+        >
+          Export Excel
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          onClick={async () => {
+            try {
+              const res = await fetch(
+                `${import.meta.env.VITE_API_URL || ""}/api/comms/contacts/${projectId}/export.html?kind=${matrixKind}`,
+                { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+              );
+              if (!res.ok) throw new Error("Export failed");
+              const html = await res.text();
+              const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+              window.open(url, "_blank", "noopener,noreferrer");
+            } catch (err) {
+              onMsg(err instanceof Error ? err.message : "Export failed");
+            }
+          }}
+        >
+          Export PDF (print)
+        </Button>
       </div>
 
       <Card className="!bg-procore-navy !text-white !border-0">
@@ -259,20 +295,27 @@ export function CommsMatrixPanel({
       </Card>
 
       {editingId && canEdit && (
-        <Card>
-          <h3 className="font-semibold text-sm mb-3">Edit contact</h3>
-          <form className="space-y-3" onSubmit={(e) => void saveEdit(e)}>
-            {fields}
-            <div className="flex gap-2">
-              <Button type="submit" disabled={busy}>
-                Save
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setEditingId(null)}>
-                Cancel
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/45" role="dialog" aria-modal="true">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto !p-4 shadow-xl">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h3 className="font-semibold text-sm">Edit matrix row</h3>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setEditingId(null)}>
+                Close
               </Button>
             </div>
-          </form>
-        </Card>
+            <form className="space-y-3" onSubmit={(e) => void saveEdit(e)}>
+              {fields}
+              <div className="flex gap-2">
+                <Button type="submit" disabled={busy}>
+                  Save
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditingId(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
       )}
 
       {canEdit && !editingId && (

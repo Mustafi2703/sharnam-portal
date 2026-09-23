@@ -66,7 +66,20 @@ vendorsRouter.get("/", async (req: AuthedRequest, res) => {
     include: { _count: { select: { projects: true } } },
     orderBy: [{ partyType: "asc" }, { name: "asc" }],
   });
-  res.json(vendors);
+  const emails = vendors.map((v) => v.email).filter(Boolean) as string[];
+  const portalUsers = emails.length
+    ? await prisma.user.findMany({
+        where: { email: { in: emails.map((e) => e.toLowerCase()) } },
+        select: { email: true },
+      })
+    : [];
+  const activeEmails = new Set(portalUsers.map((u) => u.email.toLowerCase()));
+  res.json(
+    vendors.map((v) => ({
+      ...v,
+      portalLoginActive: Boolean(v.email && activeEmails.has(v.email.toLowerCase())),
+    })),
+  );
 });
 
 vendorsRouter.post("/consultant-types", requireRoles("admin", "office"), async (req, res) => {
@@ -145,7 +158,8 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
 
   let login = null;
   let loginError: string | undefined;
-  if (email) {
+  const shouldLogin = email && (req.body.createLogin === true || req.body.activatePortal === true);
+  if (shouldLogin) {
     const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
     const sync = await syncDirectoryPortalLogin({
       vendor: v,
@@ -200,6 +214,7 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   const current = await prisma.vendor.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ error: "Company not found" });
   const password = req.body.password ? String(req.body.password) : null;
+  const activatePortal = req.body.activatePortal === true;
   const data = vendorPatchFromBody(req.body as Record<string, unknown>);
   if (data.partyType === "Vendor") data.partyType = "Contractor";
   if (data.name !== undefined && !String(data.name).trim()) {
@@ -214,7 +229,7 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   let login = null;
   let loginError: string | undefined;
   let projectsSynced = 0;
-  if (v.email) {
+  if (v.email && (password || activatePortal)) {
     const { syncDirectoryPortalLogin } = await import("../services/crmVendorCredentials.js");
     const sync = await syncDirectoryPortalLogin({
       vendor: v,
@@ -228,6 +243,53 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
     projectsSynced = await syncClientVendorToLinkedProjects(v);
   }
   res.json({ ...v, login, loginError, projectsSynced });
+});
+
+/** Site / client representatives — additional contacts beyond primary login email. */
+vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, res) => {
+  const rows = await prisma.vendorContact.findMany({
+    where: { vendorId: req.params.id },
+    orderBy: { createdAt: "asc" },
+  });
+  res.json(rows);
+});
+
+vendorsRouter.post("/:id/contacts", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "email required" });
+  const row = await prisma.vendorContact.create({
+    data: {
+      vendorId: req.params.id,
+      email,
+      fullName: req.body.fullName ? String(req.body.fullName).trim() : null,
+      role: req.body.role ? String(req.body.role).trim() : null,
+    },
+  });
+  await audit("vendor.contact.create", { userId: req.user!.id, entity: "VendorContact", entityId: row.id });
+  res.status(201).json(row);
+});
+
+vendorsRouter.patch("/:id/contacts/:contactId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.vendorContact.findFirst({
+    where: { id: req.params.contactId, vendorId: req.params.id },
+  });
+  if (!existing) return res.status(404).json({ error: "not found" });
+  const row = await prisma.vendorContact.update({
+    where: { id: existing.id },
+    data: {
+      ...(req.body.email !== undefined ? { email: String(req.body.email).trim().toLowerCase() } : {}),
+      ...(req.body.fullName !== undefined ? { fullName: req.body.fullName ? String(req.body.fullName).trim() : null } : {}),
+      ...(req.body.role !== undefined ? { role: req.body.role ? String(req.body.role).trim() : null } : {}),
+    },
+  });
+  res.json(row);
+});
+
+vendorsRouter.delete("/:id/contacts/:contactId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.vendorContact.deleteMany({
+    where: { id: req.params.contactId, vendorId: req.params.id },
+  });
+  res.json({ ok: true });
 });
 
 vendorsRouter.delete("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

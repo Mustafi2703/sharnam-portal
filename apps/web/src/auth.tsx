@@ -18,8 +18,40 @@ type AuthState = {
 
 const AuthCtx = createContext<AuthState | null>(null);
 
+const TOKEN_KEY = "sharnam_token";
+
+function readStoredToken(): string | null {
+  try {
+    const session = sessionStorage.getItem(TOKEN_KEY);
+    if (session) return session;
+    const legacy = localStorage.getItem(TOKEN_KEY);
+    if (legacy) {
+      sessionStorage.setItem(TOKEN_KEY, legacy);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    return legacy;
+  } catch {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+}
+
+function persistToken(next: string | null) {
+  try {
+    if (next) sessionStorage.setItem(TOKEN_KEY, next);
+    else sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    if (next) localStorage.setItem(TOKEN_KEY, next);
+    else localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("sharnam_token"));
+  const [token, setTokenState] = useState<string | null>(() => readStoredToken());
+  const setToken = (next: string | null) => {
+    persistToken(next);
+    setTokenState(next);
+  };
   const [user, setUser] = useState<AuthUser | null>(null);
   const [permissions, setPermissions] = useState<ModulePermissions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,7 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       setPermissions(data.permissions);
     } catch {
-      localStorage.removeItem("sharnam_token");
       setToken(null);
       setUser(null);
     } finally {
@@ -59,19 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: "POST",
           body: JSON.stringify({ email, password }),
         });
-        localStorage.setItem("sharnam_token", data.token);
         setToken(data.token);
         setUser(data.user);
       },
       loginWithToken: (nextToken, nextUser) => {
-        localStorage.setItem("sharnam_token", nextToken);
         setToken(nextToken);
         setUser(nextUser);
       },
       logout: () => {
-        localStorage.removeItem("sharnam_token");
         setToken(null);
         setUser(null);
+        setPermissions(null);
       },
       impersonate: async (userId) => {
         const data = await api<{ token: string; user: AuthUser; landingPath: string }>("/api/auth/impersonate", {
@@ -79,7 +108,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           token,
           body: JSON.stringify({ userId }),
         });
-        localStorage.setItem("sharnam_token", data.token);
         setToken(data.token);
         setUser(data.user);
         return { user: data.user, landingPath: data.landingPath || "/dashboard" };
@@ -89,14 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           method: "POST",
           token,
         });
-        localStorage.setItem("sharnam_token", data.token);
         setToken(data.token);
         setUser(data.user);
         return data.user;
       },
       refresh,
     }),
-    [token, user, permissions, loading]
+    [token, user, permissions, loading],
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

@@ -2503,6 +2503,35 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
   return `SPDC/HR/${codeMap[kind]}/${yn}-${nx}/${seq}`;
 }
 
+/** Live HTML preview from form fields — does not create a register row. */
+hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, res) => {
+  const kindRaw = String(req.body.kind || "");
+  if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
+    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+  }
+  const employeeName = String(req.body.employeeName || "").trim();
+  if (!employeeName) return res.status(400).json({ error: "employeeName required" });
+  const data =
+    req.body.data && typeof req.body.data === "object" ? (req.body.data as Record<string, unknown>) : {};
+  const { previewHrmsLetterDraft } = await import("../services/hrmsLetter.js");
+  try {
+    const html = await previewHrmsLetterDraft({
+      kind: kindRaw,
+      employeeName,
+      employeeUserId: req.body.employeeUserId || null,
+      candidateEmail: req.body.candidateEmail || null,
+      designation: req.body.designation || null,
+      department: req.body.department || null,
+      effectiveDate: req.body.effectiveDate || null,
+      data,
+    });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Preview failed" });
+  }
+});
+
 hrmRouter.get("/hrms-documents", hrmDesk, async (req, res) => {
   const rows = await prisma.hrmsDocument.findMany({
     where: {

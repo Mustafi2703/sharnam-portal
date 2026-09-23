@@ -25,13 +25,6 @@ export const HRMS_SECTIONS: HrmsSection[] = [
     label: "People lifecycle",
     tools: [
       {
-        to: "",
-        label: "Dashboard",
-        end: true,
-        icon: "dashboard",
-        subtitle: "Headcount, onboarded users, punches, leave queue, and quick links.",
-      },
-      {
         to: "recruitment",
         label: "Recruitment",
         icon: "comms",
@@ -83,7 +76,7 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         to: "documents",
         label: "Letters",
         icon: "dms",
-        subtitle: "Appointment, Relieving, Exit — form fills the SPDC letter and files it on Drive.",
+        subtitle: "Select one person — preview and generate onboarding pack or separation letters on Drive.",
       },
       {
         to: "files",

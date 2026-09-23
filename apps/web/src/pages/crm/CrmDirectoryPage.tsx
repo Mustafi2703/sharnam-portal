@@ -2,14 +2,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import {
-  accountKindLabel,
-  portalAccountKind,
-} from "../../lib/portalAccounts";
 import { ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
+import { ClientRepresentativesPanel } from "../../components/ClientRepresentativesPanel";
 import { useConsultantTypes } from "../../lib/consultantTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
-import { Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { Button, Card, Input, PageHeader, Select, TextArea, Badge } from "../../components/ui";
 import {
   EMPTY_VENDOR_FORM,
   VENDOR_PARTY_TYPES,
@@ -29,7 +26,7 @@ function directoryVendorsQuery(tab: string) {
   return "";
 }
 
-type VendorRow = VendorFormState & { id: string; isActive?: boolean; _count?: { projects: number } };
+type VendorRow = VendorFormState & { id: string; isActive?: boolean; portalLoginActive?: boolean; _count?: { projects: number } };
 
 const TAB_META: Record<
   string,
@@ -37,20 +34,20 @@ const TAB_META: Record<
 > = {
   vendors: {
     title: "Vendors / contractors master",
-    subtitle: "Add the company, contact, email, and phone here. Portal login at /login/vendor is created with the record. Pick these companies later in Bid management — not in project setup.",
+    subtitle: "Add company and contact here. Activate vendor portal access when email is on file — then use Bid management.",
     partyTypes: ["Contractor", "Vendor"] as VendorPartyType[],
     defaultParty: "Contractor",
   },
   clients: {
     title: "Client directory",
-    subtitle: "Select a client to edit company, contact, email, phone, and portal password. Saves sync to every linked project card.",
+    subtitle: "Add the client company first, save details, then activate portal access when email is ready. Linked projects sync from here.",
     partyTypes: ["Client"],
     defaultParty: "Client",
     loginRole: "client",
   },
   stakeholders: {
     title: "Consultants",
-    subtitle: "Separate list from vendors. Add consultant type and contact — stakeholder login at /login/stakeholder is created on save.",
+    subtitle: "Consultant types and contacts — save the company, then activate stakeholder portal access from this desk.",
     partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",
     loginRole: "employee",
@@ -208,10 +205,6 @@ export function DirectoryCompaniesPanel({
                   : "Updated.") + syncNote
         );
       } else {
-        if (!payload.email) {
-          setMsg("Add an email to create the portal login for this company.");
-          return;
-        }
         const created = await api<
           VendorRow & {
             login?: { email: string; created: boolean; tempPassword?: string };
@@ -222,22 +215,16 @@ export function DirectoryCompaniesPanel({
           {
             method: "POST",
             token,
-            body: JSON.stringify({ ...payload, createLogin: true, password: loginPassword }),
-          }
+            body: JSON.stringify({ ...payload, createLogin: false }),
+          },
         );
         setCreatingNew(false);
         setSelectedId(created.id);
-        const path =
-          tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
-        if (created.loginError) {
-          setMsg(`Company saved. Portal login not created — ${created.loginError}`);
-        } else if (created.login?.created) {
-          setMsg(`Saved. Portal ready — ${created.login.email} signs in at ${path}. Password: ${created.login.tempPassword || loginPassword}`);
-        } else if (created.login) {
-          setMsg(`Saved. Login already existed for ${created.login.email} · ${path}`);
-        } else {
-          setMsg("Added to directory. Add an email to issue a portal login.");
-        }
+        setMsg(
+          created.loginError
+            ? `Company saved. ${created.loginError}`
+            : "Company saved. Add email if needed, then use Activate portal access.",
+        );
       }
       await load();
     } catch (err) {
@@ -245,15 +232,13 @@ export function DirectoryCompaniesPanel({
     }
   }
 
-  async function createLogin() {
+  async function activatePortalAccess() {
     if (!selected?.email) {
       setLoginMsg("Add an email on the company record first.");
       return;
     }
     setLoginMsg("");
     try {
-      const role = meta.loginRole || (tab === "vendors" ? "vendor" : tab === "stakeholders" ? "employee" : "client");
-      const kind = portalAccountKind(role, { department: tab === "stakeholders" ? selected.trade : null }, selected.id);
       const updated = await api<{ login?: { created?: boolean; email?: string; tempPassword?: string; passwordUpdated?: boolean }; loginError?: string }>(
         `/api/vendors/${selected.id}`,
         {
@@ -262,9 +247,10 @@ export function DirectoryCompaniesPanel({
           body: JSON.stringify({
             email: selected.email,
             primaryContactName: selected.primaryContactName || selected.name,
-            ...(trimField(loginPassword) ? { password: trimField(loginPassword) } : {}),
+            activatePortal: true,
+            password: trimField(loginPassword) || "Demo@1234",
           }),
-        }
+        },
       );
       const path =
         tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
@@ -272,7 +258,7 @@ export function DirectoryCompaniesPanel({
         setLoginMsg(`Company on file. Portal login not updated — ${updated.loginError}`);
       } else if (updated.login?.created) {
         setLoginMsg(
-          `Portal login created for ${updated.login.email} (${accountKindLabel(kind)}). Password: ${updated.login.tempPassword || loginPassword || "Demo@1234"} · ${path}`
+          `Portal activated for ${updated.login.email}. Password: ${updated.login.tempPassword || loginPassword || "Demo@1234"} · ${path}`,
         );
       } else if (updated.login?.passwordUpdated) {
         setLoginMsg(`Portal password updated for ${selected.email}. Sign in at ${path}`);
@@ -343,10 +329,13 @@ export function DirectoryCompaniesPanel({
             >
               <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => selectCompany(r.id)}>
                 <div className="font-medium">{r.name}</div>
-                <div className="text-xs text-steel-muted mt-0.5">
+                <div className="text-xs text-steel-muted mt-0.5 flex flex-wrap items-center gap-1.5">
                   {tab === "stakeholders" && r.trade ? r.trade : formatPartyType(r.partyType)}
                   {r.email ? ` · ${r.email}` : ""}
                   {r._count?.projects ? ` · ${r._count.projects} project(s)` : ""}
+                  {r.email ? (
+                    <Badge tone={r.portalLoginActive ? "ok" : "neutral"}>{r.portalLoginActive ? "Portal active" : "No portal"}</Badge>
+                  ) : null}
                 </div>
               </button>
               {canEdit ? (
@@ -393,7 +382,7 @@ export function DirectoryCompaniesPanel({
       ) : (
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
-          <h3 className="font-semibold text-sm">{selected ? "Edit company" : "Add company + portal login"}</h3>
+          <h3 className="font-semibold text-sm">{selected ? "Edit company" : "Add company"}</h3>
           {canEdit && selected ? (
             <Button
               type="button"
@@ -411,8 +400,7 @@ export function DirectoryCompaniesPanel({
         </div>
         {!selected ? (
           <p className="text-[11px] text-steel-muted mb-3">
-            Company, contact, email, and phone are collected here. Saving creates the{" "}
-            {tab === "clients" ? "client" : tab === "stakeholders" ? "consultant / stakeholder" : "vendor"} login.
+            Step 1 — save company and contact. Step 2 — add email and click <strong className="text-ink">Activate portal access</strong> (default password Demo@1234).
           </p>
         ) : tab === "clients" ? (
           <p className="text-[11px] text-steel-muted mb-3">
@@ -477,8 +465,8 @@ export function DirectoryCompaniesPanel({
                 </Button>
               ) : null}
               {selected && (meta.loginRole || tab === "vendors" || tab === "clients" || tab === "stakeholders") && (
-                <Button type="button" variant="secondary" onClick={() => void createLogin()}>
-                  Create portal login
+                <Button type="button" variant="secondary" onClick={() => void activatePortalAccess()}>
+                  Activate portal access
                 </Button>
               )}
               {selected ? (
@@ -499,6 +487,9 @@ export function DirectoryCompaniesPanel({
           {msg && <p className="text-xs text-brand-dark">{msg}</p>}
           {loginMsg && <p className="text-xs text-steel-muted">{loginMsg}</p>}
         </form>
+        {tab === "clients" && selected && canEdit ? (
+          <ClientRepresentativesPanel vendorId={selected.id} token={token} canEdit={canEdit} />
+        ) : null}
         <p className="text-[11px] text-steel-muted mt-4 border-t border-line pt-3">
           {tab === "vendors" ? (
             <>

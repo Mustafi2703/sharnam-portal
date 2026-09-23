@@ -9,6 +9,7 @@ import { SetupPartyMultiPick } from "../../components/SetupPartyMultiPick";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
+import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
@@ -47,6 +48,7 @@ type SetupSummary = {
     contractorName?: string | null;
     pmcName?: string | null;
     clientGst?: string | null;
+    clientLogoUrl?: string | null;
     startDate?: string | null;
     endDate?: string | null;
   };
@@ -677,6 +679,22 @@ export default function CrmProjectSetupPage() {
                     <p className="sm:col-span-2 text-[11px] text-steel-muted">
                       Office and admin only. Save updates the client directory and every project linked to this company.
                     </p>
+                    {projectId && summary?.project ? (
+                      <div className="sm:col-span-2 rounded-lg border border-line bg-paper p-2">
+                        <RegisterBrandHeader
+                          title="Client logo (matrix & registers)"
+                          project={{
+                            id: projectId,
+                            name: summary.project.name,
+                            clientName: details.clientName,
+                            clientLogoUrl: summary.project.clientLogoUrl,
+                          }}
+                          token={token}
+                          canEdit={canManage}
+                          onProjectUpdated={() => void loadProject()}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-[11px] text-steel-muted rounded-lg border border-dashed border-line px-3 py-2">

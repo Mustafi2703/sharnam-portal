@@ -303,6 +303,13 @@ export {
 } from "./hrmsStages.js";
 
 export {
+  SPDC_PMC_NAME,
+  SPDC_OFFICE_ADDRESS,
+  SPDC_OFFICE_PHONE,
+  SPDC_OFFICE_FOOTER,
+} from "./spdcBranding.js";
+
+export {
   CUBE_SIZE_MM,
   cubeStrengthFromLoadKN,
   gradeTargetMPa,
