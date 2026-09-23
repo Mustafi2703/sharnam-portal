@@ -37,5 +37,6 @@
 
 - **Letter templates:** Official files `01–11_SPDC_*.docx` + usage guide → `apps/api/formats/hrms/` via `npm run hrms:import-root-formats` (synced to repo). **Generate** = filled **.docx** + branded HTML (print PDF) + vault; **Preview** = HTML draft (use Generate for pixel-perfect Word).
 - **Leave:** HRMS → Leave — apply CL, PL, Sick, Emergency, Short (types seeded). Set entitlements in **Users** / leave balances.
+- **PL default 12** days per employee on HR user create (+ CL 12, SL 6, EL 3, SHL 24). Shown as *remaining / entitled* on Leave. HR edits balances, approves, **converts** leave type, cancels approved leave (restores balance).
 - **Site team:** `/attendance` punch + calendar; vouchers with bills; trim extra HR clutter — ongoing UX pass.
 - **Next:** Auto PDF engine (not browser print); per-employee monthly attendance Excel mail; letter preview from live .docx render.

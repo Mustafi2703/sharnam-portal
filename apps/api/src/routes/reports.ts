@@ -68,7 +68,7 @@ import {
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
 import { syncProposalSummaryFile } from "../services/crmSharePoint.js";
 import { ensureSpdcDepartmentMasters } from "../services/spdcOrgSeed.js";
-import { ensureSpdcLeaveTypes } from "../services/spdcLeaveSeed.js";
+import { ensureSpdcLeaveTypes, ensureDefaultLeaveBalancesForUser, applyLeaveBalanceDelta } from "../services/spdcLeaveSeed.js";
 import { nextSpdcQuotationNo } from "../services/crmQuotationNumbers.js";
 import {
   createVersionedProposal,
@@ -1768,6 +1768,9 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
     entityId: user.id,
     meta: { email: user.email, role: user.role, fullName: user.fullName },
   });
+  if (roleKey !== "client" && roleKey !== "vendor") {
+    await ensureDefaultLeaveBalancesForUser(user.id);
+  }
   res.status(201).json(user);
 });
 
@@ -2502,21 +2505,66 @@ hrmRouter.post("/holidays/import-csv", hrmDesk, hrmUpload.single("file"), async 
 
 hrmRouter.get("/leave-balances", hrmStaff, async (req: AuthedRequest, res) => {
   const year = Number(req.query.year || new Date().getFullYear());
-  const userId = String(req.query.userId || req.user!.id);
+  const isHr = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "hr";
+  const userId = isHr && req.query.userId ? String(req.query.userId) : req.user!.id;
+  if (!isHr && userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
+  await ensureDefaultLeaveBalancesForUser(userId, year);
+  const rows = await prisma.leaveBalance.findMany({
+    where: { userId, year },
+    include: { leaveType: true },
+    orderBy: { leaveType: { code: "asc" } },
+  });
+  res.json(rows);
+});
+
+hrmRouter.post("/leave-balances/ensure-defaults", hrmDesk, async (req, res) => {
+  const userId = String(req.body.userId || "");
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  const year = Number(req.body.year || new Date().getFullYear());
+  await ensureDefaultLeaveBalancesForUser(userId, year);
   const rows = await prisma.leaveBalance.findMany({
     where: { userId, year },
     include: { leaveType: true },
   });
-  res.json(rows);
+  res.json({ ok: true, rows });
+});
+
+hrmRouter.post("/leave-balances/bulk", hrmDesk, async (req, res) => {
+  const userId = String(req.body.userId || "");
+  const year = Number(req.body.year || new Date().getFullYear());
+  const items = Array.isArray(req.body.balances) ? req.body.balances : [];
+  if (!userId) return res.status(400).json({ error: "userId required" });
+  const updated = [];
+  for (const item of items) {
+    const leaveTypeId = String(item.leaveTypeId || "");
+    const entitled = Number(item.entitled);
+    if (!leaveTypeId || !Number.isFinite(entitled)) continue;
+    const existing = await prisma.leaveBalance.findUnique({
+      where: { userId_leaveTypeId_year: { userId, leaveTypeId, year } },
+    });
+    const used = existing?.used ?? 0;
+    const row = await prisma.leaveBalance.upsert({
+      where: { userId_leaveTypeId_year: { userId, leaveTypeId, year } },
+      create: { userId, leaveTypeId, year, entitled, used: 0, balance: entitled },
+      update: { entitled, balance: entitled - used },
+    });
+    updated.push(row);
+  }
+  res.json({ ok: true, rows: updated });
 });
 
 hrmRouter.post("/leave-balances", hrmDesk, async (req, res) => {
   const { userId, leaveTypeId, year, entitled } = req.body;
   if (!userId || !leaveTypeId || !year) return res.status(400).json({ error: "userId, leaveTypeId, year required" });
+  const existing = await prisma.leaveBalance.findUnique({
+    where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: Number(year) } },
+  });
+  const used = existing?.used ?? 0;
+  const ent = Number(entitled || 0);
   const row = await prisma.leaveBalance.upsert({
     where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: Number(year) } },
-    create: { userId, leaveTypeId, year: Number(year), entitled: Number(entitled || 0), used: 0, balance: Number(entitled || 0) },
-    update: { entitled: Number(entitled || 0), balance: Number(entitled || 0) - (await prisma.leaveBalance.findUnique({ where: { userId_leaveTypeId_year: { userId, leaveTypeId, year: Number(year) } } }))!.used },
+    create: { userId, leaveTypeId, year: Number(year), entitled: ent, used: 0, balance: ent },
+    update: { entitled: ent, balance: ent - used },
   });
   res.json(row);
 });
@@ -2886,9 +2934,17 @@ hrmRouter.delete("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res)
   res.json({ ok: true });
 });
 
-hrmRouter.get("/leave", hrmDesk, async (_req, res) => {
+hrmRouter.get("/leave", hrmStaff, async (req: AuthedRequest, res) => {
+  const isHr = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "hr";
+  const where =
+    isHr && req.query.all === "1"
+      ? req.query.userId
+        ? { userId: String(req.query.userId) }
+        : {}
+      : { userId: req.user!.id };
   const rows = await prisma.leaveRequest.findMany({
-    include: { user: { select: { fullName: true } } },
+    where,
+    include: { user: { select: { fullName: true, email: true } }, leaveType: true },
     orderBy: { createdAt: "desc" },
   });
   res.json(rows);
@@ -2899,47 +2955,70 @@ hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", 
   const to = new Date(req.body.toDate);
   const halfDay = !!req.body.halfDay;
   const days = Number(req.body.days) || Math.max(halfDay ? 0.5 : 1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const targetUserId =
+    req.body.userId && ["admin", "office", "hr"].includes(req.user!.role) ? String(req.body.userId) : req.user!.id;
+  await ensureDefaultLeaveBalancesForUser(targetUserId, from.getFullYear());
   const row = await prisma.leaveRequest.create({
     data: {
-      userId: req.user!.id,
+      userId: targetUserId,
       leaveTypeId: req.body.leaveTypeId || null,
       fromDate: from,
       toDate: to,
       days,
       halfDay,
       reason: req.body.reason,
+      status: req.body.status === "Approved" && ["admin", "office", "hr"].includes(req.user!.role) ? "Approved" : "Pending",
+      ...(req.body.status === "Approved" ? { approverId: req.user!.id, decidedAt: new Date() } : {}),
     },
-    include: { leaveType: true },
+    include: { leaveType: true, user: { select: { fullName: true } } },
   });
+  if (row.status === "Approved" && row.leaveTypeId) {
+    await applyLeaveBalanceDelta(row.userId, row.leaveTypeId, from.getFullYear(), row.days);
+  }
   res.status(201).json(row);
 });
 
 hrmRouter.patch("/leave/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const before = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
-  const status = String(req.body.status);
+  const year = new Date(before.fromDate).getFullYear();
+
+  const convertTo = req.body.convertToLeaveTypeId || req.body.leaveTypeId;
+  let nextLeaveTypeId = before.leaveTypeId;
+  if (convertTo && String(convertTo) !== before.leaveTypeId) {
+    nextLeaveTypeId = String(convertTo);
+    if (before.status === "Approved" && before.leaveTypeId) {
+      await applyLeaveBalanceDelta(before.userId, before.leaveTypeId, year, -before.days);
+      await applyLeaveBalanceDelta(before.userId, nextLeaveTypeId, year, before.days);
+    }
+  }
+
+  const status = req.body.status ? String(req.body.status) : before.status;
   const row = await prisma.leaveRequest.update({
     where: { id: req.params.id },
     data: {
       status,
+      leaveTypeId: nextLeaveTypeId,
       approverId: req.user!.id,
-      decidedAt: new Date(),
-      decisionNote: req.body.decisionNote || null,
+      decidedAt: req.body.status ? new Date() : before.decidedAt,
+      decisionNote: req.body.decisionNote ?? before.decisionNote,
+      ...(req.body.fromDate ? { fromDate: new Date(req.body.fromDate) } : {}),
+      ...(req.body.toDate ? { toDate: new Date(req.body.toDate) } : {}),
+      ...(req.body.days != null ? { days: Number(req.body.days) } : {}),
     },
+    include: { leaveType: true, user: { select: { fullName: true } } },
   });
-  if (status === "Approved" && before.status !== "Approved" && before.leaveTypeId) {
-    const year = new Date(before.fromDate).getFullYear();
-    const bal = await prisma.leaveBalance.findUnique({
-      where: { userId_leaveTypeId_year: { userId: before.userId, leaveTypeId: before.leaveTypeId, year } },
-    });
-    if (bal) {
-      const used = bal.used + before.days;
-      await prisma.leaveBalance.update({
-        where: { id: bal.id },
-        data: { used, balance: bal.entitled - used },
-      });
-    }
+
+  if (status === "Approved" && before.status !== "Approved" && row.leaveTypeId) {
+    await applyLeaveBalanceDelta(row.userId, row.leaveTypeId, year, row.days);
   }
+  if (status === "Rejected" && before.status === "Approved" && before.leaveTypeId) {
+    await applyLeaveBalanceDelta(before.userId, before.leaveTypeId, year, -before.days);
+  }
+  if (status === "Cancelled" && before.status === "Approved" && before.leaveTypeId) {
+    await applyLeaveBalanceDelta(before.userId, before.leaveTypeId, year, -before.days);
+  }
+
   res.json(row);
 });
 
