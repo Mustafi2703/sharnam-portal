@@ -21,6 +21,8 @@ import {
   rfiKindFromSearch,
   rfiKindPillsForScope,
   rfiListKindFilter,
+  rfiKindAllowedInModuleScope,
+  rfiLogTitle,
   rfiModuleScope,
   rfiPageCopy,
   type RfiKindFilter,
@@ -253,20 +255,22 @@ export default function RfisPage() {
     return rfis.filter((r) => {
       const statusOk = statusFilter === "All" || r.status === statusFilter;
       const kind = r.rfiKind || "RequestForInformation";
+      if (moduleScoped && !rfiKindAllowedInModuleScope(moduleScope, kind)) return false;
       const effectiveKind = rfiListKindFilter(moduleScope, kindFilter);
       const kindOk =
         effectiveKind === "All"
           ? moduleScope === "drawings"
             ? kind === "DrawingChecklist" ||
               kind === "RequestForInformation" ||
-              kind === "Manual" ||
-              kind === "RequestForInformation"
-            : true
+              kind === "Manual"
+            : moduleScope === "home"
+              ? true
+              : rfiKindAllowedInModuleScope(moduleScope, kind)
           : kind === effectiveKind ||
             (effectiveKind === "RequestForInformation" && (kind === "Manual" || kind === "RequestForInformation"));
       return statusOk && kindOk;
     });
-  }, [rfis, statusFilter, kindFilter, moduleScope]);
+  }, [rfis, statusFilter, kindFilter, moduleScope, moduleScoped]);
 
   const selected = rfis.find((r) => r.id === active);
   const selectedProgress = selected ? rfiProgress(selected) : null;
@@ -697,8 +701,8 @@ export default function RfisPage() {
       ) : (
       <div className="grid lg:grid-cols-[340px_1fr] gap-4">
         <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">Log</div>
-          <ul className="divide-y divide-line max-h-[60vh] overflow-y-auto">
+          <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">{rfiLogTitle(moduleScope)}</div>
+          <ul className="divide-y divide-line max-h-[min(520px,60vh)] overflow-y-auto overscroll-contain">
             {filtered.map((r) => {
               const prog = rfiProgress(r);
               return (

@@ -309,3 +309,24 @@ export function createBodyFromForm(form: LetterFormState) {
     data: letterDataPayload(form),
   };
 }
+
+/** Fields shown in the letter desk form — maps to {{tokens}} in SPDC .docx templates. */
+export function letterFormUsesCtc(kind: DocKind): boolean {
+  return kind === "Appointment" || kind === "Offer" || kind === "Promotion";
+}
+
+export function letterFormUsesPromotionExtras(kind: DocKind): boolean {
+  return kind === "Promotion";
+}
+
+export function letterFormUsesWarningExtras(kind: DocKind): boolean {
+  return kind === "Warning";
+}
+
+export function letterFormUsesAssetExtras(kind: DocKind): boolean {
+  return kind === "AssetReturn";
+}
+
+export function letterFormUsesSeparationReason(kind: DocKind): boolean {
+  return kind === "Warning" || kind === "Exit" || kind === "Relieving";
+}

@@ -171,6 +171,42 @@ export function rfiListKindFilter(scope: RfiModuleScope, kindFilter: RfiKindFilt
   return kindFilter;
 }
 
+/** Keeps drawing information RFIs out of Quality / Safety logs (and vice versa). */
+export function rfiKindAllowedInModuleScope(scope: RfiModuleScope, rfiKind: string | null | undefined): boolean {
+  const kind = rfiKind || "RequestForInformation";
+  switch (scope) {
+    case "drawings":
+      return kind === "RequestForInformation" || kind === "DrawingChecklist" || kind === "Manual";
+    case "quality":
+      return kind === "QualityInspection" || kind === "SiteExecution";
+    case "safety":
+      return kind === "SafetyChecklist" || kind === "SafetyIR";
+    case "inspection":
+      return kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection";
+    case "comms":
+      return kind === "RequestForInformation" || kind === "ClientConcern" || kind === "Manual";
+    default:
+      return true;
+  }
+}
+
+export function rfiLogTitle(scope: RfiModuleScope): string {
+  switch (scope) {
+    case "drawings":
+      return "Drawing RFI & information log";
+    case "quality":
+      return "Quality inspection log";
+    case "safety":
+      return "Safety checklist log";
+    case "inspection":
+      return "Inspection request log (IR)";
+    case "comms":
+      return "Communication RFI log";
+    default:
+      return "Request log";
+  }
+}
+
 export function checklistFamilyForRfiKind(
   rfiKind: string | undefined
 ): "DrawingCheck" | "QualityInspection" | "Safety" | "SiteExecution" | "ActivityInspection" {

@@ -20,6 +20,11 @@ import {
   editableDocxUrl,
   emptyLetterForm,
   subjectKeyFromForm,
+  letterFormUsesAssetExtras,
+  letterFormUsesCtc,
+  letterFormUsesPromotionExtras,
+  letterFormUsesSeparationReason,
+  letterFormUsesWarningExtras,
 } from "./hrmsLetterDesk";
 
 export default function HrmsDocumentsPage() {
@@ -41,7 +46,6 @@ export default function HrmsDocumentsPage() {
   const [previewTitle, setPreviewTitle] = useState("");
   const [packBusy, setPackBusy] = useState(false);
   const [form, setForm] = useState(emptyLetterForm());
-  const [showDetails, setShowDetails] = useState(false);
 
   const subjectKey = subjectKeyFromForm(form);
   const subjectOptions = useMemo(() => buildSubjectOptions(staff, offers), [staff, offers]);
@@ -89,6 +93,10 @@ export default function HrmsDocumentsPage() {
 
   function setSubjectKey(key: string) {
     setForm((f) => applySubjectKey(key, staff, offers, f));
+  }
+
+  function selectKind(kind: DocKind) {
+    setForm((f) => ({ ...f, kind }));
   }
 
   async function previewKind(kind: DocKind) {
@@ -178,6 +186,8 @@ export default function HrmsDocumentsPage() {
     e.preventDefault();
     await generateKind(form.kind);
   }
+
+  const activeKindMeta = KIND_OPTIONS.find((k) => k.key === form.kind) || KIND_OPTIONS[0];
 
   async function openPreview(id: string, title: string) {
     setMsg("");
@@ -277,9 +287,15 @@ export default function HrmsDocumentsPage() {
       </div>
 
       {canManage && (
-        <Card className="!p-4 space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="space-y-1 flex-1 min-w-[240px]">
+        <Card className="!p-0 overflow-hidden">
+          <div className="px-4 py-3 border-b border-line bg-sand/40">
+            <div className="font-semibold text-sm">Letter composer</div>
+            <p className="text-[11px] text-steel-muted mt-0.5">
+              One employee · all template variables · Preview (HTML) then Generate (official .docx from SPDC templates).
+            </p>
+          </div>
+          <div className="p-4 space-y-4">
+            <label className="space-y-1 block max-w-xl">
               <span className="text-[11px] text-steel-muted uppercase font-mono">Person (select once)</span>
               <Select value={subjectKey} onChange={(e) => setSubjectKey(e.target.value)}>
                 <option value="">— Choose accepted offer or staff —</option>
@@ -290,155 +306,207 @@ export default function HrmsDocumentsPage() {
                 ))}
               </Select>
             </label>
-            {subjectKey ? (
-              <div className="text-xs text-steel-muted pb-1">
-                <strong className="text-ink">{form.employeeName}</strong>
-                {form.designation ? ` · ${form.designation}` : ""}
-                {form.ctcAnnual ? ` · CTC ₹${Number(form.ctcAnnual).toLocaleString("en-IN")}` : ""}
-                {form.effectiveDate ? ` · ${form.effectiveDate}` : ""}
-              </div>
-            ) : null}
-          </div>
 
-          {subjectKey ? (
-            <>
-              <div>
-                <h3 className="font-semibold text-sm mb-2">Onboarding letter pack</h3>
-                <p className="text-[11px] text-steel-muted mb-3">
-                  Offer, appointment, NDA at joining, and confirmation — preview any row, then generate missing letters in one go.
-                </p>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                  {ONBOARDING_LETTER_PACK.map((kind) => {
-                    const existing = subjectRows.find((r) => r.kind === kind);
-                    const meta = KIND_OPTIONS.find((k) => k.key === kind)!;
-                    return (
-                      <div key={kind} className="rounded-lg border border-line p-3 bg-sand/30 space-y-2">
-                        <div className="font-medium text-xs">{meta.label}</div>
-                        <Badge tone={existing ? "ok" : "brand"}>{existing ? existing.refNo : "Not generated"}</Badge>
-                        <div className="flex flex-wrap gap-1">
+            {!subjectKey ? (
+              <p className="text-sm text-steel-muted">Select a person to fill letter variables and generate documents.</p>
+            ) : (
+              <div className="grid lg:grid-cols-[minmax(200px,240px)_1fr] gap-4 min-h-0">
+                <div className="rounded-lg border border-line bg-white flex flex-col min-h-0 max-h-[min(520px,55vh)]">
+                  <div className="px-3 py-2 border-b border-line text-[10px] font-mono uppercase text-steel-muted shrink-0">
+                    Letter types
+                  </div>
+                  <ul className="overflow-y-auto overscroll-contain divide-y divide-line flex-1">
+                    {KIND_OPTIONS.map((k) => {
+                      const existing = subjectRows.find((r) => r.kind === k.key && r.status !== "Cancelled");
+                      const active = form.kind === k.key;
+                      return (
+                        <li key={k.key}>
                           <button
                             type="button"
-                            className="text-[11px] px-2 py-0.5 rounded border border-line hover:bg-paper"
-                            onClick={() => void previewKind(kind)}
+                            onClick={() => selectKind(k.key)}
+                            className={`w-full text-left px-3 py-2.5 text-xs transition-colors ${
+                              active ? "bg-brand-soft border-l-2 border-l-brand" : "hover:bg-sand/40"
+                            }`}
                           >
-                            Preview
+                            <div className="font-semibold text-ink">{k.label}</div>
+                            <div className="text-[10px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div>
+                            {existing ? (
+                              <span className="inline-block mt-1 text-[10px] font-mono text-brand">{existing.refNo}</span>
+                            ) : (
+                              <span className="inline-block mt-1 text-[10px] text-steel-muted">Not on file</span>
+                            )}
                           </button>
-                          {!existing ? (
-                            <button
-                              type="button"
-                              className="text-[11px] px-2 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/5"
-                              onClick={() => void generateKind(kind)}
-                            >
-                              Generate
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="text-[11px] px-2 py-0.5 rounded border border-line hover:bg-paper"
-                              onClick={() => void openPreview(existing.id, `${kind} · ${existing.refNo}`)}
-                            >
-                              Open
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" disabled={packBusy} onClick={() => void generateOnboardingPack()}>
-                    {packBusy ? "Generating…" : "Generate missing onboarding letters"}
-                  </Button>
-                </div>
-              </div>
 
-              <details open={showDetails} onToggle={(e) => setShowDetails((e.target as HTMLDetailsElement).open)}>
-                <summary className="cursor-pointer text-sm font-semibold text-ink">Other letter types &amp; edit fields</summary>
-                <form onSubmit={create} className="grid md:grid-cols-3 gap-3 text-sm mt-3 pt-3 border-t border-line">
-                  <label className="space-y-1">
-                    <span className="text-[11px] text-steel-muted uppercase font-mono">Kind</span>
-                    <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as DocKind })}>
-                      {KIND_OPTIONS.map((k) => (
-                        <option key={k.key} value={k.key}>
-                          {k.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <label className="space-y-1 md:col-span-2">
-                    <span className="text-[11px] text-steel-muted uppercase font-mono">Effective / joining date</span>
-                    <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
-                  </label>
-                  {(form.kind === "Appointment" || form.kind === "Offer" || form.kind === "Promotion") && (
-                    <>
-                      {form.kind === "Promotion" && (
+                <div className="space-y-4 min-w-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold text-sm">{activeKindMeta.label}</h3>
+                      <p className="text-[11px] text-steel-muted">{activeKindMeta.hint}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => void previewKind(form.kind)}>
+                        Preview
+                      </Button>
+                      <Button type="button" className="!py-1 !text-xs" onClick={() => void generateKind(form.kind)}>
+                        Generate .docx
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-[11px] font-mono uppercase text-steel-muted mb-2">Onboarding pack</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {ONBOARDING_LETTER_PACK.map((kind) => {
+                        const existing = subjectRows.find((r) => r.kind === kind);
+                        return (
+                          <button
+                            key={kind}
+                            type="button"
+                            onClick={() => selectKind(kind)}
+                            className="text-[11px] px-2 py-1 rounded border border-line hover:bg-sand/50"
+                          >
+                            {KIND_OPTIONS.find((k) => k.key === kind)?.label}
+                            {existing ? ` · ${existing.refNo}` : ""}
+                          </button>
+                        );
+                      })}
+                      <Button type="button" disabled={packBusy} className="!py-1 !text-xs" onClick={() => void generateOnboardingPack()}>
+                        {packBusy ? "Generating…" : "Generate missing pack"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <form onSubmit={create} className="rounded-lg border border-line p-3 bg-sand/20 space-y-3">
+                    <p className="text-[10px] font-mono uppercase text-steel-muted">Template variables for {form.employeeName}</p>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                      <label className="space-y-1 sm:col-span-2">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Employee name</span>
+                        <Input value={form.employeeName} onChange={(e) => setForm({ ...form, employeeName: e.target.value })} required />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Emp code</span>
+                        <Input value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Designation</span>
+                        <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Department</span>
+                        <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Email</span>
+                        <Input value={form.candidateEmail} onChange={(e) => setForm({ ...form, candidateEmail: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Mobile</span>
+                        <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">PAN</span>
+                        <Input value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Gender</span>
+                        <Input value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} />
+                      </label>
+                      <label className="space-y-1 sm:col-span-2">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Project / client site</span>
+                        <Input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Effective / joining date</span>
+                        <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
+                      </label>
+                      <label className="space-y-1 sm:col-span-3">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Address (as per records)</span>
+                        <TextArea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                      </label>
+                      {letterFormUsesCtc(form.kind) && (
                         <>
+                          {letterFormUsesPromotionExtras(form.kind) && (
+                            <>
+                              <label className="space-y-1">
+                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation</span>
+                                <Input
+                                  value={form.previousDesignation}
+                                  onChange={(e) => setForm({ ...form, previousDesignation: e.target.value })}
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
+                                <Input value={form.previousCtc} onChange={(e) => setForm({ ...form, previousCtc: e.target.value })} />
+                              </label>
+                            </>
+                          )}
                           <label className="space-y-1">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation</span>
-                            <Input value={form.previousDesignation} onChange={(e) => setForm({ ...form, previousDesignation: e.target.value })} />
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">
+                              {form.kind === "Promotion" ? "Revised CTC (INR p.a.)" : "Fixed CTC (INR p.a.)"}
+                            </span>
+                            <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
                           </label>
-                          <label className="space-y-1">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
-                            <Input value={form.previousCtc} onChange={(e) => setForm({ ...form, previousCtc: e.target.value })} />
+                          <label className="space-y-1 sm:col-span-2">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Reporting manager</span>
+                            <Input value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
+                          </label>
+                          <label className="space-y-1 sm:col-span-3">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Base location</span>
+                            <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
                           </label>
                         </>
                       )}
-                      <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">
-                          {form.kind === "Promotion" ? "Revised CTC (INR p.a.)" : "Fixed CTC (INR p.a.)"}
-                        </span>
-                        <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Reporting manager</span>
-                        <Input value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
-                      </label>
-                      <label className="space-y-1 md:col-span-2">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Base location</span>
-                        <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-                      </label>
-                    </>
-                  )}
-                  {form.kind === "AssetReturn" && (
-                    <>
-                      <label className="space-y-1 md:col-span-2">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Assets returned</span>
-                        <Input placeholder="Laptop, mobile, ID card…" value={form.assets} onChange={(e) => setForm({ ...form, assets: e.target.value })} />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Serials / asset tags</span>
-                        <Input value={form.serials} onChange={(e) => setForm({ ...form, serials: e.target.value })} />
-                      </label>
-                    </>
-                  )}
-                  {(form.kind === "Warning" || form.kind === "Exit") && (
-                    <label className="space-y-1 md:col-span-3">
-                      <span className="text-[11px] text-steel-muted uppercase font-mono">
-                        {form.kind === "Warning" ? "Concern / remarks" : "Reason for exit"}
-                      </span>
-                      <TextArea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
-                    </label>
-                  )}
-                  <label className="space-y-1">
-                    <span className="text-[11px] text-steel-muted uppercase font-mono">Emp code</span>
-                    <Input value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
-                  </label>
-                  <label className="space-y-1 md:col-span-2">
-                    <span className="text-[11px] text-steel-muted uppercase font-mono">Address</span>
-                    <TextArea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-                  </label>
-                  <div className="md:col-span-3 flex flex-wrap items-center gap-2">
-                    <Button type="button" variant="secondary" onClick={() => void previewKind(form.kind)}>
-                      Preview this kind
-                    </Button>
-                    <Button type="submit">Generate &amp; file</Button>
-                  </div>
-                </form>
-              </details>
-            </>
-          ) : (
-            <p className="text-sm text-steel-muted">Select an accepted offer or onboarded staff member to preview and generate letters.</p>
-          )}
+                      {letterFormUsesAssetExtras(form.kind) && (
+                        <>
+                          <label className="space-y-1 sm:col-span-2">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Assets returned</span>
+                            <Input value={form.assets} onChange={(e) => setForm({ ...form, assets: e.target.value })} />
+                          </label>
+                          <label className="space-y-1">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Serials / tags</span>
+                            <Input value={form.serials} onChange={(e) => setForm({ ...form, serials: e.target.value })} />
+                          </label>
+                        </>
+                      )}
+                      {letterFormUsesSeparationReason(form.kind) && !letterFormUsesWarningExtras(form.kind) && (
+                        <label className="space-y-1 sm:col-span-3">
+                          <span className="text-[11px] text-steel-muted uppercase font-mono">Reason / remarks</span>
+                          <TextArea rows={2} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+                        </label>
+                      )}
+                      {letterFormUsesWarningExtras(form.kind) && (
+                        <>
+                          <label className="space-y-1 sm:col-span-3">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Issue in brief</span>
+                            <TextArea rows={2} value={form.issueInBrief} onChange={(e) => setForm({ ...form, issueInBrief: e.target.value })} />
+                          </label>
+                          <label className="space-y-1 sm:col-span-3">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Impact</span>
+                            <TextArea rows={2} value={form.impact} onChange={(e) => setForm({ ...form, impact: e.target.value })} />
+                          </label>
+                          <label className="space-y-1 sm:col-span-3">
+                            <span className="text-[11px] text-steel-muted uppercase font-mono">Corrective action required</span>
+                            <TextArea rows={2} value={form.correctiveAction} onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })} />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button type="button" variant="secondary" onClick={() => void previewKind(form.kind)}>
+                        Preview HTML
+                      </Button>
+                      <Button type="submit">Generate &amp; file</Button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
       )}
 
@@ -453,8 +521,9 @@ export default function HrmsDocumentsPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
+        <div className="max-h-[min(480px,52vh)] overflow-y-auto overscroll-contain border-t border-line">
           <table className="min-w-[900px] w-full text-xs">
-            <thead className="text-left text-steel-muted bg-white">
+            <thead className="text-left text-steel-muted bg-white sticky top-0 z-10 shadow-[0_1px_0_var(--color-line,#e5e7eb)]">
               <tr>
                 <th className="p-2">Ref</th>
                 <th>Kind</th>
@@ -538,6 +607,7 @@ export default function HrmsDocumentsPage() {
               )}
             </tbody>
           </table>
+        </div>
         </div>
       </Card>
 
