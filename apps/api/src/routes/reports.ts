@@ -2763,6 +2763,37 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
   }
 });
 
+/** Filled Word letter from form — same bytes as Generate .docx (for in-browser Word preview). */
+hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedRequest, res) => {
+  const kindRaw = String(req.body.kind || "");
+  if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
+    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+  }
+  const employeeName = String(req.body.employeeName || "").trim();
+  if (!employeeName) return res.status(400).json({ error: "employeeName required" });
+  const data =
+    req.body.data && typeof req.body.data === "object" ? (req.body.data as Record<string, unknown>) : {};
+  const { buildHrmsLetterDraftDocx } = await import("../services/hrmsLetter.js");
+  try {
+    const buf = await buildHrmsLetterDraftDocx({
+      kind: kindRaw,
+      employeeName,
+      employeeUserId: req.body.employeeUserId || null,
+      candidateEmail: req.body.candidateEmail || null,
+      designation: req.body.designation || null,
+      department: req.body.department || null,
+      effectiveDate: req.body.effectiveDate || null,
+      data,
+    });
+    const safeName = `${kindRaw}-${employeeName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40)}.docx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+    res.send(buf);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Preview failed" });
+  }
+});
+
 hrmRouter.get("/hrms-documents", hrmDesk, async (req, res) => {
   const rows = await prisma.hrmsDocument.findMany({
     where: {
@@ -2867,6 +2898,21 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
   }
   await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
   res.json(updated);
+});
+
+hrmRouter.get("/hrms-documents/:id/preview.docx", hrmDesk, async (req, res) => {
+  const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const { buildHrmsLetterDocxFromRow } = await import("../services/hrmsLetter.js");
+  try {
+    const buf = await buildHrmsLetterDocxFromRow(row);
+    const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `inline; filename="${row.kind}-${safeRef}.docx"`);
+    res.send(buf);
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Preview failed" });
+  }
 });
 
 hrmRouter.get("/hrms-documents/:id/preview", hrmDesk, async (req, res) => {

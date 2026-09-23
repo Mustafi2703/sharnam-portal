@@ -5,6 +5,7 @@ import { api, apiBase, mediaUrl } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
+import HrmsDocxPreview from "../../components/HrmsDocxPreview";
 import HrmsPageHero from "./HrmsPageHero";
 import {
   ONBOARDING_LETTER_PACK,
@@ -19,6 +20,7 @@ import {
   createBodyFromForm,
   docMatchesSubject,
   editableDocxUrl,
+  letterSharePointLink,
   emptyLetterForm,
   subjectKeyFromForm,
   hydrateLetterFormFromDoc,
@@ -45,7 +47,7 @@ export default function HrmsDocumentsPage() {
 
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [offers, setOffers] = useState<OfferRow[]>([]);
-  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewDocxBlob, setPreviewDocxBlob] = useState<Blob | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
   const [packBusy, setPackBusy] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -109,16 +111,19 @@ export default function HrmsDocumentsPage() {
     return visible;
   }, [visible, subjectKey, form]);
 
-  function setSubjectKey(key: string) {
-    setPreviewHtml("");
+  function clearPreview() {
+    setPreviewDocxBlob(null);
     setPreviewFingerprint("");
+  }
+
+  function setSubjectKey(key: string) {
+    clearPreview();
     setForm((f) => applySubjectKey(key, staff, offers, f));
   }
 
   function selectKind(kind: DocKind) {
     const existing = subjectRows.find((r) => r.kind === kind && r.status !== "Cancelled");
-    setPreviewHtml("");
-    setPreviewFingerprint("");
+    clearPreview();
     setForm((f) => {
       const next = { ...f, kind };
       return existing ? hydrateLetterFormFromDoc(existing, next) : next;
@@ -129,7 +134,23 @@ export default function HrmsDocumentsPage() {
   }
 
   const currentFingerprint = useMemo(() => letterFormFingerprint(form), [form]);
-  const previewIsCurrent = previewFingerprint === currentFingerprint && !!previewHtml;
+  const previewIsCurrent = previewFingerprint === currentFingerprint && !!previewDocxBlob;
+
+  async function fetchPreviewDocx(url: string, body?: object): Promise<Blob> {
+    const res = await fetch(url, {
+      method: body ? "POST" : "GET",
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || "Preview failed");
+    }
+    return res.blob();
+  }
 
   async function upsertLetterRow(kind: DocKind, rowSource?: DocRow[]): Promise<string> {
     const pool = rowSource ?? rows;
@@ -169,20 +190,8 @@ export default function HrmsDocumentsPage() {
     setPreviewBusy(true);
     try {
       const body = { ...createBodyFromForm({ ...form, kind }), kind };
-      const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/preview`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Preview failed");
-      }
-      const html = await res.text();
-      setPreviewHtml(html);
+      const blob = await fetchPreviewDocx(`${apiBase()}/api/hrm/hrms-documents/preview.docx`, body);
+      setPreviewDocxBlob(blob);
       setPreviewTitle(`${KIND_OPTIONS.find((k) => k.key === kind)?.label || kind} · ${form.employeeName}`);
       setPreviewFingerprint(letterFormFingerprint({ ...form, kind }));
       setPreviewExpanded(false);
@@ -208,8 +217,13 @@ export default function HrmsDocumentsPage() {
     setGenerateBusy(true);
     try {
       const id = await upsertLetterRow(kind);
-      await api(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
-      setMsg(`${kind} generated — download .docx from the register below.`);
+      const updated = await api<DocRow>(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
+      const sp = letterSharePointLink(updated);
+      setMsg(
+        sp
+          ? `${kind} filed — Word + print copy on SharePoint. Use Print PDF in the register if you need PDF.`
+          : `${kind} generated — download .docx from the register.`,
+      );
       await load();
       await openPreview(id, `${kind} · ${form.employeeName}`);
     } catch (err) {
@@ -260,23 +274,17 @@ export default function HrmsDocumentsPage() {
 
   useEffect(() => {
     if (previewFingerprint && previewFingerprint !== currentFingerprint) {
-      setPreviewHtml("");
-      setPreviewFingerprint("");
+      clearPreview();
     }
   }, [currentFingerprint, previewFingerprint]);
 
   async function openPreview(id: string, title: string) {
     setMsg("");
     try {
-      const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${id}/preview`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) throw new Error("Preview failed");
-      const html = await res.text();
-      setPreviewHtml(html);
+      const blob = await fetchPreviewDocx(`${apiBase()}/api/hrm/hrms-documents/${id}/preview.docx`);
+      setPreviewDocxBlob(blob);
       setPreviewTitle(title);
       setPreviewExpanded(true);
-      setPreviewFingerprint(currentFingerprint);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Preview failed");
     }
@@ -332,10 +340,10 @@ export default function HrmsDocumentsPage() {
               <strong className="text-ink font-semibold">2.</strong> Edit fields
             </span>
             <span>
-              <strong className="text-ink font-semibold">3.</strong> Preview HTML
+              <strong className="text-ink font-semibold">3.</strong> Preview Word
             </span>
             <span>
-              <strong className="text-ink font-semibold">4.</strong> Generate .docx
+              <strong className="text-ink font-semibold">4.</strong> Generate & file
             </span>
             <span>
               <strong className="text-ink font-semibold">5.</strong> Upload signed copy
@@ -373,7 +381,7 @@ export default function HrmsDocumentsPage() {
           <div className="px-4 py-3 border-b border-line bg-sand/40">
             <div className="font-semibold text-sm">Letter composer</div>
             <p className="text-[11px] text-steel-muted mt-0.5">
-              One employee · all template variables · Preview (HTML) then Generate (official .docx from SPDC templates).
+              One employee · all template variables · Preview Word (same file as download), then Generate & file to SharePoint.
             </p>
           </div>
           <div className="p-4 space-y-4">
@@ -441,7 +449,7 @@ export default function HrmsDocumentsPage() {
                         disabled={previewBusy}
                         onClick={() => void previewKind(form.kind)}
                       >
-                        {previewBusy ? "Loading preview…" : "Preview HTML"}
+                        {previewBusy ? "Loading preview…" : "Preview Word"}
                       </Button>
                       <Button
                         type="button"
@@ -449,7 +457,7 @@ export default function HrmsDocumentsPage() {
                         disabled={generateBusy || previewBusy}
                         onClick={() => void generateKind(form.kind)}
                       >
-                        {generateBusy ? "Generating…" : "Generate .docx"}
+                        {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>
                     </div>
                   </div>
@@ -594,7 +602,7 @@ export default function HrmsDocumentsPage() {
                     </div>
                     <div className="flex flex-wrap gap-2 pt-1">
                       <Button type="button" variant="secondary" disabled={previewBusy} onClick={() => void previewKind(form.kind)}>
-                        {previewBusy ? "Loading preview…" : "Preview HTML"}
+                        {previewBusy ? "Loading preview…" : "Preview Word"}
                       </Button>
                       <Button type="submit" disabled={generateBusy || previewBusy}>
                         {generateBusy ? "Generating…" : "Generate & file"}
@@ -607,19 +615,19 @@ export default function HrmsDocumentsPage() {
                     className="rounded-lg border border-line bg-white overflow-hidden min-h-[280px] flex flex-col"
                   >
                     <div className="px-3 py-2 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-mono uppercase text-steel-muted">Letter preview (Word template)</span>
-                      {previewHtml ? (
-                        <Button type="button" variant="secondary" className="!py-0.5 !text-[11px]" onClick={() => setPreviewHtml("")}>
+                      <span className="text-[11px] font-mono uppercase text-steel-muted">Letter preview (official Word template)</span>
+                      {previewDocxBlob ? (
+                        <Button type="button" variant="secondary" className="!py-0.5 !text-[11px]" onClick={clearPreview}>
                           Clear
                         </Button>
                       ) : null}
                     </div>
-                    {previewHtml ? (
+                    {previewDocxBlob ? (
                       <>
-                        <iframe title="Letter preview inline" srcDoc={previewHtml} className="w-full flex-1 min-h-[320px] border-0 bg-white" />
+                        <HrmsDocxPreview blob={previewDocxBlob} className="flex-1 min-h-[360px]" />
                         <div className="px-3 py-2 border-t border-line flex flex-wrap gap-2">
                           <Button type="button" className="!text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
-                            Generate .docx after preview
+                            {previewIsCurrent ? "Generate & file (SharePoint)" : "Preview again, then generate"}
                           </Button>
                           <Button type="button" variant="secondary" className="!text-xs" onClick={() => setPreviewExpanded(true)}>
                             Full screen
@@ -627,10 +635,7 @@ export default function HrmsDocumentsPage() {
                         </div>
                       </>
                     ) : (
-                      <p className="p-4 text-sm text-steel-muted">
-                        Select a letter type, edit the fields above, then click <strong className="text-ink">Preview</strong>. This matches the
-                        downloadable .docx (official SPDC Word format).
-                      </p>
+                      <HrmsDocxPreview blob={null} />
                     )}
                   </div>
                 </div>
@@ -647,12 +652,12 @@ export default function HrmsDocumentsPage() {
               Letters register · {registerVisible.length}
               {subjectKey ? " (this person)" : ""}
             </div>
-            <div className="text-[11px] text-steel-muted">Print HTML to PDF · edit .docx in Word · Annexure I when CTC is set.</div>
+            <div className="text-[11px] text-steel-muted">SharePoint link for maintenance · Print HTML → PDF · Annexure I when CTC is set.</div>
           </div>
         </div>
         <div className="overflow-x-auto">
         <div className="max-h-[min(480px,52vh)] overflow-y-auto overscroll-contain border-t border-line">
-          <table className="min-w-[900px] w-full text-xs">
+          <table className="min-w-[1020px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white sticky top-0 z-10 shadow-[0_1px_0_var(--color-line,#e5e7eb)]">
               <tr>
                 <th className="p-2">Ref</th>
@@ -661,6 +666,7 @@ export default function HrmsDocumentsPage() {
                 <th>Designation / dept</th>
                 <th>Effective</th>
                 <th>Status</th>
+                <th>SharePoint / DMS</th>
                 <th>Files</th>
                 <th>Actions</th>
               </tr>
@@ -675,6 +681,25 @@ export default function HrmsDocumentsPage() {
                   <td>{r.effectiveDate ? new Date(r.effectiveDate).toLocaleDateString("en-IN") : "—"}</td>
                   <td>
                     <Badge tone={r.status === "Signed" ? "ok" : r.status === "Cancelled" ? "danger" : "brand"}>{r.status}</Badge>
+                  </td>
+                  <td className="max-w-[200px]">
+                    {letterSharePointLink(r) ? (
+                      <a
+                        href={mediaUrl(letterSharePointLink(r))}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-brand underline block text-[11px] break-all"
+                        title={letterSharePointLink(r)!}
+                      >
+                        Open in SharePoint
+                      </a>
+                    ) : r.storagePath ? (
+                      <span className="text-[10px] font-mono text-steel-muted break-all" title={r.storagePath}>
+                        {r.storagePath}
+                      </span>
+                    ) : (
+                      <span className="text-steel-muted">—</span>
+                    )}
                   </td>
                   <td className="space-y-1">
                     {r.generatedPdfUrl && (
@@ -697,7 +722,9 @@ export default function HrmsDocumentsPage() {
                         Signed copy
                       </a>
                     )}
-                    {!r.generatedPdfUrl && !r.uploadedFileUrl && <span className="text-steel-muted">—</span>}
+                    {!r.generatedPdfUrl && !editableDocxUrl(r) && !r.uploadedFileUrl && !annexureXlsxUrl(r) && (
+                      <span className="text-steel-muted">—</span>
+                    )}
                   </td>
                   <td className="space-y-1">
                     {canManage && (
@@ -730,7 +757,7 @@ export default function HrmsDocumentsPage() {
               ))}
               {!registerVisible.length && (
                 <tr>
-                  <td colSpan={8} className="py-4 text-center text-steel-muted">
+                  <td colSpan={9} className="py-4 text-center text-steel-muted">
                     {subjectKey ? "No letters for this person yet — use the pack above." : "No letters yet — select a person above."}
                   </td>
                 </tr>
@@ -741,17 +768,17 @@ export default function HrmsDocumentsPage() {
         </div>
       </Card>
 
-      {previewHtml && previewExpanded
+      {previewDocxBlob && previewExpanded
         ? createPortal(
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
-              <div className="bg-paper rounded-xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col min-h-0">
+              <div className="bg-paper rounded-xl shadow-xl w-full max-w-5xl h-[92vh] flex flex-col min-h-0">
                 <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
-                  <div className="font-semibold text-sm">{previewTitle || "Letter preview"}</div>
+                  <div className="font-semibold text-sm">{previewTitle || "Letter preview (Word)"}</div>
                   <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewExpanded(false)}>
                     Close
                   </Button>
                 </div>
-                <iframe title="Letter preview" srcDoc={previewHtml} className="flex-1 w-full border-0 bg-white rounded-b-xl" />
+                <HrmsDocxPreview blob={previewDocxBlob} className="flex-1 min-h-0 overflow-hidden" />
               </div>
             </div>,
             document.body,

@@ -34,6 +34,7 @@ export type DocRow = {
   generatedPdfUrl: string | null;
   uploadedFileUrl: string | null;
   sharePointUrl: string | null;
+  storagePath?: string | null;
   createdBy?: { fullName?: string; email?: string } | null;
 };
 
@@ -295,6 +296,12 @@ export function editableDocxUrl(row: DocRow): string | null {
   const url = row.generatedDocxUrl || "";
   if (!url || url.toLowerCase().includes(".xlsx")) return null;
   return url;
+}
+
+/** Primary SharePoint / DMS link for maintenance (set on generate). */
+export function letterSharePointLink(row: DocRow): string | null {
+  const u = row.sharePointUrl?.trim();
+  return u || null;
 }
 
 export function createBodyFromForm(form: LetterFormState) {

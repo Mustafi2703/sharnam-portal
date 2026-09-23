@@ -606,8 +606,21 @@ export async function renderHrmsLetterHtml(row: HrmsDocument) {
   return renderHrmsLetterPreviewHtml(row, merged);
 }
 
-/** Draft preview from the letter desk form — no DB row or SharePoint write. */
-export async function previewHrmsLetterDraft(input: {
+function readStoredUploadBuffer(url: string | null | undefined): Buffer | null {
+  if (!url) return null;
+  const match = url.match(/\/uploads\/onedrive\/(.+)$/);
+  if (!match) return null;
+  const uploadRoot = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+  const full = path.join(uploadRoot, "onedrive", match[1]);
+  try {
+    if (fs.existsSync(full)) return fs.readFileSync(full);
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+function draftRowFromInput(input: {
   kind: string;
   employeeName: string;
   employeeUserId?: string | null;
@@ -616,9 +629,9 @@ export async function previewHrmsLetterDraft(input: {
   department?: string | null;
   effectiveDate?: Date | string | null;
   data?: Record<string, unknown>;
-}): Promise<string> {
+}): HrmsDocument {
   const dataJson = JSON.stringify(input.data && typeof input.data === "object" ? input.data : {});
-  const row = {
+  return {
     id: "preview",
     kind: input.kind,
     refNo: "SPDC/HR/PREVIEW/DRAFT",
@@ -634,9 +647,65 @@ export async function previewHrmsLetterDraft(input: {
     createdAt: new Date(),
     updatedAt: new Date(),
   } as HrmsDocument;
-  let ctx: Record<string, unknown> = input.data && typeof input.data === "object" ? { ...input.data } : {};
+}
+
+async function mergedContextForRow(row: HrmsDocument): Promise<Record<string, unknown>> {
+  let ctx: Record<string, unknown> = {};
+  try {
+    ctx = row.dataJson ? JSON.parse(row.dataJson) : {};
+  } catch {
+    ctx = {};
+  }
   ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
-  const merged = letterMergeContext(row, ctx);
+  return letterMergeContext(row, ctx);
+}
+
+/** Filled .docx bytes — same engine as Generate (optionally reuse stored file after generate). */
+export async function buildHrmsLetterDocxFromRow(row: HrmsDocument, opts?: { preferStored?: boolean }): Promise<Buffer> {
+  if (opts?.preferStored !== false && row.generatedDocxUrl) {
+    const stored = readStoredUploadBuffer(row.generatedDocxUrl);
+    if (stored) return stored;
+  }
+  const merged = await mergedContextForRow(row);
+  let raw: Record<string, unknown> = {};
+  try {
+    raw = row.dataJson ? JSON.parse(row.dataJson) : {};
+  } catch {
+    raw = {};
+  }
+  const breakdown = await ctcBreakdownForLetter(row, raw, merged);
+  const buf = await filledDocxBufferForRow(row, merged, breakdown);
+  if (!buf) throw new Error(`No Word template for ${row.kind}. Add apps/api/formats/hrms/${row.kind}.docx`);
+  return buf;
+}
+
+export async function buildHrmsLetterDraftDocx(input: {
+  kind: string;
+  employeeName: string;
+  employeeUserId?: string | null;
+  candidateEmail?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  effectiveDate?: Date | string | null;
+  data?: Record<string, unknown>;
+}): Promise<Buffer> {
+  const row = draftRowFromInput(input);
+  return buildHrmsLetterDocxFromRow(row, { preferStored: false });
+}
+
+/** @deprecated Use preview.docx + docx-preview in the browser for WYSIWYG Word layout. */
+export async function previewHrmsLetterDraft(input: {
+  kind: string;
+  employeeName: string;
+  employeeUserId?: string | null;
+  candidateEmail?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  effectiveDate?: Date | string | null;
+  data?: Record<string, unknown>;
+}): Promise<string> {
+  const row = draftRowFromInput(input);
+  const merged = await mergedContextForRow(row);
   return renderHrmsLetterPreviewHtml(row, merged);
 }
 

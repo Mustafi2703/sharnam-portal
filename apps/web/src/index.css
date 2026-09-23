@@ -11904,3 +11904,26 @@ html.is-standalone-form #root {
     font-size: 0.95rem;
   }
 }
+
+/* HR letter desk — docx-preview must not inherit Tailwind preflight (breaks Word layout/branding) */
+.docx-preview-host .docx-wrapper {
+  margin: 0 auto;
+  background: transparent;
+}
+.docx-preview-host section.docx {
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(18, 20, 23, 0.12);
+  margin-bottom: 1rem;
+}
+.docx-preview-host section.docx,
+.docx-preview-host section.docx * {
+  box-sizing: content-box;
+  line-height: normal;
+}
+.docx-preview-host section.docx table {
+  border-collapse: collapse;
+}
+.docx-preview-host section.docx img {
+  max-width: none;
+  height: auto;
+}
