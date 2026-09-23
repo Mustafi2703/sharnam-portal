@@ -6659,6 +6659,14 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 /* DPR / WPR maker — single page scroll (header scrolls with form) */
+.maker-shell.custom-sheet-maker.page-scroll-full .maker-table-wrap.register-sheet-viewport {
+  min-height: min(70vh, 640px);
+  max-height: var(--register-scroll-h-tall, 72vh);
+  overflow: auto;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background: var(--color-paper);
+}
 .maker-shell.dpr-maker,
 .maker-shell.wpr-maker {
   gap: 0;

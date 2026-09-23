@@ -25,6 +25,32 @@ customSheetsRouter.use(requireAuth);
 
 const WRITE_ROLES = ["admin", "office", "employee"] as const;
 
+/** Bid / CRM system sheets — hidden from the interactive Sheet Maker workspace. */
+const MAKER_HIDDEN_CATEGORIES = ["CRM Vendor BOQ", "Comparative statement", "Payment summary"] as const;
+
+async function bidProtectedSheetIds(): Promise<Set<string>> {
+  const pkgs = await prisma.crmBidPackage.findMany({
+    select: {
+      summarySheetId: true,
+      comparativeSheetId: true,
+      vendorBoqs: { select: { sheetId: true } },
+    },
+  });
+  const ids = new Set<string>();
+  for (const p of pkgs) {
+    if (p.summarySheetId) ids.add(p.summarySheetId);
+    if (p.comparativeSheetId) ids.add(p.comparativeSheetId);
+    for (const v of p.vendorBoqs) if (v.sheetId) ids.add(v.sheetId);
+  }
+  return ids;
+}
+
+function defaultBlankGrid() {
+  const headers = ["Column A", "Column B", "Column C", "Column D", "Column E", "Column F"];
+  const rows: SheetCell[][] = Array.from({ length: 30 }, () => headers.map(() => ({ raw: "" })));
+  return { headers, rows };
+}
+
 function parseSheetWithFormulas(sheet: WorkSheet): { headers: string[]; rows: SheetCell[][] } {
   const ref = sheet["!ref"];
   if (!ref) return { headers: [], rows: [] };
@@ -232,8 +258,17 @@ customSheetsRouter.get("/masters/:masterId/lines", async (req, res) => {
 
 customSheetsRouter.get("/", async (req, res) => {
   const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+  const makerWorkspace = req.query.maker === "1" || req.query.scope === "maker";
+  const protectedIds = makerWorkspace ? await bidProtectedSheetIds() : null;
   const rows = await prisma.customSheet.findMany({
-    where: projectId ? { projectId } : {},
+    where: {
+      ...(projectId ? { projectId } : {}),
+      ...(makerWorkspace
+        ? {
+            category: { notIn: [...MAKER_HIDDEN_CATEGORIES] },
+          }
+        : {}),
+    },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -248,8 +283,9 @@ customSheetsRouter.get("/", async (req, res) => {
       rowsJson: true,
     },
   });
+  const filtered = protectedIds ? rows.filter((r) => !protectedIds.has(r.id)) : rows;
   res.json(
-    rows.map((r) => {
+    filtered.map((r) => {
       const headers = JSON.parse(r.headersJson || "[]");
       const parsed = parseRowsJson(r.rowsJson);
       const stats = sheetStats(parsed);
@@ -267,6 +303,25 @@ customSheetsRouter.get("/", async (req, res) => {
       };
     })
   );
+});
+
+/** Remove demo / stray workspace sheets (keeps bid BOQ and comparative registers). */
+customSheetsRouter.post("/clear-maker", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const protectedIds = await bidProtectedSheetIds();
+  const rows = await prisma.customSheet.findMany({
+    where: { category: { notIn: [...MAKER_HIDDEN_CATEGORIES] } },
+    select: { id: true },
+  });
+  const toDelete = rows.filter((r) => !protectedIds.has(r.id)).map((r) => r.id);
+  if (toDelete.length) {
+    await prisma.customSheet.deleteMany({ where: { id: { in: toDelete } } });
+  }
+  await audit("customsheet.clear_maker", {
+    userId: req.user!.id,
+    entity: "CustomSheet",
+    meta: { deleted: toDelete.length },
+  });
+  res.json({ ok: true, deleted: toDelete.length });
 });
 
 customSheetsRouter.post("/preview-sheets", requireRoles(...WRITE_ROLES), upload.single("file"), async (req, res) => {
@@ -375,10 +430,15 @@ customSheetsRouter.post("/blank", requireRoles(...WRITE_ROLES), async (req: Auth
   const name = String(req.body.name || "").trim() || `Untitled sheet — ${new Date().toISOString().slice(0, 10)}`;
   const category = String(req.body.category || "General");
   const projectId = req.body.projectId ? String(req.body.projectId) : null;
+  const { headers: defaultHeaders, rows: defaultRows } = defaultBlankGrid();
   const rawHeaders =
     Array.isArray(req.body.headers) && req.body.headers.length
       ? (req.body.headers as unknown[]).map((h, i) => String(h ?? "").trim() || `Column ${i + 1}`)
-      : ["Column 1", "Column 2", "Column 3"];
+      : defaultHeaders;
+  const rows =
+    Array.isArray(req.body.rows) && req.body.rows.length
+      ? evaluateAllRows(migrateRows(req.body.rows as SheetCell[][]))
+      : defaultRows;
 
   const row = await prisma.customSheet.create({
     data: {
@@ -386,7 +446,7 @@ customSheetsRouter.post("/blank", requireRoles(...WRITE_ROLES), async (req: Auth
       name,
       category,
       headersJson: JSON.stringify(rawHeaders),
-      rowsJson: JSON.stringify([]),
+      rowsJson: JSON.stringify(rows),
       sourceFile: null,
       storagePath: null,
       createdById: req.user!.id,
@@ -396,9 +456,15 @@ customSheetsRouter.post("/blank", requireRoles(...WRITE_ROLES), async (req: Auth
     userId: req.user!.id,
     entity: "CustomSheet",
     entityId: row.id,
-    meta: { headers: rawHeaders.length, source: "blank" },
+    meta: { headers: rawHeaders.length, rows: rows.length, source: "blank" },
   });
-  res.status(201).json({ id: row.id, name: row.name, headers: rawHeaders, rowCount: 0, formulaCount: 0 });
+  res.status(201).json({
+    id: row.id,
+    name: row.name,
+    headers: rawHeaders,
+    rowCount: rows.length,
+    formulaCount: sheetStats(rows).formulaCount,
+  });
 });
 
 customSheetsRouter.post("/:id/clone", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
