@@ -27,3 +27,15 @@
 - HRMS → **Users**: SPDC logins, departments, **company roles** (Director, HR, Coordinator, Billing / Planning / PM / Senior / Junior / Safety / MEPF engineers), CTC.
 - HRMS → **Documents**: appointment / engagement letters (preview → SharePoint or download).
 - **Login role** (portal access) ≠ **company role** (letters & HR profile). Site team: login **SPDC site** + project assignment = all project modules.
+
+**11\. Vouchers, attendance record, holidays**
+
+- **Done in portal:** Expense vouchers with **bill/receipt upload** (PDF/photo) per submission; **attendance calendar** + **Download Excel** (Attendance + Leave tabs); **holiday CSV upload** on HRMS → Masters.
+- **HR:** Assign leave balances per employee after CL/PL/SL/Emergency/Short types auto-seed on first open.
+
+**12\. Letters, leave, site HR cleanup**
+
+- **Letter templates:** Official files `01–11_SPDC_*.docx` + usage guide → `apps/api/formats/hrms/` via `npm run hrms:import-root-formats` (synced to repo). **Generate** = filled **.docx** + branded HTML (print PDF) + vault; **Preview** = HTML draft (use Generate for pixel-perfect Word).
+- **Leave:** HRMS → Leave — apply CL, PL, Sick, Emergency, Short (types seeded). Set entitlements in **Users** / leave balances.
+- **Site team:** `/attendance` punch + calendar; vouchers with bills; trim extra HR clutter — ongoing UX pass.
+- **Next:** Auto PDF engine (not browser print); per-employee monthly attendance Excel mail; letter preview from live .docx render.

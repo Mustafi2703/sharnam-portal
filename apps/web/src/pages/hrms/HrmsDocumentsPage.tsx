@@ -233,7 +233,7 @@ export default function HrmsDocumentsPage() {
       <HrmsPageHero
         eyebrow="Documents · Letters"
         title="HR letter desk"
-        subtitle="Pick one person (offer or onboarded staff). Preview names and CTC on the letterhead, then generate the onboarding pack or individual letters — filed to SharePoint under 06.02 Employee Files."
+        subtitle="Pick one person. Preview is HTML on SPDC letterhead; Generate fills the official Word template ({{tokens}} from 00_SPDC_HR_Letters_Usage_Guide) → .docx + print HTML + employee vault / DMS."
         workflow={
           <>
             <span>

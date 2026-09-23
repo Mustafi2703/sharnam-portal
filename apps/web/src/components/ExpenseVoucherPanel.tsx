@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { isHrApprover } from "../lib/driveAccess";
 import { Badge, Button, Card, Input, Select } from "./ui";
+import { FilePickButton } from "./FilePickButton";
 
 export type VoucherLine = {
   date?: string;
@@ -25,6 +26,7 @@ export type VoucherRow = {
   approver?: { fullName?: string } | null;
   project?: { id?: string; code?: string; name?: string } | null;
   particulars?: VoucherLine[];
+  bills?: { name: string; url: string }[];
 };
 
 const CATEGORIES = ["Site", "Travel", "Petty cash", "Conveyance", "Food", "Material", "Fuel", "Other"];
@@ -64,6 +66,7 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
     projectId: defaultProjectId || "",
   });
   const [lines, setLines] = useState<VoucherLine[]>([emptyLine(today)]);
+  const [billFiles, setBillFiles] = useState<File[]>([]);
 
   const load = useCallback(async () => {
     const [list, proj] = await Promise.all([
@@ -124,6 +127,17 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
     setBusy(true);
     setMsg("");
     try {
+      let bills: { name: string; url: string }[] = [];
+      if (billFiles.length) {
+        const fd = new FormData();
+        billFiles.forEach((f) => fd.append("bills", f, f.name));
+        const up = await api<{ bills: { name: string; url: string }[] }>("/api/hrm/vouchers/bill-upload", {
+          method: "POST",
+          token,
+          body: fd,
+        });
+        bills = up.bills || [];
+      }
       await api("/api/hrm/vouchers", {
         method: "POST",
         token,
@@ -134,6 +148,7 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
           amount: total,
           projectId: form.projectId || undefined,
           particulars,
+          bills,
         }),
       });
       setForm({
@@ -143,6 +158,7 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
         projectId: defaultProjectId || form.projectId,
       });
       setLines([emptyLine(today)]);
+      setBillFiles([]);
       setMsg("Voucher submitted — awaiting HR approval.");
       await load();
     } catch (err) {
@@ -293,6 +309,22 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
                   + Add line
                 </Button>
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-steel-muted">Bill / receipt upload</p>
+              <FilePickButton
+                multiple
+                accept="image/*,application/pdf"
+                onPick={(files) => setBillFiles((prev) => [...prev, ...files])}
+              >
+                Attach bills
+              </FilePickButton>
+              {billFiles.length ? (
+                <p className="text-xs text-brand">{billFiles.length} file(s) attached — stored with this voucher.</p>
+              ) : (
+                <p className="text-xs text-steel-muted">Attach invoice or payment proof (PDF or photo).</p>
+              )}
             </div>
 
             <Button type="submit" className="w-full" disabled={busy || total <= 0}>

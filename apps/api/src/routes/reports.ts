@@ -68,6 +68,7 @@ import {
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
 import { syncProposalSummaryFile } from "../services/crmSharePoint.js";
 import { ensureSpdcDepartmentMasters } from "../services/spdcOrgSeed.js";
+import { ensureSpdcLeaveTypes } from "../services/spdcLeaveSeed.js";
 import { nextSpdcQuotationNo } from "../services/crmQuotationNumbers.js";
 import {
   createVersionedProposal,
@@ -2055,6 +2056,98 @@ hrmRouter.get("/attendance/range", hrmStaff, async (req: AuthedRequest, res) => 
   });
 });
 
+/** Monthly attendance + leave register — Excel for HR / site records. */
+hrmRouter.get("/attendance/register.xlsx", hrmStaff, async (req: AuthedRequest, res) => {
+  await applyAutoEodClockOut();
+  const { attendanceSiteMinutes, formatIstDateKey } = await import("@sharnam/shared");
+  const XLSX = (await import("../lib/xlsx.js")).default;
+
+  const role = req.user!.role;
+  const canViewAll = role === "admin" || role === "office" || role === "hr";
+  let userId = typeof req.query.userId === "string" && req.query.userId.trim() ? req.query.userId.trim() : undefined;
+  if (!canViewAll) userId = req.user!.id;
+
+  const parseDay = (raw: string | undefined, fallback: Date) => {
+    if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return istStartOfDay(fallback);
+    const [y, m, d] = raw.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  };
+  const now = new Date();
+  const from = parseDay(typeof req.query.from === "string" ? req.query.from : undefined, new Date(now.getFullYear(), now.getMonth(), 1));
+  const to = parseDay(
+    typeof req.query.to === "string" ? req.query.to : undefined,
+    new Date(now.getFullYear(), now.getMonth() + 1, 0),
+  );
+
+  const attendance = await prisma.attendance.findMany({
+    where: { date: { gte: from, lte: to }, ...(userId ? { userId } : {}) },
+    include: { user: { select: { fullName: true, email: true } } },
+    orderBy: [{ date: "asc" }, { user: { fullName: "asc" } }],
+  });
+
+  const leave = await prisma.leaveRequest.findMany({
+    where: {
+      ...(userId ? { userId } : {}),
+      fromDate: { lte: to },
+      toDate: { gte: from },
+    },
+    include: { user: { select: { fullName: true } }, leaveType: { select: { name: true, code: true } } },
+    orderBy: { fromDate: "asc" },
+  });
+
+  const attRows = attendance.map((r) => {
+    const mins = attendanceSiteMinutes(r.checkIn, r.checkOut);
+    const hours = mins != null ? Math.round((mins / 60) * 100) / 100 : "";
+    return [
+      formatIstDateKey(r.date),
+      r.user.fullName,
+      r.status,
+      r.checkIn || "",
+      r.checkOut || "",
+      hours,
+      r.inSiteName || "",
+      r.inLat != null && r.inLng != null ? `${r.inLat},${r.inLng}` : "",
+      r.outSiteName || "",
+      r.outLat != null && r.outLng != null ? `${r.outLat},${r.outLng}` : "",
+      r.notes || "",
+    ];
+  });
+
+  const leaveRows = leave.map((l) => [
+    l.fromDate.toISOString().slice(0, 10),
+    l.toDate.toISOString().slice(0, 10),
+    l.user.fullName,
+    l.leaveType?.name || l.leaveType?.code || "",
+    l.days,
+    l.halfDay ? "Half" : "Full",
+    l.status,
+    l.reason || "",
+  ]);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ["Date", "Employee", "Status", "Check-in", "Check-out", "Hours on site", "In site", "In GPS", "Out site", "Out GPS", "Notes"],
+      ...attRows,
+    ]),
+    "Attendance",
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ["From", "To", "Employee", "Leave type", "Days", "Half/Full", "Status", "Reason"],
+      ...leaveRows,
+    ]),
+    "Leave",
+  );
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+  const fname = `SPDC-Attendance-${formatIstDateKey(from)}-${formatIstDateKey(to)}.xlsx`;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
 /** Selfie + GPS punch — multipart: selfie (required), kind, lat, lng, accuracy, projectId */
 hrmRouter.post(
   "/attendance/punch",
@@ -2316,6 +2409,7 @@ hrmRouter.delete("/departments/:id", hrmDesk, async (req, res) => {
 });
 
 hrmRouter.get("/leave-types", hrmStaff, async (_req, res) => {
+  await ensureSpdcLeaveTypes();
   const rows = await prisma.leaveType.findMany({ orderBy: { name: "asc" } });
   res.json(rows);
 });
@@ -2372,6 +2466,38 @@ hrmRouter.post("/holidays", hrmDesk, async (req, res) => {
 hrmRouter.delete("/holidays/:id", hrmDesk, async (req, res) => {
   await prisma.holiday.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
+});
+
+/** Bulk holiday calendar — CSV columns: date (YYYY-MM-DD), name, optional region, optional optional (yes/no) */
+hrmRouter.post("/holidays/import-csv", hrmDesk, hrmUpload.single("file"), async (req, res) => {
+  const text = req.file
+    ? req.file.buffer.toString("utf8")
+    : String((req.body as { csv?: string }).csv || "");
+  if (!text.trim()) return res.status(400).json({ error: "CSV file or csv body required" });
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const created: unknown[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (i === 0 && /date/i.test(line) && /name/i.test(line)) continue;
+    const cols = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+    const dateStr = cols[0];
+    const name = cols[1];
+    if (!dateStr || !name || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+    const row = await prisma.holiday.upsert({
+      where: { date_name: { date, name } },
+      create: {
+        date,
+        name,
+        region: cols[2] || "India",
+        isOptional: /^yes|true|1$/i.test(cols[3] || ""),
+      },
+      update: { region: cols[2] || "India", isOptional: /^yes|true|1$/i.test(cols[3] || "") },
+    });
+    created.push(row);
+  }
+  res.status(201).json({ imported: created.length, rows: created });
 });
 
 hrmRouter.get("/leave-balances", hrmStaff, async (req: AuthedRequest, res) => {
@@ -2829,10 +2955,26 @@ function parseVoucherParticulars(raw: unknown): { particular: string; amount: nu
   if (!raw) return [];
   try {
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray((parsed as { lines?: unknown }).lines)) {
+      return (parsed as { lines: { particular: string; amount: number; date?: string; qty?: number; rate?: number; category?: string }[] }).lines;
+    }
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
+}
+
+function parseVoucherBills(raw: unknown): { name: string; url: string }[] {
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray((parsed as { bills?: unknown }).bills)) {
+      return (parsed as { bills: { name: string; url: string }[] }).bills.filter((b) => b?.url);
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
 }
 
 hrmRouter.get("/vouchers", requireRoles("admin", "office", "hr", "employee", "site_employee"), async (req: AuthedRequest, res) => {
@@ -2855,6 +2997,7 @@ hrmRouter.get("/vouchers", requireRoles("admin", "office", "hr", "employee", "si
     rows.map((row) => ({
       ...row,
       particulars: parseVoucherParticulars(row.particularsJson),
+      bills: parseVoucherBills(row.particularsJson),
     }))
   );
 });
@@ -2871,6 +3014,11 @@ hrmRouter.post("/vouchers", requireRoles("admin", "office", "hr", "employee", "s
       .filter(Boolean)
       .join("; ");
   if (!description) return res.status(400).json({ error: "Particulars required" });
+  const bills = Array.isArray(req.body.bills)
+    ? (req.body.bills as { name?: string; url?: string }[]).filter((b) => b?.url).map((b) => ({ name: String(b.name || "Bill"), url: String(b.url) }))
+    : [];
+  const particularsJson =
+    bills.length > 0 ? JSON.stringify({ lines: particulars, bills }) : particulars.length ? JSON.stringify(particulars) : null;
   const count = await prisma.expenseVoucher.count({ where: { userId: req.user!.id } });
   const voucherNo = `VOU-${new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
   const row = await prisma.expenseVoucher.create({
@@ -2883,13 +3031,37 @@ hrmRouter.post("/vouchers", requireRoles("admin", "office", "hr", "employee", "s
       description,
       amount,
       status: "Submitted",
-      particularsJson: particulars.length ? JSON.stringify(particulars) : null,
+      particularsJson,
     },
     include: { user: { select: { fullName: true } }, project: { select: { id: true, code: true, name: true } } },
   });
   await audit("hrm.voucher.raise", { userId: req.user!.id, entity: "ExpenseVoucher", entityId: row.id });
-  res.status(201).json({ ...row, particulars });
+  res.status(201).json({ ...row, particulars, bills });
 });
+
+hrmRouter.post(
+  "/vouchers/bill-upload",
+  requireRoles("admin", "office", "hr", "employee", "site_employee"),
+  hrmUpload.array("bills", 8),
+  async (req: AuthedRequest, res) => {
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    if (!files.length) return res.status(400).json({ error: "Upload at least one bill (PDF or image)" });
+    const person = (req.user!.fullName || req.user!.email || "user").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const uploaded: { name: string; url: string }[] = [];
+    for (const f of files) {
+      const stamp = Date.now();
+      const safe = (f.originalname || "bill").replace(/[^a-zA-Z0-9._-]+/g, "_");
+      const saved = await mockOneDrive.upload(
+        "_HR",
+        "06_HR_AND_ADMIN/06.05_Expense_Vouchers",
+        `${person}-${stamp}-${safe}`,
+        f.buffer,
+      );
+      uploaded.push({ name: f.originalname || safe, url: saved.sharePointUrl || saved.url || saved.path });
+    }
+    res.status(201).json({ bills: uploaded });
+  },
+);
 
 hrmRouter.patch("/vouchers/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (!canApproveVoucher(req.user)) return res.status(403).json({ error: "HR approval only" });

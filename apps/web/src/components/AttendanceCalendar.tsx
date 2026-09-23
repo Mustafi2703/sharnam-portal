@@ -6,7 +6,7 @@ import {
   formatIstPunchTime,
   istStartOfDay,
 } from "@sharnam/shared";
-import { api } from "../api";
+import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { canManageHrms } from "../lib/portalAccounts";
 import { formatPunchLine, mapsUrl } from "../lib/attendanceDisplay";
@@ -192,6 +192,23 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
     });
   }
 
+  async function downloadRegister() {
+    if (!token) return;
+    const q = new URLSearchParams({ from: range.from, to: range.to });
+    if (canViewTeam && userId) q.set("userId", userId);
+    const res = await fetch(`${apiBase()}/api/hrm/attendance/register.xlsx?${q}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SPDC-Attendance-${range.from}-${range.to}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <Card className={`attendance-cal ${compact ? "attendance-cal--compact" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -206,6 +223,9 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
           <span className="text-sm font-semibold min-w-[10rem] text-center">{monthLabel(cursor.year, cursor.month)}</span>
           <Button type="button" variant="secondary" onClick={() => shiftMonth(1)} aria-label="Next month">
             →
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => void downloadRegister()}>
+            Download Excel
           </Button>
         </div>
       </div>

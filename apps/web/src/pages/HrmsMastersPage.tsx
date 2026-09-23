@@ -120,6 +120,7 @@ export default function HrmsMastersPage() {
         <Card>
           <h3 className="font-semibold mb-3">Holidays · {new Date().getFullYear()}</h3>
           {canManage && (
+            <>
             <form className="grid sm:grid-cols-4 gap-2 mb-3" onSubmit={addHol}>
               <Input type="date" value={holForm.date} onChange={(e) => setHolForm({ ...holForm, date: e.target.value })} required />
               <Input placeholder="Name" value={holForm.name} onChange={(e) => setHolForm({ ...holForm, name: e.target.value })} required className="sm:col-span-2" />
@@ -128,6 +129,24 @@ export default function HrmsMastersPage() {
                 Add holiday
               </Button>
             </form>
+            <label className="block text-xs text-steel-muted mb-3">
+              Upload holiday calendar (CSV: date, name, region, optional)
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="block mt-1 text-sm"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  await api("/api/hrm/holidays/import-csv", { method: "POST", token, body: fd });
+                  e.target.value = "";
+                  await load();
+                }}
+              />
+            </label>
+            </>
           )}
           <ul className="text-sm divide-y max-h-64 overflow-y-auto">
             {holSorted.map((h) => (
