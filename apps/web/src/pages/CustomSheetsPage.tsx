@@ -398,6 +398,26 @@ export function CustomSheetEditorPage() {
     }
   }
 
+  async function downloadCsv() {
+    if (!id || !sheet) return;
+    const res = await fetch(`${apiBase()}/api/custom-sheets/${id}/export.csv`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      setMsg("CSV export failed");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${sheet.name || "sheet"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg("Exported .csv");
+  }
+
   async function download() {
     if (!id || !sheet) return;
     const res = await fetch(`${apiBase()}/api/custom-sheets/${id}/export`, {
@@ -432,8 +452,8 @@ export function CustomSheetEditorPage() {
   }
 
   return (
-    <div className="maker-shell custom-sheet-maker page-scroll-full flex flex-col gap-3 pb-28 safe-bottom min-h-0">
-      <div className="maker-shell__body space-y-3 px-1 sm:px-2 flex-1 min-h-0">
+    <div className="maker-shell custom-sheet-maker page-scroll-full flex flex-col gap-3 pb-28 safe-bottom">
+      <div className="maker-shell__body space-y-3 px-1 sm:px-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           {canWrite && sheet ? (
             <Input
@@ -515,8 +535,8 @@ export function CustomSheetEditorPage() {
         {!sheet ? (
           <p className="text-sm text-steel-muted py-8 text-center">Loading sheet…</p>
         ) : (
-          <div className="maker-section maker-section--flush flex-1 min-h-[420px] flex flex-col">
-            <div className="maker-table-wrap register-sheet-viewport sheet-register__scroll custom-sheet-grid flex-1 min-h-[min(70vh,720px)]">
+          <div className="custom-sheet-editor-grid">
+            <div className="custom-sheet-grid-viewport" role="region" aria-label="Sheet cells">
               <table className="maker-table maker-table--notion">
                 <thead>
                   <tr className="bg-sand/50 text-left align-top sticky top-0 z-[1]">
@@ -598,6 +618,9 @@ export function CustomSheetEditorPage() {
           ) : null}
           <Button type="button" variant="secondary" onClick={() => void download()}>
             Export .xlsx
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => void downloadCsv()}>
+            Export .csv
           </Button>
         </div>
       ) : null}

@@ -53,7 +53,7 @@ const TAB_META: Record<
   stakeholders: {
     title: uiCopy("Consultants"),
     subtitle: uiCopy(
-      "Consultant types and contacts — save the company, then activate stakeholder portal access from this desk.",
+      "External consultants only — not SPDC site or HR staff. Save the firm, set consultant type, activate stakeholder login. SPDC team: HRMS → Users.",
     ),
     partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",

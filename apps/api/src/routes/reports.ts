@@ -11,7 +11,7 @@ import {
   buildDprPack,
   buildWprPack,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
+import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
 
 /** Auto clock-out at 18:00 IST for open punches (same day after EOD, or any prior day). */
 const EOD_CLOCK_OUT = "18:00";
@@ -67,6 +67,7 @@ import {
 } from "../services/quotationExport.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "../services/proposalTemplate.js";
 import { syncProposalSummaryFile } from "../services/crmSharePoint.js";
+import { ensureSpdcDepartmentMasters } from "../services/spdcOrgSeed.js";
 import { nextSpdcQuotationNo } from "../services/crmQuotationNumbers.js";
 import {
   createVersionedProposal,
@@ -1999,6 +2000,61 @@ hrmRouter.get("/attendance", hrmStaff, async (req, res) => {
   );
 });
 
+/** Calendar range — one row per user per day with in/out times and GPS. */
+hrmRouter.get("/attendance/range", hrmStaff, async (req: AuthedRequest, res) => {
+  await applyAutoEodClockOut();
+  const role = req.user!.role;
+  const canViewAll = role === "admin" || role === "office" || role === "hr";
+  let userId = typeof req.query.userId === "string" && req.query.userId.trim() ? req.query.userId.trim() : undefined;
+  if (!canViewAll) userId = req.user!.id;
+
+  const parseDay = (raw: string | undefined, fallback: Date) => {
+    if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return istStartOfDay(fallback);
+    const [y, m, d] = raw.split("-").map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  };
+
+  const now = new Date();
+  const from = parseDay(typeof req.query.from === "string" ? req.query.from : undefined, new Date(now.getFullYear(), now.getMonth(), 1));
+  const to = parseDay(
+    typeof req.query.to === "string" ? req.query.to : undefined,
+    new Date(now.getFullYear(), now.getMonth() + 1, 0),
+  );
+  if (to < from) return res.status(400).json({ error: "Invalid date range" });
+
+  const rows = await prisma.attendance.findMany({
+    where: {
+      date: { gte: from, lte: to },
+      ...(userId ? { userId } : {}),
+    },
+    include: { user: { select: { id: true, fullName: true, role: true, email: true } } },
+    orderBy: [{ date: "asc" }, { updatedAt: "desc" }],
+  });
+
+  const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
+  const projects =
+    projectIds.length > 0
+      ? await prisma.project.findMany({
+          where: { id: { in: projectIds } },
+          select: { id: true, code: true, name: true, location: true },
+        })
+      : [];
+  const projectById = Object.fromEntries(projects.map((p) => [p.id, p]));
+
+  res.json({
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+    userId: userId ?? null,
+    rows: rows.map((r) => ({
+      ...r,
+      date: formatIstDateKey(r.date),
+      project: r.projectId ? projectById[r.projectId] ?? null : null,
+      inPhotoUrl: r.inPhotoUrl ? publicPhotoUrl(r.id, "in") : r.inPhotoUrl,
+      outPhotoUrl: r.outPhotoUrl ? publicPhotoUrl(r.id, "out") : r.outPhotoUrl,
+    })),
+  });
+});
+
 /** Selfie + GPS punch — multipart: selfie (required), kind, lat, lng, accuracy, projectId */
 hrmRouter.post(
   "/attendance/punch",
@@ -2223,6 +2279,7 @@ async function distinctDepartmentNames(): Promise<string[]> {
 
 hrmRouter.get("/departments", hrmStaff, async (_req, res) => {
   try {
+    await ensureSpdcDepartmentMasters();
     const rows = await prisma.hrmDepartment.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
     if (rows.length) return res.json(rows);
   } catch {

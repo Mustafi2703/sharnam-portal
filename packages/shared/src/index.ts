@@ -250,12 +250,64 @@ export function istStartOfDay(d = new Date()): Date {
   return new Date(y, m - 1, day, 0, 0, 0, 0);
 }
 
+/** YYYY-MM-DD in IST for API / calendar keys. */
+export function formatIstDateKey(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
 export function formatIstPunchTime(time: string | null | undefined): string {
   if (!time) return "—";
   if (/^\d{1,2}:\d{2}$/.test(time)) return `${time} IST`;
   const parsed = new Date(time);
   if (!Number.isNaN(parsed.getTime())) return `${formatIstTimeHHMM(parsed)} IST`;
   return time;
+}
+
+function punchTimeToMinutes(time: string): number | null {
+  const t = time.trim();
+  if (/^\d{1,2}:\d{2}$/.test(t)) {
+    const [h, m] = t.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return h * 60 + m;
+  }
+  const parsed = new Date(t);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: IST_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(parsed);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  return hour * 60 + minute;
+}
+
+/** Minutes between check-in and check-out (same calendar day punches, HH:MM IST). */
+export function attendanceSiteMinutes(
+  checkIn?: string | null,
+  checkOut?: string | null,
+): number | null {
+  if (!checkIn || !checkOut) return null;
+  const start = punchTimeToMinutes(checkIn);
+  const end = punchTimeToMinutes(checkOut);
+  if (start == null || end == null) return null;
+  let diff = end - start;
+  if (diff < 0) diff += 24 * 60;
+  return diff;
+}
+
+export function formatAttendanceDuration(minutes: number | null | undefined): string {
+  if (minutes == null || minutes < 0) return "—";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h <= 0) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
 }
 
 export {
@@ -290,6 +342,17 @@ export {
   roleCanModule,
   createModuleRoleHelpers,
 } from "./moduleRoles.js";
+
+export {
+  SPDC_DEPARTMENTS,
+  SPDC_COMPANY_ROLES,
+  type SpdcDepartment,
+  type SpdcCompanyRole,
+  isSpdcCompanyRole,
+  suggestedLoginRoleForCompanyRole,
+  spdcDepartmentOptions,
+  spdcCompanyRoleOptions,
+} from "./spdcOrg.js";
 
 export {
   CANDIDATE_STAGES,

@@ -4,8 +4,7 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Select } from "../components/ui";
 import { PhotoCapture } from "./PhotoCapture";
-
-type GeoFix = { lat: number; lng: number; accuracy: number };
+import { formatPunchLine, mapsUrl } from "../lib/attendanceDisplay";
 
 function photoSrc(url?: string | null, token?: string | null) {
   if (!url) return null;
@@ -17,49 +16,7 @@ function photoSrc(url?: string | null, token?: string | null) {
   return full;
 }
 
-function mapsUrl(lat: number, lng: number) {
-  return `https://www.google.com/maps?q=${lat},${lng}`;
-}
-
-function formatPunchLine(
-  kind: "in" | "out",
-  row: {
-    checkIn?: string | null;
-    checkOut?: string | null;
-    inLat?: number | null;
-    inLng?: number | null;
-    outLat?: number | null;
-    outLng?: number | null;
-    inAccuracy?: number | null;
-    outAccuracy?: number | null;
-    inSiteName?: string | null;
-    outSiteName?: string | null;
-    project?: { code?: string; name?: string; location?: string | null } | null;
-  }
-) {
-  const time = kind === "in" ? row.checkIn : row.checkOut;
-  const lat = kind === "in" ? row.inLat : row.outLat;
-  const lng = kind === "in" ? row.inLng : row.outLng;
-  const acc = kind === "in" ? row.inAccuracy : row.outAccuracy;
-  const site = kind === "in" ? row.inSiteName : row.outSiteName;
-  if (!time && (lat == null || lng == null)) return null;
-
-  const label = kind === "in" ? "Check-in" : "Check-out";
-  const place =
-    site ||
-    row.project?.location ||
-    (row.project ? `${row.project.code}` : null) ||
-    (lat != null && lng != null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "—");
-
-  return {
-    label,
-    time: formatIstPunchTime(time),
-    place,
-    lat,
-    lng,
-    acc,
-  };
-}
+type GeoFix = { lat: number; lng: number; accuracy: number };
 
 function PunchLocationRow({ line }: { line: ReturnType<typeof formatPunchLine> }) {
   if (!line) return null;
@@ -327,12 +284,19 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
                           Out {formatPunchLine("out", a)!.time}
                           {" · "}
                           {formatPunchLine("out", a)!.place}
-                        </div>
-                      )}
-                      {a.inLat != null && a.inLng != null && (
-                        <div className="font-mono truncate">
-                          {a.inLat.toFixed(5)}, {a.inLng.toFixed(5)}
-                          {a.inAccuracy != null ? ` ±${Math.round(a.inAccuracy)}m` : ""}
+                          {a.outLat != null && a.outLng != null ? (
+                            <>
+                              {" · "}
+                              <a
+                                href={mapsUrl(a.outLat, a.outLng)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-brand font-semibold"
+                              >
+                                GPS
+                              </a>
+                            </>
+                          ) : null}
                         </div>
                       )}
                     </div>

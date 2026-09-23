@@ -1998,23 +1998,27 @@ html.is-standalone-form #root {
   overflow: visible !important;
   max-width: none;
 }
-.app-frame__scroll .custom-sheet-maker .maker-section--flush {
-  flex: 1 1 auto !important;
-  height: auto !important;
-  min-height: 420px !important;
-  overflow: visible !important;
-  display: flex !important;
-  flex-direction: column !important;
+.custom-sheet-maker .custom-sheet-editor-grid {
+  width: 100%;
+  min-height: 420px;
 }
-.app-frame__scroll .custom-sheet-maker .custom-sheet-grid {
-  flex: 1 1 auto;
-  min-height: min(70vh, 720px) !important;
+.custom-sheet-maker .custom-sheet-grid-viewport {
+  display: block;
+  width: 100%;
+  flex: none !important;
+  min-height: clamp(22rem, 70vh, 52rem) !important;
   max-height: none !important;
+  height: auto !important;
   overflow: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--color-line);
   border-radius: 0.75rem;
   background: var(--color-paper);
   box-shadow: 0 1px 3px rgba(18, 20, 23, 0.06);
+}
+.app-frame__scroll .custom-sheet-maker .custom-sheet-grid-viewport {
+  min-height: clamp(22rem, calc(100dvh - 16rem), 52rem) !important;
 }
 .custom-sheet-maker .maker-table--notion {
   min-width: 100%;
@@ -6737,14 +6741,10 @@ body {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
-/* DPR / WPR maker — single page scroll (header scrolls with form) */
-.maker-shell.custom-sheet-maker.page-scroll-full .maker-table-wrap.register-sheet-viewport {
-  min-height: min(70vh, 640px);
-  max-height: var(--register-scroll-h-tall, 72vh);
-  overflow: auto;
-  border: 1px solid var(--color-line);
-  border-radius: 0.75rem;
-  background: var(--color-paper);
+/* Sheet Maker grid — not a register viewport (avoid min-height:0 / height:0 traps) */
+.maker-shell.custom-sheet-maker .custom-sheet-grid-viewport {
+  min-height: clamp(22rem, 70vh, 52rem) !important;
+  max-height: none !important;
 }
 .maker-shell.dpr-maker,
 .maker-shell.wpr-maker {
@@ -9128,6 +9128,79 @@ body {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+}
+
+.attendance-cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+.attendance-cal__weekday {
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-steel-muted);
+  padding: 0.25rem;
+}
+.attendance-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+.attendance-cal__cell {
+  min-height: 4.5rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+  background: var(--color-paper);
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.attendance-cal__cell--empty {
+  border-color: transparent;
+  background: transparent;
+  min-height: 0;
+  pointer-events: none;
+}
+.attendance-cal__cell--present {
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--color-line));
+  background: color-mix(in srgb, var(--color-brand-soft) 35%, #fff);
+}
+.attendance-cal__cell--today {
+  box-shadow: inset 0 0 0 2px var(--color-brand);
+}
+.attendance-cal__cell--selected {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 1px var(--color-brand);
+}
+.attendance-cal__day-num {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+.attendance-cal__times {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  color: var(--color-steel-2);
+  line-height: 1.2;
+}
+.attendance-cal__duration {
+  font-size: 0.65rem;
+  font-weight: 650;
+  color: var(--color-brand-dark);
+}
+.attendance-cal__multi {
+  font-size: 0.6rem;
+  color: var(--color-steel-muted);
+}
+.attendance-cal--compact .attendance-cal__cell {
+  min-height: 3.75rem;
 }
 
 /* Photo capture — mobile tap targets */

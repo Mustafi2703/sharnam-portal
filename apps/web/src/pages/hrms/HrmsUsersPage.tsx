@@ -11,6 +11,7 @@ import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "..
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 import { isHiddenPortalListUser } from "../../lib/portalUserLists";
 import { canManageHrms } from "../../lib/portalAccounts";
+import { spdcCompanyRoleOptions, suggestedLoginRoleForCompanyRole } from "@sharnam/shared";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -110,7 +111,24 @@ function AddUserModal({
             </option>
           ))}
         </Select>
-        <Input placeholder="Designation" value={form.designation} onChange={(ev) => setForm({ ...form, designation: ev.target.value })} />
+        <Select
+          value={form.designation}
+          onChange={(ev) => {
+            const designation = ev.target.value;
+            setForm({
+              ...form,
+              designation,
+              role: suggestedLoginRoleForCompanyRole(designation),
+            });
+          }}
+        >
+          <option value="">Company role</option>
+          {spdcCompanyRoleOptions(form.designation ? [form.designation] : []).map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </Select>
         <Input type="number" placeholder="CTC annual (₹)" value={form.ctcAnnual} onChange={(ev) => setForm({ ...form, ctcAnnual: ev.target.value })} />
         <Input type="number" placeholder="Basic monthly (₹)" value={form.basicMonthly} onChange={(ev) => setForm({ ...form, basicMonthly: ev.target.value })} />
         <Input type="number" placeholder="HRA monthly (₹)" value={form.hraMonthly} onChange={(ev) => setForm({ ...form, hraMonthly: ev.target.value })} />
@@ -333,7 +351,7 @@ export default function HrmsUsersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          Every SPDC staff login is listed here. HR sets emp code, department, designation, CTC, and project assignment before payroll and onboarding.
+          SPDC site and office team — not clients or consultants (those stay in CRM Directory). Set portal login role, company role for letters, department, CTC, then assign projects for site access to all modules.
           <span className="block mt-1">
             <strong>{payrollStats.ready}</strong> of <strong>{payrollStats.total}</strong> have CTC on file ·{" "}
             <button type="button" className="text-brand font-semibold underline" onClick={() => setPayrollFilter("missing")}>

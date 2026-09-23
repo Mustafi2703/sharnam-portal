@@ -365,9 +365,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inProject = /^\/projects\/[^/]+/.test(location.pathname);
   const inCrm = /^\/crm(\/|$)/.test(location.pathname);
   const inMaster = /^\/master(\/|$)/.test(location.pathname);
+  const inCustomSheets = /^\/custom-sheets(\/|$)/.test(location.pathname);
   /** Project + CRM use locked tool shell; master scrolls in the app frame like dashboard. */
   const deskFullBleed = inProject || inCrm;
-  const deskWideCanvas = inMaster;
+  const deskWideCanvas = inMaster || inCustomSheets;
   const toolWin = isToolWindow(location.search, location.pathname);
   const embed = isEmbedView(location.search);
   const [projects, setProjects] = useState<Proj[]>([]);

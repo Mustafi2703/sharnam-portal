@@ -9,6 +9,7 @@ import {
   type PortalAccountForm,
   type PortalAccountKind,
 } from "../lib/portalAccounts";
+import { spdcCompanyRoleOptions, spdcDepartmentOptions, suggestedLoginRoleForCompanyRole } from "@sharnam/shared";
 import { Input, Select } from "./ui";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -21,11 +22,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const STAFF_ROLES = [
-  { value: "office", label: "SPDC office — /login/office" },
-  { value: "hr", label: "HR — /login/hr" },
-  { value: "site_employee", label: "SPDC site — /login/site" },
-  { value: "employee", label: "SPDC employee — /login/office" },
-  { value: "admin", label: "Admin — /login/office" },
+  { value: "office", label: "Login: SPDC office — /login/office" },
+  { value: "hr", label: "Login: HR desk — /login/hr" },
+  { value: "site_employee", label: "Login: SPDC site — /login/site (project modules)" },
+  { value: "employee", label: "Login: SPDC employee — /login/office" },
+  { value: "admin", label: "Login: Admin — /login/office" },
 ] as const;
 
 type Props = {
@@ -93,7 +94,7 @@ export function PortalAccountFields({
         ) : null}
 
         {kind === "staff" ? (
-          <Field label="Staff role">
+          <Field label="Portal login role">
             <Select value={form.role} onChange={(ev) => onChange({ ...form, role: ev.target.value })}>
               {STAFF_ROLES.filter((r) => r.value !== "admin" || allowAdminRole).map((r) => (
                 <option key={r.value} value={r.value}>
@@ -177,19 +178,41 @@ export function PortalAccountFields({
                 placeholder="Emp code"
               />
             </Field>
-            <Field label="Department">
-              <Input
+            <Field label="Department (company)">
+              <Select
                 value={form.department}
                 onChange={(ev) => onChange({ ...form, department: ev.target.value })}
-                placeholder="Department"
-              />
+              >
+                <option value="">Select department</option>
+                {spdcDepartmentOptions(form.department ? [form.department] : []).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field label="Designation">
-              <Input
+            <Field label="Company role (letters & HR)">
+              <Select
                 value={form.designation}
-                onChange={(ev) => onChange({ ...form, designation: ev.target.value })}
-                placeholder="Designation"
-              />
+                onChange={(ev) => {
+                  const designation = ev.target.value;
+                  const next: PortalAccountForm = { ...form, designation };
+                  if (form.role !== "admin") {
+                    next.role = suggestedLoginRoleForCompanyRole(designation);
+                  }
+                  onChange(next);
+                }}
+              >
+                <option value="">Select role</option>
+                {spdcCompanyRoleOptions(form.designation ? [form.designation] : []).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-[10px] text-steel-muted mt-1">
+                Job title on appointment / engagement letters — not the portal login role above.
+              </p>
             </Field>
           </>
         ) : null}

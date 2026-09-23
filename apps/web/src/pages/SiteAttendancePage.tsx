@@ -1,4 +1,5 @@
 import { PageHeader } from "../components/ui";
+import { AttendanceCalendar } from "../components/AttendanceCalendar";
 import { AttendancePunchPanel } from "../components/AttendancePunchPanel";
 import { ExpenseVoucherPanel } from "../components/ExpenseVoucherPanel";
 
@@ -12,6 +13,7 @@ export default function SiteAttendancePage() {
         subtitle="Your first step each day: take a selfie, allow GPS, pick your site, then check in. Location and photo are saved to your attendance record. Gallery is not allowed — live camera only."
       />
       <AttendancePunchPanel variant="full" showRoster={false} />
+      <AttendanceCalendar compact />
       <ExpenseVoucherPanel variant="daily" title="Daily expense voucher" />
     </div>
   );

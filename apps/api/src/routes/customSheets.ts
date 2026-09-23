@@ -574,6 +574,33 @@ customSheetsRouter.post("/:id/export", requireRoles(...WRITE_ROLES), async (req:
   res.send(buf);
 });
 
+function csvEscape(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+customSheetsRouter.post("/:id/export.csv", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
+  const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const headers = JSON.parse(row.headersJson || "[]") as string[];
+  const rows = evaluateAllRows(parseRowsJson(row.rowsJson));
+  const lines = [
+    headers.map(csvEscape).join(","),
+    ...rows.map((r) =>
+      headers.map((_h, i) => {
+        const cell = r[i];
+        const v = cell && typeof cell === "object" ? (cell.computed ?? cell.raw ?? "") : cell ?? "";
+        return csvEscape(v);
+      }).join(",")
+    ),
+  ];
+  const body = `\uFEFF${lines.join("\r\n")}`;
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${row.name.replace(/"/g, "")}.csv"`);
+  res.send(body);
+});
+
 customSheetsRouter.delete("/:id", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   await prisma.customSheet.delete({ where: { id: req.params.id } });
   await audit("customsheet.delete", { userId: req.user!.id, entity: "CustomSheet", entityId: req.params.id });

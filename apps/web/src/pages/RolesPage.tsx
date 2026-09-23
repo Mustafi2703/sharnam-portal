@@ -335,9 +335,10 @@ export default function RolesPage() {
                 <div className="font-semibold text-ink truncate">{u.fullName}</div>
                 <div className="text-xs text-steel-muted truncate">
                   {u.email} · {accountKindLabel(kind)}
+                  {kind === "staff" && u.profile?.designation ? ` · ${u.profile.designation}` : ""}
                   {kind === "stakeholder" && trade ? ` · ${trade}` : ""}
                   {" · "}
-                  {loginPathForAccount(u.role, kind)}
+                  <span className="font-mono">{loginPathForAccount(u.role, kind)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
