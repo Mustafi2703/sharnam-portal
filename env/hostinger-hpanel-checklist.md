@@ -32,7 +32,9 @@ Paste each **KEY** and **VALUE** in: **Websites → portal.spdc.in → Environme
 | **First deploy** (empty DB) | `RUN_SEED=1` | `SKIP_BUILD_SEED` |
 | **Demo / all later deploys** | `SKIP_BUILD_SEED=1` | `RUN_SEED` *(delete the variable)* |
 
-## Bulk import (recommended)
+Each deploy (unless `SKIP_HRMS_LETTER_SAMPLES=1`) regenerates **11 HR letter UAT samples** for `riya.shah@sharnam.demo` — HRMS → Documents.
+
+## After deploy — smoke test
 
 1. Edit `hostinger-env-import.env` locally (copy from `hostinger-env-import.example.env`)
 2. hPanel → **portal.spdc.in** → **Settings & Redeploy** → **Environment variables**
@@ -50,7 +52,7 @@ Generate from local `.env`: `bash scripts/export-hostinger-env.sh`
 3. Login `office@sharnam.demo` / `Demo@1234`
 4. CRM: save proposal status, project card (should be fast)
 5. CRM Launch step only: ISO folders (~1 minute)
-6. HRMS: open recruitment desk, `riya.shah@sharnam.demo` profile
+6. HRMS → **Documents** → person **Riya Shah · Staff** → preview + download `.docx` for Offer / Appointment / Warning
 7. WPR Maker → Download **PPTX** (client template) and **PDF** (SharePoint convert — needs step 2)
 
 ## WPR PPTX + PDF (no VPS)

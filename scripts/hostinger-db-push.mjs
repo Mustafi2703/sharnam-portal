@@ -122,4 +122,21 @@ if (skipAllSeed) {
   }
 }
 
+if (process.env.SKIP_HRMS_LETTER_SAMPLES === "1") {
+  console.log("==> SKIP_HRMS_LETTER_SAMPLES=1 — skipping HR letter UAT samples");
+} else {
+  try {
+    console.log("==> HRMS letter samples (all 11 kinds · Riya Shah · idempotent UAT refs)…");
+    execSync("npx tsx scripts/seed-hrms-letter-samples.mts", {
+      stdio: "inherit",
+      env: seedEnv,
+      cwd: rootDir,
+      timeout: 600_000,
+    });
+  } catch (err) {
+    console.warn("WARN: HRMS letter samples skipped (non-fatal — run npm run hrms:seed-letter-samples on server)");
+    console.warn(String(err?.message || err));
+  }
+}
+
 process.exit(0);

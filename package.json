@@ -30,6 +30,7 @@
     "db:seed-demo-screenshots": "tsx seed/demoScreenshotsPack.ts",
     "db:seed-hrms-flow": "tsx seed/hrmsFlowDemo.ts",
     "hrms:letters-smoke": "tsx scripts/hrms-letters-smoke.mts",
+    "hrms:seed-letter-samples": "tsx scripts/seed-hrms-letter-samples.mts",
     "hrms:letters-offline": "tsx scripts/hrms-letters-offline.mts",
     "hrms:sync-formats": "tsx scripts/sync-hrms-formats-sharepoint.mts",
     "hrms:import-root-formats": "tsx scripts/import-spdc-hr-letter-formats.mts",

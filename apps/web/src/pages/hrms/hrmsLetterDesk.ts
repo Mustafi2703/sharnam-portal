@@ -310,6 +310,51 @@ export function createBodyFromForm(form: LetterFormState) {
   };
 }
 
+/** Reload register row fields into the composer (edit before preview / regenerate). */
+export function hydrateLetterFormFromDoc(row: DocRow, form: LetterFormState): LetterFormState {
+  let data: Record<string, unknown> = {};
+  try {
+    data = row.dataJson ? (JSON.parse(row.dataJson) as Record<string, unknown>) : {};
+  } catch {
+    data = {};
+  }
+  const str = (k: string, fallback = "") => {
+    const v = data[k];
+    return v != null && String(v).trim() ? String(v) : fallback;
+  };
+  return {
+    ...form,
+    kind: row.kind as DocKind,
+    employeeUserId: row.employeeUserId || form.employeeUserId,
+    employeeName: row.employeeName || form.employeeName,
+    candidateEmail: row.candidateEmail || form.candidateEmail,
+    designation: row.designation || form.designation,
+    department: row.department || form.department,
+    effectiveDate: row.effectiveDate ? String(row.effectiveDate).slice(0, 10) : form.effectiveDate,
+    ctcAnnual: str("fixedCtcAnnual", str("ctcAnnual", form.ctcAnnual)),
+    previousCtc: str("previousCtc", form.previousCtc),
+    previousDesignation: str("previousDesignation", str("newDesignation", form.previousDesignation)),
+    reportingManager: str("reportingManager", form.reportingManager),
+    location: str("location", form.location),
+    reason: str("reason", str("separationReason", form.reason)),
+    assets: str("assets", form.assets),
+    serials: str("serials", form.serials),
+    empCode: str("empCode", form.empCode),
+    pan: str("pan", str("panNumber", form.pan)),
+    gender: str("gender", form.gender),
+    address: str("address", str("addressAsPerRecords", form.address)),
+    mobile: str("mobile", str("phone", form.mobile)),
+    projectName: str("projectName", str("project", form.projectName)),
+    issueInBrief: str("issueInBrief", form.issueInBrief),
+    impact: str("impact", form.impact),
+    correctiveAction: str("correctiveAction", form.correctiveAction),
+  };
+}
+
+export function letterFormFingerprint(form: LetterFormState): string {
+  return JSON.stringify(createBodyFromForm(form));
+}
+
 /** Fields shown in the letter desk form — maps to {{tokens}} in SPDC .docx templates. */
 export function letterFormUsesCtc(kind: DocKind): boolean {
   return kind === "Appointment" || kind === "Offer" || kind === "Promotion";

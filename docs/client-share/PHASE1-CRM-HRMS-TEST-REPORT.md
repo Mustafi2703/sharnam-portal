@@ -10,25 +10,31 @@
 ## Executive summary (WhatsApp-ready — copy block below)
 
 ```
-Sharnam Portal — Phase 1 test status | 24 Sep 2026
+Sharnam Portal — Portal update | 24 Sep 2026
 
-✅ Phase 1 scope (done / ready for your sign-off walkthrough)
-• CRM — clients, consultants, vendors; multi contacts; portal activation from CRM; directory separate from SPDC staff
-• HRMS — users & SPDC company roles; leave (CL/PL/SL etc., PL default 12); attendance calendar + Excel export; vouchers with bill upload; holidays CSV
-• HR letters — SPDC Word templates (01–11); preview + generate .docx; scrollable letter desk per employee
-• Custom Sheet Maker — grid, formulas, CSV + XLSX export; wide canvas layout fix
+✅ CRM (Phase 1 — ready to test with your data)
+• Clients, consultants, vendors; multiple contacts per client
+• Portal login activated from CRM only; SPDC staff stay in HRMS Users
+• Communication matrix — grid + export (branded BPCL Excel/PDF still on roadmap)
 
-🔜 Phase 2 (starting next — see PHASE2 plan)
-• Two real/demo projects — module-by-module data entry, uploads, exports
-• Multi-login (office, site, client, vendor) on same records
-• Drawings, quality, safety, progress, cost, comms, reports integrity checks
+✅ HRMS (Phase 1 — ready to test with your data)
+• Users, departments, company roles (Director, PM, engineers, etc.)
+• Leave — CL/PL/SL/Emergency/Short; PL default 12; HR approve, convert, cancel
+• Attendance — site punch, calendar, Download Excel (Attendance + Leave tabs)
+• Expense vouchers with bill/receipt upload; holiday CSV on Masters
+• Letters — official SPDC Word templates; per-employee form; scrollable register; Generate = filled .docx
 
-⚠️ Known / next polish (Phase 1)
-• Letter preview = HTML draft; use Generate for exact Word match
-• Comms matrix branded Excel/PDF export — in progress per change list
-• Auto PDF for letters (server-side) — planned
+✅ Custom Sheet Maker — grid, formulas, CSV + XLSX export
 
-Please confirm Phase 1 sign-off date and name two projects for Phase 2 seed data.
+✅ RFI integrity (project modules — live on portal after deploy)
+• Drawing “Ask / information” RFIs only in Drawings module log
+• Quality, Safety, and Inspection each have separate logs (no mixed lists)
+
+🔜 Phase 2 — 5-day UAT plan (two projects, your test data)
+Day 1 Setup & matrix · Day 2 Drawings/DMS/RFI · Day 3 Q/S/Field · Day 4 Progress/Cost/Bid/R2 · Day 5 Reports/closure/integrity
+Detail: docs/client-share/PHASE2-PROJECT-MODULES-PLAN.md
+
+⚠️ Note: Letter Preview = HTML draft; use Generate for exact Word layout.
 ```
 
 ---
@@ -43,7 +49,7 @@ Please confirm Phase 1 sign-off date and name two projects for Phase 2 seed data
 | Consultants / vendors | CRM directory only; not HRMS users | Ready for UAT |
 | Demo credentials | Set/update login from directory pages | Ready for UAT |
 | Communication matrix | Data grid + export tab | Ready; branded BPCL export pending |
-| Bid / BOQ flow | Vendor rate upload path | Partial — Phase 2 with project cost module |
+| Bid / BOQ flow | BOQ upload, vendor rates, R2 with 2+ vendors | Phase 2 — Day 4 |
 
 **Suggested CRM UAT script (30–45 min):** Add client → add 2 contacts → activate portal → login as client (read-only) → add vendor → consultant type → open comms matrix → export Excel.
 
