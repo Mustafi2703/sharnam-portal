@@ -12,6 +12,7 @@ import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
+import { uiCopy } from "../../lib/formatUiText";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
 import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../../lib/workPackages";
 
@@ -115,9 +116,9 @@ function dayField(v?: string | null) {
 }
 
 const STEPS: { id: Step; n: string; label: string }[] = [
-  { id: "project", n: "1", label: "Card · parties · staff" },
-  { id: "matrix", n: "2", label: "Communication matrix · export" },
-  { id: "launch", n: "3", label: "Launch" },
+  { id: "project", n: "1", label: uiCopy("Card · parties · staff") },
+  { id: "matrix", n: "2", label: uiCopy("Communication matrix · export") },
+  { id: "launch", n: "3", label: uiCopy("Launch") },
 ];
 
 export default function CrmProjectSetupPage() {

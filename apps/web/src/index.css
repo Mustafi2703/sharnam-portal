@@ -1986,6 +1986,85 @@ html.is-standalone-form #root {
   overflow: auto !important;
 }
 
+/* Sheet Maker — full-width Notion-like grid inside office app shell (not project tool outlet) */
+.app-frame__canvas:has(.custom-sheet-maker) {
+  max-width: none;
+  width: 100%;
+}
+.app-frame__scroll .maker-shell.custom-sheet-maker.page-scroll-full {
+  height: auto !important;
+  min-height: min(100vh - 10rem, 900px);
+  flex: none !important;
+  overflow: visible !important;
+  max-width: none;
+}
+.app-frame__scroll .custom-sheet-maker .maker-section--flush {
+  flex: 1 1 auto !important;
+  height: auto !important;
+  min-height: 420px !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.app-frame__scroll .custom-sheet-maker .custom-sheet-grid {
+  flex: 1 1 auto;
+  min-height: min(70vh, 720px) !important;
+  max-height: none !important;
+  overflow: auto !important;
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+  background: var(--color-paper);
+  box-shadow: 0 1px 3px rgba(18, 20, 23, 0.06);
+}
+.custom-sheet-maker .maker-table--notion {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.custom-sheet-maker .maker-table--notion thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-sand);
+  border-bottom: 2px solid var(--color-line);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.75rem;
+}
+.custom-sheet-maker .maker-table--notion tbody td {
+  padding: 0;
+  border-right: 1px solid color-mix(in srgb, var(--color-line) 85%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 85%, transparent);
+}
+.custom-sheet-maker .maker-table--notion .maker-table__cell,
+.custom-sheet-maker .maker-table--notion .maker-table__head-input {
+  min-height: 2.35rem;
+  border-radius: 0;
+  border: none;
+  background: #fff;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8125rem;
+}
+.custom-sheet-maker .maker-table--notion .maker-table__head-input {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--color-ink);
+}
+.custom-sheet-maker .maker-table--notion .maker-table__cell:focus,
+.custom-sheet-maker .maker-table--notion .maker-table__head-input:focus {
+  background: color-mix(in srgb, var(--color-brand-soft) 55%, #fff);
+  box-shadow: inset 0 0 0 2px var(--color-brand);
+}
+.custom-sheet-maker .maker-table--notion tbody tr:hover .maker-table__cell {
+  background: color-mix(in srgb, var(--color-sand) 40%, #fff);
+}
+.custom-sheet-maker input.maker-table__cell,
+.custom-sheet-maker input.maker-table__head-input {
+  text-transform: none !important;
+}
+
 .hrms-tool-strip {
   background: var(--color-paper);
 }
@@ -9307,6 +9386,13 @@ body {
   .module-card .font-display,
   .sheet-register__table thead th,
   .tool-actions__body button
+),
+.crm-workspace :where(
+  .tool-strip__tab,
+  h1,
+  h2,
+  h3,
+  h4
 ) {
   text-transform: capitalize;
 }
@@ -9323,6 +9409,14 @@ body {
   pre,
   .side-nav__user,
   .side-nav__project-chip
+),
+.crm-workspace :where(
+  input,
+  textarea,
+  select,
+  option,
+  [data-preserve-case],
+  .font-mono
 ) {
   text-transform: none !important;
 }

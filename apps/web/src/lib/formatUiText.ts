@@ -78,8 +78,12 @@ function formatWord(word: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-/** Title-case UI copy: each word capitalized, rest lowercase; preserves acronyms and drawing codes. */
+/** Title-case UI copy: each word capitalized, rest lowercase; preserves acronyms and drawing codes. Skip user-entered values — use `data-preserve-case` on those nodes. */
 export function formatUiText(text: string | null | undefined): string {
   if (text == null || text === "") return text ?? "";
-  return String(text).replace(/\b([A-Za-z0-9']+)\b/g, (word) => formatWord(word));
+  const formatted = String(text).replace(/\b([A-Za-z0-9']+)\b/g, (word) => formatWord(word));
+  return formatted;
 }
+
+/** Alias for static copy in nav/config modules. */
+export const uiCopy = formatUiText;

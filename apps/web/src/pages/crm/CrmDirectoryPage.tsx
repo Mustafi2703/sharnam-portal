@@ -18,6 +18,7 @@ import {
   type VendorPartyType,
 } from "../../lib/vendorTypes";
 import { trimField } from "../../lib/stringUtils";
+import { formatUiText, uiCopy } from "../../lib/formatUiText";
 
 function directoryVendorsQuery(tab: string) {
   if (tab === "vendors") return "?partyType=Contractor";
@@ -33,21 +34,27 @@ const TAB_META: Record<
   { title: string; subtitle: string; partyTypes: VendorPartyType[]; defaultParty: VendorPartyType; loginRole?: string }
 > = {
   vendors: {
-    title: "Vendors / contractors master",
-    subtitle: "Add company and contact here. Activate vendor portal access when email is on file — then use Bid management.",
+    title: uiCopy("Vendors / contractors master"),
+    subtitle: uiCopy(
+      "Add company and contact here. Activate vendor portal access when email is on file — then use Bid management.",
+    ),
     partyTypes: ["Contractor", "Vendor"] as VendorPartyType[],
     defaultParty: "Contractor",
   },
   clients: {
-    title: "Client directory",
-    subtitle: "Step 1: add the client company. Step 2: add representatives. Step 3: activate portal for each person at /login/client.",
+    title: uiCopy("Client directory"),
+    subtitle: uiCopy(
+      "Step 1: add the client company. Step 2: add representatives. Step 3: activate portal for each person at /login/client.",
+    ),
     partyTypes: ["Client"],
     defaultParty: "Client",
     loginRole: "client",
   },
   stakeholders: {
-    title: "Consultants",
-    subtitle: "Consultant types and contacts — save the company, then activate stakeholder portal access from this desk.",
+    title: uiCopy("Consultants"),
+    subtitle: uiCopy(
+      "Consultant types and contacts — save the company, then activate stakeholder portal access from this desk.",
+    ),
     partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",
     loginRole: "employee",
@@ -332,10 +339,17 @@ export function DirectoryCompaniesPanel({
               className={`px-4 py-3 flex flex-wrap items-start justify-between gap-2 ${selectedId === r.id ? "bg-brand-soft/50" : ""}`}
             >
               <button type="button" className="text-left min-w-0 flex-1 hover:text-brand" onClick={() => selectCompany(r.id)}>
-                <div className="font-medium">{r.name}</div>
+                <div className="font-medium" data-preserve-case>
+                  {r.name}
+                </div>
                 <div className="text-xs text-steel-muted mt-0.5 flex flex-wrap items-center gap-1.5">
-                  {tab === "stakeholders" && r.trade ? r.trade : formatPartyType(r.partyType)}
-                  {r.email ? ` · ${r.email}` : ""}
+                  {tab === "stakeholders" && r.trade ? <span data-preserve-case>{r.trade}</span> : formatPartyType(r.partyType)}
+                  {r.email ? (
+                    <span data-preserve-case>
+                      {" · "}
+                      {r.email}
+                    </span>
+                  ) : null}
                   {r._count?.projects ? ` · ${r._count.projects} project(s)` : ""}
                   {r.email ? (
                     <Badge tone={r.portalLoginActive ? "ok" : "neutral"}>{r.portalLoginActive ? "Portal active" : "No portal"}</Badge>
@@ -585,7 +599,9 @@ export default function CrmDirectoryPage() {
     <div className="space-y-4">
       <PageHeader dense title={meta.title} subtitle={meta.subtitle} />
       <p className="text-xs text-steel-muted max-w-3xl leading-relaxed -mt-2">
-        Company master for the whole portal — clients, consultants, and vendors are managed here only. Project pages link companies from this list; they do not maintain a separate directory.
+        {formatUiText(
+          "Company master for the whole portal — clients, consultants, and vendors are managed here only. Project pages link companies from this list; they do not maintain a separate directory.",
+        )}
       </p>
       <DirectoryCompaniesPanel key={tab} tab={tab} token={token} canEdit={canEdit} />
     </div>

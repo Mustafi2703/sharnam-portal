@@ -4,6 +4,7 @@ import { useAuth } from "../../auth";
 import { Button } from "../../components/ui";
 import { closeToolWindowOrGo, isToolWindow, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
 import { homePathForUser } from "../../lib/portalAccounts";
+import { formatUiText } from "../../lib/formatUiText";
 import { CRM_ACCENT, CRM_SOFT, CRM_SECTIONS, CRM_TOOLS, CRM_VENDOR_TOOLS } from "./crmNav";
 
 const tabClass = (on: boolean) =>
@@ -48,20 +49,24 @@ export default function CrmLayout() {
   const onBidDetail = /\/crm\/bids\/[^/]+/.test(loc.pathname);
   const onProposalEdit = /\/crm\/proposals\/(new|[^/]+)/.test(loc.pathname);
 
-  const pageTitle = onHub
-    ? "CRM desk"
-    : onBidDetail
-      ? "Comparative bids"
-      : onProposalEdit
-        ? "PMC proposal"
-        : activeTool?.label || (isVendor ? "My bids" : "CRM desk");
+  const pageTitle = formatUiText(
+    onHub
+      ? "CRM desk"
+      : onBidDetail
+        ? "Comparative bids"
+        : onProposalEdit
+          ? "PMC proposal"
+          : activeTool?.label || (isVendor ? "My bids" : "CRM desk"),
+  );
 
-  const pageSubtitle = onHub
-    ? "Open a tool in a new window — same pattern as Quality, Safety, and Drawings."
-    : activeTool?.subtitle ||
-      (isVendor
-        ? "Fill R2 discipline BOQs in-portal — no separate sheet maker."
-        : "Project setup, leads, comparative bids, and PMC proposals — one desk.");
+  const pageSubtitle = formatUiText(
+    onHub
+      ? "Open a tool in a new window — same pattern as Quality, Safety, and Drawings."
+      : activeTool?.subtitle ||
+          (isVendor
+            ? "Fill R2 discipline BOQs in-portal — no separate sheet maker."
+            : "Project setup, leads, comparative bids, and PMC proposals — one desk."),
+  );
 
   return (
     <div
@@ -86,7 +91,7 @@ export default function CrmLayout() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
                 <span className="font-semibold" style={{ color: CRM_ACCENT }}>
-                  {isVendor ? "Contractor portal" : "Market intelligence"}
+                  {formatUiText(isVendor ? "Contractor portal" : "Market intelligence")}
                 </span>
                 {onBidDetail && (
                   <>

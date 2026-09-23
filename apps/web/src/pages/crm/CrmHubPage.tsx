@@ -67,7 +67,7 @@ export default function CrmHubPage() {
                     <div className="font-display text-base font-semibold text-ink group-hover:text-brand leading-snug">
                       {formatUiText(t.label)}
                     </div>
-                    <p className="text-sm text-steel-muted mt-2 leading-relaxed line-clamp-3">{t.subtitle}</p>
+                    <p className="text-sm text-steel-muted mt-2 leading-relaxed line-clamp-3">{formatUiText(t.subtitle)}</p>
                     <div className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold text-brand flex items-center justify-between gap-2">
                       <span>Open</span>
                       <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">

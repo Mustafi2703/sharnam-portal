@@ -245,10 +245,12 @@ export function Stat({
   );
 }
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ placeholder, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  const ph = typeof placeholder === "string" ? formatUiText(placeholder) : placeholder;
   return (
     <input
       {...props}
+      placeholder={ph}
       className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );
@@ -263,10 +265,12 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea({ placeholder, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ph = typeof placeholder === "string" ? formatUiText(placeholder) : placeholder;
   return (
     <textarea
       {...props}
+      placeholder={ph}
       className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
     />
   );

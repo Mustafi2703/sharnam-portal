@@ -131,7 +131,7 @@ export default function CustomSheetsPage() {
   }
 
   return (
-    <div className="maker-shell custom-sheet-maker page-scroll-full space-y-5 pb-8">
+    <div className="maker-shell custom-sheet-maker page-scroll-full space-y-5 pb-8 w-full max-w-none">
       <PageHeader
         eyebrow="Sheet Maker"
         title="Interactive spreadsheets"
@@ -432,8 +432,8 @@ export function CustomSheetEditorPage() {
   }
 
   return (
-    <div className="maker-shell custom-sheet-maker page-scroll-full page-stack--register flex flex-col gap-3 pb-24 safe-bottom">
-      <div className="maker-shell__body space-y-3 px-0.5">
+    <div className="maker-shell custom-sheet-maker page-scroll-full flex flex-col gap-3 pb-28 safe-bottom min-h-0">
+      <div className="maker-shell__body space-y-3 px-1 sm:px-2 flex-1 min-h-0">
         <div className="flex flex-wrap items-start justify-between gap-3">
           {canWrite && sheet ? (
             <Input
@@ -515,9 +515,9 @@ export function CustomSheetEditorPage() {
         {!sheet ? (
           <p className="text-sm text-steel-muted py-8 text-center">Loading sheet…</p>
         ) : (
-          <div className="maker-section maker-section--flush">
-            <div className="maker-table-wrap register-sheet-viewport sheet-register__scroll min-h-[min(70vh,640px)]">
-              <table className="maker-table">
+          <div className="maker-section maker-section--flush flex-1 min-h-[420px] flex flex-col">
+            <div className="maker-table-wrap register-sheet-viewport sheet-register__scroll custom-sheet-grid flex-1 min-h-[min(70vh,720px)]">
+              <table className="maker-table maker-table--notion">
                 <thead>
                   <tr className="bg-sand/50 text-left align-top sticky top-0 z-[1]">
                     <th className="px-2 py-1 w-8">#</th>
@@ -527,6 +527,7 @@ export function CustomSheetEditorPage() {
                         {canWrite ? (
                           <input
                             className="maker-table__head-input w-full"
+                            data-preserve-case
                             value={h}
                             onChange={(e) => renameColumn(i, e.target.value)}
                             aria-label={`Column ${colLetter(i)} name`}
@@ -555,7 +556,8 @@ export function CustomSheetEditorPage() {
                         return (
                           <td key={ci} className="px-1 py-0.5 align-top">
                             <input
-                              className={`maker-table__cell w-full min-w-[100px]${formula ? " maker-table__cell--formula" : ""}${isSel ? " ring-2 ring-brand" : ""}`}
+                            className={`maker-table__cell w-full min-w-[100px]${formula ? " maker-table__cell--formula" : ""}${isSel ? " ring-2 ring-brand" : ""}`}
+                            data-preserve-case
                               value={cellEditValue(cell)}
                               onFocus={() => {
                                 setSelected({ row: ri, col: ci });

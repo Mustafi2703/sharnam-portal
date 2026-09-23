@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Input } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 type ContactRow = {
   id: string;
@@ -93,10 +94,12 @@ export function ClientRepresentativesPanel({
   return (
     <div className="mt-5 pt-5 border-t-2 border-brand/20 space-y-4">
       <div className="rounded-xl bg-brand-soft/30 border border-brand/15 p-4 space-y-2">
-        <p className="text-xs font-mono uppercase tracking-wide text-brand font-semibold">Step 2 · Client representatives</p>
+        <p className="text-xs font-mono uppercase tracking-wide text-brand font-semibold">
+          {formatUiText("Step 2 · Client representatives")}
+        </p>
         <p className="text-sm text-ink leading-relaxed">
-          Add everyone from <strong>{clientName}</strong> who needs the client portal. Each person gets their own login — you activate portal
-          separately for each email.
+          {formatUiText("Add everyone from")} <strong data-preserve-case>{clientName}</strong>{" "}
+          {formatUiText("who needs the client portal. Each person gets their own login — you activate portal separately for each email.")}
         </p>
         <ol className="text-xs text-steel-muted list-decimal list-inside space-y-1">
           <li>Add name + email (+ role optional) — you can add more people anytime while editing this client</li>
@@ -110,8 +113,18 @@ export function ClientRepresentativesPanel({
           <li key={r.id} className="rounded-xl border border-line bg-paper p-3 space-y-2">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <div className="font-semibold text-sm">{r.fullName || "Unnamed contact"}</div>
-                <div className="text-xs text-steel-muted">{r.email}{r.role ? ` · ${r.role}` : ""}</div>
+                <div className="font-semibold text-sm" data-preserve-case>
+                  {r.fullName || formatUiText("Unnamed contact")}
+                </div>
+                <div className="text-xs text-steel-muted">
+                  <span data-preserve-case>{r.email}</span>
+                  {r.role ? (
+                    <>
+                      {" · "}
+                      <span data-preserve-case>{r.role}</span>
+                    </>
+                  ) : null}
+                </div>
               </div>
               <Badge tone={r.portalActive ? "ok" : "neutral"}>{r.portalActive ? "Portal active" : "No portal yet"}</Badge>
             </div>

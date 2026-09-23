@@ -101,7 +101,9 @@ export function SearchableSelect({
         aria-autocomplete="list"
       />
       {selected && !open && selected.sublabel ? (
-        <p className="text-[11px] text-steel-muted truncate mt-0.5">{selected.sublabel}</p>
+        <p className="text-[11px] text-steel-muted truncate mt-0.5" data-preserve-case>
+          {selected.sublabel}
+        </p>
       ) : null}
       {open && (
         <ul
@@ -117,8 +119,14 @@ export function SearchableSelect({
                 className={`w-full text-left px-3 py-2 hover:bg-sand ${o.value === value ? "bg-brand-soft" : ""}`}
                 onClick={() => pick(o.value)}
               >
-                <span className="font-medium block truncate">{o.label}</span>
-                {o.sublabel ? <span className="text-[11px] text-steel-muted block truncate">{o.sublabel}</span> : null}
+                <span className="font-medium block truncate" data-preserve-case>
+                  {o.label}
+                </span>
+                {o.sublabel ? (
+                  <span className="text-[11px] text-steel-muted block truncate" data-preserve-case>
+                    {o.sublabel}
+                  </span>
+                ) : null}
               </button>
             </li>
           ))}
