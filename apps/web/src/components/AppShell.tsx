@@ -478,6 +478,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isOffice = user?.role === "admin" || user?.role === "office";
   const isSiteDesk = user?.role === "site_employee";
   const isVendor = user?.role === "vendor";
+  const isClient = user?.role === "client";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const activeProject = projects.find((p) => p.id === projectId);
   const routeProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] || "";
@@ -601,7 +602,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
 
-            {inProject && routeProjectId && (
+            {isClient && (
+              <span className="app-topbar__chip !text-[10px] !py-1 hidden sm:inline">
+                Read-only · sign when asked
+              </span>
+            )}
+
+            {inProject && routeProjectId && !isClient && (
               <div className="hidden lg:flex items-center gap-1 flex-wrap min-w-0 max-w-[min(46vw,520px)]">
                 <Link
                   to={`/projects/${routeProjectId}/dpr-maker`}

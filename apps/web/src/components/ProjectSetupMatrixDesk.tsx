@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { downloadAuthFile } from "../lib/downloadReport";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import type { MatrixContact } from "./CommsMatrixPanel";
@@ -49,6 +50,7 @@ export function ProjectSetupMatrixDesk({
   onDirectoryChange,
 }: Props) {
   const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");
+  const [deskTab, setDeskTab] = useState<"edit" | "export">("edit");
   const [contacts, setContacts] = useState<MatrixContact[]>([]);
   const [counts, setCounts] = useState({ technical: 0, commercial: 0 });
   const [form, setForm] = useState<MatrixFormState>(EMPTY_MATRIX_FORM);
@@ -188,6 +190,34 @@ export function ProjectSetupMatrixDesk({
 
   const peopleRows = useMemo(() => contacts.filter((c) => !c.isSectionHeader), [contacts]);
 
+  async function exportMatrix(kind: "TECHNICAL" | "COMMERCIAL", format: "xlsx" | "html") {
+    setBusy(true);
+    try {
+      if (format === "xlsx") {
+        await downloadAuthFile(
+          `/api/comms/contacts/${projectId}/export.xlsx?kind=${kind}`,
+          token,
+          `${projectId}-matrix-${kind.toLowerCase()}.xlsx`,
+        );
+        onMsg(`${kind === "TECHNICAL" ? "Technical" : "Commercial"} matrix downloaded as Excel.`);
+      } else {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL || ""}/api/comms/contacts/${projectId}/export.html?kind=${kind}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+        );
+        if (!res.ok) throw new Error("Export failed");
+        const html = await res.text();
+        const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+        window.open(url, "_blank", "noopener,noreferrer");
+        onMsg("Print view opened — use the browser Print dialog to save as PDF.");
+      }
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -199,12 +229,50 @@ export function ProjectSetupMatrixDesk({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" disabled={busy} onClick={() => void importDirectory()}>
-            Import assigned directory
+          <Button type="button" variant={deskTab === "edit" ? "primary" : "secondary"} onClick={() => setDeskTab("edit")}>
+            Edit matrix
           </Button>
+          <Button type="button" variant={deskTab === "export" ? "primary" : "secondary"} onClick={() => setDeskTab("export")}>
+            Export
+          </Button>
+          {deskTab === "edit" ? (
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void importDirectory()}>
+              Import assigned directory
+            </Button>
+          ) : null}
         </div>
       </div>
 
+      {deskTab === "export" ? (
+        <Card className="!p-5 space-y-4">
+          <div>
+            <h4 className="font-semibold text-sm">Export communication matrix</h4>
+            <p className="text-xs text-steel-muted mt-1 max-w-2xl leading-relaxed">
+              Download the BPCL-style sheets for sharing or printing. Exports use the contacts saved on this project — update the matrix on
+              the Edit tab first if anything changed.
+            </p>
+          </div>
+          {(["TECHNICAL", "COMMERCIAL"] as const).map((kind) => (
+            <div key={kind} className="rounded-xl border border-line bg-sand/30 p-4 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-sm">
+                  {kind === "TECHNICAL" ? "Technical matrix" : "Commercial matrix"}
+                </span>
+                <Badge tone="neutral">{kind === "TECHNICAL" ? counts.technical : counts.commercial} people</Badge>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => void exportMatrix(kind, "xlsx")}>
+                  Download Excel
+                </Button>
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => void exportMatrix(kind, "html")}>
+                  Open for print / PDF
+                </Button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      ) : (
+        <>
       <div className="flex flex-wrap gap-2 items-center">
         {(["TECHNICAL", "COMMERCIAL"] as const).map((k) => (
           <Button key={k} type="button" variant={matrixKind === k ? "primary" : "secondary"} onClick={() => setMatrixKind(k)}>
@@ -346,6 +414,8 @@ export function ProjectSetupMatrixDesk({
           </tbody>
         </table>
       </Card>
+        </>
+      )}
     </div>
   );
 }

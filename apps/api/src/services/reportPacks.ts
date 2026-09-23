@@ -565,3 +565,19 @@ export async function canFillChecklistAssignment(opts: {
   return { ok: false as const, reason: "You cannot fill this checklist." };
 }
 
+/** Client representative — attach client signature to the latest site submission only. */
+export async function canClientSignChecklistAssignment(opts: {
+  projectId: string;
+  user: { id: string; role: string };
+}) {
+  if (opts.user.role !== "client") {
+    return { ok: false as const, reason: "Only client portal users can use client sign-off." };
+  }
+  const member = await prisma.projectMember.findFirst({
+    where: { projectId: opts.projectId, userId: opts.user.id },
+    select: { id: true },
+  });
+  if (!member) return { ok: false as const, reason: "You are not assigned to this project." };
+  return { ok: true as const };
+}
+

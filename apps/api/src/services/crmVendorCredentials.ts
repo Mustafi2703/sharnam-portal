@@ -190,6 +190,71 @@ export async function ensurePortalLogin(opts: {
   return { userId: user.id, email, created: true, tempPassword, role: opts.role };
 }
 
+/** Client representative portal — login at /login/client, linked to the client company. */
+export async function syncClientRepresentativePortal(opts: {
+  vendorId: string;
+  vendorName: string;
+  email: string;
+  fullName?: string | null;
+  password?: string | null;
+}): Promise<DirectoryLoginSyncResult> {
+  const email = String(opts.email || "")
+    .trim()
+    .toLowerCase();
+  if (!email) return { error: "Email is required to activate portal access." };
+
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: opts.vendorId },
+    select: { id: true, name: true, partyType: true, isActive: true },
+  });
+  if (!vendor || !vendor.isActive) return { error: "Client company not found." };
+  if (vendor.partyType !== "Client") return { error: "Portal activation here is only for client companies." };
+
+  const fullName = String(opts.fullName || email.split("@")[0] || opts.vendorName).trim();
+  const password = String(opts.password || "").trim() || defaultTempPassword();
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing && isProtectedStaffLogin(existing)) {
+    return { error: `${email} is an SPDC staff login — use the person's own client email.` };
+  }
+
+  if (!existing) {
+    const created = await ensurePortalLogin({
+      email,
+      fullName,
+      role: "client",
+      password,
+      vendorId: vendor.id,
+      designation: vendor.name,
+    });
+    if (!created) return { error: "Could not create portal login." };
+    return { ...created, tempPassword: created.tempPassword || password };
+  }
+
+  const bcrypt = await import("bcryptjs");
+  const { portalForRole } = await import("@sharnam/shared");
+  const updated = await prisma.user.update({
+    where: { id: existing.id },
+    data: {
+      fullName,
+      vendorId: vendor.id,
+      role: "client",
+      portal: portalForRole("client"),
+      isActive: true,
+      passwordHash: await bcrypt.hash(password, 10),
+    },
+  });
+  await alignUserRole(updated.id, "client");
+  return {
+    userId: updated.id,
+    email: updated.email,
+    created: false,
+    role: "client",
+    passwordUpdated: true,
+    tempPassword: password,
+  };
+}
+
 export async function ensureVendorPortalLogin(vendor: {
   email?: string | null;
   name: string;

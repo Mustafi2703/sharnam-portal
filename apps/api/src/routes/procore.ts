@@ -251,7 +251,15 @@ vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, 
     where: { vendorId: req.params.id },
     orderBy: { createdAt: "asc" },
   });
-  res.json(rows);
+  const emails = rows.map((r) => r.email.toLowerCase());
+  const users = emails.length
+    ? await prisma.user.findMany({
+        where: { email: { in: emails }, role: "client" },
+        select: { email: true, isActive: true },
+      })
+    : [];
+  const active = new Set(users.filter((u) => u.isActive !== false).map((u) => u.email.toLowerCase()));
+  res.json(rows.map((r) => ({ ...r, portalActive: active.has(r.email.toLowerCase()) })));
 });
 
 vendorsRouter.post("/:id/contacts", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -283,6 +291,34 @@ vendorsRouter.patch("/:id/contacts/:contactId", requireRoles("admin", "office"),
     },
   });
   res.json(row);
+});
+
+vendorsRouter.post("/:id/contacts/:contactId/activate-portal", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, name: true, partyType: true },
+  });
+  if (!vendor) return res.status(404).json({ error: "Client not found" });
+  const contact = await prisma.vendorContact.findFirst({
+    where: { id: req.params.contactId, vendorId: req.params.id },
+  });
+  if (!contact) return res.status(404).json({ error: "Representative not found" });
+  const { syncClientRepresentativePortal } = await import("../services/crmVendorCredentials.js");
+  const result = await syncClientRepresentativePortal({
+    vendorId: vendor.id,
+    vendorName: vendor.name,
+    email: contact.email,
+    fullName: contact.fullName,
+    password: req.body.password ? String(req.body.password) : null,
+  });
+  if (result && "error" in result) return res.status(400).json({ error: result.error });
+  await audit("vendor.contact.portal", {
+    userId: req.user!.id,
+    entity: "VendorContact",
+    entityId: contact.id,
+    meta: { email: contact.email, vendorId: vendor.id },
+  });
+  res.json({ ok: true, login: result, loginPath: "/login/client" });
 });
 
 vendorsRouter.delete("/:id/contacts/:contactId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

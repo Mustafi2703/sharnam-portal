@@ -91,7 +91,7 @@ export default function RfisPage() {
   const createFormRef = useRef<HTMLDivElement>(null);
 
   const isClient = user?.role === "client";
-  const canCreate = !!user;
+  const canCreate = !!user && user.role !== "client";
   const canRespond = matrixCanRespond;
   const canClose = matrixCanRespond;
 
@@ -318,7 +318,7 @@ export default function RfisPage() {
       <PageHeader
         eyebrow={pageCopy.eyebrow}
         title={isClient ? "Concerns & RFIs" : pageCopy.title}
-        subtitle={isClient ? "Raise a concern anytime. Matrix parties or office respond and close." : pageCopy.subtitle}
+        subtitle={isClient ? "View-only register — SPDC office and matrix parties respond and close." : pageCopy.subtitle}
       />
 
       {!isClient && registerMode && (

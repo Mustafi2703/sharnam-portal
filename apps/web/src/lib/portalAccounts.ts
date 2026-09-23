@@ -108,7 +108,7 @@ export function accountKindLabel(kind: PortalAccountKind): string {
 export function accountKindHint(kind: PortalAccountKind): string {
   switch (kind) {
     case "client":
-      return "Owner contact. View published GFC, progress, and raise concerns — no drawing upload.";
+      return "Owner contact. Read-only project modules at /login/client — upload signature when SPDC sends a checklist or weekly pack. No CRM or HRMS.";
     case "vendor":
       return "Same company type as contractor. Bid BOQs, RFIs, and assigned fills — no clock-in.";
     case "stakeholder":

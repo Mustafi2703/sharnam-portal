@@ -116,7 +116,7 @@ function dayField(v?: string | null) {
 
 const STEPS: { id: Step; n: string; label: string }[] = [
   { id: "project", n: "1", label: "Card · parties · staff" },
-  { id: "matrix", n: "2", label: "Communication matrix" },
+  { id: "matrix", n: "2", label: "Communication matrix · export" },
   { id: "launch", n: "3", label: "Launch" },
 ];
 

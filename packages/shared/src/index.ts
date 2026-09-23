@@ -130,7 +130,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, ModulePermissions> = {
     roles: { view: false, create: false, edit: false, approve: false },
     users: { view: false, create: false, edit: false, approve: false },
     vendors: { view: true, create: false, edit: false, approve: false },
-    rfis: { view: true, create: true, edit: false, approve: false },
+    rfis: { view: true, create: false, edit: false, approve: false },
     inspections: { view: true, create: false, edit: false, approve: false },
     safety: { view: true, create: false, edit: false, approve: false },
   },

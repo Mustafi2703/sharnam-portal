@@ -735,6 +735,67 @@ checklistRouter.post(
   }
 );
 
+checklistRouter.post(
+  "/assignments/:assignmentId/client-signature",
+  requireRoles("client"),
+  upload.single("signatureClient"),
+  async (req: AuthedRequest, res) => {
+    const assignment = await prisma.checklistAssignment.findUnique({
+      where: { id: req.params.assignmentId },
+      include: { template: true, project: true },
+    });
+    if (!assignment) return res.status(404).json({ error: "Assignment not found" });
+
+    const { canClientSignChecklistAssignment } = await import("../services/reportPacks.js");
+    const gate = await canClientSignChecklistAssignment({
+      projectId: assignment.projectId,
+      user: req.user!,
+    });
+    if (!gate.ok) return res.status(403).json({ error: gate.reason });
+
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "Draw or upload your signature (field: signatureClient)." });
+
+    const submission = await prisma.checklistSubmission.findFirst({
+      where: { assignmentId: assignment.id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!submission) {
+      return res.status(400).json({
+        error: "Nothing to sign yet — wait until SPDC or the site team submits this checklist.",
+      });
+    }
+
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+    const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
+    const saved = await mockOneDrive.upload(
+      assignment.project.code,
+      checklistFolder,
+      file.originalname,
+      file.buffer,
+    );
+    await prisma.checklistPhoto.create({
+      data: {
+        submissionId: submission.id,
+        itemId: null,
+        kind: "signature",
+        fileUrl: storedUploadUrl(saved),
+        caption: "Client",
+      },
+    });
+
+    await audit("checklist.client_signature", {
+      userId: req.user!.id,
+      entity: "ChecklistSubmission",
+      entityId: submission.id,
+      meta: { assignmentId: assignment.id },
+    });
+
+    res.json({ ok: true, submissionId: submission.id });
+  },
+);
+
 /** Save partial fill — Quality / Safety / Site. Evidence links stored in JSON; files go to SharePoint only. */
 checklistRouter.post(
   "/assignments/:assignmentId/draft",

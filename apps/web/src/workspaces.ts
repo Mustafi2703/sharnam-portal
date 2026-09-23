@@ -932,7 +932,7 @@ export const WORKSPACES: {
   if (key === "cost") roles = ["admin", "office", "employee"];
   if (key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
-  if (key === "auditKpi") roles = ["admin", "office", "employee", "client"];
+  if (key === "auditKpi") roles = ["admin", "office", "employee"];
   if (key === "closure") roles = ["admin", "office", "site_employee", "employee", "client"];
   // vendor: project fills + bid desk — RFIs, checklists, quality/safety/comms (no DPR / cost / clock-in)
   return {

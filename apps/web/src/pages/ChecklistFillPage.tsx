@@ -43,6 +43,7 @@ export default function ChecklistFillPage() {
   const [msg, setMsg] = useState("");
   const [done, setDone] = useState(false);
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
+  const clientSignOnly = user?.role === "client" && Boolean(assignment?.latestFill || assignment?.myDraft);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -232,6 +233,29 @@ export default function ChecklistFillPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMsg("");
+    if (clientSignOnly) {
+      if (!clientSignatureFile) {
+        setMsg("Draw or upload your client signature first.");
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const fd = new FormData();
+        fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
+        await api(`/api/checklist/assignments/${assignmentId}/client-signature`, {
+          method: "POST",
+          token,
+          body: fd,
+        });
+        setMsg("Your client signature is saved on this checklist.");
+        setDone(true);
+      } catch (err) {
+        setMsg(err instanceof Error ? err.message : "Could not save signature");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     if (requireDrawing && !drawingId) {
       setMsg("Select a published drawing and revision before submit.");
       return;
@@ -308,6 +332,20 @@ export default function ChecklistFillPage() {
     );
   }
 
+  if (user?.role === "client" && !clientSignOnly) {
+    return (
+      <div className="standalone-form-page standalone-form-page--paper">
+        <StandaloneFormHeader variant="navy" eyebrow={familyLabel} title="Client sign-off" />
+        <main className="standalone-form-page__main standalone-form-page__main--narrow">
+          <Card className="!p-6 text-sm text-steel-muted space-y-2">
+            <p>Nothing to sign yet. SPDC or the site team will submit this checklist first — then you can add your signature from the link they share.</p>
+            <Button type="button" onClick={() => closeEmbedOrWindow()}>Close</Button>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <ChecklistFillForm
       family={family}
@@ -349,6 +387,8 @@ export default function ChecklistFillPage() {
       photoTotal={photoTotal}
       answered={answered}
       canFill={canFill}
+      clientSignOnly={clientSignOnly}
+      clientSignatureReady={Boolean(clientSignatureFile)}
       draftId={draftId}
       savingDraft={savingDraft}
       submitting={submitting}

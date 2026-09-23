@@ -40,7 +40,7 @@ const TAB_META: Record<
   },
   clients: {
     title: "Client directory",
-    subtitle: "Add the client company first, save details, then activate portal access when email is ready. Linked projects sync from here.",
+    subtitle: "Step 1: add the client company. Step 2: add representatives. Step 3: activate portal for each person at /login/client.",
     partyTypes: ["Client"],
     defaultParty: "Client",
     loginRole: "client",
@@ -198,11 +198,13 @@ export function DirectoryCompaniesPanel({
         setMsg(
           updated.loginError
             ? `Company saved. Portal login not updated — ${updated.loginError}${syncNote}`
-            : (updated.login?.passwordUpdated
-                ? "Updated — portal password changed."
-                : updated.login?.created
-                  ? "Updated — portal login created."
-                  : "Updated.") + syncNote
+            : tab === "clients"
+              ? `Client details saved.${syncNote} Use Step 2 below to manage representatives.`
+              : (updated.login?.passwordUpdated
+                  ? "Updated — portal password changed."
+                  : updated.login?.created
+                    ? "Updated — portal login created."
+                    : "Updated.") + syncNote
         );
       } else {
         const created = await api<
@@ -223,7 +225,9 @@ export function DirectoryCompaniesPanel({
         setMsg(
           created.loginError
             ? `Company saved. ${created.loginError}`
-            : "Company saved. Add email if needed, then use Activate portal access.",
+            : tab === "clients"
+              ? "Client saved — scroll down to Step 2: add representatives, then Activate portal for each person."
+              : "Company saved. Add email if needed, then use Activate portal access.",
         );
       }
       await load();
@@ -310,7 +314,7 @@ export function DirectoryCompaniesPanel({
             <span>{visibleRows.length} companies</span>
             {canEdit && (
               <Button type="button" variant="secondary" className="!text-xs !py-1 !px-2" onClick={startNewCompany}>
-                + New
+                {tab === "clients" ? "+ New client" : "+ New"}
               </Button>
             )}
           </div>
@@ -366,23 +370,30 @@ export function DirectoryCompaniesPanel({
 
       <div ref={formPanelRef}>
       {!selected && !creatingNew ? (
-        <Card className="!p-6 text-sm text-steel-muted space-y-2">
-          <p>
-            Select a company from the list to edit it here
-            {tab === "clients" ? " — changes sync to every project using that client." : "."}
-          </p>
+        <Card className="!p-6 text-sm text-steel-muted space-y-3">
+          <p className="font-semibold text-ink">How to add a client (3 steps)</p>
+          <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
+            <li>Click <strong className="text-ink">+ New client</strong> and save the company name</li>
+            <li>Add each site representative (name + email)</li>
+            <li>Click <strong className="text-ink">Activate portal</strong> for every person who needs access</li>
+          </ol>
           {canEdit ? (
-            <p>
-              Or click <strong className="text-ink">+ New</strong> to add a company and portal login.
-            </p>
-          ) : (
-            <p>View only — office and admin can add or edit.</p>
-          )}
+            <Button type="button" onClick={startNewCompany}>
+              + New client
+            </Button>
+          ) : null}
         </Card>
       ) : (
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
-          <h3 className="font-semibold text-sm">{selected ? "Edit company" : "Add company"}</h3>
+          <h3 className="font-semibold text-sm">
+            {selected ? (tab === "clients" ? "Edit client" : "Edit company") : tab === "clients" ? "Step 1 · New client company" : "Add company"}
+          </h3>
+          {tab === "clients" && selected ? (
+            <p className="text-[11px] text-steel-muted w-full basis-full -mt-1">
+              Step 2 below — add more representatives anytime, then activate portal for each person.
+            </p>
+          ) : null}
           {canEdit && selected ? (
             <Button
               type="button"
@@ -398,28 +409,41 @@ export function DirectoryCompaniesPanel({
             </Button>
           ) : null}
         </div>
-        {!selected ? (
+        {tab === "clients" ? (
+          <div className="rounded-lg bg-sand/50 border border-line px-3 py-2 text-xs text-steel-muted mb-3">
+            <strong className="text-ink">Step 1</strong> — Save the company name and address below.{" "}
+            {selected ? (
+              <>
+                Then scroll to <strong className="text-ink">Step 2</strong> to add people and activate portal for each.
+              </>
+            ) : (
+              <>
+                Portal logins are created in <strong className="text-ink">Step 2</strong> for each representative (not on this form).
+              </>
+            )}
+          </div>
+        ) : !selected ? (
           <p className="text-[11px] text-steel-muted mb-3">
             Step 1 — save company and contact. Step 2 — add email and click <strong className="text-ink">Activate portal access</strong> (default password Demo@1234).
-          </p>
-        ) : tab === "clients" ? (
-          <p className="text-[11px] text-steel-muted mb-3">
-            Saves to the client master and updates the client card on every linked project.
           </p>
         ) : null}
         <form className="space-y-3" onSubmit={save}>
           <Input disabled={!canEdit} placeholder="Company name" value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
-            {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
-          <Input disabled={!canEdit} placeholder="Primary contact (login name)" autoComplete="name" value={form.primaryContactName ?? ""} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-          <Input disabled={!canEdit} placeholder="Email (portal login)" type="email" autoComplete="username" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          {tab !== "clients" ? (
+            <>
+              <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
+                {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+              <Input disabled={!canEdit} placeholder="Primary contact (login name)" autoComplete="name" value={form.primaryContactName ?? ""} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
+              <Input disabled={!canEdit} placeholder="Email (portal login)" type="email" autoComplete="username" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </>
+          ) : null}
           <Input disabled={!canEdit} placeholder="Phone" type="tel" autoComplete="tel" value={form.businessPhone ?? ""} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-          {canEdit ? (
+          {canEdit && tab !== "clients" ? (
             <Input
               type="password"
               autoComplete="new-password"
@@ -437,7 +461,10 @@ export function DirectoryCompaniesPanel({
           ) : null}
           <Input disabled={!canEdit} placeholder="City" value={form.city ?? ""} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           {tab === "clients" ? (
-            <Input disabled={!canEdit} placeholder="Office address" value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            <>
+              <Input disabled={!canEdit} placeholder="Office address" value={form.address ?? ""} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              <Input disabled={!canEdit} placeholder="GST number (optional)" value={form.gstNumber ?? ""} onChange={(e) => setForm({ ...form, gstNumber: e.target.value })} />
+            </>
           ) : null}
           {tab === "vendors" ? (
             <Input
@@ -464,7 +491,7 @@ export function DirectoryCompaniesPanel({
                   Cancel
                 </Button>
               ) : null}
-              {selected && (meta.loginRole || tab === "vendors" || tab === "clients" || tab === "stakeholders") && (
+              {selected && tab !== "clients" && (meta.loginRole || tab === "vendors" || tab === "stakeholders") && (
                 <Button type="button" variant="secondary" onClick={() => void activatePortalAccess()}>
                   Activate portal access
                 </Button>
@@ -487,8 +514,13 @@ export function DirectoryCompaniesPanel({
           {msg && <p className="text-xs text-brand-dark">{msg}</p>}
           {loginMsg && <p className="text-xs text-steel-muted">{loginMsg}</p>}
         </form>
-        {tab === "clients" && selected && canEdit ? (
-          <ClientRepresentativesPanel vendorId={selected.id} token={token} canEdit={canEdit} />
+        {tab === "clients" && selected ? (
+          <ClientRepresentativesPanel
+            vendorId={selected.id}
+            clientName={trimField(form.name) || selected.name || "this client"}
+            token={token}
+            canEdit={canEdit}
+          />
         ) : null}
         <p className="text-[11px] text-steel-muted mt-4 border-t border-line pt-3">
           {tab === "vendors" ? (

@@ -66,6 +66,15 @@ export function parseWprDateRange(query: {
 
 export const wprMakerRouter = Router();
 wprMakerRouter.use(requireAuth);
+
+function rejectClientWprEditor(req: AuthedRequest, res: import("express").Response, next: import("express").NextFunction) {
+  if (req.user?.role === "client") {
+    res.status(403).json({ error: "Client portal is read-only. Use Reports on your project to upload your signature." });
+    return;
+  }
+  next();
+}
+
 wprMakerRouter.param("projectId", async (req: AuthedRequest, res, next, projectId) => {
   try {
     const ok = await userCanAccessProject(req, String(projectId));
@@ -248,7 +257,7 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
 });
 
 /** Re-build all WPR sections from live portal data for the selected date window. */
-wprMakerRouter.post("/:projectId/refresh", async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/refresh", rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -311,7 +320,7 @@ wprMakerRouter.post("/:projectId/refresh", async (req: AuthedRequest, res) => {
 });
 
 /** Load the client 23–29 July WPR + budget / PR / materials workbooks into this project week. */
-wprMakerRouter.post("/:projectId/import-july", async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/import-july", rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -352,7 +361,7 @@ wprMakerRouter.post("/:projectId/import-july", async (req: AuthedRequest, res) =
   });
 });
 
-wprMakerRouter.post("/:projectId/save", async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/save", rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -458,7 +467,7 @@ wprMakerRouter.get("/:projectId/export-status", async (req, res) => {
   });
 });
 
-wprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/publish", rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const range = parseWprDateRange({
     end: req.body.weekEnding ?? req.body.end,
@@ -580,7 +589,7 @@ wprMakerRouter.get("/:projectId/recent", async (req, res) => {
  *
  * Multipart field: `photo`. Extra fields: `weekEnding`, `sectionKey`, `caption`.
  */
-wprMakerRouter.post("/:projectId/photo", upload.single("photo"), async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/photo", rejectClientWprEditor, upload.single("photo"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -620,7 +629,7 @@ wprMakerRouter.post("/:projectId/photo", upload.single("photo"), async (req: Aut
  * safety pack. Lands under wpr/attachments/ so the pack export can list it.
  * Multipart field: `file`. Extra fields: `weekEnding`, `caption`.
  */
-wprMakerRouter.post("/:projectId/attachment", upload.single("file"), async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/attachment", rejectClientWprEditor, upload.single("file"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -658,7 +667,13 @@ wprMakerRouter.post("/:projectId/signature", upload.single("signature"), async (
 
   const weekEnd = parseEnd(req.body.weekEnding);
   const dateStr = weekEnd.toISOString().slice(0, 10);
-  const role = String(req.body.role || "signer").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 30);
+  const roleRaw = String(req.body.role || "signer").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 30);
+  if (req.user!.role === "client") {
+    if (roleRaw.toLowerCase() !== "client") {
+      return res.status(403).json({ error: "Client portal may only upload the client signature." });
+    }
+  }
+  const role = roleRaw;
   const filename = `${dateStr}-${role}-${Date.now()}.png`;
   const folder = `${MODULE_TO_ISO_FOLDER.wpr}/signatures`;
   const saved = await mockOneDrive.upload(project.code, folder, filename, file.buffer);

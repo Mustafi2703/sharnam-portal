@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, PageHeader, Stat } from "../components/ui";
+import { ClientProjectSignPanel } from "../components/ClientProjectSignPanel";
+import { isClientPortalUser } from "../lib/clientPortal";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -9,7 +11,8 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 export default function ReportsPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const isClient = isClientPortalUser(user?.role);
   const tab = searchParams.get("kind") === "wpr" ? "wpr" : "dpr";
   const [dpr, setDpr] = useState<any>(null);
   const [wpr, setWpr] = useState<any>(null);
@@ -41,8 +44,13 @@ export default function ReportsPage() {
         <PageHeader
           eyebrow="Field KPIs · Sharnam PMC"
           title="DPR / WPR dashboard"
-          subtitle="Live field counts. Official DPR and WPR files are filled and exported only in DPR Maker and WPR Maker — not from this screen."
+          subtitle={
+            isClient
+              ? "View live KPIs and download published packs. Upload your client signature when SPDC shares the weekly report."
+              : "Live field counts. Official DPR and WPR files are filled and exported only in DPR Maker and WPR Maker — not from this screen."
+          }
           actions={
+            isClient ? null : (
             <div className="flex flex-wrap gap-2 items-start">
               <Link to={`/projects/${id}/dpr-maker`}>
                 <Button type="button">Open DPR maker</Button>
@@ -53,11 +61,14 @@ export default function ReportsPage() {
                 </Button>
               </Link>
             </div>
+            )
           }
         />
       </div>
 
-      {project && (
+      {isClient && id && token ? <ClientProjectSignPanel projectId={id} token={token} /> : null}
+
+      {project && !isClient && (
         <Card className="border-brand/30 bg-brand-soft/20">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>

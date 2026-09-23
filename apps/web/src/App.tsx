@@ -77,6 +77,7 @@ import CrmProjectsPage from "./pages/crm/CrmProjectsPage";
 import CrmPackagesPage from "./pages/crm/CrmPackagesPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
 import TrainingPage from "./pages/TrainingPage";
+import ClientPortalGate from "./components/ClientPortalGate";
 import { SiteAttendanceGate } from "./components/SiteAttendanceGate";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -202,6 +203,7 @@ export default function App() {
         path="/*"
         element={
           <Protected>
+            <ClientPortalGate>
             <OfficeDeskGate>
             <SiteAttendanceGate>
             <AppShell>
@@ -328,6 +330,7 @@ export default function App() {
             </AppShell>
             </SiteAttendanceGate>
             </OfficeDeskGate>
+            </ClientPortalGate>
           </Protected>
         }
       />

@@ -10,13 +10,21 @@ export function WprSignOffPanel({
   onRemove,
   resolveUrl,
   title = "Sign-off",
+  roles = ["pmc", "client", "contractor"] as const,
 }: {
   signatures: Sig[];
   onUpload: (file: File, role: string) => void;
   onRemove: (index: number) => void;
   resolveUrl: (ref: string) => string;
   title?: string;
+  roles?: readonly ("pmc" | "client" | "contractor")[];
 }) {
+  const slotDefs: { role: "pmc" | "client" | "contractor"; label: string }[] = [
+    { role: "pmc", label: "PMC sign" },
+    { role: "client", label: "Client sign" },
+    { role: "contractor", label: "Contractor sign" },
+  ];
+  const slots = slotDefs.filter((s) => roles.includes(s.role));
   return (
     <section className="rounded-lg border border-line p-3 space-y-3 bg-sand/30">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -26,13 +34,7 @@ export function WprSignOffPanel({
         <p className="text-[11px] text-steel-muted">Draw or upload PNG — saved on this week’s pack.</p>
       </div>
       <div className="grid md:grid-cols-3 gap-3">
-        {(
-          [
-            ["pmc", "PMC sign"],
-            ["client", "Client sign"],
-            ["contractor", "Contractor sign"],
-          ] as const
-        ).map(([role, label]) => (
+        {slots.map(({ role, label }) => (
           <div key={role} className="space-y-2">
             <SignaturePad label={label} personName={role.toUpperCase()} height={120} onCapture={(f) => f && onUpload(f, role)} />
             <FilePickButton accept="image/png,image/jpeg,image/webp" onPick={(files) => files[0] && onUpload(files[0], role)}>

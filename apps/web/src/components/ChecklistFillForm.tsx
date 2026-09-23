@@ -116,6 +116,9 @@ type Props = {
   photoTotal: number;
   answered: number;
   canFill: boolean;
+  /** Client portal — view site fill, upload client signature only. */
+  clientSignOnly?: boolean;
+  clientSignatureReady?: boolean;
   draftId?: string | null;
   savingDraft?: boolean;
   submitting?: boolean;
@@ -161,6 +164,8 @@ export function ChecklistFillForm({
   photoTotal,
   answered,
   canFill,
+  clientSignOnly = false,
+  clientSignatureReady = false,
   draftId,
   savingDraft,
   submitting,
@@ -177,6 +182,7 @@ export function ChecklistFillForm({
   const revisions = selectedDrawing?.revisions || [];
   const evidenceOn = showEvidence ?? family !== "DrawingCheck";
   const pickerOn = showDrawingPicker && family !== "DrawingCheck";
+  const editable = canFill && !clientSignOnly;
   const boundDrawing =
     lockedDrawingLabel ||
     (selectedDrawing
@@ -205,7 +211,7 @@ export function ChecklistFillForm({
           <>
             {headerActions}
             {onSaveDraft && (
-              <Button type="button" variant="secondary" className="!text-xs" onClick={() => onSaveDraft()} disabled={savingDraft || !canFill}>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => onSaveDraft()} disabled={savingDraft || !editable}>
                 {savingDraft ? "Saving…" : "Save draft"}
               </Button>
             )}
@@ -215,6 +221,15 @@ export function ChecklistFillForm({
           </>
         }
       />
+
+      {clientSignOnly ? (
+        <div className="standalone-form-page__main standalone-form-page__main--narrow px-4 -mt-3 mb-1">
+          <Card className="!p-3 !bg-brand-soft/30 border-brand/20 text-xs text-steel-muted leading-relaxed">
+            <strong className="text-ink">Client sign-off</strong> — site answers are read-only. Add your signature below and click{" "}
+            <strong className="text-ink">Submit my signature</strong>.
+          </Card>
+        </div>
+      ) : null}
 
       <main className="standalone-form-page__main space-y-5 portal-fill-layout">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -260,7 +275,7 @@ export function ChecklistFillForm({
                   <Select
                     className="mt-1"
                     value={drawingId}
-                    disabled={!canFill}
+                    disabled={!editable}
                     onChange={(e) => {
                       const next = e.target.value;
                       onDrawingId(next);
@@ -316,7 +331,7 @@ export function ChecklistFillForm({
                 placeholder="CL/CIV/104"
                 value={fillMeta.reportNo}
                 onChange={(e) => onFillMeta({ ...fillMeta, reportNo: e.target.value })}
-                disabled={!canFill}
+                disabled={!editable}
               />
             </label>
             <label className="block text-sm">
@@ -326,7 +341,7 @@ export function ChecklistFillForm({
                 placeholder="Grid C4 / Level +0.00"
                 value={fillMeta.location}
                 onChange={(e) => onFillMeta({ ...fillMeta, location: e.target.value })}
-                disabled={!canFill}
+                disabled={!editable}
               />
             </label>
             <label className="block text-sm">
@@ -336,7 +351,7 @@ export function ChecklistFillForm({
                 placeholder={selectedDrawing?.drawingNumber || "SPDC-STR-104 Rev. 2"}
                 value={fillMeta.refDrawing}
                 onChange={(e) => onFillMeta({ ...fillMeta, refDrawing: e.target.value })}
-                disabled={!canFill}
+                disabled={!editable}
               />
             </label>
             <label className="block text-sm">
@@ -346,7 +361,7 @@ export function ChecklistFillForm({
                 placeholder="3.2 cum"
                 value={fillMeta.quantity}
                 onChange={(e) => onFillMeta({ ...fillMeta, quantity: e.target.value })}
-                disabled={!canFill}
+                disabled={!editable}
               />
             </label>
           </div>
@@ -363,7 +378,7 @@ export function ChecklistFillForm({
               value={remarks}
               onChange={(e) => onRemarks(e.target.value)}
               placeholder="Overall remarks"
-              disabled={!canFill}
+              disabled={!editable}
             />
           </div>
 
@@ -414,7 +429,7 @@ export function ChecklistFillForm({
                               <button
                                 key={ans}
                                 type="button"
-                                disabled={!canFill}
+                                disabled={!editable}
                                 onClick={() => onPatchLine(item.id, { answer: ans })}
                                 className={`rounded-full px-4 py-2 text-sm font-semibold border ${
                                   on
@@ -435,7 +450,7 @@ export function ChecklistFillForm({
                           rows={2}
                           placeholder="Comment for this checklist item (optional)"
                           value={line.remarks}
-                          disabled={!canFill}
+                          disabled={!editable}
                           onChange={(e) => onPatchLine(item.id, { remarks: e.target.value })}
                         />
                         {evidenceOn && (
@@ -446,7 +461,7 @@ export function ChecklistFillForm({
                               className="mt-1 !text-xs"
                               placeholder="https://…sharepoint.com/… or OneDrive link"
                               value={line.evidenceLinks[0] || ""}
-                              disabled={!canFill}
+                              disabled={!editable}
                               onChange={(e) =>
                                 onPatchLine(item.id, {
                                   evidenceLinks: e.target.value.trim() ? [e.target.value.trim()] : [],
@@ -462,7 +477,7 @@ export function ChecklistFillForm({
                                 capture="environment"
                                 multiple
                                 variant="primary"
-                                disabled={!canFill}
+                                disabled={!editable}
                                 onPick={(files) => onPatchLine(item.id, { photos: [...line.photos, ...files] })}
                               >
                                 Take photo
@@ -470,7 +485,7 @@ export function ChecklistFillForm({
                               <FilePickButton
                                 accept="image/*"
                                 multiple
-                                disabled={!canFill}
+                                disabled={!editable}
                                 onPick={(files) => onPatchLine(item.id, { photos: [...line.photos, ...files] })}
                               >
                                 Attach photo
@@ -488,7 +503,7 @@ export function ChecklistFillForm({
                             <FilePickButton
                               accept=".pdf,.doc,.docx,.xls,.xlsx,.dwg,.txt,application/pdf,image/*"
                               multiple
-                              disabled={!canFill}
+                              disabled={!editable}
                               onPick={(files) => onPatchLine(item.id, { docs: [...line.docs, ...files] })}
                             >
                               Attach file
@@ -525,7 +540,7 @@ export function ChecklistFillForm({
                     capture="environment"
                     multiple
                     variant="primary"
-                    disabled={!canFill}
+                    disabled={!editable}
                     onPick={(files) => onOverallPhotos([...overallPhotos, ...files])}
                   >
                     Take photo
@@ -533,7 +548,7 @@ export function ChecklistFillForm({
                   <FilePickButton
                     accept="image/*"
                     multiple
-                    disabled={!canFill}
+                    disabled={!editable}
                     onPick={(files) => onOverallPhotos([...overallPhotos, ...files])}
                   >
                     Attach photo
@@ -546,16 +561,20 @@ export function ChecklistFillForm({
               </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 checklist-sign-grid">
-                <SignaturePad
-                  onCapture={onSignature}
-                  personName={signerName}
-                  label="Inspector / site engineer"
-                />
-                <SignaturePad
-                  onCapture={onPmcSignature || onSignature}
-                  personName={signerName}
-                  label="PMC"
-                />
+                {!clientSignOnly ? (
+                  <>
+                    <SignaturePad
+                      onCapture={onSignature}
+                      personName={signerName}
+                      label="Inspector / site engineer"
+                    />
+                    <SignaturePad
+                      onCapture={onPmcSignature || onSignature}
+                      personName={signerName}
+                      label="PMC"
+                    />
+                  </>
+                ) : null}
                 <SignaturePad
                   onCapture={onClientSignature || onSignature}
                   personName={signerName}
@@ -569,9 +588,9 @@ export function ChecklistFillForm({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {canFill && (
+              {(canFill || clientSignOnly) && (
                 <>
-                  {onSaveDraft && (
+                  {onSaveDraft && !clientSignOnly && (
                     <Button type="button" variant="secondary" disabled={savingDraft} onClick={() => onSaveDraft()}>
                       {savingDraft ? "Saving…" : "Save draft"}
                     </Button>
@@ -580,12 +599,14 @@ export function ChecklistFillForm({
                     type="submit"
                     disabled={
                       submitting ||
-                      answered < items.length ||
-                      (minPhotos > 0 && photoTotal < minPhotos) ||
-                      (requireDrawing && drawings.length > 0 && !drawingId)
+                      (clientSignOnly
+                        ? !clientSignatureReady
+                        : answered < items.length ||
+                          (minPhotos > 0 && photoTotal < minPhotos) ||
+                          (requireDrawing && drawings.length > 0 && !drawingId))
                     }
                   >
-                    {submitting ? "Submitting…" : submitLabel}
+                    {submitting ? "Submitting…" : clientSignOnly ? "Submit my signature" : submitLabel}
                   </Button>
                 </>
               )}

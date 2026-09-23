@@ -8,6 +8,7 @@ import { DailySheetWorkflow } from "../../components/DailySheetWorkflow";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ToolLink } from "../../components/ToolLink";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
+import { ClientProjectSignPanel } from "../../components/ClientProjectSignPanel";
 import { ProjectManageActions, type ManageableProject } from "../../components/ProjectManageActions";
 import { canBulkProvisionSheets } from "../../lib/productionUi";
 
@@ -76,13 +77,13 @@ export default function ProjectHomePage() {
       ]
     : isClient
     ? [
-        ["drawings", "Drawings", "Published GFC sheets — view only", "DWG", "#E4632A"],
-        ["drawings/coordination", "Design coordination", "View clash / design issues", "DC", "#2563EB"],
-        ["rfis", "Concerns / RFIs", "Raise questions without upload control", "RFI", "#0B6A78"],
-        ["reports", "Reports", "Weekly packs & DPR visibility", "RPT", "#3D4450"],
-        ["checklist", "Checklist catalog", "See assigned types (fills are site-side)", "QA", "#2F6F4E"],
-        ["comms", "Meetings", "Schedule visibility", "MTG", "#C24D1A"],
-        ["safety", "Safety", "Observations shared with client", "SAF", "#1C4A5A"],
+        ["drawings", "Drawings", "Published GFC — view only", "DWG", "#E4632A"],
+        ["reports", "Reports & weekly pack", "KPIs · upload client sign when shared", "RPT", "#3D4450"],
+        ["comms", "Meetings", "Agenda & MoM — view only", "MTG", "#C24D1A"],
+        ["rfis", "RFI register", "View status — office responds", "RFI", "#0B6A78"],
+        ["quality-inspections", "Quality", "Published inspections — view only", "QI", "#2F6F4E"],
+        ["safety", "Safety", "Shared observations — view only", "SAF", "#1C4A5A"],
+        ["dms", "Documents", "Shared project files — view only", "DOC", "#3D4450"],
       ]
     : [
         ["dpr-maker", "DPR maker", "Fill INPUT → publish SPDC template XLSX", "DPR", "#E4632A"],
@@ -138,7 +139,8 @@ export default function ProjectHomePage() {
         </div>
       )}
 
-      {id && token && <DirectoryMySignaturePanel projectId={id} token={token} compact />}
+      {isClient && id && token ? <ClientProjectSignPanel projectId={id} token={token} compact /> : null}
+      {id && token ? <DirectoryMySignaturePanel projectId={id} token={token} compact /> : null}
 
       {canManageProject && id && (
         <div className="grid lg:grid-cols-[1fr_auto] gap-4 items-start">

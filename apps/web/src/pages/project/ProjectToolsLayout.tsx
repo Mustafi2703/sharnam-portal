@@ -20,6 +20,7 @@ import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
 import { closeToolWindowOrGo, isToolWindow, searchWithToolWindow } from "../../lib/moduleToolWindow";
 import { ToolLink } from "../../components/ToolLink";
+import { isClientPortalUser } from "../../lib/clientPortal";
 
 const TOP_MODULES = (
   [
@@ -200,6 +201,11 @@ export default function ProjectToolsLayout() {
 
   return (
     <div className={`w-full tool-workspace ${toolWin ? "tool-workspace--window" : ""}`} style={{ ["--tool-accent" as string]: accent }}>
+      {isClientPortalUser(user?.role) ? (
+        <div className="px-4 py-2 text-xs text-steel-muted bg-brand-soft/35 border-b border-brand/15">
+          <strong className="text-ink">Client portal</strong> — view only on project modules. Upload your signature when SPDC shares a checklist or weekly report. No CRM or HRMS access.
+        </div>
+      ) : null}
       <div className="tool-chrome bg-paper border-b border-line shrink-0 z-20">
         <div className="px-3 sm:px-5 py-2.5 flex flex-wrap items-center gap-3 justify-between">
           <div className="min-w-0 flex items-center gap-3">
