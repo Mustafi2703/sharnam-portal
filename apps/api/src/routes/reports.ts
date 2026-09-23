@@ -2874,7 +2874,7 @@ hrmRouter.get("/hrms-documents/:id/preview", hrmDesk, async (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
   const { renderHrmsLetterHtml } = await import("../services/hrmsLetter.js");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(renderHrmsLetterHtml(row));
+  res.send(await renderHrmsLetterHtml(row));
 });
 
 /** Upload the signed / scanned copy back and attach to the same record. */

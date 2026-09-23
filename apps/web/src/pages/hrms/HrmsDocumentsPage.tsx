@@ -322,7 +322,7 @@ export default function HrmsDocumentsPage() {
       <HrmsPageHero
         eyebrow="Documents · Letters"
         title="HR letter desk"
-        subtitle="Pick one person. Preview is HTML on SPDC letterhead; Generate fills the official Word template ({{tokens}} from 00_SPDC_HR_Letters_Usage_Guide) → .docx + print HTML + employee vault / DMS."
+        subtitle="Pick one person. Preview renders the official Word template (same as .docx download). Generate files the filled .docx + print HTML + employee vault."
         workflow={
           <>
             <span>
@@ -607,7 +607,7 @@ export default function HrmsDocumentsPage() {
                     className="rounded-lg border border-line bg-white overflow-hidden min-h-[280px] flex flex-col"
                   >
                     <div className="px-3 py-2 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-mono uppercase text-steel-muted">Letter preview (HTML)</span>
+                      <span className="text-[11px] font-mono uppercase text-steel-muted">Letter preview (Word template)</span>
                       {previewHtml ? (
                         <Button type="button" variant="secondary" className="!py-0.5 !text-[11px]" onClick={() => setPreviewHtml("")}>
                           Clear
@@ -628,8 +628,8 @@ export default function HrmsDocumentsPage() {
                       </>
                     ) : (
                       <p className="p-4 text-sm text-steel-muted">
-                        Select a letter type, edit the fields above, then click <strong className="text-ink">Preview HTML</strong>. The
-                        preview loads here before you generate the official Word file.
+                        Select a letter type, edit the fields above, then click <strong className="text-ink">Preview</strong>. This matches the
+                        downloadable .docx (official SPDC Word format).
                       </p>
                     )}
                   </div>

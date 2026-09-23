@@ -524,14 +524,86 @@ async function buildAnnexureXlsx(row: HrmsDocument, ctx: Record<string, unknown>
   return Buffer.from(ab);
 }
 
-export function renderHrmsLetterHtml(row: HrmsDocument) {
+const DOCX_PREVIEW_CSS = `
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; padding: 8px 12px; }
+  .preview-banner { font-size: 10px; color: #555; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  td, th { border: 1px solid #bbb; padding: 4px 8px; vertical-align: top; }
+  p { margin: 0.45em 0; }
+`;
+
+async function ctcBreakdownForLetter(
+  row: Pick<HrmsDocument, "kind">,
+  ctx: Record<string, unknown>,
+  merged: Record<string, unknown>,
+): Promise<import("./ctcAnnexure.js").CtcBreakdown | null> {
+  const ctcNum = numOrNull(ctx.fixedCtcAnnual ?? ctx.ctcAnnual ?? ctx.ctc);
+  if (!(row.kind === "Appointment" || row.kind === "Offer" || row.kind === "Promotion") || !ctcNum) return null;
+  const { computeCtcBreakdown } = await import("./ctcAnnexure.js");
+  return computeCtcBreakdown({
+    candidateName: String(merged.candidateName || merged.employeeName || ""),
+    designation: String(merged.designation || ""),
+    fixedCtcAnnual: ctcNum,
+    basicPctOfGross: Number(ctx.basicPctOfGross ?? 0.5),
+    hraPctOfBasic: Number(ctx.hraPctOfBasic ?? 0.4),
+    restrictPfCeiling: Boolean(ctx.restrictPfCeiling ?? false),
+    gratuityPctOfBasic: Number(ctx.gratuityPctOfBasic ?? 0.0481),
+    ltaPctOfBasic: Number(ctx.ltaPctOfBasic ?? 0.0833),
+    conveyanceAnnual: Number(ctx.conveyanceAnnual ?? 19200),
+    childrenEducationAnnual: Number(ctx.childrenEducationAnnual ?? 2400),
+    mediclaimAnnual: Number(ctx.mediclaimAnnual ?? 12000),
+    performancePayPct: Number(ctx.performancePayPct ?? 0.1),
+    professionalTaxAnnual: Number(ctx.professionalTaxAnnual ?? 2400),
+  });
+}
+
+async function filledDocxBufferForRow(
+  row: HrmsDocument,
+  merged: Record<string, unknown>,
+  breakdown: import("./ctcAnnexure.js").CtcBreakdown | null,
+): Promise<Buffer | null> {
+  const docxPath = resolveHrmsLetterDocxPath(row.kind);
+  if (!docxPath) return null;
+  const templateBuf = fs.readFileSync(docxPath);
+  const { buildHrmsDocxTokenMap, fillHrmsDocx } = await import("./hrmsDocxFill.js");
+  const tokens = buildHrmsDocxTokenMap(row, merged, breakdown);
+  return fillHrmsDocx(templateBuf, tokens);
+}
+
+/** HTML preview from the same filled .docx as Generate — WYSIWYG with Word template. */
+export async function renderHrmsLetterPreviewHtml(row: HrmsDocument, merged: Record<string, unknown>): Promise<string> {
+  const breakdown = await ctcBreakdownForLetter(row, merged, merged);
+  const docxBuf = await filledDocxBufferForRow(row, merged, breakdown);
+  if (!docxBuf) return assembleHtml(row, merged);
+
+  const mammoth = await import("mammoth");
+  const { value: bodyHtml } = await mammoth.convertToHtml({ buffer: docxBuf });
+  const title = `${escapeHtml(row.kind)} · ${escapeHtml(row.refNo)}`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${title}</title>
+  <style>${DOCX_PREVIEW_CSS}</style>
+</head>
+<body>
+  <div class="preview-banner"><strong>Word template preview</strong> — same content as the editable .docx download (official SPDC format).</div>
+  ${bodyHtml}
+</body>
+</html>`;
+}
+
+export async function renderHrmsLetterHtml(row: HrmsDocument) {
   let ctx: Record<string, unknown> = {};
   try {
     ctx = row.dataJson ? JSON.parse(row.dataJson) : {};
   } catch {
     ctx = {};
   }
-  return assembleHtml(row, letterMergeContext(row, ctx));
+  ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
+  const merged = letterMergeContext(row, ctx);
+  return renderHrmsLetterPreviewHtml(row, merged);
 }
 
 /** Draft preview from the letter desk form — no DB row or SharePoint write. */
@@ -564,7 +636,8 @@ export async function previewHrmsLetterDraft(input: {
   } as HrmsDocument;
   let ctx: Record<string, unknown> = input.data && typeof input.data === "object" ? { ...input.data } : {};
   ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
-  return assembleHtml(row, letterMergeContext(row, ctx));
+  const merged = letterMergeContext(row, ctx);
+  return renderHrmsLetterPreviewHtml(row, merged);
 }
 
 export function renderHrPolicyAcknowledgement(ctx: {
@@ -689,7 +762,7 @@ export async function generateHrmsLetter(row: HrmsDocument) {
 
   const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
   const uploadFolders = [employeeFolder, `${letterFolder}/${personFolder}`];
-  const html = assembleHtml(row, merged);
+  const html = await renderHrmsLetterPreviewHtml(row, merged);
   const htmlSaved = await uploadHrmsFile(
     uploadFolders,
     `${row.kind}-${safeRef}.html`,
@@ -699,24 +772,9 @@ export async function generateHrmsLetter(row: HrmsDocument) {
 
   const ctcNum = numOrNull(ctx.fixedCtcAnnual ?? ctx.ctcAnnual ?? ctx.ctc);
   let xlsxBuf: Buffer;
-  let ctcBreakdown: import("./ctcAnnexure.js").CtcBreakdown | null = null;
-  if ((row.kind === "Appointment" || row.kind === "Offer" || row.kind === "Promotion") && ctcNum) {
-    const { computeCtcBreakdown, buildAnnexureXlsx: buildCtcXlsx } = await import("./ctcAnnexure.js");
-    ctcBreakdown = computeCtcBreakdown({
-      candidateName: String(merged.candidateName || merged.employeeName || ""),
-      designation: String(merged.designation || ""),
-      fixedCtcAnnual: ctcNum,
-      basicPctOfGross: Number(ctx.basicPctOfGross ?? 0.5),
-      hraPctOfBasic: Number(ctx.hraPctOfBasic ?? 0.4),
-      restrictPfCeiling: Boolean(ctx.restrictPfCeiling ?? false),
-      gratuityPctOfBasic: Number(ctx.gratuityPctOfBasic ?? 0.0481),
-      ltaPctOfBasic: Number(ctx.ltaPctOfBasic ?? 0.0833),
-      conveyanceAnnual: Number(ctx.conveyanceAnnual ?? 19200),
-      childrenEducationAnnual: Number(ctx.childrenEducationAnnual ?? 2400),
-      mediclaimAnnual: Number(ctx.mediclaimAnnual ?? 12000),
-      performancePayPct: Number(ctx.performancePayPct ?? 0.1),
-      professionalTaxAnnual: Number(ctx.professionalTaxAnnual ?? 2400),
-    });
+  let ctcBreakdown: import("./ctcAnnexure.js").CtcBreakdown | null = await ctcBreakdownForLetter(row, ctx, merged);
+  if (ctcBreakdown) {
+    const { buildAnnexureXlsx: buildCtcXlsx } = await import("./ctcAnnexure.js");
     xlsxBuf = await buildCtcXlsx(ctcBreakdown);
     const annexHtml = (await import("./ctcAnnexure.js")).buildAnnexureHtml(ctcBreakdown);
     await uploadHrmsFile(
@@ -740,18 +798,17 @@ export async function generateHrmsLetter(row: HrmsDocument) {
   let docxSharePointUrl: string | null = null;
   const docxPath = resolveHrmsLetterDocxPath(row.kind);
   if (docxPath) {
-    const templateBuf = fs.readFileSync(docxPath);
-    const { buildHrmsDocxTokenMap, fillHrmsDocx } = await import("./hrmsDocxFill.js");
-    const tokens = buildHrmsDocxTokenMap(row, merged, ctcBreakdown);
-    const docxBuf = await fillHrmsDocx(templateBuf, tokens);
-    const docxSaved = await uploadHrmsFile(
-      uploadFolders,
-      `${row.kind}-${safeRef}.docx`,
-      docxBuf,
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    );
-    docxUrl = docxSaved.sharePointUrl || docxSaved.url || `/uploads/onedrive/_HR/${docxSaved.path}`;
-    docxSharePointUrl = docxSaved.sharePointUrl || null;
+    const docxBuf = await filledDocxBufferForRow(row, merged, ctcBreakdown);
+    if (docxBuf) {
+      const docxSaved = await uploadHrmsFile(
+        uploadFolders,
+        `${row.kind}-${safeRef}.docx`,
+        docxBuf,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      );
+      docxUrl = docxSaved.sharePointUrl || docxSaved.url || `/uploads/onedrive/_HR/${docxSaved.path}`;
+      docxSharePointUrl = docxSaved.sharePointUrl || null;
+    }
   }
 
   return {

@@ -368,6 +368,30 @@ function tokenKeyFromDocxPlaceholder(raw: string): string {
   return raw.replace(/<[^>]+>/g, "").trim();
 }
 
+function replacePlaceholderRuns(xml: string, tokens: Record<string, string>): string {
+  let out = xml;
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    out = out.replace(/\{\{((?:[^{}]|<[^>]*>)*?)\}\}/g, (match, rawKey: string) => {
+      const key = tokenKeyFromDocxPlaceholder(rawKey);
+      if (Object.prototype.hasOwnProperty.call(tokens, key)) {
+        changed = true;
+        return escapeXml(tokens[key] ?? "");
+      }
+      return match;
+    });
+    if (!changed) break;
+  }
+  // Split runs: {{ … }} may span tags with newlines between braces
+  out = out.replace(/\{\{([\s\S]*?)\}\}/g, (match, rawKey: string) => {
+    const key = tokenKeyFromDocxPlaceholder(rawKey);
+    if (!key || key.includes("{{")) return match;
+    if (Object.prototype.hasOwnProperty.call(tokens, key)) return escapeXml(tokens[key] ?? "");
+    return match;
+  });
+  return out;
+}
+
 export async function fillHrmsDocx(template: Buffer, tokens: Record<string, string>): Promise<Buffer> {
   const zip = await JSZip.loadAsync(template);
   const xmlParts = Object.keys(zip.files).filter((k) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(k));
@@ -375,11 +399,7 @@ export async function fillHrmsDocx(template: Buffer, tokens: Record<string, stri
     const entry = zip.file(part);
     if (!entry) continue;
     let xml = await entry.async("string");
-    xml = xml.replace(/\{\{((?:[^{}]|<[^>]*>)*?)\}\}/g, (match, rawKey: string) => {
-      const key = tokenKeyFromDocxPlaceholder(rawKey);
-      if (Object.prototype.hasOwnProperty.call(tokens, key)) return escapeXml(tokens[key] ?? "");
-      return match;
-    });
+    xml = replacePlaceholderRuns(xml, tokens);
     zip.file(part, xml);
   }
   return Buffer.from(await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
