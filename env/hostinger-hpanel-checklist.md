@@ -34,7 +34,7 @@ Paste each **KEY** and **VALUE** in: **Websites → portal.spdc.in → Environme
 
 Each deploy (unless `SKIP_HRMS_LETTER_SAMPLES=1`) regenerates **11 HR letter UAT samples** for `riya.shah@sharnam.demo` — HRMS → Documents.
 
-## After deploy — smoke test
+## Bulk import (recommended)
 
 1. Edit `hostinger-env-import.env` locally (copy from `hostinger-env-import.example.env`)
 2. hPanel → **portal.spdc.in** → **Settings & Redeploy** → **Environment variables**
