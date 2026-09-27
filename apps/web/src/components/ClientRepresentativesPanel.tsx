@@ -76,7 +76,7 @@ export function CompanyRepresentativesPanel({
   const [submitBusy, setSubmitBusy] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ fullName: "", email: "", role: "" });
+  const [editForm, setEditForm] = useState({ fullName: "", email: "", role: "", password: "" });
   const [portalPassword, setPortalPassword] = useState(DEFAULT_PASSWORD);
 
   const load = useCallback(async () => {
@@ -147,13 +147,32 @@ export function CompanyRepresentativesPanel({
     setMsgTone("ok");
     setSubmitBusy(true);
     try {
-      await api(`/api/vendors/${vendorId}/contacts/${editingId}`, {
+      const saved = await api<{ id: string }>(`/api/vendors/${vendorId}/contacts/${editingId}`, {
         method: "PATCH",
         token,
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({ fullName: editForm.fullName, email: editForm.email, role: editForm.role }),
       });
+      const nextPassword = editForm.password.trim();
+      if (nextPassword.length >= 6) {
+        const r = await api<{
+          login?: { tempPassword?: string; email?: string };
+          loginPath?: string;
+        }>(`/api/vendors/${vendorId}/contacts/${saved.id}/activate-portal`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ password: nextPassword }),
+        });
+        const path = r.loginPath || meta.loginPath;
+        setMsg(
+          `Saved. Portal password reset for ${editForm.fullName || editForm.email} — ${path} · ${r.login?.email || editForm.email} · Password: ${r.login?.tempPassword || nextPassword}`,
+        );
+      } else if (nextPassword.length > 0) {
+        setMsgTone("err");
+        setMsg("Details saved. Password must be at least 6 characters to reset the portal login.");
+      } else {
+        setMsg("Representative updated.");
+      }
       setEditingId(null);
-      setMsg("Representative updated.");
       await load();
     } catch (err) {
       setMsgTone("err");
@@ -238,6 +257,14 @@ export function CompanyRepresentativesPanel({
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                 />
+                <Input
+                  className="sm:col-span-2"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="New portal password (blank = keep current)"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                />
                 <div className="sm:col-span-2 flex gap-2">
                   <Button type="submit" className="!text-xs" disabled={submitBusy}>
                     Save
@@ -256,7 +283,7 @@ export function CompanyRepresentativesPanel({
                   className="!text-xs"
                   onClick={() => {
                     setEditingId(r.id);
-                    setEditForm({ fullName: r.fullName || "", email: r.email, role: r.role || "" });
+                    setEditForm({ fullName: r.fullName || "", email: r.email, role: r.role || "", password: "" });
                   }}
                 >
                   Edit
