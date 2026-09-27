@@ -1,7 +1,10 @@
 import ExcelJS from "exceljs";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { prisma } from "../prisma.js";
 import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
-import { sharnamLogoDataUri } from "./brandedExport.js";
+import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
 
 type MatrixRow = {
   id: string;
@@ -27,6 +30,51 @@ function esc(s: unknown) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+
+async function imageDataUriFromUrl(raw: string | null | undefined): Promise<string> {
+  const url = String(raw || "").trim();
+  if (!url) return "";
+  if (url.startsWith("data:image/")) return url;
+
+  const localMarker = "/uploads/onedrive/";
+  const idx = url.indexOf(localMarker);
+  if (idx >= 0) {
+    const rel = decodeURIComponent(url.slice(idx + "/uploads/".length));
+    const file = path.join(UPLOAD_ROOT, rel);
+    if (fs.existsSync(file)) {
+      const ext = path.extname(file).toLowerCase() === ".jpg" || path.extname(file).toLowerCase() === ".jpeg" ? "jpeg" : "png";
+      return `data:image/${ext};base64,${fs.readFileSync(file).toString("base64")}`;
+    }
+  }
+
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return "";
+      const buf = Buffer.from(await res.arrayBuffer());
+      const type = (res.headers.get("content-type") || "image/png").split(";")[0];
+      if (!type.startsWith("image/")) return "";
+      return `data:${type};base64,${buf.toString("base64")}`;
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function dataUriToTempFile(dataUri: string, name: string): { file: string; ext: "png" | "jpeg" } | null {
+  const m = dataUri.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/i);
+  if (!m) return null;
+  const ext = m[1].toLowerCase() === "png" ? "png" : "jpeg";
+  const file = path.join(os.tmpdir(), `${name}-${Date.now()}.${ext === "png" ? "png" : "jpg"}`);
+  fs.writeFileSync(file, Buffer.from(m[2], "base64"));
+  return { file, ext };
 }
 
 export async function loadMatrixBundle(projectId: string, matrixKind: string) {
@@ -55,14 +103,32 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
   const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
   const wb = new ExcelJS.Workbook();
   const sheet = wb.addWorksheet(`${kind} Matrix`.slice(0, 31));
+  const spdcLogo = sharnamLogoPath();
+  const clientUri = await imageDataUriFromUrl(project.clientLogoUrl);
+  const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo") : null;
+  const temps = clientFile ? [clientFile.file] : [];
+
   sheet.mergeCells("A1:I1");
-  sheet.getCell("A1").value = `${kind} Communication Matrix · ${project.name}`;
-  sheet.getCell("A1").font = { bold: true, size: 14, color: { argb: NAVY } };
+  sheet.getRow(1).height = 48;
+  sheet.getCell("A1").value = `${kind} COMMUNICATION MATRIX`;
+  sheet.getCell("A1").font = { bold: true, size: 16, color: { argb: NAVY } };
+  sheet.getCell("A1").alignment = { vertical: "middle", horizontal: "center" };
   sheet.mergeCells("A2:I2");
-  sheet.getCell("A2").value = `${project.clientName || "—"} · PMC: ${project.pmcName || SPDC_PMC_NAME}`;
+  sheet.getCell("A2").value = `${project.name}  ·  Client: ${project.clientName || "—"}  ·  PMC: ${project.pmcName || SPDC_PMC_NAME}`;
   sheet.getCell("A2").font = { size: 10, color: { argb: "FF666666" } };
+  sheet.getCell("A2").alignment = { horizontal: "center" };
+
+  if (spdcLogo) {
+    const imgId = wb.addImage({ filename: spdcLogo, extension: "png" });
+    sheet.addImage(imgId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+  }
+  if (clientFile) {
+    const imgId = wb.addImage({ filename: clientFile.file, extension: clientFile.ext });
+    sheet.addImage(imgId, { tl: { col: 7.4, row: 0.12 }, ext: { width: 110, height: 40 }, editAs: "oneCell" });
+  }
 
   const header = ["Sr.No", "Name", "Designation", "Company", "SPOC", "Mobile", "E-mail", "Mail (TO/CC)", "Office Address"];
+  sheet.addRow([]);
   sheet.addRow(header);
   const hr = sheet.lastRow!;
   hr.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -99,14 +165,24 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
   });
   sheet.addRow([]);
   sheet.addRow([SPDC_OFFICE_FOOTER]);
-  const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
-  return Buffer.from(ab);
+  try {
+    const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+    return Buffer.from(ab);
+  } finally {
+    for (const f of temps) {
+      try {
+        fs.unlinkSync(f);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }
 
 export async function buildMatrixHtml(projectId: string, matrixKind: string): Promise<string> {
   const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
   const logo = sharnamLogoDataUri();
-  const clientLogo = project.clientLogoUrl ? esc(project.clientLogoUrl) : "";
+  const clientLogo = await imageDataUriFromUrl(project.clientLogoUrl);
   let sectionIdx = -1;
   let personInSection = 0;
   const bodyRows = rows
@@ -125,7 +201,7 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
         <td>${esc(r.spoc)}</td>
         <td class="mono">${esc(r.mobile)}</td>
         <td>${esc(r.email)}</td>
-        <td>${esc(r.mailRole)}</td>
+        <td class="to">${esc(r.mailRole)}</td>
         <td class="addr">${esc(r.officeAddress)}</td>
       </tr>`;
     })
@@ -137,32 +213,38 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
   <meta charset="utf-8" />
   <title>${esc(kind)} Communication Matrix · ${esc(project.name)}</title>
   <style>
-    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 24px; color: #1a1a1a; }
-    .head { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 16px; }
-    .head img { height: 52px; }
-    .title { font-size: 20px; font-weight: 700; color: #1e3a5f; }
-    .sub { font-size: 12px; color: #555; margin-top: 4px; }
+    @page { size: A3 landscape; margin: 12mm; }
+    body { font-family: "Segoe UI", Calibri, system-ui, sans-serif; margin: 16px; color: #1a1a1a; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 4px solid #1e3a5f; padding-bottom: 10px; margin-bottom: 12px; }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 180px; }
+    .brand img, .client img { height: 56px; max-width: 160px; object-fit: contain; }
+    .client { min-width: 180px; display: flex; justify-content: flex-end; }
+    .center { text-align: center; flex: 1; }
+    .title { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; color: #1e3a5f; text-transform: uppercase; }
+    .sub { font-size: 12px; color: #444; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th { background: #1e3a5f; color: #fff; text-align: left; padding: 8px 6px; }
-    td { border-bottom: 1px solid #e5e7eb; padding: 6px; vertical-align: top; }
-    tr.section td { background: #eef2ff; }
+    th { background: #1e3a5f; color: #fff; text-align: left; padding: 8px 6px; border: 1px solid #1e3a5f; }
+    td { border: 1px solid #d6dbe3; padding: 6px; vertical-align: top; }
+    tr.section td { background: #e8eef8; font-weight: 700; }
     .mono { font-family: ui-monospace, monospace; font-size: 10px; }
-    .addr { max-width: 180px; white-space: pre-line; }
-    footer { margin-top: 20px; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 8px; }
+    .addr { max-width: 220px; white-space: pre-line; }
+    .to { font-weight: 700; text-align: center; }
+    footer { margin-top: 16px; font-size: 10px; color: #555; border-top: 2px solid #c9a227; padding-top: 8px; }
   </style>
 </head>
 <body>
   <div class="head">
-    ${logo ? `<img src="${logo}" alt="Sharnam" />` : ""}
-    ${clientLogo ? `<img src="${clientLogo}" alt="Client" style="height:48px;margin-left:auto" />` : ""}
-    <div>
+    <div class="brand">${logo ? `<img src="${logo}" alt="SPDC" />` : `<strong>SPDC</strong>`}</div>
+    <div class="center">
       <div class="title">${esc(kind)} Communication Matrix</div>
-      <div class="sub">${esc(project.name)} · ${esc(project.clientName)} · ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
+      <div class="sub">${esc(project.code)} · ${esc(project.name)}</div>
+      <div class="sub">Client: ${esc(project.clientName || "—")} · PMC: ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
     </div>
+    <div class="client">${clientLogo ? `<img src="${clientLogo}" alt="Client" />` : `<span style="font-size:11px;color:#888">${esc(project.clientName || "Client logo")}</span>`}</div>
   </div>
   <table>
     <thead><tr>
-      <th>Sr.No</th><th>Name</th><th>Designation</th><th>Company</th><th>SPOC</th><th>Mobile</th><th>E-mail</th><th>TO/CC</th><th>Office Address</th>
+      <th>Sr.No</th><th>Name</th><th>Designation</th><th>Company</th><th>SPOC</th><th>Mobile</th><th>E-mail</th><th>General Mail (TO/CC)</th><th>Office Address</th>
     </tr></thead>
     <tbody>${bodyRows || `<tr><td colspan="9" style="text-align:center;padding:24px;color:#888">No rows</td></tr>`}</tbody>
   </table>

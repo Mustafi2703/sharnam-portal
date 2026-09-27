@@ -26,6 +26,7 @@ type Props = {
     clientContactName?: string | null;
     clientPhone?: string | null;
     clientAddress?: string | null;
+    clientLogoUrl?: string | null;
     designConsultant?: string | null;
     contractorName?: string | null;
     pmcName?: string | null;
@@ -54,6 +55,7 @@ export function ProjectSetupMatrixDesk({
   const [contacts, setContacts] = useState<MatrixContact[]>([]);
   const [counts, setCounts] = useState({ technical: 0, commercial: 0 });
   const [form, setForm] = useState<MatrixFormState>(EMPTY_MATRIX_FORM);
+  const [editForm, setEditForm] = useState<MatrixFormState>(EMPTY_MATRIX_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -77,49 +79,28 @@ export function ProjectSetupMatrixDesk({
     if (!canEdit) return;
     setBusy(true);
     try {
-      if (editingId) {
-        await api(`/api/comms/contacts/${editingId}`, {
-          method: "PATCH",
-          token,
-          body: JSON.stringify({
-            orgSection: form.orgSection,
-            orgName: form.orgName || form.company,
-            personName: form.personName,
-            designation: form.designation,
-            company: form.company,
-            spoc: form.spoc,
-            mobile: form.mobile,
-            email: form.email,
-            mailRole: form.mailRole,
-            officeAddress: form.officeAddress,
-          }),
-        });
-        setEditingId(null);
-        onMsg("Matrix row updated — same book as in-project Comms.");
-      } else {
-        const r = await api<{
-          contacts: { created: boolean; matrixKind: string }[];
-          directory?: { user?: { created: boolean; email: string; tempPassword?: string }; vendor?: { created: boolean; name: string } };
-        }>(`/api/comms/contacts/${projectId}/from-setup`, {
-          method: "POST",
-          token,
-          body: JSON.stringify({
-            ...form,
-            matrixKind,
-            bothMatrices: form.bothMatrices,
-            createDirectory: "none",
-            orgName: form.orgName || form.company,
-          }),
-        });
-        const extra = [
-          r.directory?.user?.created ? `portal ${r.directory.user.email}` : "",
-          r.directory?.vendor?.created ? `directory ${r.directory.vendor.name}` : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        onMsg(extra ? `Added to comms matrix and ${extra}.` : `Added to ${matrixKind === "COMMERCIAL" ? "commercial" : "technical"} matrix.`);
-        await onDirectoryChange?.();
-      }
+      const r = await api<{
+        contacts: { created: boolean; matrixKind: string }[];
+        directory?: { user?: { created: boolean; email: string; tempPassword?: string }; vendor?: { created: boolean; name: string } };
+      }>(`/api/comms/contacts/${projectId}/from-setup`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          ...form,
+          matrixKind,
+          bothMatrices: form.bothMatrices,
+          createDirectory: "none",
+          orgName: form.orgName || form.company,
+        }),
+      });
+      const extra = [
+        r.directory?.user?.created ? `portal ${r.directory.user.email}` : "",
+        r.directory?.vendor?.created ? `directory ${r.directory.vendor.name}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      onMsg(extra ? `Added to comms matrix and ${extra}.` : `Added to ${matrixKind === "COMMERCIAL" ? "commercial" : "technical"} matrix.`);
+      await onDirectoryChange?.();
       setForm({
         ...EMPTY_MATRIX_FORM,
         orgSection: form.orgSection,
@@ -138,7 +119,7 @@ export function ProjectSetupMatrixDesk({
 
   function startEdit(row: MatrixContact) {
     setEditingId(row.id);
-    setForm({
+    setEditForm({
       ...EMPTY_MATRIX_FORM,
       orgSection: row.orgSection || "Other",
       orgName: row.orgName || "",
@@ -155,6 +136,37 @@ export function ProjectSetupMatrixDesk({
       vendorPartyType: partyForSection(row.orgSection || "Other"),
       userRole: roleForSection(row.orgSection || "Other"),
     });
+  }
+
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setBusy(true);
+    try {
+      await api(`/api/comms/contacts/${editingId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          orgSection: editForm.orgSection,
+          orgName: editForm.orgName || editForm.company,
+          personName: editForm.personName,
+          designation: editForm.designation,
+          company: editForm.company,
+          spoc: editForm.spoc,
+          mobile: editForm.mobile,
+          email: editForm.email,
+          mailRole: editForm.mailRole,
+          officeAddress: editForm.officeAddress,
+        }),
+      });
+      setEditingId(null);
+      onMsg("Contact updated.");
+      await load();
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not update contact");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function deleteContact(rowId: string, name: string) {
@@ -248,8 +260,7 @@ export function ProjectSetupMatrixDesk({
           <div>
             <h4 className="font-semibold text-sm">Export communication matrix</h4>
             <p className="text-xs text-steel-muted mt-1 max-w-2xl leading-relaxed">
-              Download the BPCL-style sheets for sharing or printing. Exports use the contacts saved on this project — update the matrix on
-              the Edit tab first if anything changed.
+              Excel and print/PDF use the SPDC logo and the client logo uploaded on the project card. Layout matches the communication matrix (Sr.No, name, designation, company, SPOC, mobile, email, TO/CC, address).
             </p>
           </div>
           {(["TECHNICAL", "COMMERCIAL"] as const).map((kind) => (
@@ -283,24 +294,12 @@ export function ProjectSetupMatrixDesk({
 
       {canEdit && (
         <Card className="!p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="font-semibold text-sm">{editingId ? "Edit matrix row" : "Add person to matrix"}</h4>
-            {editingId && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(EMPTY_MATRIX_FORM);
-                }}
-              >
-                Cancel edit
-              </Button>
-            )}
-          </div>
+          <h4 className="font-semibold text-sm">Add person to matrix</h4>
+          <p className="text-[11px] text-steel-muted">
+            Use this form only to add someone extra. To change an existing row, click Edit on that contact.
+          </p>
           <form className="space-y-3" onSubmit={(e) => void submitRow(e)}>
             <MatrixPartyFields
-              key={editingId || "new"}
               form={form}
               onChange={setForm}
               users={users}
@@ -309,31 +308,77 @@ export function ProjectSetupMatrixDesk({
               project={project}
               projectId={projectId}
               token={token}
-              editing={Boolean(editingId)}
+              editing={false}
               onMsg={onMsg}
               onDirectoryChange={onDirectoryChange}
               allowCreateCompany={false}
             />
-            {!editingId && (
-              <label className="flex items-center gap-2 text-xs text-steel-muted">
-                <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
-                Add to both Technical and Commercial
-              </label>
-            )}
+            <label className="flex items-center gap-2 text-xs text-steel-muted">
+              <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
+              Add to both Technical and Commercial
+            </label>
             <Button type="submit" disabled={busy}>
-              {editingId ? "Save row" : "Add to communication matrix"}
+              Add to communication matrix
             </Button>
           </form>
         </Card>
       )}
 
-      <Card className="!bg-procore-navy !text-white !border-0">
-        <div className="font-display text-lg">{matrixKind} Communication Matrix</div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1 text-xs text-white/80 mt-2">
-          <div>{project?.name || "—"}</div>
-          <div>{project?.clientName || "—"}</div>
-          <div>{project?.designConsultant || "—"}</div>
-          <div>{project?.pmcName || "Sharnam Project Development Consultants & Co."}</div>
+      {editingId && canEdit ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/45" role="dialog" aria-modal="true">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto !p-4 shadow-xl">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="font-semibold text-sm">Edit contact</h3>
+                <p className="text-[11px] text-steel-muted">{editForm.personName || editForm.email || "Matrix row"}</p>
+              </div>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setEditingId(null)}>
+                Close
+              </Button>
+            </div>
+            <form className="space-y-3" onSubmit={(e) => void saveEdit(e)}>
+              <MatrixPartyFields
+                key={editingId}
+                form={editForm}
+                onChange={setEditForm}
+                users={users}
+                vendors={vendors}
+                assignedVendors={assignedVendors}
+                project={project}
+                projectId={projectId}
+                token={token}
+                editing
+                onMsg={onMsg}
+                onDirectoryChange={onDirectoryChange}
+                allowCreateCompany={false}
+              />
+              <div className="flex gap-2">
+                <Button type="submit" disabled={busy}>
+                  Save contact
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditingId(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      ) : null}
+
+      <Card className="!p-4 border border-line">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
+          <div className="text-center flex-1 min-w-[180px]">
+            <div className="font-display text-lg text-ink">{matrixKind} Communication Matrix</div>
+            <div className="text-xs text-steel-muted mt-1">
+              {project?.name || "—"} · {project?.clientName || "—"} · {project?.pmcName || "Sharnam Project Development Consultants & Co."}
+            </div>
+          </div>
+          {project?.clientLogoUrl ? (
+            <img src={project.clientLogoUrl} alt="Client" className="h-12 w-auto max-w-[140px] object-contain" />
+          ) : (
+            <span className="text-[11px] text-steel-muted w-[140px] text-right">Upload client logo on the project card</span>
+          )}
         </div>
       </Card>
 

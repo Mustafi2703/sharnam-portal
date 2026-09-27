@@ -40,6 +40,7 @@ type Props = {
     clientContactName?: string | null;
     clientPhone?: string | null;
     clientAddress?: string | null;
+    clientLogoUrl?: string | null;
     designConsultant?: string;
     contractorName?: string | null;
     pmcName?: string;
@@ -284,13 +285,20 @@ export function CommsMatrixPanel({
         </Button>
       </div>
 
-      <Card className="!bg-procore-navy !text-white !border-0">
-        <div className="font-display text-lg">{matrixKind} Communication Matrix</div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1 text-xs text-white/80 mt-2">
-          <div>{project?.name || "—"}</div>
-          <div>{project?.clientName || "—"}</div>
-          <div>{project?.designConsultant || "—"}</div>
-          <div>{project?.pmcName || "Sharnam Project Development Consultants & Co."}</div>
+      <Card className="!p-4 border border-line">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
+          <div className="text-center flex-1 min-w-[180px]">
+            <div className="font-display text-lg text-ink">{matrixKind} Communication Matrix</div>
+            <div className="text-xs text-steel-muted mt-1">
+              {project?.name || "—"} · {project?.clientName || "—"} · {project?.pmcName || "Sharnam Project Development Consultants & Co."}
+            </div>
+          </div>
+          {project?.clientLogoUrl ? (
+            <img src={project.clientLogoUrl} alt="Client" className="h-12 w-auto max-w-[140px] object-contain" />
+          ) : (
+            <span className="text-[11px] text-steel-muted w-[140px] text-right">Client logo on project card</span>
+          )}
         </div>
       </Card>
 
