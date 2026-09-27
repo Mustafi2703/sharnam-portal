@@ -118,6 +118,21 @@ export function ProjectTeamAllocatePanel({
     }
   }
 
+  async function removeMember(memberId: string, name: string) {
+    if (!token || !projectId) return;
+    if (!window.confirm(`Remove ${name} from the SPDC team on this project?`)) return;
+    setBusy(true);
+    try {
+      await api(`/api/projects/${projectId}/members/${memberId}`, { method: "DELETE", token });
+      onMsg(`${name} removed from project team.`);
+      onChanged?.();
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not remove team member");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateMemberRole(memberId: string, role: string) {
     if (!token || !projectId) return;
     setBusy(true);
@@ -156,14 +171,15 @@ export function ProjectTeamAllocatePanel({
             value={listQ}
             onChange={(e) => setListQ(e.target.value)}
           />
-          <div className="text-[11px] font-semibold text-steel-muted grid grid-cols-[1fr_auto_auto] gap-2 px-1">
+          <div className="text-[11px] font-semibold text-steel-muted grid grid-cols-[1fr_auto_auto_auto] gap-2 px-1">
             <span>Name</span>
             <span className="hidden sm:inline">Company role</span>
             <span>On project</span>
+            <span />
           </div>
           <ul className="text-sm divide-y divide-line max-h-48 overflow-y-auto">
             {assigned.map((m) => (
-              <li key={m.id} className="py-2 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
+              <li key={m.id} className="py-2 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
                 <span>
                   <span className="font-medium">{m.fullName}</span>
                   <span className="block text-xs font-mono text-steel-muted">{m.email}</span>
@@ -197,6 +213,17 @@ export function ProjectTeamAllocatePanel({
                 ) : (
                   <Badge tone="neutral">{projectMemberRoleLabel(m.role)}</Badge>
                 )}
+                {canEdit && projectId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="!text-xs text-danger"
+                    disabled={busy}
+                    onClick={() => void removeMember(m.id, m.fullName)}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
               </li>
             ))}
             {!assigned.length && <li className="py-2 text-xs text-steel-muted">No match.</li>}

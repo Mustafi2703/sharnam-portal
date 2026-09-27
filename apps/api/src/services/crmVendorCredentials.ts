@@ -279,6 +279,7 @@ export async function syncCompanyRepresentativePortal(opts: {
       department: role === "employee" ? vendor.trade || null : null,
     });
     if (!created) return { error: "Could not create portal login." };
+    await grantRepresentativeToLinkedProjects(vendor.id, created.userId);
     return { ...created, tempPassword: created.tempPassword || password, loginPath };
   }
 
@@ -301,6 +302,7 @@ export async function syncCompanyRepresentativePortal(opts: {
     },
   });
   await alignUserRole(updated.id, role);
+  await grantRepresentativeToLinkedProjects(vendor.id, updated.id);
   return {
     userId: updated.id,
     email: updated.email,
@@ -310,6 +312,64 @@ export async function syncCompanyRepresentativePortal(opts: {
     tempPassword: password,
     loginPath,
   };
+}
+
+export function projectMemberRoleForPartyType(partyType?: string | null): string {
+  if (partyType === "Client") return "client";
+  if (partyType === "Consultant" || partyType === "Designer" || partyType === "PMC") return "consultant";
+  return "vendor";
+}
+
+/** Ensure every portal login for this company is on the project member list (client / vendor / consultant reps). */
+export async function syncAllPortalUsersForCompanyOnProject(projectId: string, vendorId: string): Promise<number> {
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: { id: true, partyType: true, email: true },
+  });
+  if (!vendor) return 0;
+  const memberRole = projectMemberRoleForPartyType(vendor.partyType);
+  const expectedRole = portalRoleForPartyType(vendor.partyType);
+  const userIds = new Set<string>();
+
+  const linked = await prisma.user.findMany({
+    where: { vendorId: vendor.id, isActive: true, role: expectedRole },
+    select: { id: true },
+  });
+  linked.forEach((u) => userIds.add(u.id));
+
+  const contacts = await prisma.vendorContact.findMany({ where: { vendorId: vendor.id }, select: { email: true } });
+  if (contacts.length) {
+    const emails = contacts.map((c) => c.email.toLowerCase());
+    const fromContacts = await prisma.user.findMany({
+      where: { email: { in: emails }, isActive: true, role: expectedRole },
+      select: { id: true },
+    });
+    fromContacts.forEach((u) => userIds.add(u.id));
+  }
+
+  const primaryEmail = (vendor.email || "").trim().toLowerCase();
+  if (primaryEmail) {
+    const primary = await prisma.user.findFirst({
+      where: { email: primaryEmail, isActive: true, role: expectedRole },
+      select: { id: true },
+    });
+    if (primary) userIds.add(primary.id);
+  }
+
+  for (const userId of userIds) {
+    await grantVendorProjectAccess({ projectId, vendorId: vendor.id, userId, memberRole });
+  }
+  return userIds.size;
+}
+
+async function grantRepresentativeToLinkedProjects(vendorId: string, userId: string) {
+  const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { partyType: true } });
+  if (!vendor) return;
+  const memberRole = projectMemberRoleForPartyType(vendor.partyType);
+  const links = await prisma.projectVendor.findMany({ where: { vendorId }, select: { projectId: true } });
+  for (const { projectId } of links) {
+    await grantVendorProjectAccess({ projectId, vendorId, userId, memberRole });
+  }
 }
 
 export async function ensureVendorPortalLogin(vendor: {

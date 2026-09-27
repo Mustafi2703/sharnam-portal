@@ -8,6 +8,7 @@ import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk"
 import { SetupPartyMultiPick } from "../../components/SetupPartyMultiPick";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
+import { ProjectClientRepresentativesPanel, type ProjectClientRep } from "../../components/ProjectClientRepresentativesPanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
@@ -65,6 +66,7 @@ type SetupSummary = {
     endDate?: string | null;
   };
   lead?: { id: string; title: string; stage: string } | null;
+  clientRepresentatives?: ProjectClientRep[];
   members: {
     id: string;
     userId: string;
@@ -723,6 +725,16 @@ export default function CrmProjectSetupPage() {
                           token={token}
                           canEdit={canManage}
                           onProjectUpdated={() => void loadProject()}
+                        />
+                      </div>
+                    ) : null}
+                    {projectId ? (
+                      <div className="sm:col-span-2 mt-2">
+                        <ProjectClientRepresentativesPanel
+                          reps={summary?.clientRepresentatives || []}
+                          canEdit={canManage}
+                          compact
+                          directoryClientId={clientId}
                         />
                       </div>
                     ) : null}

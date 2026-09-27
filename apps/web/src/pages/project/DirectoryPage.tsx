@@ -99,14 +99,41 @@ export default function DirectoryPage() {
 
   const staffForTab = useMemo(() => {
     const members = overview?.members || [];
+    if (activeTool.party === "Client") {
+      const fromMembers = members.filter((m: any) => (m.user?.role || m.role) === "client");
+      const reps = (overview?.clientRepresentatives || []) as Array<{
+        id: string;
+        fullName: string | null;
+        email: string;
+        siteRole: string | null;
+        portalActive: boolean;
+        vendorName: string;
+      }>;
+      const repRows = reps.map((r) => ({
+        id: `rep-${r.id}`,
+        fullName: r.fullName || r.email,
+        email: r.email,
+        role: "client",
+        siteRole: r.siteRole,
+        vendorName: r.vendorName,
+        portalActive: r.portalActive,
+        isClientRep: true,
+      }));
+      const memberRows = fromMembers.map((m: any) => ({
+        id: m.id,
+        user: m.user,
+        fullName: m.user?.fullName || m.fullName,
+        email: m.user?.email || m.email,
+        role: m.user?.role || m.role,
+        isClientRep: false,
+      }));
+      return [...repRows, ...memberRows];
+    }
     if (activeTool.party === "PMC") {
       return members.filter((m: any) => ["admin", "office", "employee"].includes(m.user?.role || m.role));
     }
     if (activeTool.party === "Site") {
       return members.filter((m: any) => (m.user?.role || m.role) === "site_employee");
-    }
-    if (activeTool.party === "Client") {
-      return members.filter((m: any) => (m.user?.role || m.role) === "client");
     }
     return members.filter((m: any) => (m.user?.role || m.role) === "vendor");
   }, [overview, activeTool]);
@@ -218,7 +245,8 @@ export default function DirectoryPage() {
                 : t.party === "Site"
                   ? overview?.members?.filter((m: any) => m.user?.role === "site_employee").length || 0
                   : t.party === "Client"
-                    ? overview?.stats?.clients || 0
+                    ? (overview?.clientRepresentatives?.length || 0) +
+                      (overview?.members?.filter((m: any) => m.user?.role === "client").length || 0)
                     : overview?.stats?.contractors || 0}
             </div>
           </Card>
@@ -242,12 +270,25 @@ export default function DirectoryPage() {
             <li key={m.id} className="py-2 flex justify-between gap-2">
               <div>
                 <span>{m.user?.fullName || m.fullName}</span>
-                {m.user?.email && <div className="text-[10px] font-mono text-steel-muted">{m.user.email}</div>}
+                {m.isClientRep ? (
+                  <div className="text-[10px] text-steel-muted">
+                    Client representative
+                    {m.siteRole ? ` · ${m.siteRole}` : ""}
+                    {m.vendorName ? ` · ${m.vendorName}` : ""}
+                  </div>
+                ) : null}
+                {(m.user?.email || m.email) && (
+                  <div className="text-[10px] font-mono text-steel-muted">{m.user?.email || m.email}</div>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone="neutral">
-                  {accountKindLabel(portalAccountKind(m.user?.role || m.role, m.user?.profile))}
-                </Badge>
+                {m.isClientRep ? (
+                  <Badge tone={m.portalActive ? "ok" : "warn"}>{m.portalActive ? "Portal active" : "Activate in CRM"}</Badge>
+                ) : (
+                  <Badge tone="neutral">
+                    {accountKindLabel(portalAccountKind(m.user?.role || m.role, m.user?.profile))}
+                  </Badge>
+                )}
                 {canEdit && m.user?.id ? (
                   <UserManageActions
                     user={{

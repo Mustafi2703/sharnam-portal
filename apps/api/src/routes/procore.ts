@@ -287,13 +287,16 @@ vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, 
         where: {
           email: { in: emails },
           role: portalRole,
-          vendorId: loaded.vendor.id,
           isActive: { not: false },
         },
-        select: { email: true },
+        select: { email: true, vendorId: true },
       })
     : [];
-  const active = new Set(users.map((u) => u.email.toLowerCase()));
+  const active = new Set(
+    users
+      .filter((u) => !u.vendorId || u.vendorId === loaded.vendor.id)
+      .map((u) => u.email.toLowerCase()),
+  );
   res.json(rows.map((r) => ({ ...r, portalActive: active.has(r.email.toLowerCase()) })));
 });
 
@@ -1300,9 +1303,12 @@ directoryRouter.get("/project/:projectId/overview", async (req: AuthedRequest, r
     const mine = await resolveVendorForUser(req.user!);
     visibleVendors = mine ? vendors.filter((v) => v.vendorId === mine.id) : [];
   }
+  const { listClientRepresentativesForProject } = await import("../services/projectDirectoryPeople.js");
+  const clientRepresentatives = await listClientRepresentativesForProject(projectId);
   res.json({
     members,
     vendors: visibleVendors,
+    clientRepresentatives,
     parties: {
       contractors: visibleVendors.filter((v) => v.vendor.partyType === "Contractor"),
       vendorsOnly: visibleVendors.filter((v) => v.vendor.partyType === "Vendor" || !v.vendor.partyType),

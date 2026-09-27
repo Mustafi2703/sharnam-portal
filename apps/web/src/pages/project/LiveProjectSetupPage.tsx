@@ -8,12 +8,23 @@ import { type SetupVendor } from "../../components/SetupPartyMultiPick";
 import { ProjectVendorsSetupDesk } from "../../components/ProjectVendorsSetupDesk";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
+import { ProjectClientRepresentativesPanel } from "../../components/ProjectClientRepresentativesPanel";
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; clientName?: string | null; clientEmail?: string | null };
+  clientRepresentatives?: Array<{
+    id: string;
+    vendorId: string;
+    vendorName: string;
+    fullName: string | null;
+    email: string;
+    siteRole: string | null;
+    portalActive: boolean;
+    loginPath: string;
+  }>;
   members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string }[];
   vendors: {
     id: string;
@@ -314,6 +325,14 @@ export default function LiveProjectSetupPage() {
           onChanged={() => void load()}
         />
       </div>
+
+      <ProjectClientRepresentativesPanel
+        reps={summary?.clientRepresentatives || []}
+        canEdit={canManage}
+        directoryClientId={
+          summary?.vendors?.find((v) => v.partyType === "Client")?.vendorId || null
+        }
+      />
 
       <ProjectTeamAllocatePanel
         projectId={projectId}

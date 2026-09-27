@@ -703,10 +703,13 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
   const profileByUserId = new Map(memberProfiles.map((p) => [p.userId, p]));
 
   const { parseDisciplinesJson, defaultDisciplines } = await import("../services/comparativeStatement.js");
+  const { listClientRepresentativesForProject } = await import("../services/projectDirectoryPeople.js");
+  const clientRepresentatives = await listClientRepresentativesForProject(projectId);
 
   res.json({
     project,
     lead,
+    clientRepresentatives,
     members: members.map((m) => {
       const profile = profileByUserId.get(m.userId);
       return {
@@ -821,6 +824,12 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
     entityId: projectId,
     meta: { vendorIds },
   });
+
+  const { syncAllPortalUsersForCompanyOnProject } = await import("../services/crmVendorCredentials.js");
+  for (const vendorId of vendorIds) {
+    await syncAllPortalUsersForCompanyOnProject(projectId, vendorId).catch(() => 0);
+  }
+
   res.json({ ok: true, assigned: vendorIds.length });
 });
 
@@ -1323,6 +1332,33 @@ projectsRouter.patch("/:id/members/:memberId", requireRoles("admin", "office"), 
     data: { role },
   });
   res.json(updated);
+});
+
+projectsRouter.delete("/:id/members/:memberId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const member = await prisma.projectMember.findFirst({
+    where: { id: req.params.memberId, projectId: req.params.id },
+    include: { user: { select: { id: true, role: true, vendorId: true } } },
+  });
+  if (!member) return res.status(404).json({ error: "Not on this project" });
+  const u = member.user;
+  const spdcStaff =
+    ["admin", "office", "hr", "site_employee"].includes(u.role) || (u.role === "employee" && !u.vendorId);
+  if (!spdcStaff) {
+    return res.status(400).json({
+      error: "Remove client, vendor, or consultant logins from CRM directory or Access · Users — this control is for SPDC team only.",
+    });
+  }
+  if (u.role === "admin" && req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Only admin can remove an admin from a project" });
+  }
+  await prisma.projectMember.delete({ where: { id: member.id } });
+  await audit("project.member.removed", {
+    userId: req.user?.id,
+    entity: "ProjectMember",
+    entityId: member.id,
+    meta: { projectId: req.params.id, userId: u.id },
+  });
+  res.json({ ok: true });
 });
 
 export const dmsRouter = Router();

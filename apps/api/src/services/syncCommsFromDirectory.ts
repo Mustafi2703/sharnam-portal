@@ -143,6 +143,27 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     });
   }
 
+  const clientVendorIds = projectVendors.filter((pv) => pv.vendor.partyType === "Client").map((pv) => pv.vendorId);
+  if (clientVendorIds.length) {
+    const reps = await prisma.vendorContact.findMany({
+      where: { vendorId: { in: clientVendorIds } },
+      include: { vendor: { select: { name: true, address: true, city: true, state: true } } },
+    });
+    for (const rep of reps) {
+      people.push({
+        orgSection: "Client",
+        orgName: rep.vendor.name,
+        personName: rep.fullName || rep.email,
+        designation: rep.role?.trim() || "Client representative",
+        company: rep.vendor.name,
+        mobile: "",
+        email: rep.email,
+        mailRole: "TO",
+        officeAddress: [rep.vendor.address, rep.vendor.city, rep.vendor.state].filter(Boolean).join(", "),
+      });
+    }
+  }
+
   const hasName = (section: OrgSection, name?: string | null) => {
     const n = String(name || "").trim().toLowerCase();
     if (!n) return true;
