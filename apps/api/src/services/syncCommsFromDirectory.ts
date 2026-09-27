@@ -69,6 +69,15 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     }),
   ]);
 
+  const memberUserIds = members.map((m) => m.userId);
+  const profiles = memberUserIds.length
+    ? await prisma.employeeProfile.findMany({
+        where: { userId: { in: memberUserIds } },
+        select: { userId: true, designation: true },
+      })
+    : [];
+  const companyRoleByUser = new Map(profiles.map((p) => [p.userId, (p.designation || "").trim()]));
+
   type Person = {
     orgSection: OrgSection;
     orgName: string;
@@ -114,11 +123,17 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
   for (const m of members) {
     const orgSection = memberToSection(m.role, m.user.role);
     const orgName = orgSection === "PMC" ? pmcOrgName(project) : orgSection === "Client" ? project.clientName || "Client" : m.user.fullName;
+    const companyRole = companyRoleByUser.get(m.userId) || "";
     people.push({
       orgSection,
       orgName,
       personName: m.user.fullName,
-      designation: m.role.replace(/_/g, " "),
+      designation:
+        orgSection === "PMC"
+          ? companyRole
+          : orgSection === "Client"
+            ? "Client representative"
+            : m.role.replace(/_/g, " "),
       company: orgName,
       mobile: m.user.phone || "",
       email: m.user.email,
@@ -282,6 +297,17 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     for (const person of uniquePeople) {
       const key = contactKey(person.email, person.personName, person.orgSection);
       if (existingKeys.has(key)) {
+        if (person.orgSection === "PMC" && person.designation) {
+          const row = existing.find(
+            (r) => !r.isSectionHeader && contactKey(r.email, r.personName, r.orgSection) === key,
+          );
+          if (row && (row.designation || "").trim() !== person.designation) {
+            await prisma.communicationContact.update({
+              where: { id: row.id },
+              data: { designation: person.designation },
+            });
+          }
+        }
         result.skipped += 1;
         continue;
       }

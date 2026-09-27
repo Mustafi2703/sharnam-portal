@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SPDC_COMPANY_ROLES } from "@sharnam/shared";
 import { api } from "../api";
 import { portalAccountKind } from "../lib/portalAccounts";
 import { vendorDesk } from "../lib/vendorTypes";
@@ -35,7 +36,8 @@ export type MatrixUser = {
   email: string;
   role: string;
   phone?: string | null;
-  profile?: { department?: string | null } | null;
+  designation?: string | null;
+  profile?: { department?: string | null; designation?: string | null } | null;
 };
 
 export type MatrixVendor = {
@@ -225,7 +227,7 @@ function fillFromUser(form: MatrixFormState, u: MatrixUser): MatrixFormState {
     personName: u.fullName,
     email: u.email,
     mobile: u.phone || form.mobile,
-    designation: form.designation || u.role.replace(/_/g, " "),
+    designation: u.designation || u.profile?.designation || "",
     spoc: form.spoc || u.fullName,
     userRole: u.role === "client" || u.role === "vendor" || u.role === "office" || u.role === "employee" ? u.role : "site_employee",
   };
@@ -268,8 +270,8 @@ export function MatrixPartyFields({
     const rows = sectionUsers.map((u) => ({
       value: `user:${u.id}`,
       label: u.fullName,
-      sublabel: [u.email, u.phone].filter(Boolean).join(" · "),
-      keywords: `${u.fullName} ${u.email} ${u.phone || ""} ${u.role}`,
+      sublabel: [u.designation || u.profile?.designation, u.email].filter(Boolean).join(" · "),
+      keywords: `${u.fullName} ${u.email} ${u.phone || ""} ${u.designation || u.profile?.designation || ""}`,
     }));
     const picked = sectionVendors.find((v) => v.id === pickVendorId) || sectionVendors.find((v) => v.name === form.company);
     if (picked?.primaryContactName) {
@@ -460,6 +462,18 @@ export function MatrixPartyFields({
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Designation</span>
           {form.orgSection === "Consultant" ? (
             <ConsultantTypeSelect value={form.designation} onChange={(designation) => onChange({ ...form, designation })} types={consultantTypes} />
+          ) : form.orgSection === "PMC" ? (
+            <Select value={form.designation} onChange={(e) => onChange({ ...form, designation: e.target.value })}>
+              <option value="">Company role…</option>
+              {(form.designation && !(SPDC_COMPANY_ROLES as readonly string[]).includes(form.designation)
+                ? [form.designation, ...SPDC_COMPANY_ROLES]
+                : [...SPDC_COMPANY_ROLES]
+              ).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
           ) : (
             <Input placeholder="Designation" value={form.designation} onChange={(e) => onChange({ ...form, designation: e.target.value })} />
           )}
