@@ -66,6 +66,7 @@ export default function DrawingsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<DrawingRevisionPreview | null>(null);
+  const [viewerRevId, setViewerRevId] = useState<string | null>(null);
   const [showRegister, setShowRegister] = useState(false);
   const [precheckOpen, setPrecheckOpen] = useState(false);
   const [precheckMode, setPrecheckMode] = useState<"register" | "revision">("register");
@@ -318,7 +319,18 @@ export default function DrawingsPage() {
   function openLatestViewer(d: any) {
     const latest = gfcCurrentRevision(d);
     if (!latest || !revisionHasFiles(latest)) return;
+    setViewerRevId(latest.id);
     setViewer(previewFromRev(d, latest));
+  }
+
+  async function openRevisionSharePoint(revId: string) {
+    try {
+      const r = await api<{ sharePointUrl?: string | null }>(`/api/drawings/revision/${revId}/sharepoint`, { token });
+      if (r.sharePointUrl) window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+      else setMsg("PDF stays in this viewer. The SharePoint link appears once the file is in the project library.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open SharePoint");
+    }
   }
 
   async function patchRevisionPlanned(revId: string, plannedDate: string) {
@@ -973,9 +985,22 @@ export default function DrawingsPage() {
                                       type="button"
                                       variant="ghost"
                                       className="!text-xs !px-2 !py-1"
-                                      onClick={() => setViewer(previewFromRev(d, r))}
+                                      onClick={() => {
+                                        setViewerRevId(r.id);
+                                        setViewer(previewFromRev(d, r));
+                                      }}
                                     >
-                                      View
+                                      View PDF
+                                    </Button>
+                                  )}
+                                  {revisionHasFiles(r) && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="!text-xs !px-2 !py-1"
+                                      onClick={() => void openRevisionSharePoint(r.id)}
+                                    >
+                                      SharePoint
                                     </Button>
                                   )}
                                   {canUpload && (
@@ -1166,13 +1191,46 @@ export default function DrawingsPage() {
                   ]
                 : [
                     {
-                      kind: "text" as const,
+                      kind: "select" as const,
                       name: "revisionNumber",
-                      label: "Revision",
-                      required: true,
-                      placeholder: "R1",
-                      value: revForm.revisionNumber,
-                      onChange: (v: string) => setRevForm({ ...revForm, revisionNumber: v }),
+                      label: "Revision or new revision",
+                      value: (() => {
+                        const next = gfcNextRevisionNumber(uploadTarget?.revisions || []);
+                        const existing = (uploadTarget?.revisions || []).some(
+                          (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber),
+                        );
+                        return existing ? `${revForm.revisionNumber} (this revision)` : `${next} (new column)`;
+                      })(),
+                      options: [
+                        ...(uploadTarget?.revisions || [])
+                          .map((r: any) => String(r.revisionNumber || "").trim())
+                          .filter(Boolean)
+                          .map((n: string) => `${n} (this revision)`),
+                        `${gfcNextRevisionNumber(uploadTarget?.revisions || [])} (new column)`,
+                      ],
+                      onChange: (v: string) => {
+                        const number = v.replace(/\s*\(.*\)$/, "").trim();
+                        const existing = (uploadTarget?.revisions || []).find(
+                          (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(number),
+                        );
+                        if (existing && !v.includes("new column")) {
+                          setRevUploadMode("update");
+                          setReplaceRevisionId(existing.id);
+                          setRevForm({
+                            ...revForm,
+                            revisionNumber: existing.revisionNumber,
+                            revisionLabel: existing.revisionLabel || existing.revisionNumber,
+                          });
+                        } else {
+                          setRevUploadMode("new");
+                          setReplaceRevisionId(null);
+                          setRevForm({
+                            ...revForm,
+                            revisionNumber: number,
+                            revisionLabel: `${number} — ${new Date().toLocaleDateString()}`,
+                          });
+                        }
+                      },
                     },
                     {
                       kind: "text" as const,
@@ -1223,7 +1281,17 @@ export default function DrawingsPage() {
         />
       )}
 
-      {viewer && <DrawingFileViewer revision={viewer} variant="modal" onClose={() => setViewer(null)} />}
+      {viewer && (
+        <DrawingFileViewer
+          revision={viewer}
+          variant="modal"
+          onClose={() => {
+            setViewer(null);
+            setViewerRevId(null);
+          }}
+          onOpenSharePoint={viewerRevId ? () => void openRevisionSharePoint(viewerRevId) : undefined}
+        />
+      )}
     </div>
   );
 }

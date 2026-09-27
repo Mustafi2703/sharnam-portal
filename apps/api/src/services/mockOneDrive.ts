@@ -59,6 +59,9 @@ export class MockOneDriveService {
       ensureDir(path.join(root, rel));
     }
 
+    const existingFolderRows = await prisma.documentFolder.count({ where: { projectId } });
+    const sharePointAlreadyProvisioned = existingFolderRows >= folders.length;
+
     const syncedAt = new Date();
     await prisma.$transaction(
       folders.map((rel) => {
@@ -80,8 +83,6 @@ export class MockOneDriveService {
     );
 
     let sharePoint: { rootFolder: string; folders: string[] } | null = null;
-    const existingFolderRows = await prisma.documentFolder.count({ where: { projectId } });
-    const sharePointAlreadyProvisioned = existingFolderRows >= folders.length;
     if (liveSharePoint() && !sharePointAlreadyProvisioned) {
       try {
         const sp = await withTimeout(ensureProjectSharePointTree(project.code), 25_000, "SharePoint project tree");
@@ -189,7 +190,9 @@ export class MockOneDriveService {
 
     if (liveSharePoint()) {
       try {
-        const sp = await uploadToProjectLibrary(projectCode, relFolder, fileName, buffer, contentType);
+        const sp = await uploadToProjectLibrary(projectCode, relFolder, safe, buffer, contentType, {
+          replace: opts?.replace,
+        });
         return {
           path: sp.path || rel,
           url: local.url,

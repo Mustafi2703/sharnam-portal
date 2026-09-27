@@ -503,6 +503,20 @@ export async function ensureDriveFolder(driveId: string, folderPath: string): Pr
   return last;
 }
 
+/** Web URL for an existing sandbox file. Returns null when SharePoint is off or the file is missing. */
+export async function driveItemWebUrl(itemPath: string): Promise<string | null> {
+  const cfg = graphConfig();
+  if (!cfg.configured || cfg.mock) return null;
+  try {
+    const drive = await resolveDefaultDrive();
+    assertPortalSafePath(itemPath);
+    const existing = await graphFetch<{ webUrl?: string }>(`/drives/${drive.driveId}/root:/${encodeDrivePath(itemPath)}`);
+    return existing.webUrl || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureProjectSharePointTree(projectCode: string) {
   const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
@@ -532,7 +546,8 @@ export async function uploadToProjectLibrary(
   relFolder: string,
   fileName: string,
   buffer: Buffer,
-  contentType = "application/octet-stream"
+  contentType = "application/octet-stream",
+  opts?: { replace?: boolean }
 ) {
   const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
@@ -547,11 +562,11 @@ export async function uploadToProjectLibrary(
   let target = `${folder}/${safe}`;
   assertPortalSafePath(target);
 
-  // If file already exists, do NOT overwrite — pick a new name
+  // Same name already filed: replace in place when asked, otherwise keep the old file and write a sibling.
   const existing = await graphFetch<{ id: string }>(`/drives/${drive.driveId}/root:/${encodeDrivePath(target)}`).catch(
     () => null
   );
-  if (existing) {
+  if (existing && !opts?.replace) {
     const dot = safe.lastIndexOf(".");
     const base = dot > 0 ? safe.slice(0, dot) : safe;
     const ext = dot > 0 ? safe.slice(dot) : "";

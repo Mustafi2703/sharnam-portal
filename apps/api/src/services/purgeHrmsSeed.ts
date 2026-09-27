@@ -31,10 +31,10 @@ export async function purgeHrmsSeedData(tx: Db, actorUserId?: string): Promise<P
     projectMembers: 0,
   };
 
-  const leave = await tx.leaveRequest.deleteMany({
-    where: { OR: [{ reason: { contains: "hrms-demo-seed" } }, { reason: { contains: "HRMS flow demo" } }] },
-  });
+  const leave = await tx.leaveRequest.deleteMany({});
   result.leaveRequests = leave.count;
+  await tx.attendance.deleteMany({});
+  await tx.expenseVoucher.deleteMany({});
 
   const docs = await tx.hrmsDocument.deleteMany({});
   result.hrmsDocuments = docs.count;

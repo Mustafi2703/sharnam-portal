@@ -336,7 +336,8 @@ async function storeDrawingFiles(opts: {
       rel,
       opts.pdf.originalname,
       opts.pdf.buffer,
-      contentTypeForFile(opts.pdf)
+      contentTypeForFile(opts.pdf),
+      { replace: true }
     );
     pdfFileUrl = storageUrl(saved);
     pdfFileName = opts.pdf.originalname;
@@ -349,7 +350,8 @@ async function storeDrawingFiles(opts: {
       rel,
       opts.dwg.originalname,
       opts.dwg.buffer,
-      contentTypeForFile(opts.dwg)
+      contentTypeForFile(opts.dwg),
+      { replace: true }
     );
     dwgFileUrl = storageUrl(saved);
     dwgFileName = opts.dwg.originalname;
@@ -1954,6 +1956,22 @@ drawingsRouter.patch(
     res.json(row);
   }
 );
+
+drawingsRouter.get("/revision/:revId/sharepoint", requireRoles("admin", "office", "employee", "site_employee", "client"), async (req, res) => {
+  const rev = await prisma.drawingRevision.findUnique({
+    where: { id: req.params.revId },
+    include: { drawing: { select: { project: { select: { code: true } } } } },
+  });
+  if (!rev?.drawing.project) return res.status(404).json({ error: "Not found" });
+  const code = rev.drawing.project.code;
+  const portalUrl = rev.pdfFileUrl || rev.fileUrl || "";
+  const prefix = `/uploads/onedrive/${code}/`;
+  const rel = portalUrl.startsWith(prefix) ? portalUrl.slice(prefix.length) : "";
+  if (!rel) return res.json({ sharePointUrl: null, portalUrl: portalUrl || null });
+  const { driveItemWebUrl, SHAREPOINT_SANDBOX_ROOT } = await import("../services/graph.js");
+  const sharePointUrl = await driveItemWebUrl(`${SHAREPOINT_SANDBOX_ROOT}/${code}/${rel}`);
+  res.json({ sharePointUrl, portalUrl: portalUrl || null });
+});
 
 drawingsRouter.patch(
   "/revision/:revId/dates",

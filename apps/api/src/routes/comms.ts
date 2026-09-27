@@ -66,6 +66,32 @@ commsRouter.get("/contacts/:projectId/export.xlsx", requireRoles("admin", "offic
   }
 });
 
+commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "office", "employee"), async (req, res) => {
+  const kind = String(req.body?.kind || req.query.kind || "TECHNICAL").toUpperCase();
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true, code: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { buildMatrixXlsx } = await import("../services/matrixExport.js");
+  const { mockOneDrive } = await import("../services/mockOneDrive.js");
+  try {
+    const buf = await buildMatrixXlsx(project.id, kind);
+    const saved = await mockOneDrive.upload(
+      project.code,
+      "01_CONTEXT_AND_GOVERNANCE/01.02_Stakeholders_and_Communication",
+      `Communication-Matrix-${kind}.xlsx`,
+      buf,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      { replace: true },
+    );
+    res.json({
+      sharePointUrl: saved.sharePointUrl || null,
+      url: saved.url,
+      fileName: `Communication-Matrix-${kind}.xlsx`,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not file the matrix to SharePoint" });
+  }
+});
+
 commsRouter.get("/contacts/:projectId/export.html", requireRoles("admin", "office", "employee"), async (req, res) => {
   const kind = String(req.query.kind || "TECHNICAL").toUpperCase();
   const { buildMatrixHtml } = await import("../services/matrixExport.js");

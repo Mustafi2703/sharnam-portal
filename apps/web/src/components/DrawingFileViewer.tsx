@@ -5,21 +5,32 @@ import type { DrawingPreview, DrawingRevisionPreview } from "../lib/drawingPrevi
 import { latestMarkupByPage } from "../lib/drawingPreview";
 import { canDownloadPortalFiles, canBrowseSharePoint, isSpdcEmployee, portalFileSrc } from "../lib/driveAccess";
 
-type Props =
+type Props = (
   | { preview: DrawingPreview; variant?: "inline" | "modal"; onClose?: () => void; className?: string }
   | {
       revision: DrawingRevisionPreview;
       variant?: "inline" | "modal";
       onClose?: () => void;
       className?: string;
-    };
+    }
+) & { onOpenSharePoint?: () => void };
 
 function fmtWhen(d?: string) {
   if (!d) return "";
   return new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function RevisionViewer({ revision, onClose, className = "" }: { revision: DrawingRevisionPreview; onClose?: () => void; className?: string }) {
+function RevisionViewer({
+  revision,
+  onClose,
+  onOpenSharePoint,
+  className = "",
+}: {
+  revision: DrawingRevisionPreview;
+  onClose?: () => void;
+  onOpenSharePoint?: () => void;
+  className?: string;
+}) {
   const { user } = useAuth();
   const allowToolbar = canDownloadPortalFiles(user?.role);
   const showDrive = canBrowseSharePoint(user?.role);
@@ -51,11 +62,18 @@ function RevisionViewer({ revision, onClose, className = "" }: { revision: Drawi
               .join(" · ")}
           </div>
         </div>
-        {onClose && (
-          <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={onClose}>
-            Close
-          </Button>
-        )}
+        <div className="flex gap-2 shrink-0">
+          {onOpenSharePoint && (
+            <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={onOpenSharePoint}>
+              Open in SharePoint
+            </Button>
+          )}
+          {onClose && (
+            <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={onClose}>
+              Close
+            </Button>
+          )}
+        </div>
       </div>
 
       {tabs.length > 1 && (
@@ -247,7 +265,12 @@ function SimpleViewer({ preview, onClose, className = "" }: { preview: DrawingPr
 export function DrawingFileViewer(props: Props) {
   const variant = props.variant ?? "inline";
   const body = "revision" in props ? (
-    <RevisionViewer revision={props.revision} onClose={props.onClose} className={props.className} />
+    <RevisionViewer
+      revision={props.revision}
+      onClose={props.onClose}
+      onOpenSharePoint={props.onOpenSharePoint}
+      className={props.className}
+    />
   ) : (
     <SimpleViewer preview={props.preview} onClose={props.onClose} className={props.className} />
   );

@@ -62,10 +62,44 @@ export function sumBoqSheetTotal(headers: string[], rows: SheetCell[][]): number
   return 0;
 }
 
+export type R2SectionRow = { letter: string; title: string; totals: Record<string, number> };
+
+/** Read SECTION headers and TOTAL OF SECTION rows from an R2 BOQ sheet. */
+export function extractBoqSectionTotals(headers: string[], rows: SheetCell[][]): { letter: string; title: string; total: number }[] {
+  const lower = headers.map((h) => String(h).toLowerCase());
+  const descCol = lower.findIndex((h) => h.includes("desc"));
+  const amountCol = lower.findIndex((h) => h.includes("amount") && !h.includes("unit"));
+  const descIdx = descCol >= 0 ? descCol : 1;
+  const out: { letter: string; title: string; total: number }[] = [];
+  let current: { letter: string; title: string } | null = null;
+
+  for (const row of rows) {
+    const text = String(row[descIdx]?.raw ?? row[1]?.raw ?? "").trim();
+    const upper = text.toUpperCase();
+    if (!upper.includes("SECTION")) continue;
+    if (upper.includes("TOTAL")) {
+      if (!current) continue;
+      let total = amountCol >= 0 ? numCell(row[amountCol]) : 0;
+      if (!(total > 0)) {
+        for (const c of row) total = Math.max(total, numCell(c));
+      }
+      out.push({ letter: current.letter, title: current.title, total });
+      current = null;
+      continue;
+    }
+    const match = upper.match(/SECTION\s*[-–:]?\s*([A-Z])/);
+    if (!match) continue;
+    const title = text.replace(/^SECTION\s*[-–:]?\s*[A-Z]\s*/i, "").replace(/^[-–:.\s]+/, "").trim();
+    current = { letter: match[1], title: title || text };
+  }
+  return out;
+}
+
 export function buildR2SummarySheet(
   vendorNames: string[],
   disciplines: DisciplineDef[],
-  totalsByDiscipline: Record<string, Record<string, number>>
+  totalsByDiscipline: Record<string, Record<string, number>>,
+  sections?: R2SectionRow[]
 ): ImportedSheet {
   const rows: SheetCell[][] = [];
   rows.push([cell("SR NO"), cell("SECTION"), cell("TITLE"), ...vendorNames.map(cell)]);
@@ -76,21 +110,27 @@ export function buildR2SummarySheet(
     ...vendorNames.map(() => cell("GRAND TOTAL")),
   ]);
 
-  disciplines.forEach((d, idx) => {
-    const totals: Record<string, number> = {};
-    for (const v of vendorNames) totals[v] = totalsByDiscipline[d.key]?.[v] ?? 0;
+  const sectionRows = sections?.length
+    ? sections
+    : disciplines.map((d) => ({
+        letter: d.key,
+        title: d.label,
+        totals: Object.fromEntries(vendorNames.map((v) => [v, totalsByDiscipline[d.key]?.[v] ?? 0])),
+      }));
+
+  sectionRows.forEach((section, idx) => {
     rows.push([
       cell(idx + 1),
-      cell(`SECTION — ${d.key}`),
-      cell(d.label),
-      ...vendorNames.map((v) => cell(totals[v] || 0)),
+      cell(`SECTION : -${section.letter}`),
+      cell(section.title),
+      ...vendorNames.map((v) => cell(section.totals[v] || 0)),
     ]);
   });
 
   const grandTotals: Record<string, number> = Object.fromEntries(vendorNames.map((v) => [v, 0]));
-  for (const d of disciplines) {
+  for (const section of sectionRows) {
     for (const v of vendorNames) {
-      grandTotals[v] += totalsByDiscipline[d.key]?.[v] ?? 0;
+      grandTotals[v] += section.totals[v] ?? 0;
     }
   }
   rows.push([
@@ -215,6 +255,7 @@ export async function recomputeBidPackageComparative(
   const vendorNames = parseVendorNames(pkg.vendorNamesJson);
   const disciplines = parseDisciplinesJson(pkg.disciplinesJson);
   const totalsByDiscipline: Record<string, Record<string, number>> = {};
+  const sectionMap = new Map<string, R2SectionRow>();
 
   for (const d of disciplines) totalsByDiscipline[d.key] = {};
 
@@ -232,9 +273,20 @@ export async function recomputeBidPackageComparative(
     if (total > 0 || slotRow.fileName || slotRow.uploadedAt) filledSlots++;
     totalsByDiscipline[slot.discipline] ||= {};
     totalsByDiscipline[slot.discipline][slot.vendorLabel] = total;
+
+    for (const section of extractBoqSectionTotals(headers, rows)) {
+      const key = `${slot.discipline}:${section.letter}`;
+      const discLabel = disciplines.find((d) => d.key === slot.discipline)?.label || slot.discipline;
+      const title = disciplines.length > 1 ? `${discLabel} — ${section.title}` : section.title;
+      const row = sectionMap.get(key) || { letter: section.letter, title, totals: {} };
+      if (title.length > row.title.length) row.title = title;
+      row.totals[slot.vendorLabel] = section.total;
+      sectionMap.set(key, row);
+    }
   }
 
-  const summarySheet = buildR2SummarySheet(vendorNames, disciplines, totalsByDiscipline);
+  const sections = [...sectionMap.values()].sort((a, b) => a.title.localeCompare(b.title) || a.letter.localeCompare(b.letter));
+  const summarySheet = buildR2SummarySheet(vendorNames, disciplines, totalsByDiscipline, sections);
   const masterSheet = buildMasterCompareSheet(vendorNames, disciplines, totalsByDiscipline);
   const summary = parseR2SummarySheet([], summarySheet.rows);
 

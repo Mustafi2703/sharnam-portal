@@ -283,6 +283,28 @@ export function CommsMatrixPanel({
         >
           Export PDF (print)
         </Button>
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const r = await api<{ sharePointUrl?: string | null; url?: string }>(
+                `/api/comms/contacts/${projectId}/sharepoint-link`,
+                { method: "POST", token, body: JSON.stringify({ kind: matrixKind }) },
+              );
+              const href = r.sharePointUrl || r.url;
+              if (href) window.open(href, "_blank", "noopener,noreferrer");
+              onMsg(r.sharePointUrl ? "Opened the matrix in SharePoint." : "Matrix filed in the project library.");
+            } catch (err) {
+              onMsg(err instanceof Error ? err.message : "Could not open SharePoint");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Open in SharePoint
+        </Button>
       </div>
 
       <Card className="!p-4 border border-line">
@@ -354,15 +376,15 @@ export function CommsMatrixPanel({
         <table className="w-full text-sm min-w-[980px]">
           <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
             <tr>
-              <th className="p-3">Sr.No</th>
-              <th className="p-3">Name</th>
-              <th className="p-3">Designation</th>
-              <th className="p-3">Company</th>
-              <th className="p-3">SPOC</th>
-              <th className="p-3">Mobile</th>
-              <th className="p-3">E-mail</th>
-              <th className="p-3">General Mail (TO/CC)</th>
-              <th className="p-3">Office Address</th>
+              <th className="p-3">SR.NO</th>
+              <th className="p-3">NAME</th>
+              <th className="p-3">DESIGNATION</th>
+              <th className="p-3">NAME OF COMPANY</th>
+              <th className="p-3">SINGLE POINT OF CONTACT</th>
+              <th className="p-3">MOBILE</th>
+              <th className="p-3">E-MAIL</th>
+              <th className="p-3">GENERAL MAIL COMMUNICATION</th>
+              <th className="p-3">OFFICE ADD.</th>
               {canEdit && <th className="p-3 w-28">Actions</th>}
             </tr>
           </thead>

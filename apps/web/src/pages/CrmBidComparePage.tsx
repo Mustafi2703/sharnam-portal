@@ -228,6 +228,31 @@ export default function CrmBidComparePage() {
     if (tab === "upload") setUploadFile(null);
   }
 
+  async function openBoqInSharePoint(slot: VendorBoqSlot) {
+    if (!selectedId) return;
+    if (slot.sharePointUrl) {
+      window.open(slot.sharePointUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await api<{ sharePointUrl?: string | null }>(
+        `/api/crm/bid-packages/${selectedId}/vendor-boq/${slot.id}/sharepoint`,
+        { method: "POST", token },
+      );
+      if (r.sharePointUrl) {
+        window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+        setMsg("Opened the BOQ in SharePoint. Microsoft will ask you to sign in if this browser is not already signed in.");
+      } else {
+        showActionNeed("SharePoint link not ready", "Save or upload this BOQ first, then View BOQ opens it in SharePoint.");
+      }
+    } catch (err) {
+      showActionError("Could not open SharePoint", err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function recomputeComparative() {
     if (!selectedId) return;
     setBusy(true);
@@ -686,6 +711,7 @@ export default function CrmBidComparePage() {
         formatINR={formatINR}
         disciplineLabel={disciplineLabel}
         openSlotPanel={openSlotPanel}
+        onViewBoq={(slot) => void openBoqInSharePoint(slot)}
         copyVendorLink={copyVendorLink}
         slotPanel={slotPanel}
         onCloseSlot={() => {

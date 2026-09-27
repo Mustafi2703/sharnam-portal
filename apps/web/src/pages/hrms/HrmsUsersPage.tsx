@@ -296,7 +296,7 @@ export default function HrmsUsersPage() {
   async function purgeHrmsSeed() {
     if (
       !window.confirm(
-        "Remove HRMS demo seed (Riya FLOW recruitment, HB-DEMO docs, @sharnam.demo logins, demo leave rows)? @spdc.in staff stay."
+        "Clear HRMS records for a full UAT: leave, attendance, vouchers, letters, and demo recruitment. @spdc.in staff logins stay."
       )
     )
       return;
@@ -391,7 +391,7 @@ export default function HrmsUsersPage() {
           ) : null}
           {canEdit && canOfficeDesk ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeHrmsSeed()}>
-              Clear HRMS seed
+              Clear HRMS for UAT
             </Button>
           ) : null}
           {isAdmin ? (

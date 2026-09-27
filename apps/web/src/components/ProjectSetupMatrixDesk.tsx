@@ -60,7 +60,6 @@ export function ProjectSetupMatrixDesk({
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
     const [tech, comm] = await Promise.all([
       api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=TECHNICAL`, { token }).catch(() => []),
       api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=COMMERCIAL`, { token }).catch(() => []),
@@ -202,6 +201,25 @@ export function ProjectSetupMatrixDesk({
 
   const peopleRows = useMemo(() => contacts.filter((c) => !c.isSectionHeader), [contacts]);
 
+  async function openSharePoint(kind: "TECHNICAL" | "COMMERCIAL") {
+    setBusy(true);
+    try {
+      const r = await api<{ sharePointUrl?: string | null; url?: string }>(
+        `/api/comms/contacts/${projectId}/sharepoint-link`,
+        { method: "POST", token, body: JSON.stringify({ kind }) },
+      );
+      const href = r.sharePointUrl || r.url;
+      if (href) {
+        window.open(href, "_blank", "noopener,noreferrer");
+        onMsg(r.sharePointUrl ? "Opened the matrix in SharePoint." : "Matrix filed in the project library.");
+      }
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not open SharePoint");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function exportMatrix(kind: "TECHNICAL" | "COMMERCIAL", format: "xlsx" | "html") {
     setBusy(true);
     try {
@@ -260,7 +278,7 @@ export function ProjectSetupMatrixDesk({
           <div>
             <h4 className="font-semibold text-sm">Export communication matrix</h4>
             <p className="text-xs text-steel-muted mt-1 max-w-2xl leading-relaxed">
-              Excel and print/PDF use the SPDC logo and the client logo uploaded on the project card. Layout matches the communication matrix (Sr.No, name, designation, company, SPOC, mobile, email, TO/CC, address).
+              Excel and print/PDF use the SPDC logo and the client logo. Columns match the BPCL sheet: SR.NO, NAME, DESIGNATION, NAME OF COMPANY, SINGLE POINT OF CONTACT, MOBILE, E-MAIL, GENERAL MAIL COMMUNICATION, OFFICE ADD.
             </p>
           </div>
           {(["TECHNICAL", "COMMERCIAL"] as const).map((kind) => (
@@ -277,6 +295,9 @@ export function ProjectSetupMatrixDesk({
                 </Button>
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => void exportMatrix(kind, "html")}>
                   Open for print / PDF
+                </Button>
+                <Button type="button" disabled={busy} onClick={() => void openSharePoint(kind)}>
+                  Open in SharePoint
                 </Button>
               </div>
             </div>
@@ -390,15 +411,15 @@ export function ProjectSetupMatrixDesk({
         <table className="w-full text-sm min-w-[980px]">
           <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
             <tr>
-              <th className="p-3">Sr.No</th>
-              <th className="p-3">Name</th>
-              <th className="p-3">Designation</th>
-              <th className="p-3">Company</th>
-              <th className="p-3">SPOC</th>
-              <th className="p-3">Mobile</th>
-              <th className="p-3">E-mail</th>
-              <th className="p-3">General Mail (TO/CC)</th>
-              <th className="p-3">Office Address</th>
+              <th className="p-3">SR.NO</th>
+              <th className="p-3">NAME</th>
+              <th className="p-3">DESIGNATION</th>
+              <th className="p-3">NAME OF COMPANY</th>
+              <th className="p-3">SINGLE POINT OF CONTACT</th>
+              <th className="p-3">MOBILE</th>
+              <th className="p-3">E-MAIL</th>
+              <th className="p-3">GENERAL MAIL COMMUNICATION</th>
+              <th className="p-3">OFFICE ADD.</th>
               {canEdit && <th className="p-3 w-28">Actions</th>}
             </tr>
           </thead>

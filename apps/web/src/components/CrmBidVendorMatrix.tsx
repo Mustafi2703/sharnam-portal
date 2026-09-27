@@ -27,6 +27,7 @@ type Props = {
   grandTotals?: Record<string, number>;
   lowestVendor?: string;
   onManageSlot: (slot: Slot, mode: "edit" | "upload") => void;
+  onViewBoq?: (slot: Slot) => void;
   onCopyLink?: (vendorLabel: string) => void;
 };
 
@@ -37,6 +38,7 @@ export function CrmBidVendorMatrix({
   grandTotals,
   lowestVendor,
   onManageSlot,
+  onViewBoq,
   onCopyLink,
 }: Props) {
   if (!vendorMatrix.length) return null;
@@ -98,9 +100,9 @@ export function CrmBidVendorMatrix({
                           type="button"
                           variant={done ? "secondary" : "primary"}
                           className="!text-[10px] !py-0.5 !px-2 !min-h-0"
-                          onClick={() => onManageSlot(slot, done ? "edit" : "upload")}
+                          onClick={() => (done && onViewBoq ? onViewBoq(slot) : onManageSlot(slot, done ? "edit" : "upload"))}
                         >
-                          {done ? "View ✓" : "Fill / upload"}
+                          {done ? "View BOQ" : "Fill / upload"}
                         </Button>
                       )}
                     </td>

@@ -136,6 +136,24 @@ export function ToolRightPanel({
     }
   }
 
+  async function openMatrixSharePoint() {
+    setBusy(true);
+    setEmailMsg("");
+    try {
+      const r = await api<{ sharePointUrl?: string | null; url?: string }>(
+        `/api/comms/contacts/${ctx.projectId}/sharepoint-link`,
+        { method: "POST", token, body: JSON.stringify({ kind: "TECHNICAL" }) },
+      );
+      const href = r.sharePointUrl || r.url;
+      if (href) window.open(href, "_blank", "noopener,noreferrer");
+      else setEmailMsg("Matrix filed. SharePoint link appears when the library is live.");
+    } catch (err) {
+      setEmailMsg(err instanceof Error ? err.message : "Could not open SharePoint");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openDelete() {
     setComposeOpen(false);
     setDeleteOpen(true);
@@ -324,6 +342,7 @@ export function ToolRightPanel({
         if (canUpload) {
           actions.push(
             { label: "Edit communication matrix", to: "comms", primary: true },
+            { label: "Open in SharePoint", onClick: () => void openMatrixSharePoint(), secondary: true },
             { label: "Generate agenda", to: "comms", secondary: true },
             { label: "Start MoM", to: "comms", secondary: true }
           );
@@ -351,7 +370,7 @@ export function ToolRightPanel({
   if (canEmail && (tool === "email" || tool === "comms")) {
     actions.push({ label: "Send email", onClick: () => openCompose(), secondary: true });
   }
-  if (canDelete && ["rfis", "photos", "inspections", "checklist", "quality-inspections", "comms", "submittals", "coordination"].includes(tool)) {
+  if (canDelete && ["rfis", "photos", "inspections", "checklist", "quality-inspections", "submittals", "coordination"].includes(tool)) {
     actions.push({ label: "Delete…", onClick: () => openDelete(), secondary: true, danger: true });
   }
 

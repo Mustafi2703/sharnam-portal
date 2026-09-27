@@ -17,6 +17,7 @@ type VendorBoqSlot = {
   vendorLabel: string;
   discipline: string;
   fileName?: string | null;
+  sharePointUrl?: string | null;
   vendor?: { email?: string | null } | null;
 };
 
@@ -75,6 +76,7 @@ export type CrmBidDeskProps = {
   formatINR: (n: number) => string;
   disciplineLabel: (disciplines: Discipline[], key: string) => string;
   openSlotPanel: (slot: VendorBoqSlot, tab: "edit" | "upload") => void;
+  onViewBoq?: (slot: VendorBoqSlot) => void;
   copyVendorLink: (label: string) => void;
   slotPanel: { slot: VendorBoqSlot; tab: "edit" | "upload" } | null;
   onCloseSlot: () => void;
@@ -148,6 +150,7 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
     formatINR,
     disciplineLabel,
     openSlotPanel,
+    onViewBoq,
     copyVendorLink,
     slotPanel,
     onCloseSlot,
@@ -438,6 +441,7 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
                         grandTotals={detail.summary?.grandTotals}
                         lowestVendor={detail.summary?.lowestVendor}
                         onManageSlot={openSlotPanel}
+                        onViewBoq={onViewBoq}
                         onCopyLink={copyVendorLink}
                       />
                     </Card>

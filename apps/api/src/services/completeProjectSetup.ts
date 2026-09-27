@@ -5,7 +5,7 @@
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { seedStandardCommsMatrix } from "./commsMatrixSeed.js";
-import { ensureMatrixScaffold, syncCommsContactsFromDirectory } from "./syncCommsFromDirectory.js";
+import { ensureMatrixScaffold } from "./syncCommsFromDirectory.js";
 import { initializeProjectReports, type InitReportsResult } from "./initializeProjectReports.js";
 import {
   provisionCompanyAccess,
@@ -36,7 +36,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
 
   const matrixCreated = await seedStandardCommsMatrix(projectId);
   await ensureMatrixScaffold(projectId);
-  const contacts = await syncCommsContactsFromDirectory(projectId);
+  const contacts = { created: 0, skipped: 0 };
 
   const clientPortals: PortalLoginResult[] = [];
   const contractorPortals: PortalLoginResult[] = [];
@@ -163,9 +163,9 @@ export async function getProjectSetupStatus(projectId: string) {
       ok: contactCount > 0 || matrixCount > 0,
       optional: true,
       label: "Communication matrix",
-      detail: contactCount || matrixCount
-        ? `${matrixCount} role flows · ${contactCount} contacts`
-        : "Add the people who should receive project mail — only those you pick",
+      detail: contactCount
+        ? `${contactCount} people on the matrix (Client, PMC, Consultant, Contractor)`
+        : "Add only the people you want on the matrix. Saving the card does not import the directory.",
     },
   ];
 

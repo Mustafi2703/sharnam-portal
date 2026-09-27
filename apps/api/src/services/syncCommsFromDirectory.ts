@@ -301,7 +301,9 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
           const row = existing.find(
             (r) => !r.isSectionHeader && contactKey(r.email, r.personName, r.orgSection) === key,
           );
-          if (row && (row.designation || "").trim() !== person.designation) {
+          const current = (row?.designation || "").trim().toLowerCase();
+          const generic = ["", "member", "team member", "site engineer", "quality lead", "viewer", "project manager"].includes(current);
+          if (row && generic && current !== person.designation.trim().toLowerCase()) {
             await prisma.communicationContact.update({
               where: { id: row.id },
               data: { designation: person.designation },

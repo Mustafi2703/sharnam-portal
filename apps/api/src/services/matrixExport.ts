@@ -127,7 +127,7 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
     sheet.addImage(imgId, { tl: { col: 7.4, row: 0.12 }, ext: { width: 110, height: 40 }, editAs: "oneCell" });
   }
 
-  const header = ["Sr.No", "Name", "Designation", "Company", "SPOC", "Mobile", "E-mail", "Mail (TO/CC)", "Office Address"];
+  const header = ["SR.NO", "NAME", "DESIGNATION", "NAME OF COMPANY", "SINGLE POINT OF CONTACT", "MOBILE", "E-MAIL", "GENERAL MAIL COMMUNICATION", "OFFICE ADD."];
   sheet.addRow([]);
   sheet.addRow(header);
   const hr = sheet.lastRow!;
@@ -244,7 +244,7 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
   </div>
   <table>
     <thead><tr>
-      <th>Sr.No</th><th>Name</th><th>Designation</th><th>Company</th><th>SPOC</th><th>Mobile</th><th>E-mail</th><th>General Mail (TO/CC)</th><th>Office Address</th>
+      <th>SR.NO</th><th>NAME</th><th>DESIGNATION</th><th>NAME OF COMPANY</th><th>SINGLE POINT OF CONTACT</th><th>MOBILE</th><th>E-MAIL</th><th>GENERAL MAIL COMMUNICATION</th><th>OFFICE ADD.</th>
     </tr></thead>
     <tbody>${bodyRows || `<tr><td colspan="9" style="text-align:center;padding:24px;color:#888">No rows</td></tr>`}</tbody>
   </table>

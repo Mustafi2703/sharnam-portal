@@ -287,6 +287,22 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                     >
                       Log →
                     </Link>
+                    {canWrite && (
+                      <button
+                        type="button"
+                        className="ml-2 text-[10px] font-semibold text-danger"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedId(row.id);
+                          setDeleteCode("");
+                          setDeleteMsg("");
+                          setDeleteProjectToo(false);
+                          setDeleteOpen(true);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -375,7 +391,7 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                     onClick={() => {
                       setDeleteCode("");
                       setDeleteMsg("");
-                      setDeleteProjectToo(Boolean(awardedProjectId));
+                      setDeleteProjectToo(false);
                       setDeleteOpen(true);
                     }}
                   >

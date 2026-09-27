@@ -47,18 +47,6 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
         ) : null}
         <Button
           type="button"
-          variant="secondary"
-          className="!text-xs !py-1.5 !px-3"
-          onClick={() => {
-            setPurge(true);
-            setCode("");
-            setErr("");
-          }}
-        >
-          Clear module data
-        </Button>
-        <Button
-          type="button"
           className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"
           onClick={() => {
             setDel(true);

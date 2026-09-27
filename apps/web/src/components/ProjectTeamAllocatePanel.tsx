@@ -135,7 +135,7 @@ export function ProjectTeamAllocatePanel({
     }
   }
 
-  async function setCompanyRole(userId: string, memberId: string, designation: string) {
+  async function saveCompanyRole(userId: string, memberId: string, designation: string) {
     if (!token || !userId || !designation) return;
     setBusy(true);
     setLocalRoles((prev) => ({ ...prev, [userId]: designation }));
@@ -200,7 +200,7 @@ export function ProjectTeamAllocatePanel({
                     className="!text-xs min-w-[11rem]"
                     value={marked}
                     disabled={busy}
-                    onChange={(e) => void setCompanyRole(m.userId!, m.id, e.target.value)}
+                    onChange={(e) => void saveCompanyRole(m.userId!, m.id, e.target.value)}
                   >
                     <option value="">Select company role…</option>
                     {roleOptions(marked).map((name) => (

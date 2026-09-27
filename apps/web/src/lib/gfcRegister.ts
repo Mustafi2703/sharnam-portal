@@ -29,14 +29,16 @@ export function gfcRevisionForSlot(revisions: any[], slotLabel: string): any | u
   return gfcRevisionsByNumber(revisions).find((r) => revNumIndex(r.revisionNumber) === slot);
 }
 
+/** Columns only for revisions that exist. A new column appears after a new revision is saved. */
 export function gfcRevSlots(drawings: { revisions?: { revisionNumber?: string }[] }[]): string[] {
-  let max = 5;
+  const nums = new Set<number>();
   for (const d of drawings) {
     for (const r of d.revisions || []) {
-      max = Math.max(max, revNumIndex(r.revisionNumber));
+      const n = revNumIndex(r.revisionNumber);
+      if (n >= 0) nums.add(n);
     }
   }
-  return Array.from({ length: max + 1 }, (_, i) => `R${i}`);
+  return [...nums].sort((a, b) => a - b).map((n) => `R${n}`);
 }
 
 export function gfcNextRevisionNumber(revisions: { revisionNumber?: string }[]): string {

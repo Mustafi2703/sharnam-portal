@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -10,7 +10,6 @@ import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectClientRepresentativesPanel, type ProjectClientRep } from "../../components/ProjectClientRepresentativesPanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
-import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { uiCopy } from "../../lib/formatUiText";
@@ -301,7 +300,7 @@ export default function CrmProjectSetupPage() {
       setCreateForm(EMPTY_PROJECT);
       await loadLists();
       setStep("project", created.id);
-      await api(`/api/comms/contacts/${created.id}/sync-from-directory`, { method: "POST", token }).catch(() => null);
+      await api(`/api/comms/contacts/${created.id}/scaffold`, { method: "POST", token }).catch(() => null);
       setMsg(
         created.alreadyExists
           ? `Project ${created.code} already exists — opened the saved card.`
@@ -375,7 +374,7 @@ export default function CrmProjectSetupPage() {
           });
         }
       }
-      await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
+      await api(`/api/comms/contacts/${projectId}/scaffold`, { method: "POST", token }).catch(() => null);
       const baseMsg =
         details.status && details.status !== "Planning"
           ? "Project card updated. New consultants, vendors, and team members are linked to this job."
@@ -712,22 +711,18 @@ export default function CrmProjectSetupPage() {
                     <p className="sm:col-span-2 text-[11px] text-steel-muted">
                       Office and admin only. Save updates the client directory and every project linked to this company.
                     </p>
-                    {projectId && summary?.project ? (
-                      <div className="sm:col-span-2 rounded-lg border border-line bg-paper p-2">
-                        <RegisterBrandHeader
-                          title="Client logo (matrix & registers)"
-                          project={{
-                            id: projectId,
-                            name: summary.project.name,
-                            clientName: details.clientName,
-                            clientLogoUrl: summary.project.clientLogoUrl,
-                          }}
-                          token={token}
-                          canEdit={canManage}
-                          onProjectUpdated={() => void loadProject()}
-                        />
-                      </div>
-                    ) : null}
+                    {projectId && token ? (
+                      <ClientLogoUpload
+                        projectId={projectId}
+                        token={token}
+                        logoUrl={summary?.project.clientLogoUrl}
+                        onUploaded={() => void loadProject()}
+                      />
+                    ) : (
+                      <p className="sm:col-span-2 text-[11px] text-steel-muted">
+                        Client logo is optional. Save the card first, then upload it anytime.
+                      </p>
+                    )}
                     {projectId ? (
                       <div className="sm:col-span-2 mt-2">
                         <ProjectClientRepresentativesPanel
@@ -819,13 +814,31 @@ export default function CrmProjectSetupPage() {
               placeholder="Select a project…"
               searchPlaceholder="Search project or client by name…"
             />
-            {summary?.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
             {summary && (
-              <p className="text-xs text-steel-muted leading-relaxed">
-                {projectStatusHint(summary.project.status)} Stored: {summary.members.filter((m) => isSpdcStaffMember(m)).length} team ·{" "}
-                {summary.vendors.length} companies
-                {details.location ? ` · ${details.location}` : ""}.
-              </p>
+              <div className="rounded-lg border border-line bg-paper px-3 py-2 space-y-1">
+                <p className="font-mono text-xs font-semibold text-brand">{summary.project.code}</p>
+                <p className="text-sm font-semibold leading-snug">{summary.project.name}</p>
+                <p className="text-xs text-steel-muted">{summary.project.clientName || details.clientName || "No client"}</p>
+                <p className="text-xs text-steel-muted">{details.location || summary.project.location || "No location"}</p>
+                <p className="text-xs">
+                  <span className="font-medium">{summary.project.status || "Planning"}</span>
+                  <span className="text-steel-muted">
+                    {" "}
+                    · {details.startDate || "—"} to {details.endDate || "—"}
+                  </span>
+                </p>
+                {summary.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
+                <p className="text-[11px] text-steel-muted leading-relaxed">
+                  {projectStatusHint(summary.project.status)} {summary.members.filter((m) => isSpdcStaffMember(m)).length} team ·{" "}
+                  {summary.vendors.length} companies.
+                </p>
+                <ProjectManageActions
+                  project={summary.project}
+                  token={token}
+                  showEdit={false}
+                  onChanged={() => void loadLists()}
+                />
+              </div>
             )}
             <ul className="space-y-1.5">
               {(status?.checks || []).map((c) => (
@@ -883,8 +896,8 @@ export default function CrmProjectSetupPage() {
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Project already launched</h3>
           <p className="text-sm text-steel-muted leading-relaxed">
-            Status is <strong>{summary?.project.status}</strong>. Use step 1 to add consultants, vendors, or team members during the job.
-            Re-run launch only if you need to refresh folders. Matrix, DPR, and WPR are not duplicated.
+            Status is <strong>{summary?.project.status}</strong>. SharePoint folders for this project are already there and are not copied again.
+            Use step 1 to add consultants, vendors, or team members during the job.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={() => setStep("project")}>
@@ -908,7 +921,7 @@ export default function CrmProjectSetupPage() {
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
               <p className="text-xs text-steel-muted mt-0.5">
-                Creates ISO folders in SharePoint (about a minute), fills the communication matrix, and sets status to{" "}
+                Creates ISO folders in SharePoint (about a minute), opens empty Client / PMC / Consultant / Contractor matrix sections, and sets status to{" "}
                 <strong>In Progress</strong>. CRM saves, proposals, and HRMS stay fast until this step. No emails are sent.
               </p>
             </div>
@@ -934,6 +947,57 @@ export default function CrmProjectSetupPage() {
           </Button>
         </Card>
       )}
+    </div>
+  );
+}
+
+function ClientLogoUpload({
+  projectId,
+  token,
+  logoUrl,
+  onUploaded,
+}: {
+  projectId: string;
+  token: string;
+  logoUrl?: string | null;
+  onUploaded: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await api(`/api/projects/${projectId}/client-logo`, { method: "POST", token, body: fd });
+      onUploaded();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Logo upload failed");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+      {logoUrl ? <img src={logoUrl} alt="Client logo" className="h-10 max-w-[7rem] object-contain" /> : null}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp"
+        className="hidden"
+        onChange={(e) => void onFile(e.target.files?.[0])}
+      />
+      <Button type="button" variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
+        {busy ? "Uploading…" : logoUrl ? "Replace client logo" : "Upload client logo"}
+      </Button>
+      <span className="text-[11px] text-steel-muted">Optional. Add it now or later — the matrix and registers use it when it is there.</span>
+      {err ? <span className="text-[11px] text-danger">{err}</span> : null}
     </div>
   );
 }

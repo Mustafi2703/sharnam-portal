@@ -785,6 +785,18 @@ crmComparativeRouter.get("/bid-packages/:id/sharepoint", async (req: AuthedReque
   res.json(tree);
 });
 
+/** Open the filed BOQ in SharePoint (Microsoft sign-in). Files the sheet first if it is only in the portal. */
+crmComparativeRouter.post("/bid-packages/:id/vendor-boq/:slotId/sharepoint", async (req: AuthedRequest, res) => {
+  const slot = await prisma.crmVendorBoq.findFirst({
+    where: { id: req.params.slotId, bidPackageId: req.params.id },
+  });
+  if (!slot) return res.status(404).json({ error: "BOQ slot not found" });
+  if (slot.sharePointUrl) return res.json({ sharePointUrl: slot.sharePointUrl });
+  const { syncVendorBoqSlotToSharePoint } = await import("../services/crmBidSharePointSync.js");
+  const saved = await syncVendorBoqSlotToSharePoint(prisma, slot.id, { force: true });
+  res.json({ sharePointUrl: saved?.sharePointUrl || null });
+});
+
 /** Vendor / office — load BOQ sheet for a slot (auto-creates from R2 if missing). */
 crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/sheet", async (req: AuthedRequest, res) => {
   try {
