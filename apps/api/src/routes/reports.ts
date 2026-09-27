@@ -2845,6 +2845,14 @@ hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedReques
   }
 });
 
+hrmRouter.delete("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
+  const confirm = String(req.body?.confirm || req.query.confirm || "").trim();
+  if (confirm !== "CLEAR") return res.status(400).json({ error: "Send confirm: CLEAR to empty the letters register." });
+  const result = await prisma.hrmsDocument.deleteMany({});
+  await audit("hrm.docs.clear", { userId: req.user!.id, entity: "HrmsDocument", meta: { deleted: result.count } });
+  res.json({ deleted: result.count });
+});
+
 hrmRouter.get("/hrms-documents", hrmDesk, async (req, res) => {
   const rows = await prisma.hrmsDocument.findMany({
     where: {
@@ -3016,8 +3024,11 @@ hrmRouter.patch("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) 
   const before = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
   const data: Record<string, unknown> = {};
-  for (const k of ["employeeName", "candidateEmail", "designation", "department", "status"] as const) {
+  for (const k of ["employeeName", "candidateEmail", "designation", "department", "status", "kind"] as const) {
     if (req.body[k] != null) data[k] = req.body[k];
+  }
+  if (data.kind && !(HRMS_DOC_KINDS as readonly string[]).includes(String(data.kind))) {
+    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
   }
   if (req.body.effectiveDate !== undefined) data.effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : null;
   if (req.body.data && typeof req.body.data === "object") data.dataJson = JSON.stringify(req.body.data);

@@ -55,6 +55,8 @@ export default function HrmsDocumentsPage() {
   const [previewFingerprint, setPreviewFingerprint] = useState("");
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [form, setForm] = useState(emptyLetterForm());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [registerScope, setRegisterScope] = useState<"all" | "person">("all");
   const formPanelRef = useRef<HTMLDivElement | null>(null);
   const previewPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -107,9 +109,9 @@ export default function HrmsDocumentsPage() {
   const visible = useMemo(() => (kindFilter === "all" ? rows : rows.filter((r) => r.kind === kindFilter)), [rows, kindFilter]);
 
   const registerVisible = useMemo(() => {
-    if (subjectKey && form.employeeName) return visible.filter((r) => docMatchesSubject(r, form));
+    if (registerScope === "person" && subjectKey && form.employeeName) return visible.filter((r) => docMatchesSubject(r, form));
     return visible;
-  }, [visible, subjectKey, form]);
+  }, [visible, registerScope, subjectKey, form]);
 
   function clearPreview() {
     setPreviewDocxBlob(null);
@@ -155,6 +157,22 @@ export default function HrmsDocumentsPage() {
   async function upsertLetterRow(kind: DocKind, rowSource?: DocRow[]): Promise<string> {
     const pool = rowSource ?? rows;
     const payload = createBodyFromForm({ ...form, kind });
+    if (editingId) {
+      await api(`/api/hrm/hrms-documents/${editingId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          kind,
+          employeeName: payload.employeeName,
+          candidateEmail: payload.candidateEmail,
+          designation: payload.designation,
+          department: payload.department,
+          effectiveDate: payload.effectiveDate,
+          data: payload.data,
+        }),
+      });
+      return editingId;
+    }
     const existing = pool
       .filter((r) => docMatchesSubject(r, form))
       .find((r) => r.kind === kind && r.status !== "Cancelled");
@@ -290,6 +308,43 @@ export default function HrmsDocumentsPage() {
     }
   }
 
+  function editLetter(row: DocRow) {
+    setForm((f) => hydrateLetterFormFromDoc(row, f));
+    setEditingId(row.id);
+    clearPreview();
+    setMsg(`Editing ${row.refNo} · ${row.kind}. Change the fields, preview, then Generate to update this letter.`);
+    window.setTimeout(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+  }
+
+  async function deleteLetter(row: DocRow) {
+    if (!window.confirm(`Delete ${row.kind} ${row.refNo} for ${row.employeeName}?`)) return;
+    try {
+      await api(`/api/hrm/hrms-documents/${row.id}`, { method: "DELETE", token });
+      if (editingId === row.id) setEditingId(null);
+      setMsg(`Removed ${row.refNo}.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete letter");
+    }
+  }
+
+  async function clearRegister() {
+    if (!window.confirm("Delete every letter in the register? Staff logins stay. This cannot be undone.")) return;
+    try {
+      const res = await api<{ deleted: number }>("/api/hrm/hrms-documents", {
+        method: "DELETE",
+        token,
+        body: JSON.stringify({ confirm: "CLEAR" }),
+      });
+      setEditingId(null);
+      clearPreview();
+      setMsg(`Letters register cleared — ${res.deleted} letter(s) removed.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not clear the letters register");
+    }
+  }
+
   async function regenerate(id: string) {
     setMsg("");
     try {
@@ -383,6 +438,14 @@ export default function HrmsDocumentsPage() {
             <p className="text-[11px] text-steel-muted mt-0.5">
               One employee · all template variables · Preview Word (same file as download), then Generate & file to SharePoint.
             </p>
+            {editingId ? (
+              <p className="text-xs text-brand mt-2">
+                Editing a letter already on the register. Preview, then Generate, updates that row.
+                <button type="button" className="ml-2 underline" onClick={() => setEditingId(null)}>
+                  Cancel edit
+                </button>
+              </p>
+            ) : null}
           </div>
           <div className="p-4 space-y-4">
             <label className="space-y-1 block max-w-xl">
@@ -397,7 +460,7 @@ export default function HrmsDocumentsPage() {
               </Select>
             </label>
 
-            {!subjectKey ? (
+            {!subjectKey && !editingId ? (
               <p className="text-sm text-steel-muted">Select a person to fill letter variables and generate documents.</p>
             ) : (
               <div ref={formPanelRef} className="grid lg:grid-cols-[minmax(200px,240px)_1fr] gap-4 min-h-0 scroll-mt-24">
@@ -646,13 +709,20 @@ export default function HrmsDocumentsPage() {
       )}
 
       <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="font-semibold text-sm">
-              Letters register · {registerVisible.length}
-              {subjectKey ? " (this person)" : ""}
-            </div>
-            <div className="text-[11px] text-steel-muted">SharePoint link for maintenance · Print HTML → PDF · Annexure I when CTC is set.</div>
+            <div className="font-semibold text-sm">Letters register · {registerVisible.length}</div>
+            <div className="text-[11px] text-steel-muted">Every letter can be edited or deleted. SharePoint, print HTML, and the Word file stay on the row.</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setRegisterScope(registerScope === "all" ? "person" : "all")}>
+              {registerScope === "all" ? "This person only" : "All letters"}
+            </Button>
+            {canManage && rows.length > 0 ? (
+              <Button type="button" variant="secondary" className="!text-xs !border-danger !text-danger" onClick={() => void clearRegister()}>
+                Clear letters register
+              </Button>
+            ) : null}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -673,7 +743,7 @@ export default function HrmsDocumentsPage() {
             </thead>
             <tbody>
               {registerVisible.map((r) => (
-                <tr key={r.id} className="border-t border-line align-top">
+                <tr key={r.id} className={`border-t border-line align-top ${editingId === r.id ? "bg-brand/5" : ""}`}>
                   <td className="p-2 font-mono text-[11px]">{r.refNo}</td>
                   <td>{r.kind}</td>
                   <td>{r.employeeName}</td>
@@ -729,6 +799,20 @@ export default function HrmsDocumentsPage() {
                   <td className="space-y-1">
                     {canManage && (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => editLetter(r)}
+                          className="text-[11px] px-2 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/5"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteLetter(r)}
+                          className="text-[11px] px-2 py-0.5 rounded border border-danger/40 text-danger hover:bg-danger/5"
+                        >
+                          Delete
+                        </button>
                         <button
                           type="button"
                           onClick={() => void openPreview(r.id, `${r.kind} · ${r.employeeName}`)}
