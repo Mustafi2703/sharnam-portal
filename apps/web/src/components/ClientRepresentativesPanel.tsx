@@ -75,6 +75,8 @@ export function CompanyRepresentativesPanel({
   const [msgTone, setMsgTone] = useState<"ok" | "err">("ok");
   const [submitBusy, setSubmitBusy] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: "", email: "", role: "" });
   const [portalPassword, setPortalPassword] = useState(DEFAULT_PASSWORD);
 
   const load = useCallback(async () => {
@@ -138,6 +140,29 @@ export function CompanyRepresentativesPanel({
     }
   }
 
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editingId || !canEdit) return;
+    setMsg("");
+    setMsgTone("ok");
+    setSubmitBusy(true);
+    try {
+      await api(`/api/vendors/${vendorId}/contacts/${editingId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify(editForm),
+      });
+      setEditingId(null);
+      setMsg("Representative updated.");
+      await load();
+    } catch (err) {
+      setMsgTone("err");
+      setMsg(err instanceof Error ? err.message : "Could not update representative");
+    } finally {
+      setSubmitBusy(false);
+    }
+  }
+
   async function remove(id: string) {
     if (!window.confirm(meta.removeConfirm)) return;
     await api(`/api/vendors/${vendorId}/contacts/${id}`, { method: "DELETE", token });
@@ -189,8 +214,53 @@ export function CompanyRepresentativesPanel({
               </div>
               <Badge tone={r.portalActive ? "ok" : "neutral"}>{r.portalActive ? "Portal active" : "No portal yet"}</Badge>
             </div>
+            {canEdit && editingId === r.id ? (
+              <form className="grid sm:grid-cols-2 gap-2" onSubmit={(e) => void saveEdit(e)}>
+                <Input
+                  required
+                  autoComplete="name"
+                  placeholder="Full name"
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                />
+                <Input
+                  required
+                  type="email"
+                  autoComplete="email"
+                  placeholder="Email (their login)"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+                <Input
+                  className="sm:col-span-2"
+                  autoComplete="organization-title"
+                  placeholder="Role (e.g. Estimator, Director)"
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                />
+                <div className="sm:col-span-2 flex gap-2">
+                  <Button type="submit" className="!text-xs" disabled={submitBusy}>
+                    Save
+                  </Button>
+                  <Button type="button" variant="secondary" className="!text-xs" onClick={() => setEditingId(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : null}
             {canEdit ? (
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={() => {
+                    setEditingId(r.id);
+                    setEditForm({ fullName: r.fullName || "", email: r.email, role: r.role || "" });
+                  }}
+                >
+                  Edit
+                </Button>
                 {!r.portalActive ? (
                   <Button
                     type="button"
@@ -225,9 +295,15 @@ export function CompanyRepresentativesPanel({
         <form className="rounded-xl border border-line bg-sand/40 p-4 space-y-3" onSubmit={addPerson}>
           <p className="text-sm font-semibold">Add another person</p>
           <div className="grid sm:grid-cols-2 gap-2">
-            <Input required placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-            <Input required type="email" placeholder="Email (their login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <Input className="sm:col-span-2" placeholder="Role (e.g. Estimator, Director)" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} />
+            <Input required autoComplete="name" placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
+            <Input required type="email" autoComplete="email" placeholder="Email (their login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Input
+              className="sm:col-span-2"
+              autoComplete="organization-title"
+              placeholder="Role (e.g. Estimator, Director)"
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+            />
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-xs space-y-1 flex-1 min-w-[200px]">

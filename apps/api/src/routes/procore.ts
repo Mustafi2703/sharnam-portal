@@ -407,15 +407,55 @@ vendorsRouter.patch("/:id/contacts/:contactId", requireRoles("admin", "office"),
     const existing = await prisma.vendorContact.findFirst({
       where: { id: req.params.contactId, vendorId: req.params.id },
     });
-    if (!existing) return res.status(404).json({ error: "Representative not found" });
+    const vendorRow = await prisma.vendor.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, email: true, primaryContactName: true },
+    });
+    let target = existing;
+    if (!target && req.params.contactId.startsWith("primary-") && vendorRow?.email) {
+      const email = vendorRow.email.trim().toLowerCase();
+      const taken = await prisma.vendorContact.findUnique({ where: { email } });
+      if (taken && taken.vendorId !== vendorRow.id) {
+        return res.status(409).json({ error: "This email is already a representative on another company." });
+      }
+      target =
+        taken ||
+        (await prisma.vendorContact.create({
+          data: {
+            vendorId: vendorRow.id,
+            email,
+            fullName: vendorRow.primaryContactName,
+            role: "Primary contact",
+          },
+        }));
+    }
+    if (!target) return res.status(404).json({ error: "Representative not found" });
+    const nextEmail = req.body.email !== undefined ? String(req.body.email).trim().toLowerCase() : target.email;
+    const nextName =
+      req.body.fullName !== undefined ? (req.body.fullName ? String(req.body.fullName).trim() : null) : target.fullName;
     const row = await prisma.vendorContact.update({
-      where: { id: existing.id },
+      where: { id: target.id },
       data: {
-        ...(req.body.email !== undefined ? { email: String(req.body.email).trim().toLowerCase() } : {}),
-        ...(req.body.fullName !== undefined ? { fullName: req.body.fullName ? String(req.body.fullName).trim() : null } : {}),
+        ...(req.body.email !== undefined ? { email: nextEmail } : {}),
+        ...(req.body.fullName !== undefined ? { fullName: nextName } : {}),
         ...(req.body.role !== undefined ? { role: req.body.role ? String(req.body.role).trim() : null } : {}),
       },
     });
+    if (vendorRow && target.email === (vendorRow.email || "").trim().toLowerCase()) {
+      await prisma.vendor.update({
+        where: { id: vendorRow.id },
+        data: {
+          ...(req.body.fullName !== undefined ? { primaryContactName: nextName } : {}),
+          ...(req.body.email !== undefined ? { email: nextEmail } : {}),
+        },
+      });
+    }
+    if (nextName) {
+      await prisma.user.updateMany({
+        where: { email: { in: [target.email, row.email] }, vendorId: req.params.id },
+        data: { fullName: nextName, ...(row.email !== target.email ? { email: row.email } : {}) },
+      });
+    }
     res.json(row);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
