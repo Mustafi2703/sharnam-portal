@@ -519,23 +519,30 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       ? [...new Set((req.body.memberIds as unknown[]).map((id) => String(id).trim()).filter(Boolean))]
       : [];
     if (memberIds.length) {
+      const { suggestedProjectMemberRole } = await import("@sharnam/shared");
       const staff = await prisma.user.findMany({
         where: {
           id: { in: memberIds },
           OR: [
-            { role: { in: ["admin", "office", "site_employee"] } },
+            { role: { in: ["admin", "office", "hr", "site_employee"] } },
             { role: "employee", vendorId: null },
           ],
         },
         select: { id: true },
       });
+      const profiles = await prisma.employeeProfile.findMany({
+        where: { userId: { in: memberIds } },
+        select: { userId: true, designation: true },
+      });
+      const designationByUser = new Map(profiles.map((p) => [p.userId, p.designation]));
       const ok = new Set(staff.map((u) => u.id));
       for (const userId of memberIds) {
         if (!ok.has(userId)) continue;
+        const role = suggestedProjectMemberRole(designationByUser.get(userId));
         await prisma.projectMember.upsert({
           where: { projectId_userId: { projectId: project.id, userId } },
-          create: { projectId: project.id, userId, role: "member" },
-          update: {},
+          create: { projectId: project.id, userId, role },
+          update: { role },
         });
       }
     }
@@ -686,22 +693,37 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
     prisma.lead.findFirst({ where: { projectId }, select: { id: true, title: true, stage: true } }),
   ]);
 
+  const memberUserIds = members.map((m) => m.userId);
+  const memberProfiles = memberUserIds.length
+    ? await prisma.employeeProfile.findMany({
+        where: { userId: { in: memberUserIds } },
+        select: { userId: true, designation: true, department: true, empCode: true },
+      })
+    : [];
+  const profileByUserId = new Map(memberProfiles.map((p) => [p.userId, p]));
+
   const { parseDisciplinesJson, defaultDisciplines } = await import("../services/comparativeStatement.js");
 
   res.json({
     project,
     lead,
-    members: members.map((m) => ({
-      id: m.id,
-      role: m.role,
-      userId: m.userId,
-      fullName: m.user.fullName,
-      email: m.user.email,
-      portalRole: m.user.role,
-      phone: m.user.phone,
-      portal: m.user.portal,
-      vendorId: m.user.vendorId,
-    })),
+    members: members.map((m) => {
+      const profile = profileByUserId.get(m.userId);
+      return {
+        id: m.id,
+        role: m.role,
+        userId: m.userId,
+        fullName: m.user.fullName,
+        email: m.user.email,
+        portalRole: m.user.role,
+        phone: m.user.phone,
+        portal: m.user.portal,
+        vendorId: m.user.vendorId,
+        designation: profile?.designation || null,
+        department: profile?.department || null,
+        empCode: profile?.empCode || null,
+      };
+    }),
     vendors: projectVendors.map((pv) => {
       let packages: string[] = [];
       try {
@@ -1234,17 +1256,37 @@ projectsRouter.post("/:id/whatsapp/test", requireRoles("admin", "office", "emplo
 });
 
 projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const role = String(req.body?.role || "member");
-  const ids = [
-    ...(Array.isArray(req.body?.userIds) ? req.body.userIds : []),
-    ...(req.body?.userId ? [req.body.userId] : []),
-  ].map((id: unknown) => String(id).trim()).filter(Boolean);
-  if (!ids.length) return res.status(400).json({ error: "Select at least one employee from the list." });
+  const defaultRole = String(req.body?.role || "member");
+  const rawAssignments = Array.isArray(req.body?.assignments) ? req.body.assignments : null;
+  let ids: string[] = [];
+  if (rawAssignments) {
+    const set = new Set<string>();
+    for (const a of rawAssignments as { userId?: unknown }[]) {
+      const id = String(a?.userId || "").trim();
+      if (id) set.add(id);
+    }
+    ids = [...set];
+  } else {
+    ids = [
+      ...(Array.isArray(req.body?.userIds) ? req.body.userIds : []),
+      ...(req.body?.userId ? [req.body.userId] : []),
+    ]
+      .map((id: unknown) => String(id).trim())
+      .filter(Boolean);
+  }
+  if (!ids.length) return res.status(400).json({ error: "Select at least one team member from the list." });
+  const roleForUser = (userId: string) => {
+    if (rawAssignments) {
+      const row = rawAssignments.find((a: { userId?: unknown }) => String(a?.userId) === userId);
+      return String(row?.role || defaultRole || "member");
+    }
+    return defaultRole;
+  };
   const staff = await prisma.user.findMany({
     where: {
       id: { in: ids },
       OR: [
-        { role: { in: ["admin", "office", "site_employee"] } },
+        { role: { in: ["admin", "office", "site_employee", "hr"] } },
         { role: "employee", vendorId: null },
       ],
     },
@@ -1253,10 +1295,11 @@ projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req:
   const ok = new Set(staff.map((u) => u.id));
   const allowed = ids.filter((id) => ok.has(id));
   if (!allowed.length) {
-    return res.status(400).json({ error: "Assign SPDC staff from HRMS Users only — not clients, consultants, or vendors." });
+    return res.status(400).json({ error: "Assign SPDC team from HRMS → Users only — not clients, consultants, or vendors." });
   }
   const members = [];
   for (const userId of allowed) {
+    const role = roleForUser(userId);
     members.push(
       await prisma.projectMember.upsert({
         where: { projectId_userId: { projectId: req.params.id, userId } },
@@ -1266,6 +1309,20 @@ projectsRouter.post("/:id/members", requireRoles("admin", "office"), async (req:
     );
   }
   res.json(ids.length === 1 ? members[0] : { ok: true, assigned: members.length });
+});
+
+projectsRouter.patch("/:id/members/:memberId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const role = String(req.body?.role || "").trim();
+  if (!role) return res.status(400).json({ error: "role required" });
+  const member = await prisma.projectMember.findFirst({
+    where: { id: req.params.memberId, projectId: req.params.id },
+  });
+  if (!member) return res.status(404).json({ error: "Team member not found on this project" });
+  const updated = await prisma.projectMember.update({
+    where: { id: member.id },
+    data: { role },
+  });
+  res.json(updated);
 });
 
 export const dmsRouter = Router();

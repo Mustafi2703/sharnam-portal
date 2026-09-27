@@ -317,8 +317,28 @@ usersRouter.get("/", requireRoles("admin", "office"), async (req, res) => {
     select: { id: true, email: true, fullName: true, role: true, portal: true, phone: true, isActive: true, vendorId: true },
     orderBy: { fullName: "asc" },
   });
+  const profiles =
+    kind === "staff" && users.length
+      ? await prisma.employeeProfile.findMany({
+          where: { userId: { in: users.map((u) => u.id) } },
+          select: { userId: true, designation: true, department: true, empCode: true },
+        })
+      : [];
+  const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
   const { isHiddenPortalListUser } = await import("../services/keepPortalUsers.js");
-  res.json(users.filter((u) => !isHiddenPortalListUser(u.email)));
+  res.json(
+    users
+      .filter((u) => !isHiddenPortalListUser(u.email))
+      .map((u) => {
+        const profile = profileByUser.get(u.id);
+        return {
+          ...u,
+          designation: profile?.designation || null,
+          department: profile?.department || null,
+          empCode: profile?.empCode || null,
+        };
+      }),
+  );
 });
 
 usersRouter.patch("/:id", requireRoles("admin", "office"), async (req, res) => {

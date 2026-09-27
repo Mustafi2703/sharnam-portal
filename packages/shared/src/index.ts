@@ -352,6 +352,9 @@ export {
   suggestedLoginRoleForCompanyRole,
   spdcDepartmentOptions,
   spdcCompanyRoleOptions,
+  PROJECT_MEMBER_ROLE_LABELS,
+  projectMemberRoleLabel,
+  suggestedProjectMemberRole,
 } from "./spdcOrg.js";
 
 export {

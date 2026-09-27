@@ -14,6 +14,7 @@ import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { uiCopy } from "../../lib/formatUiText";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
+import { suggestedProjectMemberRole } from "@sharnam/shared";
 import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../../lib/workPackages";
 
 type ProjectRow = {
@@ -27,7 +28,17 @@ type ProjectRow = {
   alreadyExists?: boolean;
 };
 
-type UserRow = { id: string; fullName: string; email: string; role: string; phone?: string | null; vendorId?: string | null };
+type UserRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  phone?: string | null;
+  vendorId?: string | null;
+  designation?: string | null;
+  department?: string | null;
+  empCode?: string | null;
+};
 type VendorRow = {
   id: string;
   name: string;
@@ -54,7 +65,18 @@ type SetupSummary = {
     endDate?: string | null;
   };
   lead?: { id: string; title: string; stage: string } | null;
-  members: { id: string; userId: string; fullName: string; email: string; portalRole: string; role: string; vendorId?: string | null }[];
+  members: {
+    id: string;
+    userId: string;
+    fullName: string;
+    email: string;
+    portalRole: string;
+    role: string;
+    vendorId?: string | null;
+    designation?: string | null;
+    department?: string | null;
+    empCode?: string | null;
+  }[];
   vendors: {
     id: string;
     vendorId: string;
@@ -116,7 +138,7 @@ function dayField(v?: string | null) {
 }
 
 const STEPS: { id: Step; n: string; label: string }[] = [
-  { id: "project", n: "1", label: uiCopy("Card · parties · staff") },
+  { id: "project", n: "1", label: uiCopy("Card · parties · team") },
   { id: "matrix", n: "2", label: uiCopy("Communication matrix · export") },
   { id: "launch", n: "3", label: uiCopy("Launch") },
 ];
@@ -336,17 +358,25 @@ export default function CrmProjectSetupPage() {
           return u && isSpdcStaffUser(u);
         });
         if (spdcIds.length) {
+          const assignments = spdcIds.map((userId) => {
+            const u = users.find((x) => x.id === userId);
+            const existing = summary?.members.find((m) => m.userId === userId);
+            return {
+              userId,
+              role: existing?.role || suggestedProjectMemberRole(u?.designation),
+            };
+          });
           await api(`/api/projects/${projectId}/members`, {
             method: "POST",
             token,
-            body: JSON.stringify({ userIds: spdcIds, role: "member" }),
+            body: JSON.stringify({ assignments }),
           });
         }
       }
       await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token }).catch(() => null);
       const baseMsg =
         details.status && details.status !== "Planning"
-          ? "Project card updated. New consultants, vendors, and SPDC staff are linked to this job."
+          ? "Project card updated. New consultants, vendors, and team members are linked to this job."
           : "Project card saved. Technical and commercial matrices filled from this card.";
       setMsg(loginWarn ? `${baseMsg} Client master saved; portal login: ${loginWarn}` : baseMsg);
       await loadProject();
@@ -437,8 +467,8 @@ export default function CrmProjectSetupPage() {
           title={projectId ? (isLaunched ? "Edit project card & team" : "Project setup") : "Project setup"}
           subtitle={
             projectId && isLaunched
-              ? "Job is live — update the client card and add consultants, vendors, packages, or SPDC employees as the project grows. Save links them; new logins are still created on the directory pages."
-              : "Pick client, PMC, consultants, vendors, packages, and SPDC staff. New people and companies are added on the directory pages — save only links them to this job."
+              ? "Job is live — update the client card and add consultants, vendors, packages, or team members as the project grows. Save links them; new logins are still created on the directory pages."
+              : "Pick client, PMC, consultants, vendors, packages, and SPDC team. New people and companies are added on the directory pages — save only links them to this job."
           }
         />
         {summary && (
@@ -497,7 +527,7 @@ export default function CrmProjectSetupPage() {
             <h3 className="font-semibold text-sm">{projectId ? "Project card & parties" : "New delivery project"}</h3>
             {projectId && isLaunched ? (
               <p className="text-xs text-steel-muted leading-relaxed">
-                Tick more consultants, contractors, or SPDC staff below and save — existing assignments stay; new picks are added to this job.
+                Tick more consultants, contractors, or team members below and save — existing assignments stay; new picks are added to this job.
               </p>
             ) : null}
             <form
@@ -780,7 +810,7 @@ export default function CrmProjectSetupPage() {
             {summary?.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
             {summary && (
               <p className="text-xs text-steel-muted leading-relaxed">
-                {projectStatusHint(summary.project.status)} Stored: {summary.members.length} SPDC staff ·{" "}
+                {projectStatusHint(summary.project.status)} Stored: {summary.members.filter((m) => isSpdcStaffMember(m)).length} team ·{" "}
                 {summary.vendors.length} companies
                 {details.location ? ` · ${details.location}` : ""}.
               </p>
@@ -841,7 +871,7 @@ export default function CrmProjectSetupPage() {
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Project already launched</h3>
           <p className="text-sm text-steel-muted leading-relaxed">
-            Status is <strong>{summary?.project.status}</strong>. Use step 1 to add consultants, vendors, or SPDC employees during the job.
+            Status is <strong>{summary?.project.status}</strong>. Use step 1 to add consultants, vendors, or team members during the job.
             Re-run launch only if you need to refresh folders. Matrix, DPR, and WPR are not duplicated.
           </p>
           <div className="flex flex-wrap gap-2">

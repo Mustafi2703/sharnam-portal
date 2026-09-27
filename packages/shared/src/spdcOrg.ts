@@ -65,3 +65,33 @@ export function spdcCompanyRoleOptions(existing: string[] = []): string[] {
   const merged = new Set<string>([...SPDC_COMPANY_ROLES, ...existing.map((x) => x.trim()).filter(Boolean)]);
   return [...merged].sort((a, b) => a.localeCompare(b));
 }
+
+/** On-project assignment role (ProjectMember.role) — separate from company designation. */
+export const PROJECT_MEMBER_ROLE_LABELS: Record<string, string> = {
+  project_manager: "Project Manager",
+  site_engineer: "Site Engineer",
+  quality_lead: "Quality Lead",
+  document_controller: "Document Controller",
+  member: "Team member",
+  viewer: "Viewer",
+  client: "Client",
+  consultant: "Consultant",
+  vendor: "Vendor",
+};
+
+export function projectMemberRoleLabel(role: string | null | undefined): string {
+  const key = String(role || "member").trim();
+  return PROJECT_MEMBER_ROLE_LABELS[key] || key.replace(/_/g, " ");
+}
+
+/** Default project assignment from HRMS company role (designation). */
+export function suggestedProjectMemberRole(designation: string | null | undefined): string {
+  const d = (designation || "").trim().toLowerCase();
+  if (!d) return "member";
+  if (d.includes("project manager") || d === "director" || d === "coordinator") return "project_manager";
+  if (d.includes("quality")) return "quality_lead";
+  if (d.includes("planning") || d.includes("billing")) return "member";
+  if (d.includes("engineer") || d.includes("safety") || d.includes("mepf")) return "site_engineer";
+  if (d === "hr") return "member";
+  return "member";
+}

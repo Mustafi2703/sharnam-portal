@@ -155,8 +155,8 @@ export async function getProjectSetupStatus(projectId: string) {
     {
       key: "directory",
       ok: memberCount > 0,
-      label: "Employees assigned",
-      detail: memberCount ? `${memberCount} people from the staff list · ${vendorCount} companies` : "Select staff from the list",
+      label: "Team assigned",
+      detail: memberCount ? `${memberCount} SPDC team member(s) · ${vendorCount} companies` : "Pick team from HRMS → Users",
     },
     {
       key: "comms",
