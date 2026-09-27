@@ -392,14 +392,27 @@ function replacePlaceholderRuns(xml: string, tokens: Record<string, string>): st
   return out;
 }
 
+/** Templates mark {{TOKEN}} in yellow — remove highlight/shading after fill so only updated text shows. */
+function stripPlaceholderHighlightFromXml(xml: string): string {
+  let out = xml;
+  out = out.replace(/<w:highlight\b[^/]*\/>/g, "");
+  out = out.replace(/<w:highlight\b[^>]*>[\s\S]*?<\/w:highlight>/g, "");
+  out = out.replace(/<w:shd\b(?=[^>]*\bw:fill="(?:FFFF00|ffff00|yellow|FFF2CC|fff2cc)")[^/]*\/>/g, "");
+  out = out.replace(/<w:shd\b(?=[^>]*\bw:fill="(?:FFFF00|ffff00|yellow|FFF2CC|fff2cc)")[^>]*>[\s\S]*?<\/w:shd>/g, "");
+  return out;
+}
+
 export async function fillHrmsDocx(template: Buffer, tokens: Record<string, string>): Promise<Buffer> {
   const zip = await JSZip.loadAsync(template);
-  const xmlParts = Object.keys(zip.files).filter((k) => /^word\/(document|header\d*|footer\d*)\.xml$/.test(k));
+  const xmlParts = Object.keys(zip.files).filter((k) =>
+    /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(k),
+  );
   for (const part of xmlParts) {
     const entry = zip.file(part);
     if (!entry) continue;
     let xml = await entry.async("string");
     xml = replacePlaceholderRuns(xml, tokens);
+    xml = stripPlaceholderHighlightFromXml(xml);
     zip.file(part, xml);
   }
   return Buffer.from(await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));

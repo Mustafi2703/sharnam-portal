@@ -3,10 +3,12 @@ import { useEffect, useRef } from "react";
 type Props = {
   blob: Blob | null;
   className?: string;
+  /** panel = composer sidebar; modal = full-screen dialog (fills height, scrolls inside). */
+  layout?: "panel" | "modal";
 };
 
 /** Renders a .docx blob — same bytes as Generate / Word download (docx-preview). */
-export default function HrmsDocxPreview({ blob, className }: Props) {
+export default function HrmsDocxPreview({ blob, className, layout = "panel" }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const styleRef = useRef<HTMLDivElement | null>(null);
 
@@ -57,10 +59,18 @@ export default function HrmsDocxPreview({ blob, className }: Props) {
     );
   }
 
+  const frameClass =
+    layout === "modal"
+      ? "hrms-docx-preview-frame hrms-docx-preview-frame--modal w-full flex flex-col min-h-0 flex-1"
+      : "hrms-docx-preview-frame w-full flex flex-col min-h-0";
+
   return (
-    <div className={className || "hrms-docx-preview-frame w-full min-h-[360px] flex flex-col"}>
+    <div className={[frameClass, className].filter(Boolean).join(" ")}>
       <div ref={styleRef} className="hrms-docx-preview-styles" aria-hidden />
-      <div ref={hostRef} className="docx-preview-host flex-1 overflow-auto bg-[#e8eaed] p-4" />
+      <div
+        ref={hostRef}
+        className="docx-preview-host scrollbars-visible flex-1 min-h-0 overflow-y-auto overscroll-contain bg-[#e8eaed] p-4"
+      />
     </div>
   );
 }

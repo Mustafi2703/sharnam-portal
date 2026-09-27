@@ -612,7 +612,7 @@ export default function HrmsDocumentsPage() {
 
                   <div
                     ref={previewPanelRef}
-                    className="rounded-lg border border-line bg-white overflow-hidden min-h-[280px] flex flex-col"
+                    className="rounded-lg border border-line bg-white flex flex-col min-h-[280px]"
                   >
                     <div className="px-3 py-2 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] font-mono uppercase text-steel-muted">Letter preview (official Word template)</span>
@@ -624,7 +624,7 @@ export default function HrmsDocumentsPage() {
                     </div>
                     {previewDocxBlob ? (
                       <>
-                        <HrmsDocxPreview blob={previewDocxBlob} className="flex-1 min-h-[360px]" />
+                        <HrmsDocxPreview blob={previewDocxBlob} layout="panel" />
                         <div className="px-3 py-2 border-t border-line flex flex-wrap gap-2">
                           <Button type="button" className="!text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
                             {previewIsCurrent ? "Generate & file (SharePoint)" : "Preview again, then generate"}
@@ -778,7 +778,7 @@ export default function HrmsDocumentsPage() {
                     Close
                   </Button>
                 </div>
-                <HrmsDocxPreview blob={previewDocxBlob} className="flex-1 min-h-0 overflow-hidden" />
+                <HrmsDocxPreview blob={previewDocxBlob} layout="modal" />
               </div>
             </div>,
             document.body,

@@ -11927,3 +11927,26 @@ html.is-standalone-form #root {
   max-width: none;
   height: auto;
 }
+
+.hrms-docx-preview-frame {
+  max-height: min(520px, 52vh);
+  min-height: 280px;
+}
+.hrms-docx-preview-frame--modal {
+  max-height: none;
+  min-height: 0;
+  height: 100%;
+}
+.hrms-docx-preview-frame .docx-preview-host {
+  -webkit-overflow-scrolling: touch;
+}
+/* Filled HR letters — no yellow placeholder shading in browser preview */
+.docx-preview-host section.docx span[style*="background-color: yellow"],
+.docx-preview-host section.docx span[style*="background-color:#ffff00"],
+.docx-preview-host section.docx span[style*="background-color: #ffff00"],
+.docx-preview-host section.docx span[style*="background-color:#FFFF00"],
+.docx-preview-host section.docx span[style*="background-color: #FFFF00"],
+.docx-preview-host section.docx mark {
+  background: transparent !important;
+  background-color: transparent !important;
+}

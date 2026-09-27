@@ -977,6 +977,18 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
   if (nextStatus === "Awarded" && before.status !== "Awarded") {
     return res.status(400).json({ error: "Use Award on the proposal to put a Planning job on the projects register." });
   }
+  const sectionsJson =
+    req.body.sectionsJson != null
+      ? typeof req.body.sectionsJson === "string"
+        ? req.body.sectionsJson
+        : JSON.stringify(req.body.sectionsJson)
+      : before.sectionsJson;
+  const quotationDate =
+    req.body.quotationDate != null && String(req.body.quotationDate).trim()
+      ? new Date(String(req.body.quotationDate))
+      : before.quotationDate;
+  const currency = req.body.currency != null ? String(req.body.currency).trim() || before.currency : before.currency;
+
   const row = await prisma.quotation.update({
     where: { id: req.params.id },
     data: {
@@ -988,9 +1000,26 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
       scopeSummary: req.body.scopeSummary ?? before.scopeSummary,
       totalValue: req.body.totalValue != null ? Number(req.body.totalValue) : before.totalValue,
       validityDays: req.body.validityDays != null ? Number(req.body.validityDays) : before.validityDays,
+      sectionsJson,
+      quotationDate: Number.isNaN(quotationDate.getTime()) ? before.quotationDate : quotationDate,
+      currency,
     },
     include: quotationInclude(),
   });
+  if (
+    req.body.sectionsJson != null ||
+    req.body.quotationNo != null ||
+    req.body.clientName != null ||
+    req.body.clientAddress != null ||
+    req.body.clientGst != null ||
+    req.body.scopeSummary != null ||
+    req.body.totalValue != null ||
+    req.body.validityDays != null ||
+    req.body.quotationDate != null ||
+    req.body.currency != null
+  ) {
+    writeQuotationFiles(quotationFromRecord(row));
+  }
   if (nextStatus === "Sent to client" && before.status !== "Sent to client") {
     await markCurrentProposalSent({
       quotationId: row.id,

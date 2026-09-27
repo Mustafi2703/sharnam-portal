@@ -137,8 +137,35 @@ export async function seedAllDemoSheetModules(prisma: PrismaClient) {
     console.warn("CRM comparative seed skipped:", e instanceof Error ? e.message : e);
   }
 
+  console.log("\n==> CRM quotation demo (SPDC proposal desk)");
+  try {
+    const { seedQuotationDemo } = await import("./quotationDemo.ts");
+    await seedQuotationDemo(prisma, reporter.id);
+  } catch (e) {
+    console.warn("Quotation demo seed skipped:", e instanceof Error ? e.message : e);
+  }
+
+  console.log("\n==> HRMS full flow (requisition → offer → letters → Riya Shah staff)");
+  try {
+    const { seedHrmsFlowDemo } = await import("./hrmsFlowDemo.ts");
+    const hrms = await seedHrmsFlowDemo(prisma);
+    console.log(`  ✓ ${hrms.user.email} · appointment ${hrms.appointmentRef}`);
+  } catch (e) {
+    console.warn("HRMS flow seed skipped:", e instanceof Error ? e.message : e);
+  }
+
+  console.log("\n==> HRMS payslip samples (current month)");
+  try {
+    const { seedPayslipStaffDemo } = await import("./payslipStaffDemo.ts");
+    await seedPayslipStaffDemo(prisma);
+  } catch (e) {
+    console.warn("Payslip demo seed skipped:", e instanceof Error ? e.message : e);
+  }
+
   console.log("\n✓ Demo screenshot pack ready on SPDC-DEMO-01 and SPDC-PILOT-02");
-  console.log("  Drawing register · GFC links · Quality · Safety · Finance · DPR week · WPR week + client pack");
+  console.log("  Project modules · DPR/WPR week · CRM comparative + quotation · HRMS flow + payslips");
+  console.log("  Capture guide: docs/client-share/UAT-SCREENSHOT-CHECKLIST.md");
+  console.log("  Handover flows: docs/handover/CRM-HRMS-CUSTOM-SHEETS-HANDOVER.md");
 }
 
 async function main() {

@@ -27,6 +27,9 @@ type Revision = {
   uploadedAt?: string | null;
 };
 
+type QuotationRow = { description: string; unit: string; qty: number; rate: number; amount: number };
+type QuotationSection = { title: string; note?: string; rows: QuotationRow[] };
+
 type Quotation = {
   id: string;
   quotationNo: string;
@@ -36,6 +39,9 @@ type Quotation = {
   scopeSummary?: string | null;
   totalValue?: number | null;
   validityDays?: number | null;
+  quotationDate?: string | null;
+  currency?: string | null;
+  sectionsJson?: string | null;
   status: string;
   projectId?: string | null;
   awardedProjectId?: string | null;
@@ -46,6 +52,31 @@ type Quotation = {
   revisions?: Revision[];
   log?: LogRow[];
 };
+
+function parseSections(raw: string | null | undefined): QuotationSection[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function sumSections(sections: QuotationSection[]): number {
+  return sections.reduce((s, sec) => s + sec.rows.reduce((r, row) => r + Number(row.amount || 0), 0), 0);
+}
+
+function normalizeRow(row: QuotationRow): QuotationRow {
+  const qty = Number(row.qty) || 0;
+  const rate = Number(row.rate) || 0;
+  const amount = row.amount != null && row.amount !== (qty * rate as unknown as number) ? Number(row.amount) || qty * rate : qty * rate;
+  return { ...row, qty, rate, amount: Number.isFinite(amount) ? amount : qty * rate };
+}
+
+function emptySection(): QuotationSection {
+  return { title: "New section", note: "", rows: [{ description: "", unit: "—", qty: 1, rate: 0, amount: 0 }] };
+}
 
 function driveHref(q: Quotation | null) {
   if (!q) return null;
@@ -89,7 +120,10 @@ export default function QuotationMakerPage() {
     scopeSummary: "",
     totalValue: "",
     validityDays: "30",
+    quotationDate: "",
+    currency: "INR",
   });
+  const [sections, setSections] = useState<QuotationSection[]>([]);
 
   useEffect(() => {
     if (!isEditing) nav("/crm/proposals", { replace: true });
@@ -101,6 +135,7 @@ export default function QuotationMakerPage() {
       const q = await api<Quotation>(`/api/crm/quotations/${id}`, { token });
       setSaved(q);
       setStatus(q.status);
+      const loadedSections = parseSections(q.sectionsJson);
       setDetails({
         quotationNo: q.quotationNo || "",
         clientName: q.clientName || "",
@@ -109,7 +144,10 @@ export default function QuotationMakerPage() {
         scopeSummary: q.scopeSummary || "",
         totalValue: q.totalValue != null ? String(q.totalValue) : "",
         validityDays: q.validityDays != null ? String(q.validityDays) : "30",
+        quotationDate: q.quotationDate ? String(q.quotationDate).slice(0, 10) : "",
+        currency: q.currency || "INR",
       });
+      setSections(loadedSections.length ? loadedSections : []);
     })().catch((err) => setMsg(err instanceof Error ? err.message : "Load failed"));
   }, [id, token, isEditing]);
 
@@ -120,6 +158,12 @@ export default function QuotationMakerPage() {
     setSaving(true);
     setMsg("");
     try {
+      const normalizedSections = sections.map((sec) => ({
+        ...sec,
+        rows: sec.rows.map((row) => normalizeRow(row)),
+      }));
+      const computedTotal = sumSections(normalizedSections);
+      const totalValue = details.totalValue ? Number(details.totalValue) : computedTotal;
       const r = await api<Quotation>(`/api/crm/quotations/${saved.id}`, {
         method: "PATCH",
         token,
@@ -129,11 +173,16 @@ export default function QuotationMakerPage() {
           clientAddress: details.clientAddress.trim(),
           clientGst: details.clientGst.trim() || null,
           scopeSummary: details.scopeSummary.trim() || null,
-          totalValue: details.totalValue ? Number(details.totalValue) : 0,
+          totalValue,
           validityDays: details.validityDays ? Number(details.validityDays) : 30,
+          quotationDate: details.quotationDate || undefined,
+          currency: details.currency.trim() || "INR",
+          sectionsJson: normalizedSections,
         }),
       });
       setSaved(r);
+      setSections(parseSections(r.sectionsJson));
+      setDetails((d) => ({ ...d, totalValue: r.totalValue != null ? String(r.totalValue) : d.totalValue }));
       setMsg("Proposal details saved — download .docx or open SharePoint to refresh Word.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
@@ -294,10 +343,221 @@ export default function QuotationMakerPage() {
             <Input placeholder="Client name" value={details.clientName} onChange={(e) => setDetails({ ...details, clientName: e.target.value })} />
             <Input className="sm:col-span-2" placeholder="Client address" value={details.clientAddress} onChange={(e) => setDetails({ ...details, clientAddress: e.target.value })} />
             <Input placeholder="Client GSTIN" value={details.clientGst} onChange={(e) => setDetails({ ...details, clientGst: e.target.value })} />
+            <Input type="date" placeholder="Quotation date" value={details.quotationDate} onChange={(e) => setDetails({ ...details, quotationDate: e.target.value })} />
+            <Input placeholder="Currency" value={details.currency} onChange={(e) => setDetails({ ...details, currency: e.target.value })} />
             <Input placeholder="Validity (days)" value={details.validityDays} onChange={(e) => setDetails({ ...details, validityDays: e.target.value })} />
             <Input placeholder="Total value (INR)" value={details.totalValue} onChange={(e) => setDetails({ ...details, totalValue: e.target.value })} />
             <TextArea className="sm:col-span-2" rows={3} placeholder="Scope summary" value={details.scopeSummary} onChange={(e) => setDetails({ ...details, scopeSummary: e.target.value })} />
           </div>
+
+          <div className="border-t border-line pt-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="font-semibold text-sm">Commercial sections (portal → HTML export)</h4>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!py-1 !text-xs"
+                  onClick={() => setSections((s) => [...s, emptySection()])}
+                >
+                  Add section
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!py-1 !text-xs"
+                  onClick={() => {
+                    const t = sumSections(sections);
+                    setDetails((d) => ({ ...d, totalValue: String(t) }));
+                  }}
+                >
+                  Recalc total from rows
+                </Button>
+              </div>
+            </div>
+            {!sections.length ? (
+              <p className="text-xs text-steel-muted">
+                No sections yet — add sections here or edit in Word; saved JSON feeds Download HTML and summary exports.
+              </p>
+            ) : null}
+            {sections.map((sec, si) => (
+              <div key={si} className="rounded-lg border border-line p-3 space-y-2 bg-white">
+                <div className="flex flex-wrap gap-2 items-start">
+                  <Input
+                    className="flex-1 min-w-[200px] font-semibold"
+                    placeholder="Section title"
+                    value={sec.title}
+                    onChange={(e) =>
+                      setSections((all) => all.map((s, i) => (i === si ? { ...s, title: e.target.value } : s)))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!py-1 !text-xs shrink-0"
+                    onClick={() => setSections((all) => all.filter((_, i) => i !== si))}
+                  >
+                    Remove section
+                  </Button>
+                </div>
+                <TextArea
+                  rows={2}
+                  placeholder="Section note (optional)"
+                  value={sec.note || ""}
+                  onChange={(e) =>
+                    setSections((all) => all.map((s, i) => (i === si ? { ...s, note: e.target.value } : s)))
+                  }
+                />
+                <div className="overflow-x-auto scrollbars-visible">
+                  <table className="w-full text-xs min-w-[640px]">
+                    <thead className="text-steel-muted text-left">
+                      <tr>
+                        <th className="p-1">Description</th>
+                        <th className="p-1 w-16">Unit</th>
+                        <th className="p-1 w-16">Qty</th>
+                        <th className="p-1 w-24">Rate</th>
+                        <th className="p-1 w-24">Amount</th>
+                        <th className="p-1 w-12" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sec.rows.map((row, ri) => (
+                        <tr key={ri} className="border-t border-line/60">
+                          <td className="p-1">
+                            <Input
+                              className="!text-xs"
+                              value={row.description}
+                              onChange={(e) =>
+                                setSections((all) =>
+                                  all.map((s, i) =>
+                                    i === si
+                                      ? {
+                                          ...s,
+                                          rows: s.rows.map((r, j) => (j === ri ? { ...r, description: e.target.value } : r)),
+                                        }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="p-1">
+                            <Input
+                              className="!text-xs"
+                              value={row.unit}
+                              onChange={(e) =>
+                                setSections((all) =>
+                                  all.map((s, i) =>
+                                    i === si
+                                      ? {
+                                          ...s,
+                                          rows: s.rows.map((r, j) => (j === ri ? { ...r, unit: e.target.value } : r)),
+                                        }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="p-1">
+                            <Input
+                              className="!text-xs"
+                              type="number"
+                              value={row.qty}
+                              onChange={(e) => {
+                                const qty = Number(e.target.value);
+                                setSections((all) =>
+                                  all.map((s, i) =>
+                                    i === si
+                                      ? {
+                                          ...s,
+                                          rows: s.rows.map((r, j) =>
+                                            j === ri ? normalizeRow({ ...r, qty, amount: qty * (Number(r.rate) || 0) }) : r,
+                                          ),
+                                        }
+                                      : s,
+                                  ),
+                                );
+                              }}
+                            />
+                          </td>
+                          <td className="p-1">
+                            <Input
+                              className="!text-xs"
+                              type="number"
+                              value={row.rate}
+                              onChange={(e) => {
+                                const rate = Number(e.target.value);
+                                setSections((all) =>
+                                  all.map((s, i) =>
+                                    i === si
+                                      ? {
+                                          ...s,
+                                          rows: s.rows.map((r, j) =>
+                                            j === ri ? normalizeRow({ ...r, rate, amount: (Number(r.qty) || 0) * rate }) : r,
+                                          ),
+                                        }
+                                      : s,
+                                  ),
+                                );
+                              }}
+                            />
+                          </td>
+                          <td className="p-1">
+                            <Input
+                              className="!text-xs"
+                              type="number"
+                              value={row.amount}
+                              onChange={(e) =>
+                                setSections((all) =>
+                                  all.map((s, i) =>
+                                    i === si
+                                      ? {
+                                          ...s,
+                                          rows: s.rows.map((r, j) => (j === ri ? { ...r, amount: Number(e.target.value) || 0 } : r)),
+                                        }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </td>
+                          <td className="p-1">
+                            <button
+                              type="button"
+                              className="text-[10px] text-danger"
+                              onClick={() =>
+                                setSections((all) =>
+                                  all.map((s, i) => (i === si ? { ...s, rows: s.rows.filter((_, j) => j !== ri) } : s)),
+                                )
+                              }
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!py-1 !text-xs"
+                  onClick={() =>
+                    setSections((all) =>
+                      all.map((s, i) =>
+                        i === si ? { ...s, rows: [...s.rows, { description: "", unit: "—", qty: 1, rate: 0, amount: 0 }] } : s,
+                      ),
+                    )
+                  }
+                >
+                  Add row
+                </Button>
+              </div>
+            ))}
+          </div>
+
           <Button type="button" disabled={saving} onClick={() => void saveDetails()}>
             Save proposal details
           </Button>

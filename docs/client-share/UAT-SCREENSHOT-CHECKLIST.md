@@ -22,6 +22,8 @@ Optional seed before capture (local or staging):
 npm run db:seed-demo-screenshots
 ```
 
+Handover flows (CRM / HRMS / sheet maker): [../handover/CRM-HRMS-CUSTOM-SHEETS-HANDOVER.md](../handover/CRM-HRMS-CUSTOM-SHEETS-HANDOVER.md)
+
 ---
 
 ## Capture checklist
@@ -61,7 +63,11 @@ Replace `{PID}` with project id from URL after opening SPDC-DEMO-01.
 | 26 | `26-closure-snag.png` | `/projects/{PID}/closure?sheet=snaglist` | Snaglist | Office |
 | 27 | `27-closure-lessons.png` | `/projects/{PID}/closure?sheet=lessons` | Lessons learnt | Office |
 | 28 | `28-hrm-desk.png` | `/hrm` | HRMS hub | Office |
+| 28a | `28a-hrm-documents.png` | `/hrm/documents` | Letter desk + Word preview | Office |
+| 28b | `28b-hrm-payroll-slip.png` | `/hrm/payroll` | Payslip row → View slip | Office |
 | 29 | `29-hrm-recruitment.png` | `/hrm/recruitment` | Recruitment pipeline | Office |
+| 36 | `36-custom-sheets.png` | `/custom-sheets` | Upload/blank sheet + export | Office |
+| 36a | `36a-custom-sheets-formula.png` | `/custom-sheets/:id` | Formula preview recalc | Office |
 | 30 | `30-attendance.png` | `/attendance` | Site attendance punch | **Site mobile** |
 | 31 | `31-field-diary.png` | `/projects/{PID}/diary` | Day log | Site |
 | 32 | `32-field-photos.png` | `/projects/{PID}/photos` | Site photos | Site |
