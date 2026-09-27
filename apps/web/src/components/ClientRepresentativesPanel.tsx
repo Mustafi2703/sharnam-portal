@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Input } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
@@ -11,25 +11,69 @@ type ContactRow = {
   portalActive?: boolean;
 };
 
+export type CompanyRepDesk = "client" | "vendor" | "consultant";
+
 const DEFAULT_PASSWORD = "Demo@1234";
 
+const DESK: Record<
+  CompanyRepDesk,
+  {
+    stepTitle: string;
+    blurb: string;
+    loginPath: string;
+    loginLabel: string;
+    removeConfirm: string;
+    addedMsg: string;
+  }
+> = {
+  client: {
+    stepTitle: "Step 2 · Client representatives",
+    blurb: "who needs the client portal (/login/client). Separate from vendor and consultant logins.",
+    loginPath: "/login/client",
+    loginLabel: "client",
+    removeConfirm: "Remove this person from the client list?",
+    addedMsg: "Person added — Activate portal for /login/client.",
+  },
+  vendor: {
+    stepTitle: "Step 2 · Vendor / contractor users",
+    blurb: "who need the contractor portal (/login/vendor) for bids and project desk. Not client logins.",
+    loginPath: "/login/vendor",
+    loginLabel: "vendor",
+    removeConfirm: "Remove this person from the vendor user list?",
+    addedMsg: "Person added — Activate portal for /login/vendor.",
+  },
+  consultant: {
+    stepTitle: "Step 2 · Consultant users",
+    blurb: "who need the stakeholder portal (/login/stakeholder). Not SPDC staff — add those in HRMS → Users.",
+    loginPath: "/login/stakeholder",
+    loginLabel: "consultant",
+    removeConfirm: "Remove this person from the consultant list?",
+    addedMsg: "Person added — Activate portal for /login/stakeholder.",
+  },
+};
+
 /**
- * Step 2 for client directory — add multiple site representatives and activate /login/client for each.
+ * Step 2 on CRM directory — add people + activate the correct portal per company type.
  */
-export function ClientRepresentativesPanel({
+export function CompanyRepresentativesPanel({
+  desk,
   vendorId,
-  clientName,
+  companyName,
   token,
   canEdit,
 }: {
+  desk: CompanyRepDesk;
   vendorId: string;
-  clientName: string;
+  companyName: string;
   token: string | null;
   canEdit: boolean;
 }) {
+  const meta = DESK[desk];
   const [rows, setRows] = useState<ContactRow[]>([]);
   const [form, setForm] = useState({ fullName: "", email: "", role: "" });
   const [msg, setMsg] = useState("");
+  const [msgTone, setMsgTone] = useState<"ok" | "err">("ok");
+  const [submitBusy, setSubmitBusy] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [portalPassword, setPortalPassword] = useState(DEFAULT_PASSWORD);
 
@@ -44,8 +88,10 @@ export function ClientRepresentativesPanel({
 
   async function addPerson(e: FormEvent) {
     e.preventDefault();
-    if (!canEdit) return;
+    if (!canEdit || submitBusy) return;
     setMsg("");
+    setMsgTone("ok");
+    setSubmitBusy(true);
     try {
       await api(`/api/vendors/${vendorId}/contacts`, {
         method: "POST",
@@ -53,10 +99,14 @@ export function ClientRepresentativesPanel({
         body: JSON.stringify(form),
       });
       setForm({ fullName: "", email: "", role: "" });
-      setMsg("Person added — click Activate portal when their email is correct.");
+      setMsgTone("ok");
+      setMsg(meta.addedMsg);
       await load();
     } catch (err) {
+      setMsgTone("err");
       setMsg(err instanceof Error ? err.message : "Could not add person");
+    } finally {
+      setSubmitBusy(false);
     }
   }
 
@@ -64,6 +114,7 @@ export function ClientRepresentativesPanel({
     if (!canEdit) return;
     setActivatingId(contact.id);
     setMsg("");
+    setMsgTone("ok");
     try {
       const r = await api<{
         login?: { created?: boolean; tempPassword?: string; email?: string };
@@ -73,12 +124,14 @@ export function ClientRepresentativesPanel({
         token,
         body: JSON.stringify({ password: portalPassword.trim() || DEFAULT_PASSWORD }),
       });
+      const path = r.loginPath || meta.loginPath;
       const pwd = r.login?.tempPassword || portalPassword || DEFAULT_PASSWORD;
       setMsg(
-        `Portal ready for ${contact.fullName || contact.email} — sign in at /login/client with ${r.login?.email || contact.email} · Password: ${pwd}`,
+        `${meta.loginLabel} portal ready for ${contact.fullName || contact.email} — ${path} · ${r.login?.email || contact.email} · Password: ${pwd}`,
       );
       await load();
     } catch (err) {
+      setMsgTone("err");
       setMsg(err instanceof Error ? err.message : "Could not activate portal");
     } finally {
       setActivatingId(null);
@@ -86,26 +139,34 @@ export function ClientRepresentativesPanel({
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Remove this person from the client list?")) return;
+    if (!window.confirm(meta.removeConfirm)) return;
     await api(`/api/vendors/${vendorId}/contacts/${id}`, { method: "DELETE", token });
     await load();
   }
 
+  const stepHint = useMemo(
+    () => (
+      <ol className="text-xs text-steel-muted list-decimal list-inside space-y-1">
+        <li>Add name + email (+ role optional)</li>
+        <li>
+          Click <strong className="text-ink">Activate portal</strong> for that person
+        </li>
+        <li>
+          Share <code className="text-[11px]">{meta.loginPath}</code> and the password below
+        </li>
+      </ol>
+    ),
+    [meta.loginPath],
+  );
+
   return (
     <div className="mt-5 pt-5 border-t-2 border-brand/20 space-y-4">
       <div className="rounded-xl bg-brand-soft/30 border border-brand/15 p-4 space-y-2">
-        <p className="text-xs font-mono uppercase tracking-wide text-brand font-semibold">
-          {formatUiText("Step 2 · Client representatives")}
-        </p>
+        <p className="text-xs font-mono uppercase tracking-wide text-brand font-semibold">{formatUiText(meta.stepTitle)}</p>
         <p className="text-sm text-ink leading-relaxed">
-          {formatUiText("Add everyone from")} <strong data-preserve-case>{clientName}</strong>{" "}
-          {formatUiText("who needs the client portal. Each person gets their own login — you activate portal separately for each email.")}
+          {formatUiText("Add everyone from")} <strong data-preserve-case>{companyName}</strong> {formatUiText(meta.blurb)}
         </p>
-        <ol className="text-xs text-steel-muted list-decimal list-inside space-y-1">
-          <li>Add name + email (+ role optional) — you can add more people anytime while editing this client</li>
-          <li>Click <strong className="text-ink">Activate portal</strong> for that person</li>
-          <li>Share <code className="text-[11px]">/login/client</code> and the password below</li>
-        </ol>
+        {stepHint}
       </div>
 
       <ul className="space-y-3">
@@ -153,7 +214,7 @@ export function ClientRepresentativesPanel({
         ))}
         {!rows.length ? (
           <li className="text-sm text-steel-muted border border-dashed border-line rounded-xl p-4 text-center">
-            No representatives yet — use the form below to add the first person.
+            No people yet — use the form below to add the first person.
           </li>
         ) : null}
       </ul>
@@ -164,21 +225,33 @@ export function ClientRepresentativesPanel({
           <div className="grid sm:grid-cols-2 gap-2">
             <Input required placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
             <Input required type="email" placeholder="Email (their login)" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <Input className="sm:col-span-2" placeholder="Role (e.g. Project manager, Director)" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} />
+            <Input className="sm:col-span-2" placeholder="Role (e.g. Estimator, Director)" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} />
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-xs space-y-1 flex-1 min-w-[200px]">
               <span className="text-steel-muted">Portal password for new activations</span>
               <Input type="password" value={portalPassword} onChange={(e) => setPortalPassword(e.target.value)} autoComplete="new-password" />
             </label>
-            <Button type="submit" variant="secondary">
-              + Add person
+            <Button type="submit" variant="secondary" disabled={submitBusy}>
+              {submitBusy ? "Adding…" : "+ Add person"}
             </Button>
           </div>
         </form>
       ) : null}
 
-      {msg ? <p className="text-xs text-brand font-medium leading-relaxed">{msg}</p> : null}
+      {msg ? (
+        <p
+          className={`text-xs font-medium leading-relaxed ${msgTone === "err" ? "text-danger" : "text-brand"}`}
+          role={msgTone === "err" ? "alert" : undefined}
+        >
+          {msg}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/** @deprecated Use CompanyRepresentativesPanel with desk="client" */
+export function ClientRepresentativesPanel(props: Omit<Parameters<typeof CompanyRepresentativesPanel>[0], "desk">) {
+  return <CompanyRepresentativesPanel {...props} desk="client" />;
 }

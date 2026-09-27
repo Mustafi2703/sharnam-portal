@@ -190,6 +190,12 @@ export async function ensurePortalLogin(opts: {
   return { userId: user.id, email, created: true, tempPassword, role: opts.role };
 }
 
+export function portalRoleForPartyType(partyType?: string | null): RoleKey {
+  if (partyType === "Client") return "client";
+  if (partyType === "Consultant" || partyType === "Designer" || partyType === "PMC") return "employee";
+  return "vendor";
+}
+
 /** Client representative portal — login at /login/client, linked to the client company. */
 export async function syncClientRepresentativePortal(opts: {
   vendorId: string;
@@ -198,6 +204,37 @@ export async function syncClientRepresentativePortal(opts: {
   fullName?: string | null;
   password?: string | null;
 }): Promise<DirectoryLoginSyncResult> {
+  const out = await syncCompanyRepresentativePortal({
+    vendorId: opts.vendorId,
+    email: opts.email,
+    fullName: opts.fullName,
+    password: opts.password,
+  });
+  if (out && "error" in out) return out;
+  const { loginPath: _p, ...rest } = out;
+  return rest;
+}
+
+function loginPathForPartyType(partyType?: string | null): string {
+  const role = portalRoleForPartyType(partyType);
+  if (role === "client") return "/login/client";
+  if (role === "vendor") return "/login/vendor";
+  return "/login/stakeholder";
+}
+
+function companyKindLabel(partyType?: string | null): string {
+  if (partyType === "Client") return "client";
+  if (partyType === "Consultant" || partyType === "Designer" || partyType === "PMC") return "consultant";
+  return "vendor / contractor";
+}
+
+/** Additional directory contact — separate portal role per company type (client / vendor / consultant). */
+export async function syncCompanyRepresentativePortal(opts: {
+  vendorId: string;
+  email: string;
+  fullName?: string | null;
+  password?: string | null;
+}): Promise<(DirectoryLoginSyncResult & { loginPath: string }) | { error: string }> {
   const email = String(opts.email || "")
     .trim()
     .toLowerCase();
@@ -205,30 +242,48 @@ export async function syncClientRepresentativePortal(opts: {
 
   const vendor = await prisma.vendor.findUnique({
     where: { id: opts.vendorId },
-    select: { id: true, name: true, partyType: true, isActive: true },
+    select: { id: true, name: true, partyType: true, isActive: true, trade: true },
   });
-  if (!vendor || !vendor.isActive) return { error: "Client company not found." };
-  if (vendor.partyType !== "Client") return { error: "Portal activation here is only for client companies." };
+  if (!vendor || !vendor.isActive) return { error: "Company not found in CRM directory." };
 
-  const fullName = String(opts.fullName || email.split("@")[0] || opts.vendorName).trim();
+  const role = portalRoleForPartyType(vendor.partyType);
+  const loginPath = loginPathForPartyType(vendor.partyType);
+  const fullName = String(opts.fullName || email.split("@")[0] || vendor.name).trim();
   const password = String(opts.password || "").trim() || defaultTempPassword();
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing && isProtectedStaffLogin(existing)) {
-    return { error: `${email} is an SPDC staff login — use the person's own client email.` };
+    return { error: `${email} is an SPDC office login — use this person's own company email.` };
+  }
+
+  if (existing && existing.role !== role) {
+    if (existing.role === "client" && role !== "client") {
+      return { error: `${email} is already a client portal login. ${companyKindLabel(vendor.partyType)} users need a different email.` };
+    }
+    if (existing.role === "vendor" && role !== "vendor") {
+      return { error: `${email} is already a vendor portal login. Use a separate email for clients or consultants.` };
+    }
+    if (existing.role === "employee" && role !== "employee") {
+      return { error: `${email} is already a consultant portal login. Use a separate email for clients or vendors.` };
+    }
   }
 
   if (!existing) {
     const created = await ensurePortalLogin({
       email,
       fullName,
-      role: "client",
+      role,
       password,
       vendorId: vendor.id,
       designation: vendor.name,
+      department: role === "employee" ? vendor.trade || null : null,
     });
     if (!created) return { error: "Could not create portal login." };
-    return { ...created, tempPassword: created.tempPassword || password };
+    return { ...created, tempPassword: created.tempPassword || password, loginPath };
+  }
+
+  if (existing.vendorId && existing.vendorId !== vendor.id) {
+    return { error: `${email} is already linked to another company. Each person needs one company email.` };
   }
 
   const bcrypt = await import("bcryptjs");
@@ -238,20 +293,22 @@ export async function syncClientRepresentativePortal(opts: {
     data: {
       fullName,
       vendorId: vendor.id,
-      role: "client",
-      portal: portalForRole("client"),
+      role,
+      portal: portalForRole(role),
       isActive: true,
       passwordHash: await bcrypt.hash(password, 10),
+      ...(role === "employee" ? { department: vendor.trade || null } : {}),
     },
   });
-  await alignUserRole(updated.id, "client");
+  await alignUserRole(updated.id, role);
   return {
     userId: updated.id,
     email: updated.email,
     created: false,
-    role: "client",
+    role,
     passwordUpdated: true,
     tempPassword: password,
+    loginPath,
   };
 }
 
@@ -507,12 +564,6 @@ export async function ensureStakeholderPortalLogin(party: {
   return login;
 }
 
-
-export function portalRoleForPartyType(partyType?: string | null): RoleKey {
-  if (partyType === "Client") return "client";
-  if (partyType === "Consultant" || partyType === "Designer" || partyType === "PMC") return "employee";
-  return "vendor";
-}
 
 async function alignUserRole(userId: string, role: RoleKey) {
   const existing = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });

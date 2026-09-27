@@ -106,7 +106,7 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         to: "users",
         label: "Users",
         icon: "master",
-        subtitle: "All staff listed — set emp code, department, CTC, and project assignments before payroll.",
+        subtitle: "SPDC staff only — emp code, department, CTC, project assignment. Clients/vendors/consultants: Office → Access · Users.",
         adminOnly: true,
       },
     ],

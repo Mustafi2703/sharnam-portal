@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
-import { ClientRepresentativesPanel } from "../../components/ClientRepresentativesPanel";
+import { CompanyRepresentativesPanel } from "../../components/ClientRepresentativesPanel";
 import { useConsultantTypes } from "../../lib/consultantTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
 import { Button, Card, Input, PageHeader, Select, TextArea, Badge } from "../../components/ui";
@@ -36,7 +36,7 @@ const TAB_META: Record<
   vendors: {
     title: uiCopy("Vendors / contractors master"),
     subtitle: uiCopy(
-      "Add company and contact here. Activate vendor portal access when email is on file — then use Bid management.",
+      "Step 1: company + primary email. Step 2: add more users and activate /login/vendor — separate from client logins.",
     ),
     partyTypes: ["Contractor", "Vendor"] as VendorPartyType[],
     defaultParty: "Contractor",
@@ -44,7 +44,7 @@ const TAB_META: Record<
   clients: {
     title: uiCopy("Client directory"),
     subtitle: uiCopy(
-      "Step 1: add the client company. Step 2: add representatives. Step 3: activate portal for each person at /login/client.",
+      "Step 1: client company. Step 2: add representatives and activate /login/client — separate from vendor/consultant logins.",
     ),
     partyTypes: ["Client"],
     defaultParty: "Client",
@@ -53,7 +53,7 @@ const TAB_META: Record<
   stakeholders: {
     title: uiCopy("Consultants"),
     subtitle: uiCopy(
-      "External consultants only — not SPDC site or HR staff. Save the firm, set consultant type, activate stakeholder login. SPDC team: HRMS → Users.",
+      "Step 1: consultant firm. Step 2: add users and activate /login/stakeholder — not SPDC staff (HRMS → Users).",
     ),
     partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",
@@ -233,8 +233,12 @@ export function DirectoryCompaniesPanel({
           created.loginError
             ? `Company saved. ${created.loginError}`
             : tab === "clients"
-              ? "Client saved — scroll down to Step 2: add representatives, then Activate portal for each person."
-              : "Company saved. Add email if needed, then use Activate portal access.",
+              ? "Client saved — Step 2 below: add representatives, then Activate portal for each."
+              : tab === "vendors"
+                ? "Company saved — Step 2 below: add vendor users, then Activate portal for /login/vendor."
+                : tab === "stakeholders"
+                  ? "Consultant saved — Step 2 below: add users, then Activate portal for /login/stakeholder."
+                  : "Company saved. Add email if needed, then use Activate portal access.",
         );
       }
       await load();
@@ -529,9 +533,28 @@ export function DirectoryCompaniesPanel({
           {loginMsg && <p className="text-xs text-steel-muted">{loginMsg}</p>}
         </form>
         {tab === "clients" && selected ? (
-          <ClientRepresentativesPanel
+          <CompanyRepresentativesPanel
+            desk="client"
             vendorId={selected.id}
-            clientName={trimField(form.name) || selected.name || "this client"}
+            companyName={trimField(form.name) || selected.name || "this client"}
+            token={token}
+            canEdit={canEdit}
+          />
+        ) : null}
+        {tab === "vendors" && selected ? (
+          <CompanyRepresentativesPanel
+            desk="vendor"
+            vendorId={selected.id}
+            companyName={trimField(form.name) || selected.name || "this company"}
+            token={token}
+            canEdit={canEdit}
+          />
+        ) : null}
+        {tab === "stakeholders" && selected ? (
+          <CompanyRepresentativesPanel
+            desk="consultant"
+            vendorId={selected.id}
+            companyName={trimField(form.name) || selected.name || "this firm"}
             token={token}
             canEdit={canEdit}
           />

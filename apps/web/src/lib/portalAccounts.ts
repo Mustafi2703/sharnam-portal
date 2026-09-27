@@ -92,6 +92,27 @@ export function canManageHrms(user?: { role?: string | null; hrDeskOnly?: boolea
   return ["admin", "office", "hr"].includes(user.role || "");
 }
 
+/** Office / admin — all portal logins (clients, vendors, consultants, staff) at /roles. */
+export function canManageAllPortalUsers(user?: { role?: string | null; hrDeskOnly?: boolean } | null) {
+  if (!user) return false;
+  return user.role === "admin" || user.role === "office";
+}
+
+/** HR desk — SPDC team only (not external client/vendor/consultant accounts). */
+export function isHrDeskOperator(user?: { role?: string | null; hrDeskOnly?: boolean } | null) {
+  if (!user) return false;
+  if (user.hrDeskOnly) return true;
+  return user.role === "hr";
+}
+
+export function isSpdcStaffAccount(user: {
+  role?: string | null;
+  vendorId?: string | null;
+  profile?: KindProfile;
+}): boolean {
+  return kindForAccount(user) === "staff";
+}
+
 export function accountKindLabel(kind: PortalAccountKind): string {
   switch (kind) {
     case "client":

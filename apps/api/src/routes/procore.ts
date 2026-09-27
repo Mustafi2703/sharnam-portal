@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
@@ -245,8 +246,37 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
   res.json({ ...v, login, loginError, projectsSynced });
 });
 
-/** Site / client representatives — additional contacts beyond primary login email. */
+/** Client representatives only — not vendor/contractor logins (those use primary email on the company card). */
+const DIRECTORY_CONTACT_PARTY_TYPES = ["Client", "Contractor", "Vendor", "Consultant", "PMC", "Designer"] as const;
+
+async function loadCompanyForContacts(vendorId: string) {
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: { id: true, name: true, partyType: true, email: true, isActive: true, trade: true },
+  });
+  if (!vendor || vendor.isActive === false) return { error: "not_found" as const };
+  if (!(DIRECTORY_CONTACT_PARTY_TYPES as readonly string[]).includes(vendor.partyType)) {
+    return {
+      error: "unsupported" as const,
+      message: "Portal users can only be added for clients, vendors/contractors, or consultants in the CRM directory.",
+    };
+  }
+  return { vendor };
+}
+
+function deskLabel(partyType: string): string {
+  if (partyType === "Client") return "client";
+  if (partyType === "Consultant" || partyType === "Designer" || partyType === "PMC") return "consultant";
+  return "vendor / contractor";
+}
+
+/** Additional portal users for a CRM directory company (client / vendor / consultant — separate roles). */
 vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, res) => {
+  const loaded = await loadCompanyForContacts(req.params.id);
+  if (loaded.error === "not_found") return res.status(404).json({ error: "Company not found" });
+  if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
+  const { portalRoleForPartyType } = await import("../services/crmVendorCredentials.js");
+  const portalRole = portalRoleForPartyType(loaded.vendor.partyType);
   const rows = await prisma.vendorContact.findMany({
     where: { vendorId: req.params.id },
     orderBy: { createdAt: "asc" },
@@ -254,59 +284,152 @@ vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, 
   const emails = rows.map((r) => r.email.toLowerCase());
   const users = emails.length
     ? await prisma.user.findMany({
-        where: { email: { in: emails }, role: "client" },
-        select: { email: true, isActive: true },
+        where: {
+          email: { in: emails },
+          role: portalRole,
+          vendorId: loaded.vendor.id,
+          isActive: { not: false },
+        },
+        select: { email: true },
       })
     : [];
-  const active = new Set(users.filter((u) => u.isActive !== false).map((u) => u.email.toLowerCase()));
+  const active = new Set(users.map((u) => u.email.toLowerCase()));
   res.json(rows.map((r) => ({ ...r, portalActive: active.has(r.email.toLowerCase()) })));
 });
 
 vendorsRouter.post("/:id/contacts", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const email = String(req.body.email || "").trim().toLowerCase();
-  if (!email) return res.status(400).json({ error: "email required" });
-  const row = await prisma.vendorContact.create({
-    data: {
-      vendorId: req.params.id,
-      email,
-      fullName: req.body.fullName ? String(req.body.fullName).trim() : null,
-      role: req.body.role ? String(req.body.role).trim() : null,
-    },
-  });
-  await audit("vendor.contact.create", { userId: req.user!.id, entity: "VendorContact", entityId: row.id });
-  res.status(201).json(row);
+  try {
+    const loaded = await loadCompanyForContacts(req.params.id);
+    if (loaded.error === "not_found") return res.status(404).json({ error: "Company not found" });
+    if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
+    const vendor = loaded.vendor;
+    const kind = deskLabel(vendor.partyType);
+
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Email is required." });
+    const fullName = req.body.fullName ? String(req.body.fullName).trim() : null;
+    const role = req.body.role ? String(req.body.role).trim() : null;
+
+    const primaryEmail = (vendor.email || "").trim().toLowerCase();
+    if (primaryEmail && primaryEmail === email) {
+      return res.status(400).json({
+        error: `This email is already the main contact on the ${kind} company card (Step 1). Use Activate portal access above for that login, or add a different person's email here.`,
+      });
+    }
+
+    const { portalRoleForPartyType } = await import("../services/crmVendorCredentials.js");
+    const expectedRole = portalRoleForPartyType(vendor.partyType);
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser && (existingUser.role === "office" || existingUser.role === "admin" || existingUser.role === "hr")) {
+      return res.status(409).json({
+        error: "This email is an SPDC office login. Use the person's company email instead.",
+      });
+    }
+    if (existingUser && existingUser.role !== expectedRole) {
+      return res.status(409).json({
+        error: `This email is already a different portal type (${existingUser.role}). Each login is either client, vendor, or consultant — use a separate email.`,
+      });
+    }
+
+    const onThisCompany = await prisma.vendorContact.findFirst({
+      where: { vendorId: vendor.id, email },
+    });
+    if (onThisCompany) {
+      const row = await prisma.vendorContact.update({
+        where: { id: onThisCompany.id },
+        data: {
+          ...(fullName ? { fullName } : {}),
+          ...(role ? { role } : {}),
+        },
+      });
+      return res.status(200).json(row);
+    }
+
+    const otherRep = await prisma.vendorContact.findUnique({ where: { email } });
+    if (otherRep) {
+      const otherCo = await prisma.vendor.findUnique({
+        where: { id: otherRep.vendorId },
+        select: { name: true, partyType: true },
+      });
+      return res.status(409).json({
+        error: `This email is already added for ${deskLabel(otherCo?.partyType || "")} “${otherCo?.name || "another company"}”. Use a different email or remove them there first.`,
+      });
+    }
+
+    const otherCompanyEmail = await prisma.vendor.findFirst({
+      where: {
+        email,
+        NOT: { id: vendor.id },
+      },
+      select: { name: true, partyType: true },
+    });
+    if (otherCompanyEmail) {
+      return res.status(409).json({
+        error: `This email is the primary login for ${deskLabel(otherCompanyEmail.partyType)} “${otherCompanyEmail.name}”. Additional users need their own email.`,
+      });
+    }
+
+    const row = await prisma.vendorContact.create({
+      data: {
+        vendorId: vendor.id,
+        email,
+        fullName,
+        role,
+      },
+    });
+    await audit("vendor.contact.create", { userId: req.user!.id, entity: "VendorContact", entityId: row.id });
+    res.status(201).json(row);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return res.status(409).json({
+        error: "This email is already used for someone else in the directory. Each person needs a unique email.",
+      });
+    }
+    console.error("[vendor contact create]", err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Could not add person" });
+  }
 });
 
 vendorsRouter.patch("/:id/contacts/:contactId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const existing = await prisma.vendorContact.findFirst({
-    where: { id: req.params.contactId, vendorId: req.params.id },
-  });
-  if (!existing) return res.status(404).json({ error: "not found" });
-  const row = await prisma.vendorContact.update({
-    where: { id: existing.id },
-    data: {
-      ...(req.body.email !== undefined ? { email: String(req.body.email).trim().toLowerCase() } : {}),
-      ...(req.body.fullName !== undefined ? { fullName: req.body.fullName ? String(req.body.fullName).trim() : null } : {}),
-      ...(req.body.role !== undefined ? { role: req.body.role ? String(req.body.role).trim() : null } : {}),
-    },
-  });
-  res.json(row);
+  try {
+    const loaded = await loadCompanyForContacts(req.params.id);
+    if (loaded.error === "not_found") return res.status(404).json({ error: "Company not found" });
+    if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
+
+    const existing = await prisma.vendorContact.findFirst({
+      where: { id: req.params.contactId, vendorId: req.params.id },
+    });
+    if (!existing) return res.status(404).json({ error: "Representative not found" });
+    const row = await prisma.vendorContact.update({
+      where: { id: existing.id },
+      data: {
+        ...(req.body.email !== undefined ? { email: String(req.body.email).trim().toLowerCase() } : {}),
+        ...(req.body.fullName !== undefined ? { fullName: req.body.fullName ? String(req.body.fullName).trim() : null } : {}),
+        ...(req.body.role !== undefined ? { role: req.body.role ? String(req.body.role).trim() : null } : {}),
+      },
+    });
+    res.json(row);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return res.status(409).json({ error: "That email is already used for another client representative." });
+    }
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Update failed" });
+  }
 });
 
 vendorsRouter.post("/:id/contacts/:contactId/activate-portal", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const vendor = await prisma.vendor.findUnique({
-    where: { id: req.params.id },
-    select: { id: true, name: true, partyType: true },
-  });
-  if (!vendor) return res.status(404).json({ error: "Client not found" });
+  const loaded = await loadCompanyForContacts(req.params.id);
+  if (loaded.error === "not_found") return res.status(404).json({ error: "Company not found" });
+  if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
+  const vendor = loaded.vendor;
   const contact = await prisma.vendorContact.findFirst({
     where: { id: req.params.contactId, vendorId: req.params.id },
   });
-  if (!contact) return res.status(404).json({ error: "Representative not found" });
-  const { syncClientRepresentativePortal } = await import("../services/crmVendorCredentials.js");
-  const result = await syncClientRepresentativePortal({
+  if (!contact) return res.status(404).json({ error: "Person not found on this company" });
+  const { syncCompanyRepresentativePortal } = await import("../services/crmVendorCredentials.js");
+  const result = await syncCompanyRepresentativePortal({
     vendorId: vendor.id,
-    vendorName: vendor.name,
     email: contact.email,
     fullName: contact.fullName,
     password: req.body.password ? String(req.body.password) : null,
@@ -316,9 +439,9 @@ vendorsRouter.post("/:id/contacts/:contactId/activate-portal", requireRoles("adm
     userId: req.user!.id,
     entity: "VendorContact",
     entityId: contact.id,
-    meta: { email: contact.email, vendorId: vendor.id },
+    meta: { email: contact.email, vendorId: vendor.id, partyType: vendor.partyType },
   });
-  res.json({ ok: true, login: result, loginPath: "/login/client" });
+  res.json({ ok: true, login: result, loginPath: result.loginPath });
 });
 
 vendorsRouter.delete("/:id/contacts/:contactId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

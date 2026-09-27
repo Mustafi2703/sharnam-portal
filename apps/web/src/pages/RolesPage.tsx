@@ -7,6 +7,7 @@ import { UserManageActions } from "../components/UserManageActions";
 import {
   accountKindLabel,
   badgeToneForKind,
+  canManageAllPortalUsers,
   kindForAccount,
   loginPathForAccount,
   type PortalAccountKind,
@@ -32,7 +33,7 @@ export default function RolesPage() {
   const [userQ, setUserQ] = useState("");
   const { types: consultantTypes } = useConsultantTypes(token);
 
-  const canManage = user?.role === "admin" || user?.role === "office";
+  const canManage = canManageAllPortalUsers(user);
   const [showDemoLogins, setShowDemoLogins] = useState(false);
 
   const load = async () => {
@@ -219,7 +220,7 @@ export default function RolesPage() {
     <div className="space-y-6 max-w-6xl mx-auto">
       <PageHero
         title="Access & users"
-        subtitle="Edit logins, sync CRM directory accounts, and manage the role permission matrix."
+        subtitle="Office & admin — all portal logins (staff, client, vendor, consultant), CRM sync, and role permissions. HR desk manages SPDC staff only at HRMS → Users."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/hrm/users">
@@ -245,8 +246,11 @@ export default function RolesPage() {
         </div>
         {!showDemoLogins ? (
           <p className="text-xs text-steel-muted">
-            New logins are created on HRMS (staff) or CRM directories (client / vendor / consultant). Use{" "}
-            <strong className="text-ink">Sync CRM logins</strong> if a company has email but is missing here.
+            Filter by account type below. New external logins: CRM → Clients / Vendors / Consultants (Step 2 · Add person). SPDC staff:{" "}
+            <Link to="/hrm/users" className="text-brand font-semibold underline">
+              HRMS → Users
+            </Link>
+            . Use <strong className="text-ink">Sync CRM logins</strong> when a company email is missing here.
           </p>
         ) : null}
         {canManage ? (

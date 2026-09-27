@@ -10,7 +10,7 @@ import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 import { isHiddenPortalListUser } from "../../lib/portalUserLists";
-import { canManageHrms } from "../../lib/portalAccounts";
+import { canManageHrms, canManageAllPortalUsers, isSpdcStaffAccount, kindForAccount } from "../../lib/portalAccounts";
 import { spdcCompanyRoleOptions, suggestedLoginRoleForCompanyRole } from "@sharnam/shared";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -142,6 +142,7 @@ export default function HrmsUsersPage() {
   const { token, user } = useAuth();
   const isAdmin = user?.role === "admin";
   const canEdit = canManageHrms(user);
+  const canOfficeDesk = canManageAllPortalUsers(user);
   const [employees, setEmployees] = useState<UserAccountRow[]>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -179,6 +180,7 @@ export default function HrmsUsersPage() {
   const shownEmployees = useMemo(() => {
     const needle = deferredUserQ.trim().toLowerCase();
     return employees.filter((e) => {
+      if (!isSpdcStaffAccount(e)) return false;
       if (isHiddenPortalListUser(e.email)) return false;
       if (payrollFilter === "ready" && !hasPayrollSetup(e)) return false;
       if (payrollFilter === "missing" && hasPayrollSetup(e)) return false;
@@ -351,7 +353,15 @@ export default function HrmsUsersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-steel-muted max-w-2xl">
-          SPDC site and office team — not clients or consultants (those stay in CRM Directory). Set portal login role, company role for letters, department, CTC, then assign projects for site access to all modules.
+          SPDC site and office team only — HR manages staff here. Clients, vendors, and consultants are separate: CRM directories +{" "}
+          {canOfficeDesk ? (
+            <Link to="/roles" className="text-brand font-semibold underline">
+              Office → Access · Users
+            </Link>
+          ) : (
+            <strong className="text-ink">Office → Access · Users</strong>
+          )}{" "}
+          for all portal types.
           <span className="block mt-1">
             <strong>{payrollStats.ready}</strong> of <strong>{payrollStats.total}</strong> have CTC on file ·{" "}
             <button type="button" className="text-brand font-semibold underline" onClick={() => setPayrollFilter("missing")}>
@@ -374,12 +384,12 @@ export default function HrmsUsersPage() {
           {canEdit ? (
             <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
           ) : null}
-          {canEdit ? (
+          {canEdit && canOfficeDesk ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeUatLogins()}>
               Remove demo &amp; test logins
             </Button>
           ) : null}
-          {canEdit ? (
+          {canEdit && canOfficeDesk ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeHrmsSeed()}>
               Clear HRMS seed
             </Button>
@@ -389,7 +399,11 @@ export default function HrmsUsersPage() {
               Clear seeded assignments
             </Button>
           ) : null}
-          <Link to="/roles" className="text-sm font-semibold text-brand self-center px-2">Role matrix ↗</Link>
+          {canOfficeDesk ? (
+            <Link to="/roles" className="text-sm font-semibold text-brand self-center px-2">
+              Access · all users ↗
+            </Link>
+          ) : null}
         </div>
       </div>
 

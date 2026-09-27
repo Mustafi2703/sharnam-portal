@@ -12,6 +12,7 @@ import {
   buildWprPack,
 } from "../services/reportPacks.js";
 import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
+import { isHrDeskOnly } from "../services/hrDesk.js";
 
 /** Auto clock-out at 18:00 IST for open punches (same day after EOD, or any prior day). */
 const EOD_CLOCK_OUT = "18:00";
@@ -1438,7 +1439,11 @@ hrmRouter.get("/activity", hrmDesk, async (req, res) => {
 });
 
 hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
-  const scope = String(req.query.scope || "staff");
+  const hrOnly = isHrDeskOnly(req.user?.email, req.user?.role) || req.user?.role === "hr";
+  let scope = String(req.query.scope || "staff");
+  if (hrOnly || (scope === "all" && req.user?.role !== "admin" && req.user?.role !== "office")) {
+    scope = "staff";
+  }
   const includeDemo =
     String(req.query.includeDemo || "") === "1" && (req.user?.role === "admin" || req.user?.role === "office");
   const includeInactive = String(req.query.includeInactive || "") === "1";
@@ -1738,9 +1743,13 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const { email, fullName, role, phone, empCode, department, designation, password, vendorId: vendorIdRaw, desk } = req.body;
   if (!email || !fullName || !role) return res.status(400).json({ error: "email, fullName, role required" });
   const roleKey = role as import("@sharnam/shared").RoleKey;
-  if (String(desk || "") === "hrm" && (roleKey === "client" || roleKey === "vendor")) {
+  const officeOrAdmin = req.user?.role === "admin" || req.user?.role === "office";
+  const hrOnly = isHrDeskOnly(req.user?.email, req.user?.role) || req.user?.role === "hr";
+  const staffDeskOnly = hrOnly || String(desk || "") === "hrm" || !officeOrAdmin;
+  if (staffDeskOnly && (roleKey === "client" || roleKey === "vendor" || (roleKey === "employee" && vendorIdRaw))) {
     return res.status(400).json({
-      error: "HRMS Users creates SPDC staff only. Client, consultant, and vendor logins are created in CRM directories.",
+      error:
+        "HRMS Users creates SPDC staff only. Client, vendor, and consultant logins are managed in CRM directories or Office → Access · Users.",
     });
   }
   const existing = await prisma.user.findUnique({ where: { email: String(email).trim().toLowerCase() } });
@@ -1859,6 +1868,14 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const { email, fullName, role, phone, empCode, department, designation, password, isActive, ctcAnnual, basicMonthly, hraMonthly } = req.body;
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return res.status(404).json({ error: "User not found" });
+  const hrOnly = isHrDeskOnly(req.user?.email, req.user?.role) || req.user?.role === "hr";
+  const isExternalLogin = (r: string, vendorId?: string | null) =>
+    r === "client" || r === "vendor" || (r === "employee" && !!vendorId);
+  if (hrOnly && isExternalLogin(existing.role, existing.vendorId)) {
+    return res.status(403).json({
+      error: "HR desk manages SPDC staff only. Edit client, vendor, and consultant logins under Office → Access · Users.",
+    });
+  }
   if (existing.role === "admin" && req.user?.role !== "admin") {
     return res.status(403).json({ error: "Only admin can edit admin accounts" });
   }
@@ -1875,6 +1892,11 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (role) {
     const { portalForRole } = await import("@sharnam/shared");
     const roleKey = role as import("@sharnam/shared").RoleKey;
+    if (hrOnly && isExternalLogin(roleKey, existing.vendorId)) {
+      return res.status(403).json({
+        error: "HR cannot assign client, vendor, or consultant roles. Use Office → Access · Users or CRM directories.",
+      });
+    }
     if ((roleKey === "admin" || existing.role === "admin") && req.user?.role !== "admin") {
       return res.status(403).json({ error: "Only admin can change admin accounts" });
     }
@@ -1909,9 +1931,9 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
       : existing;
 
   const effectiveRole = (data.role as string | undefined) || existing.role;
-  const external = effectiveRole === "client" || effectiveRole === "vendor";
+  const externalRole = effectiveRole === "client" || effectiveRole === "vendor";
   const profilePatch: Record<string, unknown> = {};
-  if (!external && empCode !== undefined) {
+  if (!externalRole && empCode !== undefined) {
     profilePatch.empCode = empCode || `EMP-${Date.now().toString().slice(-6)}`;
   }
   if (department !== undefined) profilePatch.department = department || null;
