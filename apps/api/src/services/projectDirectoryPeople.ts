@@ -12,44 +12,89 @@ export type ProjectClientRepRow = {
   loginPath: string;
 };
 
-/** Client representatives (VendorContact) for client companies linked to this project. */
+/** Client representatives for this job: Step 2 contacts plus the email already on the client card. */
 export async function listClientRepresentativesForProject(projectId: string): Promise<ProjectClientRepRow[]> {
-  const links = await prisma.projectVendor.findMany({
-    where: { projectId, vendor: { partyType: "Client", isActive: true } },
-    include: { vendor: { select: { id: true, name: true } } },
-    orderBy: { createdAt: "asc" },
-  });
-  const vendorIds = links.map((l) => l.vendorId);
-  if (!vendorIds.length) return [];
+  const [project, links] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { clientName: true, clientEmail: true, clientContactName: true },
+    }),
+    prisma.projectVendor.findMany({
+      where: { projectId, vendor: { partyType: "Client", isActive: true } },
+      include: {
+        vendor: { select: { id: true, name: true, email: true, primaryContactName: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
-  const contacts = await prisma.vendorContact.findMany({
-    where: { vendorId: { in: vendorIds } },
-    orderBy: [{ vendorId: "asc" }, { createdAt: "asc" }],
-  });
-  if (!contacts.length) return [];
-
+  type Draft = ProjectClientRepRow;
+  const drafts: Draft[] = [];
+  const seen = new Set<string>();
   const vendorNameById = new Map(links.map((l) => [l.vendorId, l.vendor.name]));
-  const emails = [...new Set(contacts.map((c) => c.email.toLowerCase()))];
-  const users = await prisma.user.findMany({
-    where: { email: { in: emails }, role: "client", isActive: { not: false } },
-    select: { email: true, vendorId: true },
-  });
-  const userByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]));
 
-  return contacts.map((c) => {
-    const u = userByEmail.get(c.email.toLowerCase());
-    const portalActive = Boolean(u && (!u.vendorId || u.vendorId === c.vendorId));
-    return {
-      id: c.id,
-      vendorId: c.vendorId,
-      vendorName: vendorNameById.get(c.vendorId) || "Client",
-      fullName: c.fullName,
-      email: c.email,
-      siteRole: c.role,
-      portalActive,
-      loginPath: "/login/client",
-    };
+  function add(row: Omit<Draft, "portalActive" | "loginPath" | "email"> & { email: string }) {
+    const email = row.email.trim().toLowerCase();
+    if (!email || seen.has(email)) return;
+    seen.add(email);
+    drafts.push({ ...row, email, portalActive: false, loginPath: "/login/client" });
+  }
+
+  const vendorIds = links.map((l) => l.vendorId);
+  if (vendorIds.length) {
+    const contacts = await prisma.vendorContact.findMany({
+      where: { vendorId: { in: vendorIds } },
+      orderBy: [{ vendorId: "asc" }, { createdAt: "asc" }],
+    });
+    for (const c of contacts) {
+      add({
+        id: c.id,
+        vendorId: c.vendorId,
+        vendorName: vendorNameById.get(c.vendorId) || "Client",
+        fullName: c.fullName,
+        email: c.email,
+        siteRole: c.role,
+      });
+    }
+  }
+
+  for (const link of links) {
+    const email = (link.vendor.email || "").trim().toLowerCase();
+    if (!email) continue;
+    add({
+      id: `primary-${link.vendor.id}`,
+      vendorId: link.vendor.id,
+      vendorName: link.vendor.name,
+      fullName: link.vendor.primaryContactName,
+      email,
+      siteRole: "Client representative",
+    });
+  }
+
+  const cardEmail = (project?.clientEmail || "").trim().toLowerCase();
+  if (cardEmail && !seen.has(cardEmail)) {
+    const existing = await prisma.vendorContact.findFirst({
+      where: { email: cardEmail },
+      include: { vendor: { select: { id: true, name: true } } },
+    });
+    add({
+      id: existing?.id || "card-email",
+      vendorId: existing?.vendorId || links[0]?.vendorId || "",
+      vendorName: existing?.vendor.name || links[0]?.vendor.name || project?.clientName || "Client",
+      fullName: existing?.fullName || project?.clientContactName || null,
+      email: cardEmail,
+      siteRole: existing?.role || "Client representative",
+    });
+  }
+
+  if (!drafts.length) return [];
+
+  const users = await prisma.user.findMany({
+    where: { email: { in: drafts.map((d) => d.email) }, role: "client", isActive: { not: false } },
+    select: { email: true },
   });
+  const active = new Set(users.map((u) => u.email.toLowerCase()));
+  return drafts.map((d) => ({ ...d, portalActive: active.has(d.email) }));
 }
 
 export async function listCompanyRepresentativesForProject(

@@ -277,10 +277,26 @@ vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, 
   if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
   const { portalRoleForPartyType } = await import("../services/crmVendorCredentials.js");
   const portalRole = portalRoleForPartyType(loaded.vendor.partyType);
-  const rows = await prisma.vendorContact.findMany({
+  const stored = await prisma.vendorContact.findMany({
     where: { vendorId: req.params.id },
     orderBy: { createdAt: "asc" },
   });
+  const primaryEmail = (loaded.vendor.email || "").trim().toLowerCase();
+  const rows =
+    primaryEmail && !stored.some((r) => r.email.toLowerCase() === primaryEmail)
+      ? [
+          {
+            id: `primary-${loaded.vendor.id}`,
+            vendorId: loaded.vendor.id,
+            email: primaryEmail,
+            fullName: null as string | null,
+            role: "Primary contact",
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+          },
+          ...stored,
+        ]
+      : stored;
   const emails = rows.map((r) => r.email.toLowerCase());
   const users = emails.length
     ? await prisma.user.findMany({
@@ -292,11 +308,7 @@ vendorsRouter.get("/:id/contacts", requireRoles("admin", "office"), async (req, 
         select: { email: true, vendorId: true },
       })
     : [];
-  const active = new Set(
-    users
-      .filter((u) => !u.vendorId || u.vendorId === loaded.vendor.id)
-      .map((u) => u.email.toLowerCase()),
-  );
+  const active = new Set(users.map((u) => u.email.toLowerCase()));
   res.json(rows.map((r) => ({ ...r, portalActive: active.has(r.email.toLowerCase()) })));
 });
 
@@ -306,19 +318,11 @@ vendorsRouter.post("/:id/contacts", requireRoles("admin", "office"), async (req:
     if (loaded.error === "not_found") return res.status(404).json({ error: "Company not found" });
     if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
     const vendor = loaded.vendor;
-    const kind = deskLabel(vendor.partyType);
 
     const email = String(req.body.email || "").trim().toLowerCase();
     if (!email) return res.status(400).json({ error: "Email is required." });
     const fullName = req.body.fullName ? String(req.body.fullName).trim() : null;
     const role = req.body.role ? String(req.body.role).trim() : null;
-
-    const primaryEmail = (vendor.email || "").trim().toLowerCase();
-    if (primaryEmail && primaryEmail === email) {
-      return res.status(400).json({
-        error: `This email is already the main contact on the ${kind} company card (Step 1). Use Activate portal access above for that login, or add a different person's email here.`,
-      });
-    }
 
     const { portalRoleForPartyType } = await import("../services/crmVendorCredentials.js");
     const expectedRole = portalRoleForPartyType(vendor.partyType);
@@ -426,9 +430,22 @@ vendorsRouter.post("/:id/contacts/:contactId/activate-portal", requireRoles("adm
   if (loaded.error === "not_found") return res.status(404).json({ error: "Company not found" });
   if (loaded.error === "unsupported") return res.status(400).json({ error: loaded.message });
   const vendor = loaded.vendor;
-  const contact = await prisma.vendorContact.findFirst({
+  let contact = await prisma.vendorContact.findFirst({
     where: { id: req.params.contactId, vendorId: req.params.id },
   });
+  if (!contact && req.params.contactId.startsWith("primary-")) {
+    const email = (vendor.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Add an email on the company card first." });
+    const taken = await prisma.vendorContact.findUnique({ where: { email } });
+    if (taken && taken.vendorId !== vendor.id) {
+      return res.status(409).json({ error: "This email is already a representative on another company." });
+    }
+    contact =
+      taken ||
+      (await prisma.vendorContact.create({
+        data: { vendorId: vendor.id, email, role: "Primary contact" },
+      }));
+  }
   if (!contact) return res.status(404).json({ error: "Person not found on this company" });
   const { syncCompanyRepresentativePortal } = await import("../services/crmVendorCredentials.js");
   const result = await syncCompanyRepresentativePortal({

@@ -205,9 +205,11 @@ export function CompanyRepresentativesPanel({
                     Reset password
                   </Button>
                 )}
-                <Button type="button" variant="ghost" className="!text-xs text-danger" onClick={() => void remove(r.id)}>
-                  Remove
-                </Button>
+                {!r.id.startsWith("primary-") ? (
+                  <Button type="button" variant="ghost" className="!text-xs text-danger" onClick={() => void remove(r.id)}>
+                    Remove
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </li>
