@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { projectMemberRoleLabel, suggestedProjectMemberRole } from "@sharnam/shared";
+import { SPDC_COMPANY_ROLES, suggestedProjectMemberRole } from "@sharnam/shared";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
@@ -29,14 +29,13 @@ export type AllocateMember = {
   empCode?: string | null;
 };
 
-const PROJECT_ROLE_OPTIONS = [
-  "project_manager",
-  "site_engineer",
-  "quality_lead",
-  "document_controller",
-  "member",
-  "viewer",
-] as const;
+const COMPANY_ROLES = [...SPDC_COMPANY_ROLES];
+
+function roleOptions(current?: string | null) {
+  const value = (current || "").trim();
+  if (value && !COMPANY_ROLES.includes(value as (typeof COMPANY_ROLES)[number])) return [value, ...COMPANY_ROLES];
+  return COMPANY_ROLES;
+}
 
 type Props = {
   projectId?: string;
@@ -54,13 +53,7 @@ function isSpdcStaff(u: AllocateUser) {
   return isSpdcStaffUser(u);
 }
 
-function teamMemberSublabel(u: AllocateUser) {
-  const parts = [u.designation, u.department, u.empCode].filter(Boolean);
-  if (parts.length) return parts.join(" · ");
-  return u.email;
-}
-
-/** Assign SPDC team from HRMS Users — company role + on-project role, not portal login list. */
+/** Assign SPDC team and mark company roles on the project card. */
 export function ProjectTeamAllocatePanel({
   projectId,
   token,
@@ -73,8 +66,12 @@ export function ProjectTeamAllocatePanel({
   onChanged,
 }: Props) {
   const [busy, setBusy] = useState(false);
-  const [memberRole, setMemberRole] = useState("site_engineer");
+  const [companyRole, setCompanyRole] = useState("Project Manager");
   const [listQ, setListQ] = useState("");
+  const [localRoles, setLocalRoles] = useState<Record<string, string>>({});
+
+  const roleFor = (userId: string | undefined, fallback?: string | null) =>
+    (userId && localRoles[userId]) || fallback || "";
 
   const staff = useMemo(
     () => users.filter((u) => isSpdcStaff(u) && !isHiddenPortalListUser(u.email)),
@@ -85,23 +82,28 @@ export function ProjectTeamAllocatePanel({
       staff.map((u) => ({
         id: u.id,
         label: u.fullName,
-        sublabel: teamMemberSublabel(u),
-        meta: u.designation ? u.email : undefined,
+        sublabel: roleFor(u.id, u.designation) || u.email,
+        meta: roleFor(u.id, u.designation) ? u.email : undefined,
       })),
-    [staff],
+    [staff, localRoles],
   );
 
   async function persist() {
     if (!token || !projectId || !selectedIds.length) return;
     setBusy(true);
     try {
+      if (selectedIds.length === 1) {
+        await api(`/api/hrm/employees/${selectedIds[0]}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({ designation: companyRole }),
+        });
+        setLocalRoles((prev) => ({ ...prev, [selectedIds[0]]: companyRole }));
+      }
       const assignments = selectedIds.map((userId) => {
         const u = staff.find((x) => x.id === userId);
-        const role =
-          selectedIds.length === 1
-            ? memberRole
-            : suggestedProjectMemberRole(u?.designation) || memberRole;
-        return { userId, role };
+        const marked = selectedIds.length === 1 ? companyRole : roleFor(userId, u?.designation);
+        return { userId, role: suggestedProjectMemberRole(marked) };
       });
       await api(`/api/projects/${projectId}/members`, {
         method: "POST",
@@ -133,18 +135,27 @@ export function ProjectTeamAllocatePanel({
     }
   }
 
-  async function updateMemberRole(memberId: string, role: string) {
-    if (!token || !projectId) return;
+  async function setCompanyRole(userId: string, memberId: string, designation: string) {
+    if (!token || !userId || !designation) return;
     setBusy(true);
+    setLocalRoles((prev) => ({ ...prev, [userId]: designation }));
     try {
-      await api(`/api/projects/${projectId}/members/${memberId}`, {
+      await api(`/api/hrm/employees/${userId}`, {
         method: "PATCH",
         token,
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ designation }),
       });
+      if (projectId && memberId) {
+        await api(`/api/projects/${projectId}/members/${memberId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({ role: suggestedProjectMemberRole(designation) }),
+        });
+      }
+      onMsg(`Company role saved: ${designation}`);
       onChanged?.();
     } catch (err) {
-      onMsg(err instanceof Error ? err.message : "Could not update role");
+      onMsg(err instanceof Error ? err.message : "Could not save company role");
     } finally {
       setBusy(false);
     }
@@ -152,7 +163,7 @@ export function ProjectTeamAllocatePanel({
 
   const staffMembers = useMemo(() => members.filter((m) => isSpdcStaffMember(m)), [members]);
   const assigned = staffMembers.filter((m) =>
-    `${m.fullName} ${m.email} ${m.designation || ""} ${m.department || ""} ${m.role} ${projectMemberRoleLabel(m.role)}`
+    `${m.fullName} ${m.email} ${roleFor(m.userId, m.designation)} ${m.department || ""}`
       .toLowerCase()
       .includes(listQ.trim().toLowerCase()),
   );
@@ -161,8 +172,7 @@ export function ProjectTeamAllocatePanel({
     <Card className="!p-4 space-y-3">
       <h3 className="font-semibold text-sm">Team</h3>
       <p className="text-xs text-steel-muted">
-        SPDC people from HRMS → Users with their company role (Director, PM, engineers, etc.). Clients, consultants, and
-        vendors stay in the CRM lists above.
+        Mark the company role on this project card — Director, Coordinator, Project Manager, Senior / Junior / Billing / Planning / Safety / MEPF engineer. It is saved on the person and used on the communication matrix.
       </p>
       {staffMembers.length > 0 && (
         <>
@@ -171,47 +181,36 @@ export function ProjectTeamAllocatePanel({
             value={listQ}
             onChange={(e) => setListQ(e.target.value)}
           />
-          <div className="text-[11px] font-semibold text-steel-muted grid grid-cols-[1fr_auto_auto_auto] gap-2 px-1">
+          <div className="text-[11px] font-semibold text-steel-muted grid grid-cols-[1fr_auto_auto] gap-2 px-1">
             <span>Name</span>
-            <span className="hidden sm:inline">Company role</span>
-            <span>On project</span>
+            <span>Company role</span>
             <span />
           </div>
           <ul className="text-sm divide-y divide-line max-h-48 overflow-y-auto">
-            {assigned.map((m) => (
-              <li key={m.id} className="py-2 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
+            {assigned.map((m) => {
+              const marked = roleFor(m.userId, m.designation);
+              return (
+              <li key={m.id} className="py-2 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
                 <span>
                   <span className="font-medium">{m.fullName}</span>
                   <span className="block text-xs font-mono text-steel-muted">{m.email}</span>
-                  {m.department ? (
-                    <span className="block text-[11px] text-steel-muted sm:hidden">{m.department}</span>
-                  ) : null}
                 </span>
-                <span className="text-xs">
-                  {m.designation ? (
-                    <Badge tone="ok">{m.designation}</Badge>
-                  ) : (
-                    <span className="text-steel-muted">Set role in HRMS → Users</span>
-                  )}
-                  {m.department ? (
-                    <span className="hidden sm:block text-[11px] text-steel-muted mt-0.5">{m.department}</span>
-                  ) : null}
-                </span>
-                {canEdit && projectId ? (
+                {canEdit && m.userId ? (
                   <Select
-                    className="!text-xs min-w-[9rem]"
-                    value={m.role}
+                    className="!text-xs min-w-[11rem]"
+                    value={marked}
                     disabled={busy}
-                    onChange={(e) => void updateMemberRole(m.id, e.target.value)}
+                    onChange={(e) => void setCompanyRole(m.userId!, m.id, e.target.value)}
                   >
-                    {PROJECT_ROLE_OPTIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {projectMemberRoleLabel(r)}
+                    <option value="">Select company role…</option>
+                    {roleOptions(marked).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
                       </option>
                     ))}
                   </Select>
                 ) : (
-                  <Badge tone="neutral">{projectMemberRoleLabel(m.role)}</Badge>
+                  <Badge tone={marked ? "ok" : "neutral"}>{marked || "No company role"}</Badge>
                 )}
                 {canEdit && projectId ? (
                   <Button
@@ -225,7 +224,8 @@ export function ProjectTeamAllocatePanel({
                   </Button>
                 ) : null}
               </li>
-            ))}
+              );
+            })}
             {!assigned.length && <li className="py-2 text-xs text-steel-muted">No match.</li>}
           </ul>
         </>
@@ -244,12 +244,12 @@ export function ProjectTeamAllocatePanel({
             <div className="flex flex-wrap gap-2 items-end">
               <div>
                 <label className="text-[11px] font-semibold text-steel-muted block mb-1">
-                  On-project role (when one person selected)
+                  Company role for the person you add
                 </label>
-                <Select value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                  {PROJECT_ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {projectMemberRoleLabel(r)}
+                <Select value={companyRole} onChange={(e) => setCompanyRole(e.target.value)}>
+                  {COMPANY_ROLES.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
                     </option>
                   ))}
                 </Select>
