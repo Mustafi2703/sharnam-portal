@@ -344,13 +344,21 @@ export function buildHrmsDocxTokenMap(
   };
 
   // Allow HR to pass exact template tokens in the data blob.
+  // Name tokens are applied again after this loop so a stale CANDIDATE_NAME
+  // cannot print a different person under the letterhead.
+  const locked = new Set(["EMPLOYEE_NAME", "CANDIDATE_NAME", "employeeName", "candidateName"]);
   for (const [k, v] of Object.entries(merged)) {
+    if (locked.has(k) || locked.has(k.toUpperCase())) continue;
     if (v == null || typeof v === "object") continue;
     const val = String(v).trim();
     if (!val) continue;
     tokens[k] = val;
     tokens[k.toUpperCase()] = val;
   }
+  tokens.EMPLOYEE_NAME = name;
+  tokens.CANDIDATE_NAME = name;
+  tokens.employeeName = name;
+  tokens.candidateName = name;
 
   // Helpful INR aliases used in offer / appointment templates.
   if (fixedCtc > 0) {

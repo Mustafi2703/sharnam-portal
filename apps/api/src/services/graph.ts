@@ -79,37 +79,60 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-export async function graphFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** One Graph call at a time, with a short gap, so a letter pack or folder launch does not get throttled. */
+let graphSlot: Promise<void> = Promise.resolve();
+function withGraphSlot<T>(fn: () => Promise<T>): Promise<T> {
+  const run = graphSlot.then(fn, fn);
+  graphSlot = run.then(
+    () => sleep(180),
+    () => sleep(600),
+  );
+  return run;
+}
+
+async function graphFetchOnce<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method || "GET").toUpperCase();
-  // Hard ban: never delete anything in the customer's drive via Graph
   if (method === "DELETE") {
     throw new Error("SharePoint DELETE is disabled — portal never deletes customer drive items");
   }
 
   const token = await getAccessToken();
   const url = path.startsWith("http") ? path : `https://graph.microsoft.com/v1.0${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-
-  const text = await res.text();
-  let json: unknown = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-
-  if (!res.ok) {
+  let lastMessage = "Graph request failed";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        ...(init?.headers || {}),
+      },
+    });
+    const text = await res.text();
+    let json: unknown = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
+    if (res.ok) return json as T;
     const err = json as { error?: { message?: string; code?: string } };
-    throw new Error(err?.error?.message || err?.error?.code || `Graph ${res.status}: ${text.slice(0, 240)}`);
+    lastMessage = err?.error?.message || err?.error?.code || `Graph ${res.status}: ${text.slice(0, 240)}`;
+    const throttled = res.status === 429 || res.status === 503 || /throttl/i.test(lastMessage);
+    if (!throttled || attempt === 4) throw new Error(lastMessage);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt;
+    await sleep(Math.min(wait, 12_000));
   }
-  return json as T;
+  throw new Error(lastMessage);
+}
+
+export async function graphFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  return withGraphSlot(() => graphFetchOnce<T>(path, init));
 }
 
 export type GraphHealth = {
@@ -602,16 +625,26 @@ export async function uploadToProjectLibrary(
 
   const encoded = encodeDrivePath(target);
   const behavior = opts?.replace ? "replace" : "fail";
-  const uploaded = await graphFetch<{
-    id: string;
-    name: string;
-    webUrl?: string;
-    size?: number;
-  }>(`/drives/${drive.driveId}/root:/${encoded}:/content?@microsoft.graph.conflictBehavior=${behavior}`, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body: new Uint8Array(buffer),
-  });
+  let uploaded: { id: string; name: string; webUrl?: string; size?: number };
+  try {
+    uploaded = await graphFetch<{
+      id: string;
+      name: string;
+      webUrl?: string;
+      size?: number;
+    }>(`/drives/${drive.driveId}/root:/${encoded}:/content?@microsoft.graph.conflictBehavior=${behavior}`, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: new Uint8Array(buffer),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/name already exists/i.test(message)) throw err;
+    const existing = await graphFetch<{ id: string; name: string; webUrl?: string; size?: number }>(
+      `/drives/${drive.driveId}/root:/${encoded}`,
+    );
+    uploaded = existing;
+  }
 
   return {
     path: `${relFolder}/${safe}`.replace(/^\//, ""),

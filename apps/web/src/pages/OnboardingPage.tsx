@@ -114,11 +114,8 @@ function OfferOnboardingPage() {
     }
     if (o?.candidate) {
       const docs = await api<any[]>(`/api/hrm/hrms-documents?kind=Appointment`, { token }).catch(() => []);
-      const mine = docs.find(
-        (d) =>
-          (o.candidate.email && d.candidateEmail === o.candidate.email) ||
-          d.employeeName === o.candidate.fullName,
-      );
+      const person = String(o.candidate.fullName || "").trim().toLowerCase();
+      const mine = docs.find((d) => String(d.employeeName || "").trim().toLowerCase() === person);
       if (mine?.id) {
         const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${mine.id}/preview`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,

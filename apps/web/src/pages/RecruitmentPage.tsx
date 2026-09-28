@@ -704,14 +704,22 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                     <a href={r.meetingLink} target="_blank" rel="noreferrer" className="text-brand font-semibold">↗ Join {r.mode} meeting</a>
                   </div>
                 )}
-                {canManage && r.status !== "Completed" && (
+                {canManage && (
                   <div className="grid md:grid-cols-4 gap-2 text-xs pt-2 border-t border-line">
                     <InterviewScorecard
                       token={token}
                       positionHint={candidate.applyingFor || candidate.currentDesign || ""}
                       roundHint={r.roundType}
+                      saved={(() => {
+                        try {
+                          return r.scorecardJson ? JSON.parse(r.scorecardJson) : null;
+                        } catch {
+                          return null;
+                        }
+                      })()}
                       onSave={async (scorecard) => {
                         await updateRound(r.id, { scorecard, status: "Completed" });
+                        setMsg(`Scorecard saved for ${candidate.fullName} · round ${r.roundNumber}.`);
                       }}
                     />
                     <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Evidence / notes" rows={2} className="md:col-span-4 border border-line rounded px-2 py-1" />
@@ -877,20 +885,20 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
               <Input type="number" value={ctc.fixedCtcAnnual} onChange={(e) => setCtc({ ...ctc, fixedCtcAnnual: Number(e.target.value) })} />
             </label>
             <label className="text-xs text-steel-muted">
-              Basic % of Gross
-              <Input type="number" step="0.01" value={ctc.basicPctOfGross} onChange={(e) => setCtc({ ...ctc, basicPctOfGross: Number(e.target.value) })} />
+              Basic % of gross
+              <Input type="number" step="1" value={Math.round(ctc.basicPctOfGross * 100)} onChange={(e) => setCtc({ ...ctc, basicPctOfGross: Number(e.target.value) / 100 })} />
             </label>
             <label className="text-xs text-steel-muted">
-              HRA % of Basic (0.4 non-metro, 0.5 metro)
-              <Input type="number" step="0.01" value={ctc.hraPctOfBasic} onChange={(e) => setCtc({ ...ctc, hraPctOfBasic: Number(e.target.value) })} />
+              HRA % of basic (40 non-metro, 50 metro)
+              <Input type="number" step="1" value={Math.round(ctc.hraPctOfBasic * 100)} onChange={(e) => setCtc({ ...ctc, hraPctOfBasic: Number(e.target.value) / 100 })} />
             </label>
             <label className="text-xs text-steel-muted">
-              Gratuity % of Basic
-              <Input type="number" step="0.0001" value={ctc.gratuityPctOfBasic} onChange={(e) => setCtc({ ...ctc, gratuityPctOfBasic: Number(e.target.value) })} />
+              Gratuity % of basic
+              <Input type="number" step="0.01" value={Math.round(ctc.gratuityPctOfBasic * 10000) / 100} onChange={(e) => setCtc({ ...ctc, gratuityPctOfBasic: Number(e.target.value) / 100 })} />
             </label>
             <label className="text-xs text-steel-muted">
-              LTA % of Basic
-              <Input type="number" step="0.0001" value={ctc.ltaPctOfBasic} onChange={(e) => setCtc({ ...ctc, ltaPctOfBasic: Number(e.target.value) })} />
+              LTA % of basic
+              <Input type="number" step="0.01" value={Math.round(ctc.ltaPctOfBasic * 10000) / 100} onChange={(e) => setCtc({ ...ctc, ltaPctOfBasic: Number(e.target.value) / 100 })} />
             </label>
             <label className="text-xs text-steel-muted">
               Conveyance p.a. (₹)
@@ -905,8 +913,8 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
               <Input type="number" value={ctc.mediclaimAnnual} onChange={(e) => setCtc({ ...ctc, mediclaimAnnual: Number(e.target.value) })} />
             </label>
             <label className="text-xs text-steel-muted">
-              Performance Pay % of CTC
-              <Input type="number" step="0.01" value={ctc.performancePayPct} onChange={(e) => setCtc({ ...ctc, performancePayPct: Number(e.target.value) })} />
+              Performance pay % of CTC
+              <Input type="number" step="1" value={Math.round(ctc.performancePayPct * 100)} onChange={(e) => setCtc({ ...ctc, performancePayPct: Number(e.target.value) / 100 })} />
             </label>
             <label className="text-xs text-steel-muted">
               Professional Tax p.a. (₹)
@@ -947,6 +955,8 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
                     { label: "FIXED CTC (A + B)", basis: "", perAnnum: preview.partB.fixedCtc.perAnnum, perMonth: preview.partB.fixedCtc.perMonth },
                     { label: "C. Performance Pay", basis: "", perAnnum: preview.partB.performancePay.perAnnum, perMonth: preview.partB.performancePay.perMonth },
                     { label: "TOTAL CTC (A + B + C)", basis: "", perAnnum: preview.partB.totalCtc.perAnnum, perMonth: preview.partB.totalCtc.perMonth },
+                    ...preview.partC.rows,
+                    { label: "Indicative take-home", basis: "After Part C", perAnnum: preview.partC.indicativeNet.perAnnum, perMonth: preview.partC.indicativeNet.perMonth },
                   ].map((r, i) => (
                     <tr key={i} className={r.label.startsWith("A.") || r.label.startsWith("B.") || r.label.includes("CTC") ? "font-semibold bg-brand-soft" : "border-t border-line"}>
                       <td className="p-1.5">{r.label}</td>
@@ -972,7 +982,26 @@ function OffersTab({ candidates, offers, canManage, reload, setMsg, token }: any
         <Card>
           <h3 className="font-semibold text-sm mb-2">Draft an offer</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
-            <Select value={form.candidateId} onChange={(e) => setForm({ ...form, candidateId: e.target.value })} required>
+            <Select
+              value={form.candidateId}
+              onChange={(e) => {
+                const candidateId = e.target.value;
+                const person = candidates.find((c: { id: string; fullName?: string; currentDesign?: string; applyingFor?: string }) => c.id === candidateId);
+                setForm({
+                  ...form,
+                  candidateId,
+                  designation: form.designation || person?.applyingFor || person?.currentDesign || "",
+                });
+                if (person) {
+                  setCtc((c) => ({
+                    ...c,
+                    candidateName: person.fullName || c.candidateName,
+                    designation: person.applyingFor || person.currentDesign || c.designation,
+                  }));
+                }
+              }}
+              required
+            >
               <option value="">Candidate</option>
               {shortlisted.map((c: any) => <option key={c.id} value={c.id}>{c.fullName} · {c.currentCompany || "—"}</option>)}
             </Select>

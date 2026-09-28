@@ -23,18 +23,30 @@ export function InterviewScorecard({
   token,
   positionHint,
   roundHint,
+  saved,
   onSave,
 }: {
   token: string;
   positionHint?: string;
   roundHint?: string;
+  saved?: { position?: string; round?: string; scores?: Record<string, number[]> } | null;
   onSave: (scorecard: { position: string; round: string; scores: Record<string, number[]> }) => Promise<void>;
 }) {
   const [framework, setFramework] = useState<Framework | null>(null);
-  const [position, setPosition] = useState(positionHint || "");
-  const [round, setRound] = useState(roundHint?.startsWith("R3") ? "R3" : roundHint?.startsWith("R1") ? "R1" : "R2");
-  const [scores, setScores] = useState<Record<string, string>>({});
+  const [position, setPosition] = useState(saved?.position || positionHint || "");
+  const [round, setRound] = useState(
+    saved?.round?.startsWith("R") ? saved.round.slice(0, 2) : roundHint?.startsWith("R3") ? "R3" : roundHint?.startsWith("R1") ? "R1" : "R2",
+  );
+  const [scores, setScores] = useState<Record<string, string>>(() => {
+    const next: Record<string, string> = {};
+    for (const [code, vals] of Object.entries(saved?.scores || {})) {
+      const n = Array.isArray(vals) ? vals[0] : vals;
+      if (n) next[code] = String(n);
+    }
+    return next;
+  });
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     api<Framework>("/api/hrm/interview-framework", { token }).then(setFramework).catch(() => setFramework(null));
@@ -118,20 +130,29 @@ export function InterviewScorecard({
           </tbody>
         </table>
       </div>
+      {err ? <p className="text-xs text-danger">{err}</p> : null}
       <Button
         type="button"
-        disabled={busy}
+        disabled={busy || !Object.keys(scores).length}
         onClick={() => {
           setBusy(true);
+          setErr("");
           const payload: Record<string, number[]> = {};
           for (const [code, raw] of Object.entries(scores)) {
             const n = Number(raw);
             if (n >= 1 && n <= 5) payload[code] = [n];
           }
-          void onSave({ position, round, scores: payload }).finally(() => setBusy(false));
+          if (!Object.keys(payload).length) {
+            setErr("Enter at least one score from 1 to 5.");
+            setBusy(false);
+            return;
+          }
+          void onSave({ position, round, scores: payload })
+            .catch((e) => setErr(e instanceof Error ? e.message : "Scorecard was not saved"))
+            .finally(() => setBusy(false));
         }}
       >
-        Save scorecard
+        {busy ? "Saving…" : "Save scorecard"}
       </Button>
     </div>
   );

@@ -466,39 +466,26 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
   let scorecardJson = before.scorecardJson;
   let scoreOverall = n(req.body.scoreOverall) ?? before.scoreOverall;
   let decision = s(req.body.decision) ?? before.decision;
+  let scorecardFile: { name: string; scored: ReturnType<typeof scoreInterviewRound>; payload: Record<string, unknown> } | null = null;
   if (req.body.scorecard && typeof req.body.scorecard === "object") {
     const scored = scoreInterviewRound({
       position: String(req.body.scorecard.position || ""),
       round: String(req.body.scorecard.round || before.roundType || "R2"),
       scores: req.body.scorecard.scores || {},
     });
-    const safeName = (before.candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
-    const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scored);
-    const filed = await mockOneDrive.upload(
-      HR_DRIVE,
-      interviewRecordFolder(),
-      `${safeName}_${scored.round}_scorecard.xlsx`,
-      xlsx,
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      { replace: true },
-    );
     scorecardJson = JSON.stringify({
       ...req.body.scorecard,
       result: scored,
-      sharePointUrl: filed.sharePointUrl || filed.url || null,
     });
     scoreOverall = scored.percent;
     if (!s(req.body.decision)) {
       decision = scored.grade === "D" ? "Reject" : scored.grade === "C" ? "Hold" : "Advance";
     }
-    await mockOneDrive.upload(
-      HR_DRIVE,
-      interviewRecordFolder(),
-      `${safeName}_${scored.round}_scorecard.json`,
-      Buffer.from(scorecardJson, "utf8"),
-      "application/json",
-      { replace: true },
-    );
+    scorecardFile = {
+      name: (before.candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_"),
+      scored,
+      payload: req.body.scorecard,
+    };
   }
   const row = await prisma.interviewRound.update({
     where: { id: req.params.id },
@@ -521,6 +508,37 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Interviewed" } });
   } else if (row.decision === "Reject") {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Rejected" } });
+  }
+
+  if (scorecardFile) {
+    try {
+      const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scorecardFile.scored);
+      const filed = await mockOneDrive.upload(
+        HR_DRIVE,
+        interviewRecordFolder(),
+        `${scorecardFile.name}_${scorecardFile.scored.round}_scorecard.xlsx`,
+        xlsx,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        { replace: true },
+      );
+      const withLink = JSON.stringify({
+        ...scorecardFile.payload,
+        result: scorecardFile.scored,
+        sharePointUrl: filed.sharePointUrl || null,
+      });
+      await mockOneDrive.upload(
+        HR_DRIVE,
+        interviewRecordFolder(),
+        `${scorecardFile.name}_${scorecardFile.scored.round}_scorecard.json`,
+        Buffer.from(withLink, "utf8"),
+        "application/json",
+        { replace: true },
+      );
+      await prisma.interviewRound.update({ where: { id: row.id }, data: { scorecardJson: withLink } });
+      row.scorecardJson = withLink;
+    } catch (err) {
+      console.warn("[HRMS] scorecard file:", err instanceof Error ? err.message : err);
+    }
   }
 
   await audit("hrms.interview.feedback", { userId: req.user!.id, entity: "InterviewRound", entityId: row.id, meta: { decision: row.decision, score: row.scoreOverall } });

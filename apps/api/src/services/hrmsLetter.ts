@@ -187,10 +187,17 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
   const issue = fmtDate(row.issueDate);
   const parts = name.split(/\s+/).filter(Boolean);
   const firstName = parts[0] || name;
+  const rest = { ...data };
+  delete rest.EMPLOYEE_NAME;
+  delete rest.CANDIDATE_NAME;
+  delete rest.employeeName;
+  delete rest.candidateName;
   return {
-    ...data,
+    ...rest,
     employeeName: name,
     candidateName: name,
+    EMPLOYEE_NAME: name,
+    CANDIDATE_NAME: name,
     salutation: parts.length ? `Mr. / Ms. ${firstName}` : "Mr. / Ms.",
     firstName,
     designation,
