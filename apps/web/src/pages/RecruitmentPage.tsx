@@ -763,7 +763,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       void uploadDocument(c);
                     }}
                   >
-                    <p className="md:col-span-4 text-[11px] text-steel-muted">Offer letter stays locked until these are on SharePoint: PAN, Aadhaar, Education, Experience, Salary slips, Address proof, Photo, and Bank. Files go into the employee file even before the person is converted. Delete removes the portal row.</p>
+                    <p className="md:col-span-4 text-[11px] text-steel-muted">Offer letter stays locked until these are on SharePoint: PAN, Aadhaar, Education, Experience, Salary slips, Address proof, Photo, and Bank. Each person has a folder inside the requisition. Once they are onboarded, the same files are stored in their employee file. The count matches Onboarding.</p>
                     <div className="md:col-span-4 max-h-36 overflow-y-auto space-y-1">
                     {(c.documents || []).map((d: any) => (
                       <span key={d.id} className="flex items-center gap-2 text-xs">

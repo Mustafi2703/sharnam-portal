@@ -506,7 +506,7 @@ function OfferOnboardingPage() {
         <Card>
           <h3 className="font-semibold text-sm mb-1">Upload pre-joining documents</h3>
           <p className="text-[11px] text-steel-muted mb-3">
-            PAN, Aadhaar, bank proof, education certificates, photo — saved to your HR employee folder.
+            PAN, Aadhaar, bank proof, education certificates, photo. Each file is stored in this person’s folder under the requisition, and in their employee file.
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-xs flex flex-col gap-1">
@@ -545,7 +545,7 @@ function OfferOnboardingPage() {
           </div>
           {vaultDocs.length ? (
             <div className="mt-4 border-t border-line pt-3">
-              <p className="text-xs font-semibold text-ink mb-2">Files in HR vault ({vaultDocs.length})</p>
+              <p className="text-xs font-semibold text-ink mb-2">Documents on file ({vaultDocs.length})</p>
               <ul className="divide-y text-xs max-h-64 overflow-y-auto">
                 {vaultDocs.map((d) => (
                   <li key={d.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
@@ -561,7 +561,7 @@ function OfferOnboardingPage() {
               </ul>
             </div>
           ) : (
-            <p className="text-[11px] text-steel-muted mt-3">Uploaded files are stored in SharePoint under SPDC_HRMS/06_Records_Employee_Files, in KYC or the matching letter folder.</p>
+            <p className="text-[11px] text-steel-muted mt-3">Uploads are filed under the requisition for this person, and into their employee file once they are onboarded. The count matches Recruitment.</p>
           )}
         </Card>
       ) : null}

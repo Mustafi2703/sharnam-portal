@@ -2808,6 +2808,14 @@ hrmRouter.post(
         })
       );
     }
+    const candidate = await prisma.candidate.findFirst({
+      where: { email: user.email.trim().toLowerCase() },
+      select: { id: true },
+    });
+    if (candidate) {
+      const { ensurePersonRecords } = await import("./hrmRecruitment.js");
+      await ensurePersonRecords(candidate.id).catch(() => undefined);
+    }
     await audit("hrm.files.upload", {
       userId: req.user!.id,
       entity: "EmployeeDocument",
@@ -2819,7 +2827,9 @@ hrmRouter.post(
 );
 
 hrmRouter.delete("/employee-files/:id", hrmDesk, async (req: AuthedRequest, res) => {
+  const doc = await prisma.employeeDocument.findUnique({ where: { id: req.params.id } });
   await prisma.employeeDocument.delete({ where: { id: req.params.id } });
+  if (doc?.fileUrl) await prisma.candidateDocument.deleteMany({ where: { fileUrl: doc.fileUrl } });
   await audit("hrm.files.delete", { userId: req.user!.id, entity: "EmployeeDocument", entityId: req.params.id });
   res.json({ ok: true });
 });

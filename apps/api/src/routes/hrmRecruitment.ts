@@ -8,17 +8,16 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
-import { createTeamsSchedule } from "../services/graph.js";
+import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, SHAREPOINT_SANDBOX_ROOT } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, scorecardRoundId, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
+  candidateRecruitmentFolder,
   employeeLetterFolder,
   HR_DRIVE,
-  interviewRecordFolder,
   kycFolder,
   payslipRecordFolder,
-  resumeFolder,
 } from "../services/spdcLibraryFolders.js";
 import {
   computeCtcBreakdown,
@@ -238,8 +237,8 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   const status = req.query.status ? String(req.query.status) : undefined;
   const postingId = req.query.postingId ? String(req.query.postingId) : undefined;
   const search = req.query.q ? String(req.query.q).toLowerCase() : undefined;
-  await safeHrmList("candidates", () =>
-    prisma.candidate.findMany({
+  try {
+    const rows = await prisma.candidate.findMany({
       where: {
         ...(status ? { status } : {}),
         ...(postingId ? { postingId } : {}),
@@ -262,9 +261,44 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
         documents: { select: { id: true, category: true, title: true, fileUrl: true }, orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
-    }),
-    res
-  );
+    });
+    const emails = rows.map((row) => (row.email || "").trim().toLowerCase()).filter(Boolean);
+    const users = emails.length
+      ? await prisma.user.findMany({ where: { email: { in: emails } }, select: { id: true, email: true } })
+      : [];
+    const byEmail = new Map(users.map((user) => [user.email.toLowerCase(), user.id]));
+    const staffDocs = users.length
+      ? await prisma.employeeDocument.findMany({
+          where: { userId: { in: users.map((user) => user.id) } },
+          select: { id: true, userId: true, category: true, title: true, fileUrl: true },
+        })
+      : [];
+    const byUser = new Map<string, typeof staffDocs>();
+    for (const doc of staffDocs) {
+      const list = byUser.get(doc.userId) || [];
+      list.push(doc);
+      byUser.set(doc.userId, list);
+    }
+    res.json(rows.map((row) => {
+      const userId = row.email ? byEmail.get(row.email.trim().toLowerCase()) : undefined;
+      const extra = userId ? byUser.get(userId) || [] : [];
+      const seen = new Set(row.documents.map((doc) => doc.fileUrl));
+      const documents = [...row.documents];
+      for (const doc of extra) {
+        if (seen.has(doc.fileUrl)) continue;
+        documents.push({ id: doc.id, category: doc.category, title: doc.title, fileUrl: doc.fileUrl });
+      }
+      return { ...row, documents, documentCount: documents.length };
+    }));
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.list",
+      message: "candidates failed",
+      detail: errorDetail(err),
+    });
+    res.status(500).json({ error: "Could not load candidates" });
+  }
 });
 
 hrmRecruitmentRouter.post("/registers/clear-ops", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
@@ -407,22 +441,30 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
       });
     }
   }
-  let resumeUrl: string | undefined;
-  if (req.file) {
-    const saved = await mockOneDrive.upload(
-      HR_DRIVE,
-      resumeFolder(),
-      `resume-${s(req.body.fullName)?.replace(/[^a-zA-Z0-9._-]/g, "_") || "candidate"}-${Date.now()}${extOf(req.file)}`,
-      req.file.buffer
-    );
-    resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
-  }
   const requisitionId = s(req.body.requisitionId);
   const requisition = requisitionId
     ? await prisma.manpowerRequisition.findUnique({ where: { id: requisitionId } })
     : null;
   if (!requisition || requisition.status !== "Approved") {
     return res.status(400).json({ error: "Approve the requisition first, then add the candidate to that requisition." });
+  }
+  let resumeUrl: string | undefined;
+  if (req.file) {
+    const folder = candidateRecruitmentFolder({
+      fullName: s(req.body.fullName) || "Candidate",
+      status: "New",
+      requisitionNo: requisition.requisitionNo,
+      designation: requisition.designation,
+    });
+    const saved = await mockOneDrive.upload(
+      HR_DRIVE,
+      folder,
+      `resume-${s(req.body.fullName)?.replace(/[^a-zA-Z0-9._-]/g, "_") || "candidate"}${extOf(req.file)}`,
+      req.file.buffer,
+      req.file.mimetype,
+      { replace: true },
+    );
+    resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   }
   const row = await prisma.candidate.create({
     data: {
@@ -490,9 +532,11 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
   if (!req.file) return res.status(400).json({ error: "Choose a resume file." });
   const saved = await mockOneDrive.upload(
     HR_DRIVE,
-    resumeFolder(),
-    `resume-${before.fullName.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}${extOf(req.file)}`,
+    await recruitmentFolderFor(before.id),
+    `resume-${before.fullName.replace(/[^a-zA-Z0-9._-]/g, "_")}${extOf(req.file)}`,
     req.file.buffer,
+    req.file.mimetype,
+    { replace: true },
   );
   const resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   const row = await prisma.candidate.update({
@@ -507,6 +551,149 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
 });
 
 const BGV_CATEGORIES = ["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"] as const;
+
+function storedFileName(storagePath: string | null | undefined, fileUrl: string, fallback: string) {
+  const raw = (storagePath || fileUrl || fallback).split("?")[0];
+  const name = decodeURIComponent(raw.split("/").pop() || fallback);
+  const safe = name.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_").slice(0, 80);
+  return safe || fallback;
+}
+
+async function readStoredFile(storagePath: string | null | undefined) {
+  if (!storagePath) return null;
+  const path = storagePath.startsWith(`${SHAREPOINT_SANDBOX_ROOT}/`)
+    ? storagePath
+    : `${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${storagePath.replace(/^\/+/, "")}`;
+  try {
+    return await downloadDriveFile(path);
+  } catch {
+    return null;
+  }
+}
+
+async function filedCopy(folder: string, fileName: string, storagePath: string | null | undefined) {
+  const target = `${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${folder}/${fileName}`;
+  const existing = await driveItemWebUrl(target);
+  if (existing) return { fileUrl: existing, storagePath: target };
+  const buf = await readStoredFile(storagePath);
+  if (!buf) return null;
+  const saved = await mockOneDrive.upload(HR_DRIVE, folder, fileName, buf, undefined, { replace: true });
+  return {
+    fileUrl: saved.sharePointUrl || saved.url || existing || "",
+    storagePath: saved.sharePointPath || target,
+  };
+}
+
+/** Shortlisted people live in their requisition folder. Once they have a staff login, the same files are copied into the employee vault. */
+export async function ensurePersonRecords(candidateId: string) {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: {
+      requisition: { select: { requisitionNo: true, designation: true } },
+      documents: true,
+      interviews: { select: { id: true }, take: 1 },
+    },
+  });
+  if (!candidate) return;
+  const user = candidate.email
+    ? await prisma.user.findUnique({ where: { email: candidate.email.trim().toLowerCase() } })
+    : null;
+  const profile = user ? await prisma.employeeProfile.findUnique({ where: { userId: user.id } }) : null;
+  const recruitFolder = candidateRecruitmentFolder({
+    fullName: candidate.fullName,
+    status: candidate.status,
+    requisitionNo: candidate.requisition?.requisitionNo,
+    designation: candidate.requisition?.designation,
+    interviewed: candidate.interviews.length > 0,
+  });
+  const { vaultSubfolderForCategory } = await import("../services/hrEmployeeVault.js");
+  const { employeeRecordRoot } = await import("../services/spdcLibraryFolders.js");
+  const empRoot = user ? employeeRecordRoot(profile?.empCode, user.fullName || candidate.fullName) : null;
+  const staffDocs = user ? await prisma.employeeDocument.findMany({ where: { userId: user.id } }) : [];
+  type Item = {
+    category: string;
+    title: string;
+    fileUrl: string;
+    storagePath: string | null;
+    candidateDocId?: string;
+    employeeDocId?: string;
+  };
+  const items = new Map<string, Item>();
+  for (const doc of candidate.documents) {
+    items.set(doc.fileUrl, {
+      category: doc.category,
+      title: doc.title,
+      fileUrl: doc.fileUrl,
+      storagePath: doc.storagePath,
+      candidateDocId: doc.id,
+    });
+  }
+  for (const doc of staffDocs) {
+    const prev = items.get(doc.fileUrl);
+    if (prev) prev.employeeDocId = doc.id;
+    else {
+      items.set(doc.fileUrl, {
+        category: doc.category,
+        title: doc.title,
+        fileUrl: doc.fileUrl,
+        storagePath: doc.storagePath,
+        employeeDocId: doc.id,
+      });
+    }
+  }
+  for (const item of items.values()) {
+    const name = storedFileName(item.storagePath, item.fileUrl, `${item.category || "file"}.bin`);
+    const recruit = await filedCopy(recruitFolder, name, item.storagePath);
+    const empFolder = empRoot ? `${empRoot}/${vaultSubfolderForCategory(item.category)}` : null;
+    const employee = empFolder ? await filedCopy(empFolder, name, item.storagePath) : null;
+    const canonical = employee?.fileUrl || recruit?.fileUrl || item.fileUrl;
+    const storagePath = employee?.storagePath || recruit?.storagePath || item.storagePath;
+    if (!canonical) continue;
+    if (item.candidateDocId) {
+      if (canonical !== item.fileUrl || storagePath !== item.storagePath) {
+        await prisma.candidateDocument.update({
+          where: { id: item.candidateDocId },
+          data: { fileUrl: canonical, storagePath },
+        });
+      }
+    } else {
+      await prisma.candidateDocument.create({
+        data: { candidateId, category: item.category || "Other", title: item.title, fileUrl: canonical, storagePath },
+      });
+    }
+    if (!user) continue;
+    if (item.employeeDocId) {
+      if (canonical !== item.fileUrl || storagePath !== item.storagePath) {
+        await prisma.employeeDocument.update({
+          where: { id: item.employeeDocId },
+          data: { fileUrl: canonical, storagePath },
+        });
+      }
+    } else {
+      await prisma.employeeDocument.create({
+        data: { userId: user.id, category: item.category || "Other", title: item.title, fileUrl: canonical, storagePath },
+      });
+    }
+  }
+}
+
+async function recruitmentFolderFor(candidateId: string) {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: {
+      requisition: { select: { requisitionNo: true, designation: true } },
+      interviews: { select: { id: true }, take: 1 },
+    },
+  });
+  if (!candidate) return candidateRecruitmentFolder({ fullName: "Candidate" });
+  return candidateRecruitmentFolder({
+    fullName: candidate.fullName,
+    status: candidate.status,
+    requisitionNo: candidate.requisition?.requisitionNo,
+    designation: candidate.requisition?.designation,
+    interviewed: candidate.interviews.length > 0,
+  });
+}
 
 /** Checklist and Employee files both read EmployeeDocument. Copy candidate uploads onto the staff login when one exists. SharePoint files stay; only the portal row is removed on delete. */
 async function mirrorCandidateDocsToStaff(candidateId: string, userId: string) {
@@ -543,12 +730,25 @@ hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "of
     : null;
   const profile = employee ? await prisma.employeeProfile.findUnique({ where: { userId: employee.id } }) : null;
   const safeName = before.fullName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const saved = await mockOneDrive.upload(
+  const fileName = `kyc-${category.replace(/\s+/g, "_")}-${safeName}${extOf(req.file)}`;
+  const recruitSaved = await mockOneDrive.upload(
     HR_DRIVE,
-    kycFolder(profile?.empCode, before.fullName),
-    `kyc-${category.replace(/\s+/g, "_")}-${safeName}-${Date.now()}${extOf(req.file)}`,
+    await recruitmentFolderFor(before.id),
+    fileName,
     req.file.buffer,
+    req.file.mimetype,
+    { replace: true },
   );
+  const saved = employee
+    ? await mockOneDrive.upload(
+        HR_DRIVE,
+        kycFolder(profile?.empCode, before.fullName),
+        fileName,
+        req.file.buffer,
+        req.file.mimetype,
+        { replace: true },
+      )
+    : recruitSaved;
   const fileUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   const doc = await prisma.candidateDocument.create({
     data: {
@@ -568,7 +768,16 @@ hrmRecruitmentRouter.delete("/candidates/:id/documents/:docId", requireRoles("ad
   const doc = await prisma.candidateDocument.findFirst({
     where: { id: req.params.docId, candidateId: req.params.id },
   });
-  if (!doc) return res.status(404).json({ error: "not found" });
+  if (!doc) {
+    const staffDoc = await prisma.employeeDocument.findUnique({ where: { id: req.params.docId } });
+    if (!staffDoc) return res.status(404).json({ error: "not found" });
+    await prisma.employeeDocument.delete({ where: { id: staffDoc.id } });
+    if (staffDoc.fileUrl) {
+      await prisma.candidateDocument.deleteMany({ where: { candidateId: req.params.id, fileUrl: staffDoc.fileUrl } });
+    }
+    await audit("hrms.candidate.document.delete", { userId: req.user!.id, entity: "EmployeeDocument", entityId: staffDoc.id, meta: { candidateId: req.params.id } });
+    return res.json({ ok: true });
+  }
   await prisma.candidateDocument.delete({ where: { id: doc.id } });
   if (doc.fileUrl) {
     await prisma.employeeDocument.deleteMany({ where: { fileUrl: doc.fileUrl } });
@@ -742,7 +951,7 @@ hrmRecruitmentRouter.get("/onboarding-board", requireRoles("admin", "office", "h
     where: { status: { in: ["Joined", "Accepted"] } },
     include: {
       requisition: { select: { requisitionNo: true, department: true, designation: true } },
-      documents: { select: { id: true } },
+      documents: { select: { fileUrl: true } },
       offers: {
         include: { preJoin: true, onboard: true },
         orderBy: { updatedAt: "desc" },
@@ -756,6 +965,18 @@ hrmRecruitmentRouter.get("/onboarding-board", requireRoles("admin", "office", "h
     ? await prisma.employeeProfile.findMany({ where: { userId: { in: users.map((u) => u.id) } } })
     : [];
   const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
+  const staffDocs = users.length
+    ? await prisma.employeeDocument.findMany({
+        where: { userId: { in: users.map((u) => u.id) } },
+        select: { userId: true, fileUrl: true },
+      })
+    : [];
+  const staffUrls = new Map<string, string[]>();
+  for (const doc of staffDocs) {
+    const list = staffUrls.get(doc.userId) || [];
+    list.push(doc.fileUrl);
+    staffUrls.set(doc.userId, list);
+  }
   const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), { user: u, profile: profileByUser.get(u.id) || null }]));
   res.json(
     people.map((p) => {
@@ -770,7 +991,10 @@ hrmRecruitmentRouter.get("/onboarding-board", requireRoles("admin", "office", "h
         designation: p.requisition?.designation || staff?.profile?.designation || p.currentDesign,
         department: p.requisition?.department || staff?.profile?.department || null,
         requisitionNo: p.requisition?.requisitionNo || null,
-        documentCount: p.documents.length,
+        documentCount: new Set([
+          ...p.documents.map((doc) => doc.fileUrl),
+          ...(staff ? staffUrls.get(staff.user.id) || [] : []),
+        ].filter(Boolean)).size,
         empCode: staff?.profile?.empCode || offer?.preJoin?.empCodeGenerated || null,
         userId: staff?.user.id || offer?.onboard?.userId || null,
         ctcAnnual: staff?.profile?.ctcAnnual ?? offer?.ctcAnnual ?? null,
@@ -1015,7 +1239,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     });
     const filed = await mockOneDrive.upload(
       HR_DRIVE,
-      interviewRecordFolder(),
+      await recruitmentFolderFor(candidate.id),
       scorecardShareName(candidate.fullName, roundType),
       xlsx,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1161,7 +1385,7 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
       });
       const filed = await mockOneDrive.upload(
         HR_DRIVE,
-        interviewRecordFolder(),
+        await recruitmentFolderFor(before.candidateId),
         scorecardShareName(before.candidate.fullName || "candidate", filedRound),
         xlsx,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1682,6 +1906,16 @@ async function hydratePreJoin(offerId: string) {
     ? await prisma.preJoiningChecklist.update({ where: { id: existing.id }, data })
     : existing;
   if (linkedUserId) await mirrorCandidateDocsToStaff(offer.candidateId, linkedUserId);
+  try {
+    await ensurePersonRecords(offer.candidateId);
+  } catch (err) {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.files",
+      message: "Could not file this person's documents into the requisition and employee folders",
+      detail: errorDetail(err),
+    });
+  }
   const candidateDocuments = await prisma.candidateDocument.findMany({
     where: { candidateId: offer.candidateId },
     orderBy: { createdAt: "desc" },
@@ -1796,6 +2030,7 @@ hrmRecruitmentRouter.post(
     await ensureEmployeeVault({ userId, fullName: user.fullName, email: user.email, profile });
     const vaultRel = employeeVaultRelPath(profile, user.fullName);
     const subfolder = vaultSubfolderForCategory(category);
+    const recruitFolder = await recruitmentFolderFor(offer.candidateId);
     const created = [];
     for (const file of files) {
       const safeName = vaultFileNameForUpload({
@@ -1804,8 +2039,18 @@ hrmRecruitmentRouter.post(
         fullName: user.fullName,
         originalName: file.originalname,
       });
-      const saved = await mockOneDrive.upload(HR_DRIVE, `${vaultRel}/${subfolder}`, safeName, file.buffer);
+      const saved = await mockOneDrive.upload(HR_DRIVE, `${vaultRel}/${subfolder}`, safeName, file.buffer, file.mimetype, { replace: true });
+      await mockOneDrive.upload(HR_DRIVE, recruitFolder, safeName, file.buffer, file.mimetype, { replace: true });
       const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
+      await prisma.candidateDocument.create({
+        data: {
+          candidateId: offer.candidateId,
+          category,
+          title: file.originalname || category,
+          fileUrl: url,
+          storagePath: saved.sharePointPath || saved.path,
+        },
+      });
       created.push(
         await prisma.employeeDocument.create({
           data: {

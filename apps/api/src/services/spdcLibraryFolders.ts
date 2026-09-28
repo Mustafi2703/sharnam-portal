@@ -133,6 +133,28 @@ export function hrFyRecordFolders(d = new Date()) {
   return folders;
 }
 
+export function requisitionFolderSeg(requisitionNo: string | null | undefined, designation: string | null | undefined) {
+  return safeSeg(`${(requisitionNo || "Req").trim()}_${(designation || "Role").trim()}`).slice(0, 64);
+}
+
+/** One folder per person inside the requisition pack under recruitment records. */
+export function candidateRecruitmentFolder(opts: {
+  fullName: string;
+  status?: string | null;
+  requisitionNo?: string | null;
+  designation?: string | null;
+  interviewed?: boolean;
+}) {
+  const rejected = /reject|withdraw/i.test(opts.status || "");
+  const shortlisted = !!opts.interviewed || !/^(upload|new)$/i.test(opts.status || "");
+  const bucket = rejected
+    ? "05_Records_Recruitment/03_Rejected"
+    : shortlisted
+      ? "05_Records_Recruitment/02_Shortlisted_and_Interviewed"
+      : "05_Records_Recruitment/01_Resumes_Received";
+  return `${bucket}/${requisitionFolderSeg(opts.requisitionNo, opts.designation)}/${safeSeg(opts.fullName || "Candidate")}`;
+}
+
 export function resumeFolder() {
   return "05_Records_Recruitment/01_Resumes_Received";
 }
