@@ -323,7 +323,7 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
       experienceYears: n(req.body.experienceYears),
       skills: s(req.body.skills),
       location: s(req.body.location),
-      status: "New",
+      status: resumeUrl ? "New" : "Upload",
     },
   });
   await audit("hrms.candidate.create", { userId: req.user!.id, entity: "Candidate", entityId: row.id, meta: { fullName: row.fullName, source: row.sourceChannel } });
@@ -376,7 +376,13 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
     req.file.buffer,
   );
   const resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
-  const row = await prisma.candidate.update({ where: { id: before.id }, data: { resumeUrl } });
+  const row = await prisma.candidate.update({
+    where: { id: before.id },
+    data: {
+      resumeUrl,
+      status: before.status === "Upload" ? "New" : before.status,
+    },
+  });
   await audit("hrms.candidate.resume", { userId: req.user!.id, entity: "Candidate", entityId: row.id });
   res.json(row);
 });
@@ -550,6 +556,9 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     include: { posting: { select: { title: true } } },
   });
   if (!candidate) return res.status(404).json({ error: "not found" });
+  if (!candidate.resumeUrl) {
+    return res.status(400).json({ error: "Upload the resume first. The stage moves to Resume received, then you can schedule the interview." });
+  }
   const priorRounds = await prisma.interviewRound.count({ where: { candidateId: candidate.id } });
   const interviewee: IntervieweeSeat = {
     candidateId: candidate.id,

@@ -1,5 +1,6 @@
 /** Candidate pipeline shown on the HRMS recruitment register. */
 export const CANDIDATE_STAGES = [
+  { id: "Upload", label: "Upload resume" },
   { id: "New", label: "Resume received" },
   { id: "Screened", label: "Resume screened" },
   { id: "Shortlisted", label: "Shortlisted" },
@@ -19,6 +20,7 @@ export type CandidateStageId = (typeof CANDIDATE_STAGES)[number]["id"];
 export const CANDIDATE_STAGE_IDS = CANDIDATE_STAGES.map((s) => s.id);
 
 export const ACTIVE_CANDIDATE_STAGES: CandidateStageId[] = [
+  "Upload",
   "New",
   "Screened",
   "Shortlisted",
@@ -43,7 +45,7 @@ export function candidateStageTone(
   if (status === "Joined" || status === "Accepted") return "ok";
   if (status === "Rejected" || status === "Withdrawn") return "danger";
   if (status === "Offered" || status === "Selected" || status === "SalaryDiscussion") return "brand";
-  if (status === "Interview" || status === "Interviewed" || status === "Shortlisted") return "warn";
+  if (status === "Upload" || status === "Interview" || status === "Interviewed" || status === "Shortlisted") return "warn";
   return "neutral";
 }
 

@@ -310,7 +310,11 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
       await api("/api/hrm/candidates", { method: "POST", token, body: fd });
       setForm({ postingId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
       setFile(null);
-      setMsg("Candidate and resume saved in SPDC_HRMS. Next: interview, scorecard, convert to employee, then PAN and letters.");
+      setMsg(
+        file
+          ? "Resume received. Next step is the interview and scorecard."
+          : "Saved as Upload resume. Attach the file on this row to move them to Resume received.",
+      );
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -358,7 +362,7 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
         fd.append("resume", editFile);
         await api(`/api/hrm/candidates/${id}/resume`, { method: "POST", token, body: fd });
       }
-      setMsg("Candidate updated.");
+      setMsg(editFile ? "Resume received. Next step is the interview." : "Candidate updated.");
       setOpenId(null);
       await reload();
     } catch (err) {
@@ -437,7 +441,7 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
               <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
             </label>
             <Button type="submit" className="md:col-span-4" disabled={saving}>{saving ? "Adding…" : "Add candidate"}</Button>
-            <p className="md:col-span-4 text-[11px] text-steel-muted">Saves this person and the resume in SPDC_HRMS. Letters come later, from Generate letters on their row.</p>
+            <p className="md:col-span-4 text-[11px] text-steel-muted">With a resume the stage is Resume received. Without one it stays Upload resume until you attach the file.</p>
           </form>
         </Card>
       )}
@@ -471,6 +475,8 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
             const employee = (staff || []).find((s: any) => c.email && s.email && String(s.email).toLowerCase() === String(c.email).toLowerCase());
             const scored = (c.interviews || []).some((r: any) => r.scoreOverall != null);
             const lettersReady = Boolean(employee);
+            const hasResume = Boolean(c.resumeUrl);
+            const stage = !hasResume && (c.status === "New" || c.status === "Upload" || !c.status) ? "Upload" : c.status;
             return (
               <li key={c.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -479,18 +485,28 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
                     <div className="text-xs text-steel-muted">{[c.currentDesign, c.currentCompany].filter(Boolean).join(" · ") || "No company yet"}</div>
                     <div className="text-xs mt-0.5">{c.email || "No email"} · {c.phone || "No phone"} · {money(c.expectedCtc)} expected</div>
                   </div>
-                  <Badge tone={candidateStageTone(c.status)}>{candidateStageLabel(c.status)}</Badge>
+                  <Badge tone={candidateStageTone(stage)}>{candidateStageLabel(stage)}</Badge>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${c.resumeUrl ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Resume</span>
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${hasResume ? "border-brand text-brand" : "border-line text-steel-muted"}`}>{hasResume ? "Resume received" : "Upload resume"}</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${(c.interviews || []).length ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Interview</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${scored ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Score</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${employee ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Employee</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${lettersReady ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Letters</span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 items-center">
-                  {c.resumeUrl ? <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand font-semibold">Open resume</a> : <span className="text-xs text-steel-muted">No resume</span>}
-                  <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className="text-xs text-brand font-semibold">Interview</Link>
+                  {hasResume ? (
+                    <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand font-semibold">Open resume</a>
+                  ) : canManage ? (
+                    <button type="button" className="text-xs font-semibold text-brand" onClick={() => openEdit(c)}>Upload resume</button>
+                  ) : (
+                    <span className="text-xs text-steel-muted">Upload resume</span>
+                  )}
+                  {hasResume ? (
+                    <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className="text-xs text-brand font-semibold">Interview</Link>
+                  ) : (
+                    <span className="text-xs text-steel-muted">Interview after the resume</span>
+                  )}
                   {canManage && <button type="button" className="text-xs font-semibold" onClick={() => openEdit(c)}>Edit</button>}
                   {canManage && <button type="button" className="text-xs font-semibold text-danger" onClick={() => void removeCandidate(c)}>Delete</button>}
                   {canManage && !employee && <button type="button" className="text-xs font-semibold" onClick={() => void convertEmployee(c)}>Convert to employee</button>}
