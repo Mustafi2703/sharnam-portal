@@ -82,12 +82,12 @@ export default function HrmsSideNav({
         {!user?.hrDeskOnly && (
           <Link to="/dashboard" className="side-nav__item" onClick={onNavigate}>
             <ModuleIcon name="modules" size={18} />
-            <span>Office portal</span>
+            <span>{formatUiText("Office portal")}</span>
           </Link>
         )}
         <button type="button" className="side-nav__item w-full" onClick={onToggleTheme}>
           {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
-          <span>{dark ? "Light mode" : "Dark mode"}</span>
+          <span>{formatUiText(dark ? "Light mode" : "Dark mode")}</span>
         </button>
         <div className="side-nav__user" title={user?.fullName}>
           {user?.fullName}
@@ -103,7 +103,7 @@ export default function HrmsSideNav({
             navigate("/login/hr");
           }}
         >
-          Sign out
+          {formatUiText("Sign out")}
         </button>
       </div>
     </div>

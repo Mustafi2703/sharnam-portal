@@ -2122,6 +2122,29 @@ html.is-standalone-form #root {
   vertical-align: middle;
 }
 
+/* Title case for HR desk labels, buttons, headings, and table headers. Typed values stay as entered. */
+.hrms-module,
+.register-modal,
+.side-nav__label,
+.side-nav__item,
+.side-nav__signout,
+.side-nav__role-badge {
+  text-transform: capitalize;
+}
+.hrms-module input,
+.hrms-module textarea,
+.hrms-module select,
+.hrms-module option,
+.hrms-module .font-mono,
+.register-modal input,
+.register-modal textarea,
+.register-modal select,
+.register-modal option,
+.register-modal .font-mono,
+[data-preserve-case] {
+  text-transform: none;
+}
+
 /* Quality module — dashboard / QI / checklist summary scroll in the middle column */
 .quality-module {
   flex: none !important;

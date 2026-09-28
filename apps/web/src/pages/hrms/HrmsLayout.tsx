@@ -24,8 +24,8 @@ export default function HrmsLayout() {
             HR
           </span>
           <div className="min-w-0">
-            <p className="text-xs font-semibold" style={{ color: HRMS_ACCENT }}>People desk</p>
-            <h1 className="font-display text-base text-ink">Hire, pay, and file</h1>
+            <p className="text-xs font-semibold" style={{ color: HRMS_ACCENT }}>People Desk</p>
+            <h1 className="font-display text-base text-ink">Hire, Pay, And File</h1>
           </div>
         </div>
         <div className="px-2 sm:px-3 py-2 border-t border-line">
