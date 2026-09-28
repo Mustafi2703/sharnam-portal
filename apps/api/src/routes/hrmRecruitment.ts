@@ -21,6 +21,7 @@ import {
 } from "../services/spdcLibraryFolders.js";
 import {
   computeCtcBreakdown,
+  ctcMonthlyEarnings,
   buildAnnexureHtml,
   buildAnnexureXlsx,
   DEFAULT_CTC_INPUTS,
@@ -1745,18 +1746,28 @@ async function computeAndUpsertPayslip(
   if (!profile) throw new Error("employee profile not found");
   const paidDays = Math.max(0, workingDays - lopDays);
   const factor = workingDays > 0 ? paidDays / workingDays : 1;
-  const basic = overrides?.basic ?? (profile.basicMonthly || (profile.ctcAnnual ? (profile.ctcAnnual * 0.5) / 12 : 0)) * factor;
-  const hra = overrides?.hra ?? (profile.hraMonthly || basic * 0.4) * factor;
-  const conveyance = overrides?.conveyance ?? 1600 * factor;
-  const medicalAllow = overrides?.medicalAllow ?? 1250 * factor;
+  const fromCtc = profile.ctcAnnual ? ctcMonthlyEarnings(profile.ctcAnnual, profile.designation || "") : null;
+  if (fromCtc) {
+    await prisma.employeeProfile.update({
+      where: { userId },
+      data: { basicMonthly: fromCtc.basic, hraMonthly: fromCtc.hra },
+    });
+  }
+  const scale = (full: number) => Math.round(full * factor);
+  const basic = overrides?.basic ?? (fromCtc ? scale(fromCtc.basic) : (profile.basicMonthly || 0) * factor);
+  const hra = overrides?.hra ?? (fromCtc ? scale(fromCtc.hra) : (profile.hraMonthly || basic * 0.4) * factor);
+  const conveyance = overrides?.conveyance ?? (fromCtc ? scale(fromCtc.conveyance) : 1600 * factor);
+  const medicalAllow = overrides?.medicalAllow ?? (fromCtc ? 0 : 1250 * factor);
   const specialAllow =
     overrides?.specialAllow ??
-    Math.max(0, (profile.ctcAnnual ? profile.ctcAnnual / 12 : 0) * factor - basic - hra - conveyance - medicalAllow);
+    (fromCtc
+      ? Math.max(0, scale(fromCtc.gross) - basic - hra - conveyance - medicalAllow)
+      : Math.max(0, (profile.ctcAnnual ? profile.ctcAnnual / 12 : 0) * factor - basic - hra - conveyance - medicalAllow));
   const otherEarnings = overrides?.otherEarnings ?? 0;
   const gross = basic + hra + conveyance + medicalAllow + specialAllow + otherEarnings;
-  const pfEmployee = overrides?.pfEmployee ?? Math.min(basic, 15000) * 0.12;
-  const esicEmployee = overrides?.esicEmployee ?? (gross <= 21000 ? gross * 0.0075 : 0);
-  const professionalTax = overrides?.professionalTax ?? 200;
+  const pfEmployee = overrides?.pfEmployee ?? (fromCtc ? scale(fromCtc.pfEmployee) : Math.min(basic, 15000) * 0.12);
+  const esicEmployee = overrides?.esicEmployee ?? (fromCtc ? (fromCtc.esicEmployee > 0 ? scale(fromCtc.esicEmployee) : 0) : gross <= 21000 ? gross * 0.0075 : 0);
+  const professionalTax = overrides?.professionalTax ?? (fromCtc ? (paidDays > 0 ? fromCtc.professionalTax : 0) : 200);
   const otherDeduction = overrides?.otherDeduction ?? 0;
   const tds = overrides?.incomeTax ?? incomeTax;
   const totalDeductions = pfEmployee + esicEmployee + professionalTax + tds + otherDeduction;

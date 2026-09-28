@@ -218,6 +218,36 @@ export function computeCtcBreakdown(input: CtcInputs): CtcBreakdown {
   };
 }
 
+/** Monthly payslip lines from the same calculator the offer letter uses. Special is the residual so the lines add up to gross. */
+export function ctcMonthlyEarnings(fixedCtcAnnual: number, designation = "") {
+  const b = computeCtcBreakdown({
+    candidateName: "",
+    designation: designation || "Employee",
+    fixedCtcAnnual,
+    ...DEFAULT_CTC_INPUTS,
+  });
+  const month = (label: string) => {
+    const hit = [...b.partA.rows, ...b.partC.rows].find((r) => r.label.toLowerCase().includes(label));
+    return typeof hit?.perMonth === "number" ? Math.abs(hit.perMonth) : 0;
+  };
+  const basic = month("basic");
+  const hra = month("house rent");
+  const conveyance = month("conveyance");
+  const gross = b.partA.gross.perMonth;
+  const specialAllowance = Math.max(0, Math.round(gross - basic - hra - conveyance));
+  return {
+    basic,
+    hra,
+    conveyance,
+    medicalAllow: 0,
+    specialAllowance,
+    gross,
+    pfEmployee: month("provident"),
+    professionalTax: month("professional tax"),
+    esicEmployee: month("state insurance"),
+  };
+}
+
 const inr = (v: number | string) =>
   typeof v === "string" ? v : v.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 

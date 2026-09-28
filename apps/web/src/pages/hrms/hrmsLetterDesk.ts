@@ -381,6 +381,51 @@ function sheetFromData(data: Record<string, unknown>, prev: Record<string, strin
   return sheet;
 }
 
+/** Copy a filled offer (and later appointment / NDA) into the letter being composed so the next letter is not blank. */
+export function applyPriorLetters(form: LetterFormState, docs: DocRow[]): LetterFormState {
+  const kind = form.kind;
+  const mine = docs.filter((r) => docMatchesSubject(r, form) && r.status !== "Cancelled");
+  const offer = mine.find((r) => r.kind === "Offer");
+  const appointment = mine.find((r) => r.kind === "Appointment");
+  const nda = mine.find((r) => r.kind === "NdaJoining");
+  let next = form;
+  if (kind === "Offer" && offer) {
+    next = hydrateLetterFormFromDoc(offer, form);
+  } else if (offer) {
+    const hydrated = hydrateLetterFormFromDoc(offer, form);
+    next = {
+      ...hydrated,
+      kind,
+      sheet: {
+        ...hydrated.sheet,
+        offerRefNo: hydrated.sheet.offerRefNo || offer.refNo,
+        offerDate: hydrated.sheet.offerDate || String(offer.issueDate || "").slice(0, 10),
+      },
+    };
+  }
+  if (appointment && kind !== "Offer" && kind !== "Appointment") {
+    next = {
+      ...next,
+      sheet: {
+        ...next.sheet,
+        appointmentRefNo: next.sheet.appointmentRefNo || appointment.refNo,
+        appointmentDate: next.sheet.appointmentDate || String(appointment.issueDate || "").slice(0, 10),
+      },
+    };
+  }
+  if (nda && kind === "NdaPostEmployment") {
+    next = {
+      ...next,
+      sheet: {
+        ...next.sheet,
+        ndaJoiningRef: next.sheet.ndaJoiningRef || nda.refNo,
+        ndaJoiningDate: next.sheet.ndaJoiningDate || String(nda.issueDate || "").slice(0, 10),
+      },
+    };
+  }
+  return next;
+}
+
 export function letterFormFingerprint(form: LetterFormState): string {
   return JSON.stringify(createBodyFromForm(form));
 }

@@ -23,6 +23,7 @@ import {
   letterSharePointLink,
   emptyLetterForm,
   subjectKeyFromForm,
+  applyPriorLetters,
   hydrateLetterFormFromDoc,
   letterFormFingerprint,
   letterFormUsesAssetExtras,
@@ -121,7 +122,7 @@ export default function HrmsDocumentsPage() {
 
   function setSubjectKey(key: string) {
     clearPreview();
-    setForm((f) => applySubjectKey(key, staff, offers, f));
+    setForm((f) => applyPriorLetters(applySubjectKey(key, staff, offers, f), rows));
   }
 
   function selectKind(kind: DocKind) {
@@ -129,7 +130,8 @@ export default function HrmsDocumentsPage() {
     clearPreview();
     setForm((f) => {
       const next = { ...f, kind };
-      return existing ? hydrateLetterFormFromDoc(existing, next) : next;
+      if (existing) return hydrateLetterFormFromDoc(existing, next);
+      return applyPriorLetters(next, rows);
     });
     window.setTimeout(() => {
       formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });

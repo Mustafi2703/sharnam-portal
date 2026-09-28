@@ -231,7 +231,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           <div>
             <h3 className="font-semibold text-sm">Generate · {MONTHS[month - 1]} {year}</h3>
             <p className="text-[11px] text-steel-muted mt-1">
-              Blank overrides use the SPDC CTC split on the employee profile. HTML is filed on Drive under 06.03 Payslips / YYYY-MM.
+              Blank overrides use the SPDC CTC calculator (same monthly basic, HRA, conveyance, special, PF and professional tax as the offer letter). The payslip is filed on SharePoint.
             </p>
           </div>
           <form onSubmit={generate} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">

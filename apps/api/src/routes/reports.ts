@@ -20,6 +20,7 @@ import {
   buildWprPack,
 } from "../services/reportPacks.js";
 import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS } from "@sharnam/shared";
+import { ctcMonthlyEarnings } from "../services/ctcAnnexure.js";
 import { isHrDeskOnly } from "../services/hrDesk.js";
 
 async function personFileStamp(userId: string) {
@@ -3019,9 +3020,60 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
     const { attachHrmsLetterToEmployeeVault } = await import("../services/hrmsLetter.js");
     await attachHrmsLetterToEmployeeVault(updated, { fileUrl, storagePath: updated.storagePath, signed: false });
   }
+  await syncStaffRecordFromLetter(updated);
   await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
   res.json(updated);
 });
+
+async function syncStaffRecordFromLetter(row: {
+  kind: string;
+  employeeUserId: string | null;
+  designation: string | null;
+  department: string | null;
+  effectiveDate: Date | null;
+  dataJson: string;
+}) {
+  if (!row.employeeUserId) return;
+  if (row.kind !== "Offer" && row.kind !== "Appointment" && row.kind !== "Promotion") return;
+  let data: Record<string, unknown> = {};
+  try {
+    data = row.dataJson ? (JSON.parse(row.dataJson) as Record<string, unknown>) : {};
+  } catch {
+    data = {};
+  }
+  const filled = (v: unknown) => {
+    const s = String(v ?? "").trim();
+    return Boolean(s) && !/^[_\-—.\s]+$/.test(s);
+  };
+  const ctc = Number(String(data.fixedCtcAnnual ?? data.ctcAnnual ?? "").replace(/[^\d.]/g, ""));
+  const address = filled(data.address) ? String(data.address) : filled(data.candidateAddress) ? String(data.candidateAddress) : "";
+  const phone = filled(data.mobile) ? String(data.mobile) : filled(data.phone) ? String(data.phone) : "";
+  const profilePatch: Record<string, unknown> = {};
+  if (row.designation) profilePatch.designation = row.designation;
+  if (row.department) profilePatch.department = row.department;
+  if (address) {
+    profilePatch.addressCurrent = address;
+    profilePatch.addressPermanent = address;
+  }
+  if (row.kind === "Offer" && row.effectiveDate) profilePatch.joinDate = row.effectiveDate;
+  if (ctc > 0) {
+    const lines = ctcMonthlyEarnings(ctc, row.designation || "");
+    profilePatch.ctcAnnual = ctc;
+    profilePatch.basicMonthly = lines.basic;
+    profilePatch.hraMonthly = lines.hra;
+  }
+  const mgrName = filled(data.reportingManager) ? String(data.reportingManager) : "";
+  if (mgrName && mgrName !== "—") {
+    const mgr = await prisma.user.findFirst({ where: { fullName: mgrName }, select: { id: true } });
+    if (mgr && mgr.id !== row.employeeUserId) profilePatch.reportingManagerId = mgr.id;
+  }
+  if (Object.keys(profilePatch).length) {
+    await prisma.employeeProfile.updateMany({ where: { userId: row.employeeUserId }, data: profilePatch });
+  }
+  if (phone) {
+    await prisma.user.update({ where: { id: row.employeeUserId }, data: { phone } });
+  }
+}
 
 hrmRouter.get("/hrms-documents/:id/preview.docx", hrmDesk, async (req, res) => {
   const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
