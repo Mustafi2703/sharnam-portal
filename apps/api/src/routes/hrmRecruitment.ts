@@ -59,6 +59,23 @@ async function safeHrmList<T>(label: string, fn: () => Promise<T[]>, res: import
   }
 }
 
+/** Payslip and hike rows store only userId. Attach the staff name so the register does not depend on a filtered employee list. */
+async function attachStaffNames<T extends { userId: string }>(rows: T[]) {
+  const ids = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
+  if (!ids.length) return rows.map((r) => ({ ...r, staffName: "", empCode: "" }));
+  const [users, profiles] = await Promise.all([
+    prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } }),
+    prisma.employeeProfile.findMany({ where: { userId: { in: ids } }, select: { userId: true, empCode: true } }),
+  ]);
+  const names = new Map(users.map((u) => [u.id, u.fullName]));
+  const codes = new Map(profiles.map((p) => [p.userId, p.empCode || ""]));
+  return rows.map((r) => ({
+    ...r,
+    staffName: names.get(r.userId) || "",
+    empCode: codes.get(r.userId) || "",
+  }));
+}
+
 /* ═════════════════════════════════════  MANPOWER REQUISITION  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
@@ -1872,13 +1889,13 @@ hrmRecruitmentRouter.post("/onboarding/:offerId/hr-policy", requireRoles("admin"
 
 hrmRecruitmentRouter.get("/pay-hikes", async (req, res) => {
   const userId = req.query.userId ? String(req.query.userId) : undefined;
-  await safeHrmList("pay hikes", () =>
-    prisma.payHike.findMany({
+  await safeHrmList("pay hikes", async () => {
+    const rows = await prisma.payHike.findMany({
       where: userId ? { userId } : {},
       orderBy: { effectiveDate: "desc" },
-    }),
-    res
-  );
+    });
+    return attachStaffNames(rows);
+  }, res);
 });
 
 hrmRecruitmentRouter.post("/pay-hikes", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
@@ -1944,7 +1961,7 @@ hrmRecruitmentRouter.get("/payslips", async (req: AuthedRequest, res) => {
   if (req.query.month) filters.month = Number(req.query.month);
   if (!isAdmin || req.query.userId) filters.userId = String(req.query.userId || req.user!.id);
   const rows = await prisma.payslip.findMany({ where: filters, orderBy: [{ year: "desc" }, { month: "desc" }] });
-  res.json(rows);
+  res.json(await attachStaffNames(rows));
 });
 
 /**

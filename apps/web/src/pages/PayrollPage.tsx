@@ -16,6 +16,13 @@ function money(n?: number | null) {
   return "₹ " + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
+function staffName(row: { userId?: string; staffName?: string; empCode?: string }, employees: { id?: string; fullName?: string; profile?: { empCode?: string } }[]) {
+  const emp = employees.find((e) => e.id === row.userId);
+  const name = String(row.staffName || emp?.fullName || "").trim();
+  const code = String(row.empCode || emp?.profile?.empCode || "").trim();
+  return { name, code };
+}
+
 export default function PayrollPage() {
   const { token, user } = useAuth();
   const canWrite = ["admin", "office", "hr"].includes(user?.role || "") || Boolean(user?.hrDeskOnly);
@@ -312,7 +319,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           <table className="min-w-[1100px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-sand/20">
               <tr>
-                <th>User</th>
+                <th>Staff</th>
                 <th>Days</th>
                 <th className="text-right">Basic</th>
                 <th className="text-right">HRA</th>
@@ -329,10 +336,13 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
             </thead>
             <tbody>
               {payslips.map((p: any) => {
-                const emp = employees.find((e: any) => e.id === p.userId);
+                const who = staffName(p, employees);
                 return (
                   <tr key={p.id} className="border-t border-line">
-                    <td className="p-2">{emp?.fullName || p.userId.slice(0, 8)}</td>
+                    <td className="p-2">
+                      <div className="font-medium text-ink">{who.name || "—"}</div>
+                      {who.code ? <div className="text-[10px] text-steel-muted">{who.code}</div> : null}
+                    </td>
                     <td>{p.paidDays}/{p.workingDays}{p.lopDays ? ` (LOP ${p.lopDays})` : ""}</td>
                     <td className="text-right">
                       {editId === p.id ? (
@@ -495,10 +505,13 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
             </thead>
             <tbody>
               {hikes.map((h: any) => {
-                const emp = employees.find((e: any) => e.id === h.userId);
+                const who = staffName(h, employees);
                 return (
                   <tr key={h.id} className="border-t border-line">
-                    <td className="p-2">{emp?.fullName || h.userId.slice(0, 8)}</td>
+                    <td className="p-2">
+                      <div className="font-medium text-ink">{who.name || "—"}</div>
+                      {who.code ? <div className="text-[10px] text-steel-muted">{who.code}</div> : null}
+                    </td>
                     <td>{new Date(h.effectiveDate).toLocaleDateString("en-IN")}</td>
                     <td className="text-right">{money(h.oldCtcAnnual)}</td>
                     <td className="text-right">{money(h.newCtcAnnual)}</td>
