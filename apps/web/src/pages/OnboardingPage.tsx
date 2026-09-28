@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, apiBase, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
@@ -15,65 +15,128 @@ export default function OnboardingPage() {
   return <OnboardingList />;
 }
 
+const JOIN_STEPS = ["Convert", "Documents", "Letters", "Pre-join", "Day 1"];
+
 function OnboardingList() {
-  const { token, user } = useAuth();
-  const [offers, setOffers] = useState<any[]>([]);
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<any[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [busyId, setBusyId] = useState("");
+
+  async function load() {
+    try {
+      setRows(await api<any[]>("/api/hrm/onboarding-board", { token }));
+      setLoadError("");
+    } catch (err) {
+      setRows([]);
+      setLoadError(err instanceof Error ? err.message : "Could not load onboarding");
+    }
+  }
 
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await api<any[]>("/api/hrm/offers", { token });
-        setOffers(list.filter((o) => ["Accepted", "Joined"].includes(o.status)));
-        setLoadError("");
-      } catch (err) {
-        setOffers([]);
-        setLoadError(err instanceof Error ? err.message : "Could not load onboarding");
-      }
-    })();
-  }, [token, user]);
+    void load();
+  }, [token]);
+
+  async function openDesk(row: any) {
+    if (row.offerId) {
+      navigate(`/hrm/onboarding/${row.offerId}`);
+      return;
+    }
+    setBusyId(row.candidateId);
+    try {
+      const desk = await api<{ offerId: string }>(`/api/hrm/candidates/${row.candidateId}/start-onboarding`, {
+        method: "POST",
+        token,
+      });
+      navigate(`/hrm/onboarding/${desk.offerId}`);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not open the checklist");
+      setBusyId("");
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <Card className="!p-4 bg-brand-soft/20 border-brand/20">
-        <p className="text-sm text-ink font-semibold">2 · Pre-Joining &amp; 3 · Employee Onboarding</p>
+      <Card className="!p-4">
+        <p className="text-sm font-semibold">New joinee desk</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          After recruitment (section 1), accepted offers appear here. HR runs pre-joining — documents, BGV, medical,
-          employee code, appointment letter, IT/email/ID — then onboarding formalities, KYC, PF/ESIC, orientation, and
-          policy acknowledgement.
+          People converted from Recruitment land here. Open a person to finish documents, the appointment letter, employee code, email, and Day 1 formalities.
         </p>
-        <Link to="/hrm/recruitment" className="text-xs text-brand font-semibold underline mt-2 inline-block">
-          ← Recruitment &amp; interview (section 1)
-        </Link>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {JOIN_STEPS.map((step, i) => (
+            <span key={step} className="inline-flex items-center gap-2 text-xs">
+              <span className="h-6 min-w-6 px-1.5 rounded-full grid place-items-center text-[11px] font-semibold text-white" style={{ background: "var(--module-accent, #0D9488)" }}>{i + 1}</span>
+              <span className="font-medium">{step}</span>
+              {i < JOIN_STEPS.length - 1 ? <span className="text-steel-muted">→</span> : null}
+            </span>
+          ))}
+        </div>
       </Card>
       {loadError ? (
         <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
           {loadError}
         </p>
       ) : null}
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">
-          Accepted / joined ({offers.length})
-        </div>
-        <ul className="divide-y">
-          {offers.map((o) => (
-            <li key={o.id} className="px-4 py-3 flex items-center justify-between gap-4">
+      <div className="grid lg:grid-cols-2 gap-3">
+        {rows.map((row) => (
+          <Card key={row.candidateId} className="!p-4">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="font-medium">{o.candidate?.fullName}</div>
-                <div className="text-xs text-steel-muted">
-                  {o.offerNo} · {o.designation} · CTC ₹{Number(o.ctcAnnual).toLocaleString("en-IN")} · joining{" "}
-                  {o.joiningDate ? new Date(o.joiningDate).toLocaleDateString("en-IN") : "—"} ·{" "}
-                  <Badge tone={o.status === "Joined" ? "ok" : "brand"}>{o.status}</Badge>
-                </div>
+                <p className="font-semibold">{row.fullName}</p>
+                <p className="text-xs text-steel-muted mt-0.5">
+                  {[row.designation, row.department, row.requisitionNo].filter(Boolean).join(" · ") || "Joined"}
+                </p>
               </div>
-              <Link to={`/hrm/onboarding/${o.id}`}>
-                <Button variant="secondary">Open checklist</Button>
-              </Link>
-            </li>
-          ))}
-          {!offers.length && <li className="px-4 py-6 text-center text-sm text-steel-muted">No accepted offers yet. Once a candidate accepts, they show up here.</li>}
-        </ul>
-      </Card>
+              <Badge tone="ok">{row.status}</Badge>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <dt className="text-steel-muted">Employee code</dt>
+                <dd className="font-medium">{row.empCode || "Pending"}</dd>
+              </div>
+              <div>
+                <dt className="text-steel-muted">Joining</dt>
+                <dd className="font-medium">{row.joinDate ? new Date(row.joinDate).toLocaleDateString("en-IN") : "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-steel-muted">Documents</dt>
+                <dd className="font-medium">{row.documentCount || 0} on file</dd>
+              </div>
+              <div>
+                <dt className="text-steel-muted">CTC</dt>
+                <dd className="font-medium">{row.ctcAnnual ? `₹${Number(row.ctcAnnual).toLocaleString("en-IN")}` : "—"}</dd>
+              </div>
+            </dl>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <Button type="button" disabled={busyId === row.candidateId} onClick={() => void openDesk(row)}>
+                {busyId === row.candidateId ? "Opening…" : "Open checklist"}
+              </Button>
+              {row.userId ? (
+                <Link to={`/hrm/documents?employeeUserId=${row.userId}`} className="inline-flex items-center justify-center rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-semibold">
+                  Letters
+                </Link>
+              ) : null}
+              {row.userId ? (
+                <Link to={`/hrm/files?userId=${row.userId}`} className="inline-flex items-center justify-center rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-semibold">
+                  Employee files
+                </Link>
+              ) : null}
+            </div>
+          </Card>
+        ))}
+      </div>
+      {!rows.length && !loadError ? (
+        <Card>
+          <p className="text-sm font-medium">No joinees yet</p>
+          <p className="text-xs text-steel-muted mt-1">
+            Score the interviews, open Compare, convert the person you select, then they appear on this desk.
+          </p>
+          <Link to="/hrm/recruitment?tab=compare" className="text-xs font-semibold text-brand underline mt-2 inline-block">
+            Go to Compare
+          </Link>
+        </Card>
+      ) : null}
     </div>
   );
 }

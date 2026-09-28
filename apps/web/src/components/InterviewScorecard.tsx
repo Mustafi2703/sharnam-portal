@@ -58,6 +58,7 @@ export function InterviewScorecard({
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [savedNote, setSavedNote] = useState("");
 
   useEffect(() => {
     api<Framework>("/api/hrm/interview-framework", { token }).then(setFramework).catch(() => setFramework(null));
@@ -93,30 +94,56 @@ export function InterviewScorecard({
     return { percent, grade };
   }, [lines, scores, position]);
 
+  function save() {
+    setBusy(true);
+    setErr("");
+    setSavedNote("");
+    const payload: Record<string, number[]> = {};
+    for (const [code, raw] of Object.entries(scores)) {
+      if (!lines.some((p) => p.code === code && p.weight > 0)) continue;
+      const n = Number(raw);
+      if (n >= 1 && n <= 5) payload[code] = [n];
+    }
+    if (!Object.keys(payload).length) {
+      setErr("Enter at least one score from 1 to 5, then save.");
+      setBusy(false);
+      return;
+    }
+    void onSave({ position, round, scores: payload })
+      .then(() => setSavedNote(`Saved · ${preview.percent.toFixed(1)}% · Grade ${preview.grade}. The Excel file for this round is on SharePoint.`))
+      .catch((e) => setErr(e instanceof Error ? e.message : "Scorecard was not saved"))
+      .finally(() => setBusy(false));
+  }
+
   if (!framework) return <p className="text-xs text-steel-muted">Loading SPDC scorecard…</p>;
 
   return (
-    <div className="md:col-span-4 space-y-2">
-      <div className="flex flex-wrap gap-2 items-end">
-        <label className="text-xs">
-          Position
-          <select className="mt-1 block border border-line rounded px-2 py-1" value={position} onChange={(e) => setPosition(e.target.value)}>
-            {framework.roles.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-xs">
-          Round
-          <select className="mt-1 block border border-line rounded px-2 py-1" value={round} onChange={(e) => setRound(roundId(e.target.value))}>
-            {framework.rounds.map((r) => (
-              <option key={r} value={r}>{ROUND_LABEL[r] || r}</option>
-            ))}
-          </select>
-        </label>
-        <span className="text-xs font-semibold pb-1">
-          Score {preview.percent.toFixed(1)}% · Grade {preview.grade}
-        </span>
+    <div className="space-y-2 rounded-xl border border-line bg-paper p-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap gap-2 items-end">
+          <label className="text-xs">
+            Position
+            <select className="mt-1 block border border-line rounded px-2 py-1" value={position} onChange={(e) => setPosition(e.target.value)}>
+              {framework.roles.map((r) => (
+                <option key={r}>{r}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs">
+            Round
+            <select className="mt-1 block border border-line rounded px-2 py-1" value={round} onChange={(e) => setRound(roundId(e.target.value))}>
+              {framework.rounds.map((r) => (
+                <option key={r} value={r}>{ROUND_LABEL[r] || r}</option>
+              ))}
+            </select>
+          </label>
+          <span className="text-sm font-semibold pb-1">
+            Score {preview.percent.toFixed(1)}% · Grade {preview.grade}
+          </span>
+        </div>
+        <Button type="button" disabled={busy} onClick={save}>
+          {busy ? "Saving…" : "Save scorecard"}
+        </Button>
       </div>
       <p className="text-xs rounded-lg border border-line bg-sand/40 px-3 py-2">
         {framework.roundNote?.[round] || ROUND_LABEL[round]}
@@ -157,34 +184,16 @@ export function InterviewScorecard({
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-steel-muted">
-        Changing the round changes which competencies can be scored. A row with no weight for this position stays blank. Saving stores this round’s Excel scorecard on SharePoint.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-steel-muted">
+          Score this round, then Save. Each candidate and each round is its own Excel file on SharePoint. Compare ranks them after they are saved.
+        </p>
+        <Button type="button" disabled={busy} onClick={save}>
+          {busy ? "Saving…" : "Save scorecard"}
+        </Button>
+      </div>
       {err ? <p className="text-xs text-danger">{err}</p> : null}
-      <Button
-        type="button"
-        disabled={busy || !Object.keys(scores).length}
-        onClick={() => {
-          setBusy(true);
-          setErr("");
-          const payload: Record<string, number[]> = {};
-          for (const [code, raw] of Object.entries(scores)) {
-            if (!lines.some((p) => p.code === code && p.weight > 0)) continue;
-            const n = Number(raw);
-            if (n >= 1 && n <= 5) payload[code] = [n];
-          }
-          if (!Object.keys(payload).length) {
-            setErr("Enter at least one score from 1 to 5.");
-            setBusy(false);
-            return;
-          }
-          void onSave({ position, round, scores: payload })
-            .catch((e) => setErr(e instanceof Error ? e.message : "Scorecard was not saved"))
-            .finally(() => setBusy(false));
-        }}
-      >
-        {busy ? "Saving…" : "Save scorecard to SharePoint"}
-      </Button>
+      {savedNote ? <p className="text-xs font-medium text-brand-dark">{savedNote}</p> : null}
     </div>
   );
 }

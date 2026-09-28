@@ -827,9 +827,35 @@ function bestScore(c: any) {
   return Math.max(0, ...(c.interviews || []).map((r: any) => Number(r.scoreOverall) || 0));
 }
 
-function roundScore(c: any, kind: string) {
-  const hit = (c.interviews || []).find((r: any) => String(r.roundType || "").toLowerCase().includes(kind));
-  return hit?.scoreOverall != null ? `${hit.scoreOverall}%` : "—";
+function roundHit(c: any, kind: string) {
+  return (c.interviews || []).find((r: any) => String(r.roundType || "").toLowerCase().includes(kind));
+}
+
+function sheetLink(c: any) {
+  for (const r of c.interviews || []) {
+    try {
+      const url = JSON.parse(r.scorecardJson || "{}").sharePointUrl as string | undefined;
+      if (url && url.includes("sharepoint.com")) return url;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+function ScoreMeter({ label, value }: { label: string; value: number | null }) {
+  const pct = value == null ? 0 : Math.max(0, Math.min(100, value));
+  return (
+    <div>
+      <div className="flex justify-between text-[11px] text-steel-muted mb-1">
+        <span>{label}</span>
+        <span className="tabular-nums font-semibold text-ink">{value == null ? "—" : `${value}%`}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-sand overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--module-accent, #0D9488)" }} />
+      </div>
+    </div>
+  );
 }
 
 function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
@@ -860,62 +886,76 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <Card className="!p-4">
         <p className="text-sm font-semibold">Compare scored candidates</p>
-        <p className="text-xs text-steel-muted mt-1">People on the same requisition, ranked by their best scorecard. HR, Technical, and Management stay in separate columns.</p>
+        <p className="text-xs text-steel-muted mt-1">
+          One board per requisition. People are ranked by their best saved score. HR, Technical, and Management stay separate so you can see who leads each round.
+        </p>
       </Card>
-      {groups.map((g) => (
-        <Card key={g.title} padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">{g.title}</div>
-          <div className="overflow-x-auto">
-            <table className="min-w-[860px] w-full text-sm">
-              <thead className="text-left text-[11px] uppercase tracking-wide text-steel-muted bg-sand/30">
-                <tr>
-                  <th className="px-3 py-2">Rank</th>
-                  <th className="px-3 py-2">Candidate</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2 text-right">HR</th>
-                  <th className="px-3 py-2 text-right">Technical</th>
-                  <th className="px-3 py-2 text-right">Management</th>
-                  <th className="px-3 py-2 text-right">Best</th>
-                  <th className="px-3 py-2">Decision</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.rows.map((c, i) => {
-                  const employee = (staff || []).find((s: any) => c.email && s.email && String(s.email).toLowerCase() === String(c.email).toLowerCase());
-                  const decision = (c.interviews || []).map((r: any) => r.decision).filter(Boolean).slice(-1)[0];
-                  const best = bestScore(c);
-                  return (
-                    <tr key={c.id} className="border-t border-line">
-                      <td className="px-3 py-2 font-semibold">{i + 1}</td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{c.fullName}</div>
-                        <div className="text-xs text-steel-muted">{c.phone || c.email || "—"}</div>
-                      </td>
-                      <td className="px-3 py-2"><Badge tone={candidateStageTone(c.status)}>{candidateStageLabel(c.status)}</Badge></td>
-                      <td className="px-3 py-2 text-right">{roundScore(c, "hr")}</td>
-                      <td className="px-3 py-2 text-right">{roundScore(c, "tech")}</td>
-                      <td className="px-3 py-2 text-right">{roundScore(c, "manag")}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{best ? `${best}%` : "—"}</td>
-                      <td className="px-3 py-2">{decision || "—"}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
-                          {employee ? <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link> : null}
-                          {canManage && <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeCandidate(c)}>Delete</Button>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ))}
+      {groups.map((g) => {
+        const leader = g.rows.find((c) => bestScore(c) > 0 && c.status !== "Rejected") || g.rows.find((c) => bestScore(c) > 0);
+        return (
+          <Card key={g.title} padding={false}>
+            <div className="px-4 py-3 border-b border-line flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-steel-muted">Requisition</p>
+                <p className="font-semibold text-sm">{g.title}</p>
+              </div>
+              {leader ? (
+                <div className="text-sm">
+                  <span className="text-steel-muted">Leading </span>
+                  <span className="font-semibold">{leader.fullName}</span>
+                  <span className="font-semibold"> · {bestScore(leader)}%</span>
+                </div>
+              ) : (
+                <p className="text-xs text-steel-muted">No saved scores yet. Open Scorecard, enter the marks, and press Save scorecard.</p>
+              )}
+            </div>
+            <div className="grid lg:grid-cols-2 gap-3 p-3">
+              {g.rows.map((c, i) => {
+                const employee = (staff || []).find((s: any) => c.email && s.email && String(s.email).toLowerCase() === String(c.email).toLowerCase());
+                const decision = (c.interviews || []).map((r: any) => r.decision).filter(Boolean).slice(-1)[0];
+                const best = bestScore(c);
+                const sheet = sheetLink(c);
+                const hr = roundHit(c, "hr")?.scoreOverall ?? null;
+                const tech = roundHit(c, "tech")?.scoreOverall ?? null;
+                const mgmt = roundHit(c, "manag")?.scoreOverall ?? null;
+                const leading = leader && leader.id === c.id;
+                return (
+                  <div key={c.id} className={`rounded-xl border p-3 space-y-3 ${leading ? "border-[var(--module-accent,#0D9488)] bg-[color-mix(in_srgb,var(--module-accent,#0D9488)_8%,var(--color-paper))]" : "border-line bg-paper"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-steel-muted">Rank {i + 1}{leading ? " · Leading" : ""}</p>
+                        <p className="font-semibold">{c.fullName}</p>
+                        <p className="text-xs text-steel-muted">{c.phone || c.email || "—"}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-semibold tabular-nums">{best ? `${best}%` : "—"}</p>
+                        <Badge tone={candidateStageTone(c.status)}>{candidateStageLabel(c.status)}</Badge>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <ScoreMeter label="HR screening" value={hr == null ? null : Number(hr)} />
+                      <ScoreMeter label="Technical" value={tech == null ? null : Number(tech)} />
+                      <ScoreMeter label="Management" value={mgmt == null ? null : Number(mgmt)} />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs text-steel-muted">Decision {decision || "—"}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
+                        {sheet ? <a href={sheet} target="_blank" rel="noreferrer" className={linkBtn}>SharePoint</a> : null}
+                        {employee ? <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link> : null}
+                        {canManage && <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeCandidate(c)}>Delete</Button>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        );
+      })}
       {!groups.length && <Card><p className="text-sm text-steel-muted">No candidates yet. Add them on Resumes, score them, then come back here.</p></Card>}
     </div>
   );
@@ -1197,7 +1237,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                   </div>
                 )}
                 {canManage && (
-                  <div className="grid md:grid-cols-4 gap-2 text-xs pt-2 border-t border-line">
+                  <div className="space-y-2 text-xs pt-2 border-t border-line">
                     <InterviewScorecard
                       key={r.id}
                       token={token}

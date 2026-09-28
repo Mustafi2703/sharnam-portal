@@ -239,7 +239,7 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
       include: {
         posting: { select: { title: true, department: true } },
         requisition: { select: { id: true, requisitionNo: true, department: true, designation: true, status: true } },
-        interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true, scoreOverall: true } },
+        interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true, scoreOverall: true, scorecardJson: true } },
         offers: { select: { id: true, offerNo: true, status: true, onboard: { select: { userId: true } } } },
         documents: { select: { id: true, category: true, title: true, fileUrl: true }, orderBy: { createdAt: "desc" } },
       },
@@ -613,13 +613,148 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
     });
   }
   await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Joined" } });
+  const desk = await openJoinerDesk(candidate.id, user.id);
   await audit("hrms.candidate.convert", {
     userId: req.user!.id,
     entity: "User",
     entityId: user.id,
     meta: { candidateId: candidate.id, created, email },
   });
-  res.json({ userId: user.id, created, email: user.email, fullName: user.fullName });
+  res.json({ userId: user.id, created, email: user.email, fullName: user.fullName, offerId: desk?.offerId || offer?.id || null });
+});
+
+const HIRED_STATUSES = new Set(["Joined", "Accepted", "Offered", "Selected"]);
+
+/** Joined people get an offer row so the onboarding checklist has somewhere to live. Does not move them back to Selected. */
+async function openJoinerDesk(candidateId: string, userId?: string | null) {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: {
+      offers: { orderBy: { updatedAt: "desc" } },
+      requisition: { select: { designation: true, department: true } },
+      documents: { select: { id: true } },
+    },
+  });
+  if (!candidate) return null;
+  const email = (candidate.email || "").trim().toLowerCase();
+  const staffUser = email ? await prisma.user.findUnique({ where: { email } }) : null;
+  const profile = staffUser ? await prisma.employeeProfile.findUnique({ where: { userId: staffUser.id } }) : null;
+  let offer = candidate.offers.find((o) => o.status === "Accepted" || o.status === "Joined") || candidate.offers[0] || null;
+  if (!offer) {
+    offer = await prisma.offer.create({
+      data: {
+        candidateId: candidate.id,
+        offerNo: `OFR-${Date.now().toString().slice(-6)}`,
+        designation: candidate.requisition?.designation || profile?.designation || candidate.currentDesign || "Executive",
+        department: candidate.requisition?.department || profile?.department || null,
+        ctcAnnual: profile?.ctcAnnual || candidate.expectedCtc || 0,
+        basicMonthly: profile?.basicMonthly ?? null,
+        hraMonthly: profile?.hraMonthly ?? null,
+        joiningDate: profile?.joinDate || new Date(),
+        location: candidate.location,
+        status: "Joined",
+        acceptedAt: new Date(),
+        joinedAt: new Date(),
+      },
+    });
+  }
+  const appointment = await prisma.hrmsDocument.findFirst({
+    where: {
+      kind: "Appointment",
+      OR: [
+        ...(staffUser ? [{ employeeUserId: staffUser.id }] : []),
+        { employeeName: candidate.fullName },
+        ...(email ? [{ candidateEmail: email }] : []),
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  await prisma.preJoiningChecklist.upsert({
+    where: { offerId: offer.id },
+    create: {
+      offerId: offer.id,
+      empCodeGenerated: profile?.empCode || null,
+      docCollectionDone: candidate.documents.length > 0,
+      docCollectionAt: candidate.documents.length > 0 ? new Date() : null,
+      appointmentLetterUrl: appointment?.sharePointUrl || appointment?.generatedDocxUrl || null,
+      emailCreated: Boolean(staffUser?.email),
+      emailAddress: staffUser?.email || null,
+      emailCreatedAt: staffUser?.email ? new Date() : null,
+    },
+    update: {
+      empCodeGenerated: profile?.empCode || undefined,
+      ...(candidate.documents.length > 0 ? { docCollectionDone: true } : {}),
+      ...(appointment?.sharePointUrl || appointment?.generatedDocxUrl
+        ? { appointmentLetterUrl: appointment.sharePointUrl || appointment.generatedDocxUrl }
+        : {}),
+    },
+  });
+  await prisma.onboardingChecklist.upsert({
+    where: { offerId: offer.id },
+    create: { offerId: offer.id, userId: userId || staffUser?.id || null },
+    update: { userId: userId || staffUser?.id || undefined },
+  });
+  return { offerId: offer.id, userId: userId || staffUser?.id || null };
+}
+
+hrmRecruitmentRouter.get("/onboarding-board", requireRoles("admin", "office", "hr"), async (_req, res) => {
+  const people = await prisma.candidate.findMany({
+    where: { status: { in: ["Joined", "Accepted"] } },
+    include: {
+      requisition: { select: { requisitionNo: true, department: true, designation: true } },
+      documents: { select: { id: true } },
+      offers: {
+        include: { preJoin: true, onboard: true },
+        orderBy: { updatedAt: "desc" },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  const emails = people.map((p) => (p.email || "").trim().toLowerCase()).filter(Boolean);
+  const users = emails.length ? await prisma.user.findMany({ where: { email: { in: emails } } }) : [];
+  const profiles = users.length
+    ? await prisma.employeeProfile.findMany({ where: { userId: { in: users.map((u) => u.id) } } })
+    : [];
+  const profileByUser = new Map(profiles.map((p) => [p.userId, p]));
+  const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), { user: u, profile: profileByUser.get(u.id) || null }]));
+  res.json(
+    people.map((p) => {
+      const staff = p.email ? byEmail.get(p.email.trim().toLowerCase()) : undefined;
+      const offer = p.offers.find((o) => o.status === "Accepted" || o.status === "Joined") || null;
+      return {
+        candidateId: p.id,
+        fullName: p.fullName,
+        email: p.email,
+        phone: p.phone,
+        status: p.status,
+        designation: p.requisition?.designation || staff?.profile?.designation || p.currentDesign,
+        department: p.requisition?.department || staff?.profile?.department || null,
+        requisitionNo: p.requisition?.requisitionNo || null,
+        documentCount: p.documents.length,
+        empCode: staff?.profile?.empCode || offer?.preJoin?.empCodeGenerated || null,
+        userId: staff?.user.id || offer?.onboard?.userId || null,
+        ctcAnnual: staff?.profile?.ctcAnnual ?? offer?.ctcAnnual ?? null,
+        joinDate: staff?.profile?.joinDate || offer?.joiningDate || null,
+        offerId: offer?.id || null,
+        offerNo: offer?.offerNo || null,
+      };
+    }),
+  );
+});
+
+hrmRecruitmentRouter.post("/candidates/:id/start-onboarding", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  if (!candidate) return res.status(404).json({ error: "not found" });
+  if (candidate.status === "Rejected" || candidate.status === "Withdrawn") {
+    return res.status(400).json({ error: "This candidate was not selected. Convert the person you hired, then open onboarding." });
+  }
+  const desk = await openJoinerDesk(candidate.id);
+  if (!desk) return res.status(404).json({ error: "not found" });
+  if (!HIRED_STATUSES.has(candidate.status)) {
+    await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Joined" } });
+  }
+  await audit("hrms.onboarding.open", { userId: req.user!.id, entity: "Offer", entityId: desk.offerId, meta: { candidateId: candidate.id } });
+  res.json(desk);
 });
 
 /* ═════════════════════════════════════  INTERVIEW ROUNDS  ═════════════════════════════════════ */
@@ -840,7 +975,9 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
       scorecardJson,
     },
   });
-  await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Interview" } });
+  if (!HIRED_STATUSES.has(candidate.status)) {
+    await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Interview" } });
+  }
   await audit("hrms.interview.schedule", {
     userId: req.user!.id,
     entity: "InterviewRound",
@@ -863,7 +1000,7 @@ hrmRecruitmentRouter.get("/interview-framework", requireRoles("admin", "office",
 hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.interviewRound.findUnique({
     where: { id: req.params.id },
-    include: { candidate: { select: { fullName: true } } },
+    include: { candidate: { select: { fullName: true, status: true } } },
   });
   if (!before) return res.status(404).json({ error: "not found" });
   let scorecardJson = before.scorecardJson;
@@ -907,9 +1044,9 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
   });
 
   // Auto-advance candidate to "Selected" if the last decision advance
-  if (row.decision === "Advance") {
+  if (row.decision === "Advance" && !HIRED_STATUSES.has(before.candidate.status)) {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Interviewed" } });
-  } else if (row.decision === "Reject") {
+  } else if (row.decision === "Reject" && !HIRED_STATUSES.has(before.candidate.status)) {
     await prisma.candidate.update({ where: { id: row.candidateId }, data: { status: "Rejected" } });
   }
 
