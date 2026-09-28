@@ -596,13 +596,13 @@ export async function uploadToProjectLibrary(
   }
 
   const encoded = encodeDrivePath(target);
-  // conflictBehavior=fail: refuse overwrite if something appeared mid-flight
+  const behavior = opts?.replace ? "replace" : "fail";
   const uploaded = await graphFetch<{
     id: string;
     name: string;
     webUrl?: string;
     size?: number;
-  }>(`/drives/${drive.driveId}/root:/${encoded}:/content?@microsoft.graph.conflictBehavior=fail`, {
+  }>(`/drives/${drive.driveId}/root:/${encoded}:/content?@microsoft.graph.conflictBehavior=${behavior}`, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: new Uint8Array(buffer),

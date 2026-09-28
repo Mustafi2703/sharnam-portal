@@ -204,15 +204,13 @@ export function ProjectSetupMatrixDesk({
   async function openSharePoint(kind: "TECHNICAL" | "COMMERCIAL") {
     setBusy(true);
     try {
-      const r = await api<{ sharePointUrl?: string | null; url?: string }>(
+      const r = await api<{ sharePointUrl?: string | null }>(
         `/api/comms/contacts/${projectId}/sharepoint-link`,
         { method: "POST", token, body: JSON.stringify({ kind }) },
       );
-      const href = r.sharePointUrl || r.url;
-      if (href) {
-        window.open(href, "_blank", "noopener,noreferrer");
-        onMsg(r.sharePointUrl ? "Opened the matrix in SharePoint." : "Matrix filed in the project library.");
-      }
+      if (!r.sharePointUrl) throw new Error("SharePoint link is not ready");
+      window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+      onMsg("Opened the SPDC Excel matrix in SharePoint.");
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Could not open SharePoint");
     } finally {
@@ -297,7 +295,7 @@ export function ProjectSetupMatrixDesk({
                   Open for print / PDF
                 </Button>
                 <Button type="button" disabled={busy} onClick={() => void openSharePoint(kind)}>
-                  Open in SharePoint
+                  Open Excel in SharePoint
                 </Button>
               </div>
             </div>

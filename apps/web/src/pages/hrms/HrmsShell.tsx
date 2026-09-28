@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { IconClose, IconMenu, IconMoon, IconPanel, IconPanelRight, IconSun } from "../../components/icons";
+import { SessionControls } from "../../components/SessionControls";
+import { IconClose, IconMenu, IconPanel, IconPanelRight } from "../../components/icons";
 import { BRAND_EN } from "../../components/Brand";
 import {
   applyModuleAccent,
@@ -63,8 +64,6 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
     setColorMode(toggleColorMode());
   }
 
-  const dark = colorMode === "dark";
-
   return (
     <div
       className={`app-frame hrms-portal-shell ${hidden ? "is-hidden" : ""}`}
@@ -115,17 +114,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
             </div>
 
             <div className="ml-auto flex items-center gap-1.5">
-              <Link to="/dashboard" className="app-topbar__chip hidden sm:inline-flex hover:border-brand">
-                Office portal
-              </Link>
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft"
-                aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-                onClick={onToggleTheme}
-              >
-                {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
-              </button>
+              <SessionControls />
             </div>
           </div>
         </header>

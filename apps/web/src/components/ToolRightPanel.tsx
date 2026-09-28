@@ -140,13 +140,12 @@ export function ToolRightPanel({
     setBusy(true);
     setEmailMsg("");
     try {
-      const r = await api<{ sharePointUrl?: string | null; url?: string }>(
+      const r = await api<{ sharePointUrl?: string | null }>(
         `/api/comms/contacts/${ctx.projectId}/sharepoint-link`,
         { method: "POST", token, body: JSON.stringify({ kind: "TECHNICAL" }) },
       );
-      const href = r.sharePointUrl || r.url;
-      if (href) window.open(href, "_blank", "noopener,noreferrer");
-      else setEmailMsg("Matrix filed. SharePoint link appears when the library is live.");
+      if (r.sharePointUrl) window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+      else setEmailMsg("SharePoint link is not ready. Live SharePoint must accept the Excel first.");
     } catch (err) {
       setEmailMsg(err instanceof Error ? err.message : "Could not open SharePoint");
     } finally {
@@ -342,7 +341,7 @@ export function ToolRightPanel({
         if (canUpload) {
           actions.push(
             { label: "Edit communication matrix", to: "comms", primary: true },
-            { label: "Open in SharePoint", onClick: () => void openMatrixSharePoint(), secondary: true },
+            { label: "Open Excel in SharePoint", onClick: () => void openMatrixSharePoint(), secondary: true },
             { label: "Generate agenda", to: "comms", secondary: true },
             { label: "Start MoM", to: "comms", secondary: true }
           );

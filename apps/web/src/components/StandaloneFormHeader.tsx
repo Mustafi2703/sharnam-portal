@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SessionControls } from "./SessionControls";
 
 type Props = {
   variant?: "light" | "navy";
@@ -39,12 +40,11 @@ export function StandaloneFormHeader({
             {subtitle ? <div className="standalone-form-header__subtitle">{subtitle}</div> : null}
           </div>
         </div>
-        {(metaRight || actions) && (
-          <div className="standalone-form-header__actions shrink-0">
-            {metaRight}
-            {actions}
-          </div>
-        )}
+        <div className="standalone-form-header__actions shrink-0">
+          {metaRight}
+          {actions}
+          <SessionControls />
+        </div>
       </div>
     </header>
   );

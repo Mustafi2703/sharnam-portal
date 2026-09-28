@@ -82,11 +82,21 @@ commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       { replace: true },
     );
+    const direct = (saved.sharePointUrl || "").trim();
+    let sharePointUrl = /sharepoint\.com/i.test(direct) ? direct : null;
+    if (!sharePointUrl && saved.sharePointPath) {
+      const { driveItemWebUrl } = await import("../services/graph.js");
+      sharePointUrl = await driveItemWebUrl(saved.sharePointPath);
+    }
     const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
     void fileWonProjectPack(project.id).catch(() => undefined);
+    if (!sharePointUrl) {
+      return res.status(404).json({
+        error: "The Excel is not on SharePoint yet. Live SharePoint must be on, then open it again.",
+      });
+    }
     res.json({
-      sharePointUrl: saved.sharePointUrl || null,
-      url: saved.url,
+      sharePointUrl,
       fileName: `Communication-Matrix-${kind}.xlsx`,
     });
   } catch (err) {

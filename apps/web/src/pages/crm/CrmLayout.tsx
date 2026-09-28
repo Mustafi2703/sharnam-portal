@@ -104,9 +104,29 @@ export default function CrmLayout() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-sm"
+              onClick={() => {
+                if (window.opener && !window.opener.closed) {
+                  try {
+                    window.opener.location.assign(portalHome);
+                    window.opener.focus();
+                  } catch {
+                    /* opener may block navigation */
+                  }
+                  window.close();
+                  return;
+                }
+                navigate(portalHome);
+              }}
+            >
+              Back to main portal
+            </Button>
             {inWin && !onHub ? (
               <>
-                <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo("/crm")}>
+                <Button type="button" variant="ghost" className="!text-sm" onClick={() => closeToolWindowOrGo("/crm")}>
                   Back to CRM hub
                 </Button>
                 <Button type="button" variant="ghost" className="!text-sm" onClick={() => window.close()}>
@@ -114,14 +134,7 @@ export default function CrmLayout() {
                 </Button>
               </>
             ) : (
-              <>
-                {!inWin && (
-                  <Button type="button" variant="secondary" className="!text-sm" onClick={() => navigate(portalHome)}>
-                    Back to main portal
-                  </Button>
-                )}
-                <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
-              </>
+              <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
             )}
           </div>
         </div>

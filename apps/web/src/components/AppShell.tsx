@@ -27,8 +27,8 @@ import { resolveProjectWorkspace, isProjectModuleActive } from "../lib/projectWo
 import { isToolWindow } from "../lib/moduleToolWindow";
 import { isEmbedView } from "../lib/inPageOverlay";
 import { InPageOverlayHost } from "./InPageOverlayHost";
+import { SessionControls } from "./SessionControls";
 import { api } from "../api";
-import { downloadAuthFile, exportPaths, type ExportModule } from "../lib/downloadReport";
 import {
   applyModuleAccent,
   clearModuleAccent,
@@ -512,27 +512,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     notifyModuleTheme();
   }
 
-  const dark = colorMode === "dark";
-  const isOffice = user?.role === "admin" || user?.role === "office";
   const isSiteDesk = user?.role === "site_employee";
   const isVendor = user?.role === "vendor";
   const homeTo = isVendor ? "/vendor-desk" : isSiteDesk ? "/attendance" : "/dashboard";
-  const isClient = user?.role === "client";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const activeProject = projects.find((p) => p.id === projectId);
-  const routeProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1] || "";
-
-  async function quickExport(kind: ExportModule) {
-    if (!routeProjectId || !token) return;
-    const paths = exportPaths(routeProjectId, kind);
-    const code = projects.find((p) => p.id === routeProjectId)?.code || "project";
-    const fname = paths.htmlName.replace(".html", `-${code}.html`);
-    try {
-      await downloadAuthFile(paths.html, token, fname);
-    } catch {
-      /* ignore — user can retry from module page */
-    }
-  }
 
   if (embed) {
     return (
@@ -563,7 +547,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="app-frame__main">
-        <header className={`app-topbar ${inProject ? "app-topbar--project" : ""} ${toolWin ? "md:hidden" : ""}`}>
+        <header className={`app-topbar ${inProject ? "app-topbar--project" : ""}`}>
+          {toolWin ? (
+            <div className="flex items-center justify-end gap-1.5 px-3 h-11 w-full">
+              <SessionControls />
+            </div>
+          ) : (
           <div className={`flex items-center gap-2.5 px-3 sm:px-4 ${inProject ? "h-11" : "h-[52px]"}`}>
             <button
               type="button"
@@ -608,97 +597,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            {isSiteDesk && (
-              <div className="hidden sm:flex items-center gap-1.5">
-                <Link to="/attendance" className="app-topbar__chip hover:border-brand">
-                  Attendance
-                </Link>
-                <Link to="/vouchers" className="app-topbar__chip hover:border-brand">
-                  Expense
-                </Link>
-              </div>
-            )}
-
-            {isVendor && (
-              <div className="hidden sm:flex items-center gap-1.5">
-                <Link to="/vendor-desk" className="app-topbar__chip hover:border-brand">
-                  My desk
-                </Link>
-                <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">
-                  Bid management
-                </Link>
-              </div>
-            )}
-
-            {!inProject && isOffice && (
-              <div className="hidden lg:flex items-center gap-1.5">
-                <Link to="/roles" className="app-topbar__chip hover:border-brand">
-                  <strong>Access</strong>
-                </Link>
-                <Link to="/crm" className="app-topbar__chip hover:border-brand">
-                  CRM
-                </Link>
-                <Link to="/hrm" className="app-topbar__chip hover:border-brand">
-                  HR portal
-                </Link>
-              </div>
-            )}
-
-            {isClient && (
-              <span className="app-topbar__chip !text-[10px] !py-1 hidden sm:inline">
-                Read-only · sign when asked
-              </span>
-            )}
-
-            {inProject && routeProjectId && !isClient && (
-              <div className="hidden lg:flex items-center gap-1 flex-wrap min-w-0 max-w-[min(46vw,520px)]">
-                <Link
-                  to={`/projects/${routeProjectId}/dpr-maker`}
-                  className="app-topbar__chip !text-[10px] !py-1 !px-2 whitespace-nowrap hover:border-brand"
-                >
-                  DPR maker
-                </Link>
-                <Link
-                  to={`/projects/${routeProjectId}/wpr-maker`}
-                  className="app-topbar__chip !text-[10px] !py-1 !px-2 whitespace-nowrap hover:border-brand"
-                >
-                  WPR maker
-                </Link>
-                {(
-                  [
-                    ["rfis", "RFI log"],
-                    ["quality", "Quality PDF"],
-                    ["progress", "Progress PDF"],
-                  ] as const
-                ).map(([kind, label]) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    className="app-topbar__chip !text-[10px] !py-1 !px-2 whitespace-nowrap"
-                    onClick={() => void quickExport(kind)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className="ml-auto flex items-center gap-1.5">
-              {inProject && (
-                <Link to="/workspace" className="app-topbar__chip hidden sm:inline-flex hover:border-brand">
-                  Modules
-                </Link>
-              )}
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-paper text-ink hover:bg-brand-soft"
-                aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-                onClick={onToggleTheme}
-              >
-                {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
-              </button>
+              <SessionControls />
             </div>
           </div>
+          )}
         </header>
 
         <main
