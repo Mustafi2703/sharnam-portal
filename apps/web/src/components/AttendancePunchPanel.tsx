@@ -86,8 +86,8 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
   const [msg, setMsg] = useState("");
   const [geoHint, setGeoHint] = useState("");
   const [attendance, setAttendance] = useState<any[]>([]);
-  const isSite = user?.role === "site_employee";
-  const isField = isSite || user?.role === "vendor";
+  const isSite = user?.role === "site_employee" || user?.role === "employee" || user?.role === "vendor";
+  const isField = isSite;
 
   const load = useCallback(async () => {
     const [today, roster, p] = await Promise.all([
@@ -133,7 +133,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         setMsg("Take a selfie first — tap Camera (front lens on phone).");
         return;
       }
-      if ((isSite || projects.length > 0) && !projectId) {
+      if (projects.length > 0 && !projectId) {
         setMsg("Select the site / project you are checking in at.");
         return;
       }
@@ -181,7 +181,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         </h2>
         <p className="text-xs text-steel-muted mb-3">
           {isField
-            ? "Allow camera and location when prompted. Selfie + GPS are required for every punch."
+            ? "Site, vendor, and employee punches need a live selfie and GPS. The photo and map show on the HR attendance desk."
             : "Office punch — one tap check-in/out. Auto clock-out at 18:00 IST if you forget to check out."}
         </p>
 

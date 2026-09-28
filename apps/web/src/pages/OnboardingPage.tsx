@@ -143,7 +143,9 @@ function OnboardingList() {
 
 function OfferOnboardingPage() {
   const { offerId } = useParams();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
+  const [portalBusy, setPortalBusy] = useState(false);
   const canHrWrite = canManageHrms(user);
 
   const [offer, setOffer] = useState<any | null>(null);
@@ -235,6 +237,28 @@ function OfferOnboardingPage() {
     });
     setNotes(onboard.notes || "");
   }, [onboard]);
+
+  async function addPortalLogin() {
+    if (staffUserId) {
+      navigate("/hrm/users");
+      return;
+    }
+    const candidateId = offer?.candidate?.id;
+    if (!candidateId) return;
+    setPortalBusy(true);
+    try {
+      const res = await api<{ email: string; fullName: string; created: boolean }>(`/api/hrm/candidates/${candidateId}/convert`, {
+        method: "POST",
+        token,
+      });
+      setMsg(`${res.fullName} can sign in as ${res.email}. Set department, CTC, and project under Users.`);
+      await load();
+      navigate("/hrm/users");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add the portal login");
+      setPortalBusy(false);
+    }
+  }
 
   async function saveChecklist() {
     if (!offerId || !form) return;
@@ -421,6 +445,9 @@ function OfferOnboardingPage() {
               <Link to={`/hrm/documents?offerId=${offerId}`}>
                 <Button variant="secondary">Letter desk</Button>
               </Link>
+              <Button type="button" variant="secondary" disabled={portalBusy} onClick={() => void addPortalLogin()}>
+                {portalBusy ? "Opening…" : staffUserId ? "Portal setup" : "Add portal login"}
+              </Button>
               <Link to="/hrm/onboarding">
                 <Button variant="secondary">Back to list</Button>
               </Link>

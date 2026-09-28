@@ -29,6 +29,8 @@ type AttendanceRow = {
   outSiteName?: string | null;
   inGeofenceOk?: boolean;
   outGeofenceOk?: boolean;
+  inPhotoUrl?: string | null;
+  outPhotoUrl?: string | null;
   notes?: string | null;
   user?: { id: string; fullName: string; email?: string };
   project?: { code?: string; name?: string; location?: string | null } | null;
@@ -49,7 +51,16 @@ function monthLabel(year: number, month: number) {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function DetailBlock({ row }: { row: AttendanceRow }) {
+function photoSrc(url?: string | null, token?: string | null) {
+  if (!url || url.startsWith("http")) return null;
+  const full = url.startsWith("/") ? `${apiBase()}${url}` : url;
+  if (url.includes("/attendance/") && url.includes("/photo/") && token) {
+    return `${full}?token=${encodeURIComponent(token)}`;
+  }
+  return full;
+}
+
+function DetailBlock({ row, token }: { row: AttendanceRow; token?: string | null }) {
   const mins = attendanceSiteMinutes(row.checkIn, row.checkOut);
   const lineIn = formatPunchLine("in", row);
   const lineOut = formatPunchLine("out", row);
@@ -74,6 +85,20 @@ function DetailBlock({ row }: { row: AttendanceRow }) {
           <div className="text-[10px] uppercase text-steel-muted">Check-out</div>
           <div className="font-mono">{formatIstPunchTime(row.checkOut)}</div>
         </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {row.inPhotoUrl ? (
+          <div>
+            <p className="text-[10px] uppercase text-steel-muted mb-1">Check-in photo</p>
+            <img src={photoSrc(row.inPhotoUrl, token) || ""} alt="Check-in" className="h-28 w-28 object-cover rounded-lg border border-line" />
+          </div>
+        ) : null}
+        {row.outPhotoUrl ? (
+          <div>
+            <p className="text-[10px] uppercase text-steel-muted mb-1">Check-out photo</p>
+            <img src={photoSrc(row.outPhotoUrl, token) || ""} alt="Check-out" className="h-28 w-28 object-cover rounded-lg border border-line" />
+          </div>
+        ) : null}
       </div>
       {[lineIn, lineOut].map(
         (line) =>
@@ -297,7 +322,7 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
           ) : (
             selectedRows.map((r) => (
               <div key={r.id} className="mb-4 last:mb-0">
-                <DetailBlock row={r} />
+                <DetailBlock row={r} token={token} />
               </div>
             ))
           )}

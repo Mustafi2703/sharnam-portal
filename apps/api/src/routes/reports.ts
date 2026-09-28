@@ -2244,8 +2244,8 @@ hrmRouter.post(
       return res.status(400).json({ error: "GPS location required — allow location access on your device" });
     }
 
-    const isSiteEmployee = req.user!.role === "site_employee";
-    if (isSiteEmployee && !projectId) {
+    const needsSite = req.user!.role === "site_employee" || req.user!.role === "vendor";
+    if (needsSite && !projectId) {
       return res.status(400).json({ error: "Select the site / project for check-in" });
     }
 

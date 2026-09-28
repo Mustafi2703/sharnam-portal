@@ -1,5 +1,5 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -37,6 +37,13 @@ const INTERVIEW_STAGES = ["Scheduled", "Completed", "No-Show", "Cancelled"] as c
 
 const rowBtn = "!px-2.5 !py-1.5 !text-xs !rounded-lg whitespace-nowrap";
 const linkBtn = "inline-flex items-center justify-center rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-[var(--color-brand-soft)]";
+
+async function openOnboardingDesk(candidateId: string, token: string) {
+  return api<{ offerId: string }>(`/api/hrm/candidates/${candidateId}/start-onboarding`, {
+    method: "POST",
+    token,
+  });
+}
 
 function money(n?: number | null) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
@@ -103,7 +110,7 @@ export default function RecruitmentPage() {
           <div>
         <p className="text-sm text-ink font-semibold">Hiring steps</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          Requisition, then resumes, then the scorecard. Open Compare to rank everyone scored on the same requisition. Convert the person you select, upload documents, then letters.
+          Requisition, then resumes, then the scorecard. Compare ranks the people on one requisition. Onboard opens their checklist. Portal login is added from that checklist.
         </p>
           </div>
           {canManage && (
@@ -400,6 +407,7 @@ function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, t
 /* ────────────────────────────  3  Candidates / Resume DB  ──────────────────────────── */
 
 function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, token }: any) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({ requisitionId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
   const [filterReq, setFilterReq] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -536,13 +544,12 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
     }
   }
 
-  async function convertEmployee(c: any) {
+  async function goOnboard(c: any) {
     try {
-      const res = await api<{ userId: string; created: boolean; fullName: string }>("/api/hrm/candidates/" + c.id + "/convert", { method: "POST", token });
-      setMsg(res.created ? `${res.fullName} is now an employee. No email was sent — set their password from Users, then upload PAN.` : `${res.fullName} is already a login. Upload PAN, then generate letters.`);
-      await reload();
+      const desk = await openOnboardingDesk(c.id, token);
+      navigate(`/hrm/onboarding/${desk.offerId}`);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not convert");
+      setMsg(err instanceof Error ? err.message : "Could not open onboarding");
     }
   }
 
@@ -736,10 +743,8 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       Documents{docCount ? ` (${docCount})` : ""}
                     </Button>
                   )}
-                  {canManage && !employee && (
-                    <Button type="button" className={rowBtn} disabled={!scored} onClick={() => void convertEmployee(c)}>
-                      {scored ? "Convert" : "Convert after score"}
-                    </Button>
+                  {canManage && scored && (
+                    <Button type="button" className={rowBtn} onClick={() => void goOnboard(c)}>Onboard</Button>
                   )}
                   {lettersReady ? (
                     <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link>
@@ -859,6 +864,7 @@ function ScoreMeter({ label, value }: { label: string; value: number | null }) {
 }
 
 function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
+  const navigate = useNavigate();
   const groups = useMemo(() => {
     const by = new Map<string, { title: string; rows: any[] }>();
     for (const c of candidates || []) {
@@ -943,7 +949,10 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs text-steel-muted">Decision {decision || "—"}</span>
                       <div className="flex flex-wrap gap-1.5">
-                        <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
+                          <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
+                          {canManage && best > 0 && (
+                            <Button type="button" className={rowBtn} onClick={() => void openOnboardingDesk(c.id, token).then((desk) => navigate(`/hrm/onboarding/${desk.offerId}`)).catch((err) => setMsg(err instanceof Error ? err.message : "Could not open onboarding"))}>Onboard</Button>
+                          )}
                         {sheet ? <a href={sheet} target="_blank" rel="noreferrer" className={linkBtn}>SharePoint</a> : null}
                         {employee ? <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link> : null}
                         {canManage && <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeCandidate(c)}>Delete</Button>}
@@ -964,6 +973,7 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
 /* ────────────────────────────  4  Interviews & scorecard  ──────────────────────────── */
 
 function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
+  const navigate = useNavigate();
   const [sp] = useSearchParams();
   const preselected = sp.get("candidateId") || "";
   const [candidateId, setCandidateId] = useState(preselected);
@@ -1252,7 +1262,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       })()}
                       onSave={async (scorecard) => {
                         await updateRound(r.id, { scorecard, status: "Completed" });
-                        setMsg(`Scorecard saved for ${candidate.fullName} · round ${r.roundNumber}. The SPDC Excel file is on SharePoint. Next: upload background documents, then convert to an employee.`);
+                        setMsg(`Scorecard saved for ${candidate.fullName}. Open Onboard to start the checklist.`);
                       }}
                     />
                     <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Evidence / notes" rows={2} className="md:col-span-4 border border-line rounded px-2 py-1" />
@@ -1261,6 +1271,16 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Hold" })} variant="secondary">Hold</Button>
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
                     </div>
+                    {r.scoreOverall != null && canManage && (
+                      <div className="md:col-span-4">
+                        <Button
+                          type="button"
+                          onClick={() => void openOnboardingDesk(candidate.id, token).then((desk) => navigate(`/hrm/onboarding/${desk.offerId}`)).catch((err) => setMsg(err instanceof Error ? err.message : "Could not open onboarding"))}
+                        >
+                          Onboard {candidate.fullName}
+                        </Button>
+                      </div>
+                    )}
                     {r.scorecardJson && (
                       <p className="md:col-span-4 text-[11px] text-steel-muted">
                         {r.scoreOverall != null ? `Saved score ${r.scoreOverall}%` : "Scorecard workbook is on SharePoint — fill the scores below."}
