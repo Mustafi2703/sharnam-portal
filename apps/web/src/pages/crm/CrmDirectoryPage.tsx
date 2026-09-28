@@ -63,6 +63,45 @@ const TAB_META: Record<
 
 export const DIRECTORY_TAB_META = TAB_META;
 
+const ADD_COPY: Record<
+  keyof typeof TAB_META,
+  { newLabel: string; title: string; steps: [string, string, string]; edit: string; create: string }
+> = {
+  clients: {
+    newLabel: "+ New client",
+    title: "How to add a client (3 steps)",
+    steps: [
+      "+ New client",
+      "Add each site representative (name + email)",
+      "Activate portal",
+    ],
+    edit: "Edit client",
+    create: "Step 1 · New client company",
+  },
+  vendors: {
+    newLabel: "+ New vendor",
+    title: "How to add a vendor (3 steps)",
+    steps: [
+      "+ New vendor",
+      "Add each vendor user (name + email)",
+      "Activate portal",
+    ],
+    edit: "Edit vendor",
+    create: "Step 1 · New vendor",
+  },
+  stakeholders: {
+    newLabel: "+ New consultant",
+    title: "How to add a consultant (3 steps)",
+    steps: [
+      "+ New consultant",
+      "Add each consultant user (name + email)",
+      "Activate portal",
+    ],
+    edit: "Edit consultant",
+    create: "Step 1 · New consultant",
+  },
+};
+
 export function DirectoryCompaniesPanel({
   tab,
   token,
@@ -73,12 +112,11 @@ export function DirectoryCompaniesPanel({
   canEdit: boolean;
 }) {
   const meta = TAB_META[tab];
+  const addCopy = ADD_COPY[tab];
   const [rows, setRows] = useState<VendorRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<VendorFormState>({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
   const [msg, setMsg] = useState("");
-  const [loginMsg, setLoginMsg] = useState("");
-  const [loginPassword, setLoginPassword] = useState("Demo@1234");
   const [listSearch, setListSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [creatingNew, setCreatingNew] = useState(false);
@@ -100,8 +138,6 @@ export function DirectoryCompaniesPanel({
     setCreatingNew(false);
     setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
     setMsg("");
-    setLoginMsg("");
-    setLoginPassword("Demo@1234");
     setListSearch("");
     setTypeFilter("");
   }, [tab, meta.defaultParty]);
@@ -125,14 +161,12 @@ export function DirectoryCompaniesPanel({
     if (!selectedId) {
       if (!creatingNew) {
         setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
-        setLoginPassword("Demo@1234");
       }
       return;
     }
     const row = rows.find((r) => r.id === selectedId);
     if (row) {
       setForm(vendorToForm(row));
-      setLoginPassword("");
     }
   }, [selectedId, rows, creatingNew, meta.defaultParty]);
 
@@ -141,8 +175,6 @@ export function DirectoryCompaniesPanel({
     setCreatingNew(true);
     setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
     setMsg("");
-    setLoginMsg("");
-    setLoginPassword("Demo@1234");
     requestAnimationFrame(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
@@ -150,7 +182,6 @@ export function DirectoryCompaniesPanel({
     setCreatingNew(false);
     setSelectedId(id);
     setMsg("");
-    setLoginMsg("");
   }
 
   const partyType = meta.partyTypes.includes(form.partyType) ? form.partyType : meta.defaultParty;
@@ -192,27 +223,14 @@ export function DirectoryCompaniesPanel({
         >(`/api/vendors/${selectedId}`, {
           method: "PATCH",
           token,
-          body: JSON.stringify({
-            ...payload,
-            ...(trimField(loginPassword) ? { password: trimField(loginPassword) } : {}),
-          }),
+          body: JSON.stringify(payload),
         });
-        setLoginPassword("");
         const syncNote =
           tab === "clients" && updated.projectsSynced
             ? ` Linked project cards updated (${updated.projectsSynced}).`
             : "";
-        setMsg(
-          updated.loginError
-            ? `Company saved. Portal login not updated — ${updated.loginError}${syncNote}`
-            : tab === "clients"
-              ? `Client details saved.${syncNote} Use Step 2 below to manage representatives.`
-              : (updated.login?.passwordUpdated
-                  ? "Updated — portal password changed."
-                  : updated.login?.created
-                    ? "Updated — portal login created."
-                    : "Updated.") + syncNote
-        );
+        const who = addCopy.newLabel.replace(/^\+ New /, "");
+        setMsg(`${who.charAt(0).toUpperCase()}${who.slice(1)} saved.${syncNote} Step 2 below starts the portal for each person.`);
       } else {
         const created = await api<
           VendorRow & {
@@ -232,59 +250,12 @@ export function DirectoryCompaniesPanel({
         setMsg(
           created.loginError
             ? `Company saved. ${created.loginError}`
-            : tab === "clients"
-              ? "Client saved — Step 2 below: add representatives, then Activate portal for each."
-              : tab === "vendors"
-                ? "Company saved — Step 2 below: add vendor users, then Activate portal for /login/vendor."
-                : tab === "stakeholders"
-                  ? "Consultant saved — Step 2 below: add users, then Activate portal for /login/stakeholder."
-                  : "Company saved. Add email if needed, then use Activate portal access.",
+            : "Company saved — Step 2 below: add each person, then Activate portal to start their login.",
         );
       }
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
-    }
-  }
-
-  async function activatePortalAccess() {
-    if (!selected?.email) {
-      setLoginMsg("Add an email on the company record first.");
-      return;
-    }
-    setLoginMsg("");
-    try {
-      const updated = await api<{ login?: { created?: boolean; email?: string; tempPassword?: string; passwordUpdated?: boolean }; loginError?: string }>(
-        `/api/vendors/${selected.id}`,
-        {
-          method: "PATCH",
-          token,
-          body: JSON.stringify({
-            email: selected.email,
-            primaryContactName: selected.primaryContactName || selected.name,
-            activatePortal: true,
-            password: trimField(loginPassword) || "Demo@1234",
-          }),
-        },
-      );
-      const path =
-        tab === "clients" ? "/login/client" : tab === "stakeholders" ? "/login/stakeholder" : "/login/vendor";
-      if (updated.loginError) {
-        setLoginMsg(`Company on file. Portal login not updated — ${updated.loginError}`);
-      } else if (updated.login?.created) {
-        setLoginMsg(
-          `Portal activated for ${updated.login.email}. Password: ${updated.login.tempPassword || loginPassword || "Demo@1234"} · ${path}`,
-        );
-      } else if (updated.login?.passwordUpdated) {
-        setLoginMsg(`Portal password updated for ${selected.email}. Sign in at ${path}`);
-      } else if (updated.login) {
-        setLoginMsg(`Portal login linked for ${selected.email} · ${path}`);
-      } else {
-        setLoginMsg("Could not create login — check the email address.");
-      }
-      await load();
-    } catch (err) {
-      setLoginMsg(err instanceof Error ? err.message : "Could not create login");
     }
   }
 
@@ -325,7 +296,7 @@ export function DirectoryCompaniesPanel({
             <span>{visibleRows.length} companies</span>
             {canEdit && (
               <Button type="button" variant="secondary" className="!text-xs !py-1 !px-2" onClick={startNewCompany}>
-                {tab === "clients" ? "+ New client" : "+ New"}
+                {addCopy.newLabel}
               </Button>
             )}
           </div>
@@ -389,15 +360,19 @@ export function DirectoryCompaniesPanel({
       <div ref={formPanelRef}>
       {!selected && !creatingNew ? (
         <Card className="!p-6 text-sm text-steel-muted space-y-3">
-          <p className="font-semibold text-ink">How to add a client (3 steps)</p>
+          <p className="font-semibold text-ink">{addCopy.title}</p>
           <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
-            <li>Click <strong className="text-ink">+ New client</strong> and save the company name</li>
-            <li>Add each site representative (name + email)</li>
-            <li>Click <strong className="text-ink">Activate portal</strong> for every person who needs access</li>
+            <li>
+              Click <strong className="text-ink">{addCopy.steps[0]}</strong> and save the company name
+            </li>
+            <li>{addCopy.steps[1]}</li>
+            <li>
+              Click <strong className="text-ink">{addCopy.steps[2]}</strong> for every person who needs access
+            </li>
           </ol>
           {canEdit ? (
             <Button type="button" onClick={startNewCompany}>
-              + New client
+              {addCopy.newLabel}
             </Button>
           ) : null}
         </Card>
@@ -405,11 +380,11 @@ export function DirectoryCompaniesPanel({
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
           <h3 className="font-semibold text-sm">
-            {selected ? (tab === "clients" ? "Edit client" : "Edit company") : tab === "clients" ? "Step 1 · New client company" : "Add company"}
+            {selected ? addCopy.edit : addCopy.create}
           </h3>
-          {tab === "clients" && selected ? (
+          {selected ? (
             <p className="text-[11px] text-steel-muted w-full basis-full -mt-1">
-              Step 2 below — add more representatives anytime, then activate portal for each person.
+              Step 2 below — add people, then start the portal for each person.
             </p>
           ) : null}
           {canEdit && selected ? (
@@ -427,53 +402,30 @@ export function DirectoryCompaniesPanel({
             </Button>
           ) : null}
         </div>
-        {tab === "clients" ? (
-          <div className="rounded-lg bg-sand/50 border border-line px-3 py-2 text-xs text-steel-muted mb-3">
-            <strong className="text-ink">Step 1</strong> — Save the company name and address below.{" "}
-            {selected ? (
-              <>
-                Then scroll to <strong className="text-ink">Step 2</strong> to add people and activate portal for each.
-              </>
-            ) : (
-              <>
-                Portal logins are created in <strong className="text-ink">Step 2</strong> for each representative (not on this form).
-              </>
-            )}
-          </div>
-        ) : !selected ? (
-          <p className="text-[11px] text-steel-muted mb-3">
-            Step 1 — save company and contact. Step 2 — add email and click <strong className="text-ink">Activate portal access</strong> (default password Demo@1234).
-          </p>
-        ) : null}
+        <div className="rounded-lg bg-sand/50 border border-line px-3 py-2 text-xs text-steel-muted mb-3">
+          <strong className="text-ink">Step 1</strong> — Save the company name below.{" "}
+          {selected ? (
+            <>
+              Then scroll to <strong className="text-ink">Step 2</strong> to add people and start the portal for each.
+            </>
+          ) : (
+            <>
+              The portal is started in <strong className="text-ink">Step 2</strong> for each person, not on this form.
+            </>
+          )}
+        </div>
         <form className="space-y-3" onSubmit={save}>
           <Input disabled={!canEdit} placeholder="Company name" value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           {tab !== "clients" ? (
-            <>
-              <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
-                {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
-              <Input disabled={!canEdit} placeholder="Primary contact (login name)" autoComplete="name" value={form.primaryContactName ?? ""} onChange={(e) => setForm({ ...form, primaryContactName: e.target.value })} />
-              <Input disabled={!canEdit} placeholder="Email (portal login)" type="email" autoComplete="username" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            </>
+            <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
+              {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
           ) : null}
           <Input disabled={!canEdit} placeholder="Phone" type="tel" autoComplete="tel" value={form.businessPhone ?? ""} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-          {canEdit && tab !== "clients" ? (
-            <Input
-              type="password"
-              autoComplete="new-password"
-              placeholder={
-                selected
-                  ? "New portal password (leave blank to keep current)"
-                  : "Portal password (default Demo@1234)"
-              }
-              value={loginPassword ?? ""}
-              onChange={(e) => setLoginPassword(e.target.value)}
-            />
-          ) : null}
           {tab === "stakeholders" ? (
             <ConsultantTypeSelect value={form.trade ?? ""} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
           ) : null}
@@ -509,11 +461,6 @@ export function DirectoryCompaniesPanel({
                   Cancel
                 </Button>
               ) : null}
-              {selected && tab !== "clients" && (meta.loginRole || tab === "vendors" || tab === "stakeholders") && (
-                <Button type="button" variant="secondary" onClick={() => void activatePortalAccess()}>
-                  Activate portal access
-                </Button>
-              )}
               {selected ? (
                 <VendorManageActions
                   vendor={selected}
@@ -530,7 +477,6 @@ export function DirectoryCompaniesPanel({
             </div>
           )}
           {msg && <p className="text-xs text-brand-dark">{msg}</p>}
-          {loginMsg && <p className="text-xs text-steel-muted">{loginMsg}</p>}
         </form>
         {tab === "clients" && selected ? (
           <CompanyRepresentativesPanel
