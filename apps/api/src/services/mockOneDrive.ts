@@ -83,15 +83,17 @@ export class MockOneDriveService {
     );
 
     let sharePoint: { rootFolder: string; folders: string[] } | null = null;
-    if (liveSharePoint() && !sharePointAlreadyProvisioned) {
+    if (liveSharePoint()) {
       try {
-        const sp = await withTimeout(ensureProjectSharePointTree(project.code), 25_000, "SharePoint project tree");
+        // Always call Graph. Local folder rows can exist from an earlier attempt that never
+        // reached SharePoint (for example a rejected folder name). ensureDriveFolder leaves
+        // folders that are already there.
+        const sp = await withTimeout(ensureProjectSharePointTree(project.code), 90_000, "SharePoint project tree");
         sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
       } catch (err) {
         console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);
+        if (!sharePointAlreadyProvisioned) throw err;
       }
-    } else if (liveSharePoint() && sharePointAlreadyProvisioned) {
-      sharePoint = { rootFolder: project.code, folders };
     }
 
     return {
@@ -165,6 +167,7 @@ export class MockOneDriveService {
     provider?: string;
     sharePointPath?: string | null;
     sharePointUrl?: string | null;
+    sharePointError?: string;
   }> {
     const dir = path.join(this.projectRoot(projectCode), relFolder);
     ensureDir(dir);
@@ -201,7 +204,9 @@ export class MockOneDriveService {
           sharePointUrl: sp.url || null,
         };
       } catch (err) {
-        console.warn("[SharePoint] upload failed, kept local mock:", err instanceof Error ? err.message : err);
+        const sharePointError = err instanceof Error ? err.message : String(err);
+        console.warn("[SharePoint] upload failed, kept local mock:", sharePointError);
+        return { ...local, sharePointError };
       }
     }
     return local;

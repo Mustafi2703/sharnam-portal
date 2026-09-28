@@ -1975,6 +1975,37 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
   });
 });
 
+/** Drop workbook sample rows (DRAWING REGISTER - 01.xlsx) and the drawings they created. */
+drawingsRouter.post(
+  "/project/:projectId/clear-template-register",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const lines = await prisma.drawingRegisterLine.findMany({
+      where: { projectId, source: { contains: "DRAWING REGISTER" } },
+      select: { id: true, drawingId: true },
+    });
+    const drawingIds = [...new Set(lines.map((l) => l.drawingId).filter((id): id is string => Boolean(id)))];
+    const revIds = drawingIds.length
+      ? (await prisma.drawingRevision.findMany({ where: { drawingId: { in: drawingIds } }, select: { id: true } })).map((r) => r.id)
+      : [];
+    await prisma.$transaction(async (tx) => {
+      if (revIds.length) {
+        await tx.checklistSubmission.updateMany({ where: { revisionId: { in: revIds } }, data: { revisionId: null, drawingId: null } });
+        await tx.drawingRevisionMarkupPage.deleteMany({ where: { revisionId: { in: revIds } } });
+        await tx.drawingRevision.deleteMany({ where: { id: { in: revIds } } });
+      }
+      if (drawingIds.length) {
+        await tx.checklistSubmission.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null, revisionId: null } });
+        await tx.drawingRegisterLine.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null } });
+        await tx.drawing.deleteMany({ where: { id: { in: drawingIds }, projectId } });
+      }
+      await tx.drawingRegisterLine.deleteMany({ where: { id: { in: lines.map((l) => l.id) } } });
+    });
+    res.json({ removedLines: lines.length, removedDrawings: drawingIds.length });
+  },
+);
+
 drawingsRouter.post(
   "/project/:projectId/register-lines",
   requireRoles("admin", "office", "employee", "site_employee"),

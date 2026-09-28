@@ -263,6 +263,9 @@ export function ProjectSetupMatrixDesk({
           <Button type="button" variant={deskTab === "export" ? "primary" : "secondary"} onClick={() => setDeskTab("export")}>
             Export
           </Button>
+          <Button type="button" disabled={busy} onClick={() => void openSharePoint(matrixKind)}>
+            Open Excel in SharePoint
+          </Button>
           {deskTab === "edit" ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void importDirectory()}>
               Import assigned directory

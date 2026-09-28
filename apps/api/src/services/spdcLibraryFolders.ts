@@ -62,7 +62,13 @@ export function monthFolder(d = new Date()) {
 }
 
 function safeSeg(value: string) {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "Unfiled";
+  const clean = value
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/\.+$/g, "")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48)
+    .replace(/\.+$/g, "");
+  return clean || "Unfiled";
 }
 
 export function employeeFolderName(empCode: string | null | undefined, fullName: string) {

@@ -896,10 +896,26 @@ export default function CrmProjectSetupPage() {
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Project already launched</h3>
           <p className="text-sm text-steel-muted leading-relaxed">
-            Status is <strong>{summary?.project.status}</strong>. SharePoint folders for this project are already there and are not copied again.
+            Status is <strong>{summary?.project.status}</strong>. Create the SharePoint folders if they are missing — existing folders are left as they are.
             Use step 1 to add consultants, vendors, or team members during the job.
           </p>
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                const code = summary?.project.code;
+                if (!code) return;
+                setBusy(true);
+                setMsg("");
+                void api(`/api/graph/ensure-project-tree`, { method: "POST", token, body: JSON.stringify({ projectCode: code }) })
+                  .then(() => setMsg("SharePoint folders are ready for this project."))
+                  .catch((err) => setMsg(err instanceof Error ? err.message : "Could not create SharePoint folders"))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Create SharePoint folders
+            </Button>
             <Button type="button" variant="secondary" onClick={() => setStep("project")}>
               Edit card & team
             </Button>

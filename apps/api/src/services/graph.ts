@@ -430,9 +430,14 @@ function encodeDrivePath(relPath: string) {
 export const SHAREPOINT_SANDBOX_ROOT = "Sharnam Portal";
 
 function sanitizeProjectCode(projectCode: string) {
-  const clean = projectCode.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+  const clean = projectCode
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/\.+$/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
   if (!clean || clean === "." || clean === "..") throw new Error("Invalid projectCode");
-  return clean;
+  return clean.slice(0, 80);
 }
 
 /** Refuse any path outside Sharnam Portal/ or with path traversal. */
