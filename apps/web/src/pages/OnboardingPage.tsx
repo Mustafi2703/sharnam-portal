@@ -36,6 +36,9 @@ function OnboardingList() {
 
   useEffect(() => {
     void load();
+    const onFocus = () => { void load(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [token]);
 
   async function openDesk(row: any) {
@@ -78,7 +81,7 @@ function OnboardingList() {
           {loadError}
         </p>
       ) : null}
-      <div className="grid lg:grid-cols-2 gap-3">
+      <div className="grid lg:grid-cols-2 gap-3 max-h-[36rem] overflow-y-auto pr-1">
         {rows.map((row) => (
           <Card key={row.candidateId} className="!p-4">
             <div className="flex items-start justify-between gap-3">
@@ -168,8 +171,9 @@ function OfferOnboardingPage() {
     const o = await api<any>(`/api/hrm/offers/${offerId}`, { token });
     setOffer(o);
     let linked = o?.onboard?.userId || "";
+    let pre: any = null;
     try {
-      const pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, { token });
+      pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, { token });
       setPreJoin(pre);
       setForm({
         docCollectionDone: !!pre.docCollectionDone,
@@ -196,12 +200,16 @@ function OfferOnboardingPage() {
       setOnboard(null);
     }
     setStaffUserId(linked);
-    if (linked) {
-      const docs = await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(linked)}`, { token }).catch(() => []);
-      setVaultDocs(docs);
-    } else {
-      setVaultDocs([]);
+    const fromCandidate = Array.isArray(pre?.candidateDocuments) ? pre.candidateDocuments : [];
+    const fromVault = linked
+      ? await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(linked)}`, { token }).catch(() => [])
+      : [];
+    const seen = new Set(fromVault.map((d) => d.fileUrl));
+    const merged = [...fromVault];
+    for (const d of fromCandidate) {
+      if (d?.fileUrl && !seen.has(d.fileUrl)) merged.push(d);
     }
+    setVaultDocs(merged);
     if (canHrWrite && (linked || o?.candidate?.id)) {
       const q = new URLSearchParams();
       if (offerId) q.set("offerId", offerId);
@@ -215,6 +223,12 @@ function OfferOnboardingPage() {
   };
   useEffect(() => {
     void load();
+  }, [offerId, token]);
+
+  useEffect(() => {
+    const onFocus = () => { void load(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [offerId, token]);
 
   useEffect(() => {
@@ -501,7 +515,7 @@ function OfferOnboardingPage() {
           {vaultDocs.length ? (
             <div className="mt-4 border-t border-line pt-3">
               <p className="text-xs font-semibold text-ink mb-2">Files in HR vault ({vaultDocs.length})</p>
-              <ul className="divide-y text-xs">
+              <ul className="divide-y text-xs max-h-64 overflow-y-auto">
                 {vaultDocs.map((d) => (
                   <li key={d.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
                     <span>

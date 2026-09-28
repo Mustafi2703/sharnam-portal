@@ -763,15 +763,17 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       void uploadDocument(c);
                     }}
                   >
-                    <p className="md:col-span-4 text-[11px] text-steel-muted">Offer letter stays locked until these are on SharePoint: PAN, Aadhaar, Education, Experience, Salary slips, Address proof, Photo, and Bank. Delete removes the test file.</p>
+                    <p className="md:col-span-4 text-[11px] text-steel-muted">Offer letter stays locked until these are on SharePoint: PAN, Aadhaar, Education, Experience, Salary slips, Address proof, Photo, and Bank. Files go into the employee file even before the person is converted. Delete removes the portal row.</p>
+                    <div className="md:col-span-4 max-h-36 overflow-y-auto space-y-1">
                     {(c.documents || []).map((d: any) => (
-                      <span key={d.id} className="inline-flex items-center gap-2 text-xs">
+                      <span key={d.id} className="flex items-center gap-2 text-xs">
                         <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
                         {canManage && (
                           <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeDocument(c, d)}>Delete</Button>
                         )}
                       </span>
                     ))}
+                    </div>
                     <Select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
                       {["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"].map((v) => (
                         <option key={v}>{v}</option>
@@ -832,8 +834,22 @@ function bestScore(c: any) {
   return Math.max(0, ...(c.interviews || []).map((r: any) => Number(r.scoreOverall) || 0));
 }
 
-function roundHit(c: any, kind: string) {
-  return (c.interviews || []).find((r: any) => String(r.roundType || "").toLowerCase().includes(kind));
+const SCHEDULE_ROUNDS = [
+  { id: "R1" as const, label: "R1 – HR Screening" },
+  { id: "R2" as const, label: "R2 – Technical" },
+  { id: "R3" as const, label: "R3 – Management" },
+];
+
+function scheduledRoundId(roundType: string): "R1" | "R2" | "R3" | null {
+  const t = String(roundType || "");
+  if (/^R1\b/i.test(t) || /^hr\b/i.test(t) || /screen/i.test(t)) return "R1";
+  if (/^R3\b/i.test(t) || /manag/i.test(t)) return "R3";
+  if (/^R2\b/i.test(t) || /technical/i.test(t)) return "R2";
+  return null;
+}
+
+function roundHit(c: any, id: "R1" | "R2" | "R3") {
+  return (c.interviews || []).find((r: any) => scheduledRoundId(String(r.roundType || "")) === id);
 }
 
 function sheetLink(c: any) {
@@ -896,7 +912,7 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
       <Card className="!p-4">
         <p className="text-sm font-semibold">Compare scored candidates</p>
         <p className="text-xs text-steel-muted mt-1">
-          One board per requisition. People are ranked by their best saved score. HR, Technical, and Management stay separate so you can see who leads each round.
+          One board per requisition. People are ranked by their best saved score. R1, R2, and R3 stay separate. A candidate can skip a round and still be onboarded.
         </p>
       </Card>
       {groups.map((g) => {
@@ -924,9 +940,9 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
                 const decision = (c.interviews || []).map((r: any) => r.decision).filter(Boolean).slice(-1)[0];
                 const best = bestScore(c);
                 const sheet = sheetLink(c);
-                const hr = roundHit(c, "hr")?.scoreOverall ?? null;
-                const tech = roundHit(c, "tech")?.scoreOverall ?? null;
-                const mgmt = roundHit(c, "manag")?.scoreOverall ?? null;
+                const hr = roundHit(c, "R1")?.scoreOverall ?? null;
+                const tech = roundHit(c, "R2")?.scoreOverall ?? null;
+                const mgmt = roundHit(c, "R3")?.scoreOverall ?? null;
                 const leading = leader && leader.id === c.id;
                 return (
                   <div key={c.id} className={`rounded-xl border p-3 space-y-3 ${leading ? "border-[var(--module-accent,#0D9488)] bg-[color-mix(in_srgb,var(--module-accent,#0D9488)_8%,var(--color-paper))]" : "border-line bg-paper"}`}>
@@ -942,9 +958,9 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <ScoreMeter label="HR screening" value={hr == null ? null : Number(hr)} />
-                      <ScoreMeter label="Technical" value={tech == null ? null : Number(tech)} />
-                      <ScoreMeter label="Management" value={mgmt == null ? null : Number(mgmt)} />
+                      <ScoreMeter label="R1 · HR Screening" value={hr == null ? null : Number(hr)} />
+                      <ScoreMeter label="R2 · Technical" value={tech == null ? null : Number(tech)} />
+                      <ScoreMeter label="R3 · Management" value={mgmt == null ? null : Number(mgmt)} />
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs text-steel-muted">Decision {decision || "—"}</span>
@@ -981,7 +997,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
   const [diary, setDiary] = useState<any[]>([]);
   const [form, setForm] = useState({
     position: "",
-    roundType: "Technical",
+    roundType: "R1",
     scheduledAt: "",
     durationMins: 60,
     mode: "Teams",
@@ -1004,6 +1020,14 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
     const title = person?.requisition?.designation || person?.posting?.title || "";
     if (title) setForm((prev) => ({ ...prev, position: scorecardRoleForDesignation(title) }));
   }, [candidateId, token, candidates]);
+
+  useEffect(() => {
+    const open = SCHEDULE_ROUNDS.find((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id));
+    if (!open) return;
+    if (rounds.some((row) => scheduledRoundId(row.roundType) === form.roundType)) {
+      setForm((prev) => ({ ...prev, roundType: open.id }));
+    }
+  }, [rounds, form.roundType]);
 
   async function schedule(e: FormEvent) {
     e.preventDefault();
@@ -1041,9 +1065,10 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
         }),
       });
       setRounds((prev) => [...prev, r]);
+      const stillOpen = SCHEDULE_ROUNDS.find((opt) => opt.id !== form.roundType && !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id));
       setForm({
         position: "",
-        roundType: "Technical",
+        roundType: stillOpen?.id || "R1",
         scheduledAt: "",
         durationMins: 60,
         mode: "Teams",
@@ -1147,7 +1172,9 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 ))}
               </Select>
               <Select value={form.roundType} onChange={(e) => setForm({ ...form, roundType: e.target.value })}>
-                {["Technical", "HR", "Management", "Client", "Assessment"].map((v) => <option key={v}>{v}</option>)}
+                {SCHEDULE_ROUNDS.filter((opt) => opt.id === form.roundType || !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id)).map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
               </Select>
               <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
                 <option>Teams</option>
@@ -1204,11 +1231,11 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 Add interviewer
               </Button>
             </div>
-            <Button type="submit">Schedule interview meeting</Button>
+            <Button type="submit" disabled={rounds.length >= 3 || !SCHEDULE_ROUNDS.some((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id))}>Schedule interview meeting</Button>
+            {rounds.length >= 3 ? <p className="text-[11px] text-steel-muted">Three rounds are already on file. Score the ones this candidate sat, then use Onboard.</p> : null}
           </form>
           <p className="text-[10px] text-steel-muted mt-2">
-            Interviewee is always the candidate. Interviewers are SPDC staff with a seat (technical / HR / management / client).
-            Teams meetings are created on the SPDC mailbox when Graph is connected.
+            Schedule only R1, R2, or R3. Skip any round this candidate does not need. Three is the maximum. The scorecard sheet uses the candidate’s name. Teams meetings are created on the SPDC mailbox when Graph is connected.
           </p>
         </Card>
       )}
@@ -1216,7 +1243,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
       {candidate && (
         <Card padding={false}>
           <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">Rounds for {candidate.fullName}</div>
-          <ul className="divide-y">
+          <ul className="divide-y max-h-[32rem] overflow-y-auto">
             {rounds.map((r) => (
               <li key={r.id} className="p-4 space-y-2">
                 <div className="flex justify-between text-sm">

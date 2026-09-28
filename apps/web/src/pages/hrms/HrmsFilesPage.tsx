@@ -225,7 +225,7 @@ export default function HrmsFilesPage() {
         <div className="px-4 py-3 border-b bg-sand/40 font-semibold text-sm">
           {person?.fullName || "Select an employee"} · {files.length} file{files.length === 1 ? "" : "s"}
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[32rem]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-sand/30 text-left text-xs uppercase tracking-wide text-steel-muted">

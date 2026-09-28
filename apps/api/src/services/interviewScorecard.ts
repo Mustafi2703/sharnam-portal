@@ -124,7 +124,12 @@ function scorecardTemplatePath(): string | null {
 export async function scorecardWorkbook(
   candidateName: string,
   result: ScorecardResult,
-  meta?: { interviewDate?: Date | string | null },
+  meta?: {
+    interviewDate?: Date | string | null;
+    experienceYears?: number | null;
+    source?: string | null;
+    panelists?: string[];
+  },
 ): Promise<Buffer> {
   const ExcelJS = (await import("exceljs")).default;
   const template = scorecardTemplatePath();
@@ -145,14 +150,34 @@ export async function scorecardWorkbook(
     const out = await wb.xlsx.writeBuffer();
     return Buffer.from(out);
   }
-  const roundKey = result.round.startsWith("R1") ? "R1" : result.round.startsWith("R3") ? "R3" : "R2";
+  const roundKey = scorecardRoundId(result.round);
   const scored = new Map(result.lines.filter((l) => l.average > 0).map((l) => [l.code, l.average]));
-  ws.getCell("C5").value = candidateName;
+  const name = String(candidateName || "").trim() || "Candidate";
+  ws.getCell("C5").value = name;
+  ws.getCell("D5").value = name;
   ws.getCell("C6").value = result.position;
-  ws.getCell("C7").value = ROUND_LABEL[roundKey] || result.round;
+  ws.getCell("D6").value = result.position;
+  const roundLabel = ROUND_LABEL[roundKey] || result.round;
+  ws.getCell("C7").value = roundLabel;
+  ws.getCell("D7").value = roundLabel;
   if (meta?.interviewDate) {
     const d = new Date(meta.interviewDate);
-    if (!Number.isNaN(d.getTime())) ws.getCell("C8").value = d;
+    if (!Number.isNaN(d.getTime())) {
+      ws.getCell("C8").value = d;
+      ws.getCell("D8").value = d;
+    }
+  }
+  const years = meta?.experienceYears;
+  ws.getCell("C9").value = years != null && Number.isFinite(Number(years)) ? Number(years) : "";
+  ws.getCell("D9").value = years != null && Number.isFinite(Number(years)) ? Number(years) : "";
+  const source = String(meta?.source || "").trim();
+  ws.getCell("C10").value = source;
+  ws.getCell("D10").value = source;
+  const panel = (meta?.panelists || []).map((p) => String(p || "").trim()).filter(Boolean).slice(0, 3);
+  for (let i = 0; i < panel.length; i++) {
+    const row = 5 + i;
+    ws.getCell(`I${row}`).value = panel[i];
+    ws.getCell(`J${row}`).value = panel[i];
   }
   for (let row = 14; row <= 36; row++) {
     const code = cellText(ws.getCell(`A${row}`).value);

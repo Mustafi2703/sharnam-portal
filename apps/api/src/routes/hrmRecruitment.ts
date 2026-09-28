@@ -11,11 +11,12 @@ import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
-import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
+import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, scorecardRoundId, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
   employeeLetterFolder,
   HR_DRIVE,
   interviewRecordFolder,
+  kycFolder,
   payslipRecordFolder,
   resumeFolder,
 } from "../services/spdcLibraryFolders.js";
@@ -507,6 +508,29 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
 
 const BGV_CATEGORIES = ["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"] as const;
 
+/** Checklist and Employee files both read EmployeeDocument. Copy candidate uploads onto the staff login when one exists. SharePoint files stay; only the portal row is removed on delete. */
+async function mirrorCandidateDocsToStaff(candidateId: string, userId: string) {
+  const docs = await prisma.candidateDocument.findMany({ where: { candidateId } });
+  if (!docs.length) return;
+  const existing = await prisma.employeeDocument.findMany({
+    where: { userId, fileUrl: { in: docs.map((d) => d.fileUrl) } },
+    select: { fileUrl: true },
+  });
+  const have = new Set(existing.map((d) => d.fileUrl));
+  for (const doc of docs) {
+    if (have.has(doc.fileUrl)) continue;
+    await prisma.employeeDocument.create({
+      data: {
+        userId,
+        category: doc.category,
+        title: doc.title,
+        fileUrl: doc.fileUrl,
+        storagePath: doc.storagePath,
+      },
+    });
+  }
+}
+
 hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "office", "hr"), upload.single("file"), async (req: AuthedRequest, res) => {
   const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
@@ -514,10 +538,14 @@ hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "of
   const category = BGV_CATEGORIES.includes(String(req.body.category) as (typeof BGV_CATEGORIES)[number])
     ? String(req.body.category)
     : "Other";
+  const employee = before.email
+    ? await prisma.user.findUnique({ where: { email: before.email.trim().toLowerCase() } })
+    : null;
+  const profile = employee ? await prisma.employeeProfile.findUnique({ where: { userId: employee.id } }) : null;
   const safeName = before.fullName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const saved = await mockOneDrive.upload(
     HR_DRIVE,
-    "05_Records_Recruitment/02_Shortlisted_and_Interviewed",
+    kycFolder(profile?.empCode, before.fullName),
     `kyc-${category.replace(/\s+/g, "_")}-${safeName}-${Date.now()}${extOf(req.file)}`,
     req.file.buffer,
   );
@@ -531,14 +559,7 @@ hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "of
       storagePath: saved.sharePointPath || saved.path,
     },
   });
-  if (before.email) {
-    const employee = await prisma.user.findUnique({ where: { email: before.email.trim().toLowerCase() } });
-    if (employee) {
-      await prisma.employeeDocument.create({
-        data: { userId: employee.id, category, title: doc.title, fileUrl, storagePath: doc.storagePath },
-      });
-    }
-  }
+  if (employee) await mirrorCandidateDocsToStaff(before.id, employee.id);
   await audit("hrms.candidate.document", { userId: req.user!.id, entity: "CandidateDocument", entityId: doc.id, meta: { candidateId: before.id, category } });
   res.status(201).json(doc);
 });
@@ -711,7 +732,9 @@ async function openJoinerDesk(candidateId: string, userId?: string | null) {
     create: { offerId: offer.id, userId: userId || staffUser?.id || null },
     update: { userId: userId || staffUser?.id || undefined },
   });
-  return { offerId: offer.id, userId: userId || staffUser?.id || null };
+  const staffId = userId || staffUser?.id || null;
+  if (staffId) await mirrorCandidateDocsToStaff(candidate.id, staffId);
+  return { offerId: offer.id, userId: staffId };
 }
 
 hrmRecruitmentRouter.get("/onboarding-board", requireRoles("admin", "office", "hr"), async (_req, res) => {
@@ -862,6 +885,19 @@ hrmRecruitmentRouter.get("/interviews", async (_req, res) => {
   );
 });
 
+function canonicalInterviewRound(raw: string | null | undefined): "R1" | "R2" | "R3" | null {
+  const t = String(raw || "").trim();
+  if (/^R1\b/i.test(t) || /^hr\b/i.test(t) || /screen/i.test(t)) return "R1";
+  if (/^R3\b/i.test(t) || /manag/i.test(t)) return "R3";
+  if (/^R2\b/i.test(t) || /technical/i.test(t)) return "R2";
+  return null;
+}
+
+function scorecardShareName(fullName: string, round: "R1" | "R2" | "R3") {
+  const safe = (fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
+  return `${safe}_${round}_scorecard.xlsx`;
+}
+
 hrmRecruitmentRouter.get("/candidates/:id/interviews", async (req, res) => {
   const candidate = await prisma.candidate.findUnique({
     where: { id: req.params.id },
@@ -890,7 +926,20 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   if (!appliedRole) {
     return res.status(400).json({ error: "Attach the candidate to an approved requisition before scheduling the interview." });
   }
-  const priorRounds = await prisma.interviewRound.count({ where: { candidateId: candidate.id } });
+  const priorRounds = await prisma.interviewRound.findMany({
+    where: { candidateId: candidate.id },
+    select: { roundType: true },
+  });
+  const roundType = canonicalInterviewRound(s(req.body.roundType));
+  if (!roundType) {
+    return res.status(400).json({ error: "Schedule R1, R2, or R3 only. A candidate does not need every round." });
+  }
+  if (priorRounds.length >= 3) {
+    return res.status(400).json({ error: "This candidate already has 3 rounds. Score the rounds they sat, then onboard." });
+  }
+  if (priorRounds.some((row) => canonicalInterviewRound(row.roundType) === roundType)) {
+    return res.status(400).json({ error: `${roundType} is already scheduled for this candidate.` });
+  }
   const interviewee: IntervieweeSeat = {
     candidateId: candidate.id,
     name: candidate.fullName,
@@ -948,28 +997,30 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     }
   }
 
-  const roundType = s(req.body.roundType) || "Technical";
-  const scorecardRound = /hr/i.test(roundType) ? "R1" : /manag/i.test(roundType) ? "R3" : "R2";
   let scorecardJson: string | null = null;
   try {
     const blank = scoreInterviewRound({
       position: appliedRole,
-      round: scorecardRound,
+      round: roundType,
       scores: {},
     });
-    const xlsx = await scorecardWorkbook(candidate.fullName, blank, { interviewDate: s(req.body.scheduledAt) || null });
-    const safeName = (candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const xlsx = await scorecardWorkbook(candidate.fullName, blank, {
+      interviewDate: s(req.body.scheduledAt) || null,
+      experienceYears: candidate.experienceYears,
+      source: candidate.sourceChannel,
+      panelists: interviewers.map((p) => p.name),
+    });
     const filed = await mockOneDrive.upload(
       HR_DRIVE,
       interviewRecordFolder(),
-      `${safeName}_${scorecardRound}_scorecard.xlsx`,
+      scorecardShareName(candidate.fullName, roundType),
       xlsx,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       { replace: true },
     );
     scorecardJson = JSON.stringify({
       position: blank.position,
-      round: scorecardRound,
+      round: roundType,
       scores: {},
       sharePointUrl: filed.sharePointUrl || null,
     });
@@ -980,7 +1031,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   const row = await prisma.interviewRound.create({
     data: {
       candidateId: candidate.id,
-      roundNumber: Number(req.body.roundNumber) || priorRounds + 1,
+      roundNumber: roundType === "R1" ? 1 : roundType === "R3" ? 3 : 2,
       roundType,
       panelJson: JSON.stringify({ version: 1, interviewers, interviewee }),
       scheduledAt,
@@ -1017,7 +1068,16 @@ hrmRecruitmentRouter.get("/interview-framework", requireRoles("admin", "office",
 hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.interviewRound.findUnique({
     where: { id: req.params.id },
-    include: { candidate: { select: { fullName: true, status: true } } },
+    include: {
+      candidate: {
+        select: {
+          fullName: true,
+          status: true,
+          experienceYears: true,
+          sourceChannel: true,
+        },
+      },
+    },
   });
   if (!before) return res.status(404).json({ error: "not found" });
   let scorecardJson = before.scorecardJson;
@@ -1069,13 +1129,25 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
 
   if (scorecardFile) {
     try {
+      const filedRound = scorecardRoundId(scorecardFile.scored.round);
+      let panelists: string[] = [];
+      try {
+        const panel = JSON.parse(before.panelJson || "{}");
+        const rows = Array.isArray(panel?.interviewers) ? panel.interviewers : [];
+        panelists = rows.map((p: { name?: string }) => String(p?.name || "")).filter(Boolean);
+      } catch {
+        panelists = [];
+      }
       const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scorecardFile.scored, {
         interviewDate: before.scheduledAt,
+        experienceYears: before.candidate.experienceYears,
+        source: before.candidate.sourceChannel,
+        panelists,
       });
       const filed = await mockOneDrive.upload(
         HR_DRIVE,
         interviewRecordFolder(),
-        `${scorecardFile.name}_${scorecardFile.scored.round}_scorecard.xlsx`,
+        scorecardShareName(before.candidate.fullName || "candidate", filedRound),
         xlsx,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         { replace: true },
@@ -1594,7 +1666,12 @@ async function hydratePreJoin(offerId: string) {
   const row = Object.keys(data).length
     ? await prisma.preJoiningChecklist.update({ where: { id: existing.id }, data })
     : existing;
-  return { ...row, linkedUserId };
+  if (linkedUserId) await mirrorCandidateDocsToStaff(offer.candidateId, linkedUserId);
+  const candidateDocuments = await prisma.candidateDocument.findMany({
+    where: { candidateId: offer.candidateId },
+    orderBy: { createdAt: "desc" },
+  });
+  return { ...row, linkedUserId, candidateDocuments };
 }
 
 hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req: AuthedRequest, res) => {
