@@ -8,8 +8,8 @@ import { canManageHrms } from "../../lib/portalAccounts";
 import HrmsDocxPreview from "../../components/HrmsDocxPreview";
 import HrmsPageHero from "./HrmsPageHero";
 import {
-  ONBOARDING_LETTER_PACK,
   KIND_OPTIONS,
+  ONBOARDING_LETTER_PACK,
   type DocKind,
   type DocRow,
   type OfferRow,
@@ -51,7 +51,6 @@ export default function HrmsDocumentsPage() {
   const [offers, setOffers] = useState<OfferRow[]>([]);
   const [previewDocxBlob, setPreviewDocxBlob] = useState<Blob | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
-  const [packBusy, setPackBusy] = useState(false);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [generateBusy, setGenerateBusy] = useState(false);
   const [previewFingerprint, setPreviewFingerprint] = useState("");
@@ -251,38 +250,6 @@ export default function HrmsDocumentsPage() {
       setMsg(err instanceof Error ? err.message : "Generate failed");
     } finally {
       setGenerateBusy(false);
-    }
-  }
-
-  async function generateOnboardingPack() {
-    if (!form.employeeName.trim()) {
-      setMsg("Select a person first.");
-      return;
-    }
-    setPackBusy(true);
-    setMsg("");
-    const made: string[] = [];
-    try {
-      const fresh = await api<DocRow[]>("/api/hrm/hrms-documents", { token });
-      for (const kind of ONBOARDING_LETTER_PACK) {
-        const mine = fresh.filter((r) => docMatchesSubject(r, form));
-        const existing = mine.find((r) => r.kind === kind && r.status !== "Cancelled");
-        if (existing?.status === "Generated" || existing?.status === "Signed") continue;
-        const id = await upsertLetterRow(kind, fresh);
-        await api(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
-        const ref = fresh.find((r) => r.id === id)?.refNo || existing?.refNo || kind;
-        made.push(`${kind} · ${ref}`);
-      }
-      if (!made.length) {
-        setMsg("Onboarding pack already on file for this person — open previews below or pick another letter type.");
-      } else {
-        setMsg(`Generated ${made.length} letter(s): ${made.join("; ")}`);
-      }
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Pack generate failed");
-    } finally {
-      setPackBusy(false);
     }
   }
 
@@ -555,9 +522,6 @@ export default function HrmsDocumentsPage() {
                           </button>
                         );
                       })}
-                      <Button type="button" disabled={packBusy} className="!py-1 !text-xs" onClick={() => void generateOnboardingPack()}>
-                        {packBusy ? "Generating…" : "Generate missing pack"}
-                      </Button>
                     </div>
                   </div>
 

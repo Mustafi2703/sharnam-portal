@@ -6,7 +6,7 @@ import type { PreJoiningChecklist } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import type { AuthUser } from "@sharnam/shared";
 
-/** Steps 1–4 + IT / email / ID before HR generates the appointment letter. */
+/** Steps 1–4. The letter is generated next. IT, email, ID, and the welcome kit can be finished after that. */
 export function isPreJoinReadyForAppointmentLetter(preJoin: PreJoiningChecklist | null | undefined) {
   if (!preJoin) return false;
   return [
@@ -14,18 +14,18 @@ export function isPreJoinReadyForAppointmentLetter(preJoin: PreJoiningChecklist 
     preJoin.bgvStatus === "Cleared",
     preJoin.medicalStatus === "Cleared" || preJoin.medicalStatus === "Not-Applicable",
     !!preJoin.empCodeGenerated,
-    preJoin.itAssetRequested,
-    preJoin.emailCreated,
-    preJoin.idCardRequested,
   ].every(Boolean);
 }
 
-/** Full section 2 complete — opens Day 1 onboarding (section 3). Welcome kit follows appointment letter. */
+/** Full section 2 complete — opens Day 1 onboarding (section 3). */
 export function isPreJoinComplete(preJoin: PreJoiningChecklist | null | undefined) {
   if (!preJoin) return false;
   return (
     isPreJoinReadyForAppointmentLetter(preJoin) &&
     !!preJoin.appointmentLetterUrl &&
+    preJoin.itAssetRequested &&
+    preJoin.emailCreated &&
+    preJoin.idCardRequested &&
     preJoin.welcomeKitPrepared
   );
 }

@@ -74,8 +74,6 @@ commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
   try {
     const buf = await buildMatrixXlsx(project.id, kind);
-    const { ensureProjectSharePointTree } = await import("../services/graph.js");
-    await ensureProjectSharePointTree(project.code);
     const saved = await mockOneDrive.upload(
       project.code,
       "01_CONTEXT_AND_GOVERNANCE/01.02_Stakeholders_and_Communication",
@@ -90,8 +88,6 @@ commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "
       const { driveItemWebUrl } = await import("../services/graph.js");
       sharePointUrl = await driveItemWebUrl(saved.sharePointPath);
     }
-    const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
-    void fileWonProjectPack(project.id).catch(() => undefined);
     if (!sharePointUrl) {
       return res.status(502).json({
         error: saved.sharePointError || "Could not open the matrix Excel in SharePoint.",

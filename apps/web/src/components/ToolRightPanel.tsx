@@ -142,7 +142,7 @@ export function ToolRightPanel({
     try {
       const r = await api<{ sharePointUrl?: string | null }>(
         `/api/comms/contacts/${ctx.projectId}/sharepoint-link`,
-        { method: "POST", token, body: JSON.stringify({ kind: "TECHNICAL" }) },
+        { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind: "TECHNICAL" }) },
       );
       if (r.sharePointUrl) window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
       else setEmailMsg("SharePoint link is not ready. Live SharePoint must accept the Excel first.");

@@ -1210,7 +1210,7 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
   if (!offer) return res.status(404).json({ error: "offer not found" });
   if (!isPreJoinReadyForAppointmentLetter(offer.preJoin)) {
     return res.status(400).json({
-      error: "Complete pre-joining steps 1–4 and IT / email / ID requests before generating the appointment letter.",
+      error: "Complete document collection, background check, medical, and the employee code before generating the appointment letter.",
     });
   }
   const employeeName = offer.candidate.fullName;

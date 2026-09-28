@@ -349,7 +349,7 @@ function OfferOnboardingPage() {
       { key: "itAssetRequested", label: "6 · IT asset allocation request", candidate: true },
       { key: "emailCreated", label: "7 · Email ID created", hrOnly: true, text: true, boolTextKey: "emailAddress" },
       { key: "idCardRequested", label: "8 · ID card request", candidate: true },
-      { key: "welcomeKitPrepared", label: "9 · Welcome kit ready", hrOnly: true, afterLetter: true },
+      { key: "welcomeKitPrepared", label: "9 · Welcome kit ready", hrOnly: true },
     ];
   }, []);
 
@@ -378,11 +378,24 @@ function OfferOnboardingPage() {
         preJoin.bgvStatus === "Cleared",
         preJoin.medicalStatus === "Cleared" || preJoin.medicalStatus === "Not-Applicable",
         !!preJoin.empCodeGenerated,
-        preJoin.itAssetRequested,
-        preJoin.emailCreated,
-        preJoin.idCardRequested,
       ].every(Boolean)
     : false;
+
+  async function fileSignedAppointment(file: File | null) {
+    if (!offerId || !file) return;
+    setUploadBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await api(`/api/hrm/offers/${offerId}/signed-appointment`, { method: "POST", token, body: fd });
+      setMsg("Signed appointment filed. IT, email, ID card, and the welcome kit can be saved now.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not file the signed letter");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
 
   const onboardItems = [
     { key: "joiningFormalitiesDone", label: "1 · Joining formalities" },
@@ -435,11 +448,11 @@ function OfferOnboardingPage() {
             <Button
               type="button"
               disabled={!letterReady}
-              title={!letterReady ? "Complete steps 1–4 and IT / email / ID before generating the letter" : undefined}
+              title={!letterReady ? "Complete document collection, background check, medical, and the employee code first" : undefined}
               onClick={async () => {
                 try {
                   const letter = await api<any>(`/api/hrm/offers/${offerId}/appointment-letter`, { method: "POST", token });
-                  setMsg(`Appointment ${letter.refNo} filed. Open it from the checklist.`);
+                  setMsg(`Appointment ${letter.refNo} generated. File the signed copy on step 5 when they return it. IT, email, ID card, and the welcome kit can be saved now.`);
                   await load();
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Letter generate failed");
@@ -555,15 +568,26 @@ function OfferOnboardingPage() {
             <ul className="space-y-2 text-sm">
               {preJoinItems.map((item) => {
                 const editable = canEditPreJoinItem(item);
-                const lockedAfterLetter = item.afterLetter && !form.appointmentLetterUrl;
                 if (item.key === "appointmentLetterUrl") {
                   return (
-                    <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
+                    <li key={item.key} className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
                       <span className="flex-1">{item.label}</span>
                       {form.appointmentLetterUrl ? (
-                        <a href={mediaUrl(form.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Open letter</a>
+                        <>
+                          <a href={mediaUrl(form.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Open letter</a>
+                          <label className="text-xs">
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                              className="hidden"
+                              disabled={uploadBusy}
+                              onChange={(e) => void fileSignedAppointment(e.target.files?.[0] || null)}
+                            />
+                            <span className="inline-flex items-center rounded-md border border-line px-2 py-1 cursor-pointer">{uploadBusy ? "Filing…" : "File signed copy"}</span>
+                          </label>
+                        </>
                       ) : (
-                        <span className="text-xs text-steel-muted">Not filed yet</span>
+                        <span className="text-xs text-steel-muted">Generate the letter first. File the signed copy after they return it.</span>
                       )}
                     </li>
                   );
@@ -623,14 +647,9 @@ function OfferOnboardingPage() {
                       type="checkbox"
                       checked={!!form[item.key]}
                       onChange={(e) => setForm({ ...form, [item.key]: e.target.checked })}
-                      disabled={!editable || lockedAfterLetter}
+                      disabled={!editable}
                     />
-                    <span className="flex-1">
-                      {item.label}
-                      {item.afterLetter && !form.appointmentLetterUrl ? (
-                        <span className="block text-[10px] text-steel-muted">After the appointment letter is filed</span>
-                      ) : null}
-                    </span>
+                    <span className="flex-1">{item.label}</span>
                   </li>
                 );
               })}

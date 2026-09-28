@@ -108,27 +108,36 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
   const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo") : null;
   const temps = clientFile ? [clientFile.file] : [];
 
-  sheet.mergeCells("A1:I1");
-  sheet.getRow(1).height = 48;
-  sheet.getCell("A1").value = `${kind} COMMUNICATION MATRIX`;
-  sheet.getCell("A1").font = { bold: true, size: 16, color: { argb: NAVY } };
-  sheet.getCell("A1").alignment = { vertical: "middle", horizontal: "center" };
-  sheet.mergeCells("A2:I2");
-  sheet.getCell("A2").value = `${project.name}  ·  Client: ${project.clientName || "—"}  ·  PMC: ${project.pmcName || SPDC_PMC_NAME}`;
-  sheet.getCell("A2").font = { size: 10, color: { argb: "FF666666" } };
-  sheet.getCell("A2").alignment = { horizontal: "center" };
+  const today = new Date();
+  const matrixDate = `${String(today.getDate()).padStart(2, "0")}-${String(today.getMonth() + 1).padStart(2, "0")}-${today.getFullYear()}`;
+  const banner = [
+    `PROJECT : ${project.name}`,
+    `CLIENT: ${project.clientName || "—"}`,
+    `DESIGN CONSULTANT : ${project.designConsultant || "—"}`,
+    `PROJECT MANAGEMENT CONSULTANTS : ${project.pmcName || SPDC_PMC_NAME}`,
+    `SUBJECT : ${kind} COMMUNICATION MATRIX`,
+    `DATE : ${matrixDate}`,
+  ];
+  banner.forEach((line, i) => {
+    const rowNo = i + 1;
+    sheet.mergeCells(`A${rowNo}:G${rowNo}`);
+    const cell = sheet.getCell(`A${rowNo}`);
+    cell.value = line;
+    cell.font = { bold: true, size: rowNo === 5 ? 14 : 11, color: { argb: NAVY }, name: "Calibri" };
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+    sheet.getRow(rowNo).height = 18;
+  });
 
   if (spdcLogo) {
     const imgId = wb.addImage({ filename: spdcLogo, extension: "png" });
-    sheet.addImage(imgId, { tl: { col: 0.15, row: 0.12 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+    sheet.addImage(imgId, { tl: { col: 7.1, row: 0.15 }, ext: { width: 90, height: 36 }, editAs: "oneCell" });
   }
   if (clientFile) {
     const imgId = wb.addImage({ filename: clientFile.file, extension: clientFile.ext });
-    sheet.addImage(imgId, { tl: { col: 7.4, row: 0.12 }, ext: { width: 110, height: 40 }, editAs: "oneCell" });
+    sheet.addImage(imgId, { tl: { col: 8.1, row: 0.15 }, ext: { width: 90, height: 36 }, editAs: "oneCell" });
   }
 
   const header = ["SR.NO", "NAME", "DESIGNATION", "NAME OF COMPANY", "SINGLE POINT OF CONTACT", "MOBILE", "E-MAIL", "GENERAL MAIL COMMUNICATION", "OFFICE ADD."];
-  sheet.addRow([]);
   sheet.addRow(header);
   const hr = sheet.lastRow!;
   hr.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -142,8 +151,9 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
       sectionIdx += 1;
       personInSection = 0;
       const row = sheet.addRow([String.fromCharCode(65 + sectionIdx), r.orgName || "", "", "", "", "", "", "", ""]);
-      row.font = { bold: true };
-      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8F0FE" } };
+      sheet.mergeCells(`B${row.number}:I${row.number}`);
+      row.font = { bold: true, name: "Calibri" };
+      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E3F0" } };
       continue;
     }
     personInSection += 1;
@@ -236,9 +246,11 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
   <div class="head">
     <div class="brand">${logo ? `<img src="${logo}" alt="SPDC" />` : `<strong>SPDC</strong>`}</div>
     <div class="center">
-      <div class="title">${esc(kind)} Communication Matrix</div>
-      <div class="sub">${esc(project.code)} · ${esc(project.name)}</div>
-      <div class="sub">Client: ${esc(project.clientName || "—")} · PMC: ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
+      <div class="title">Subject : ${esc(kind)} Communication Matrix</div>
+      <div class="sub">Project : ${esc(project.name)}</div>
+      <div class="sub">Client: ${esc(project.clientName || "—")}</div>
+      <div class="sub">Design consultant : ${esc(project.designConsultant || "—")}</div>
+      <div class="sub">Project management consultants : ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
     </div>
     <div class="client">${clientLogo ? `<img src="${clientLogo}" alt="Client" />` : `<span style="font-size:11px;color:#888">${esc(project.clientName || "Client logo")}</span>`}</div>
   </div>
