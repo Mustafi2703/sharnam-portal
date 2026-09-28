@@ -139,7 +139,65 @@ export async function ensureHrCompanyTree() {
       });
   }
   await hrTreeTask;
+  void fileHrmsMasterFormats();
   return { driveCode: HR_VAULT_DRIVE_CODE, folders };
+}
+
+const HR_LETTER_MASTERS: Array<[string, string]> = [
+  ["00_SPDC_HR_Letters_Usage_Guide.docx", "00_SPDC_HR_Letters_Usage_Guide.docx"],
+  ["Offer.docx", "01_SPDC_Offer_Letter.docx"],
+  ["Appointment.docx", "02_SPDC_Appointment_Letter.docx"],
+  ["Confirmation.docx", "03_SPDC_Confirmation_Letter.docx"],
+  ["AssetReturn.docx", "04_SPDC_Asset_Submission_Letter.docx"],
+  ["Relieving.docx", "05_SPDC_Relieving_Letter.docx"],
+  ["Exit.docx", "06_SPDC_Exit_Letter.docx"],
+  ["Promotion.docx", "07_SPDC_Letter_of_Promotion.docx"],
+  ["Warning.docx", "08_SPDC_Warning_Concern_Letter.docx"],
+  ["Experience.docx", "09_SPDC_Experience_Certificate.docx"],
+  ["NdaJoining.docx", "10_SPDC_NDA_At_Joining.docx"],
+  ["NdaPostEmployment.docx", "11_SPDC_NDA_Post_Employment.docx"],
+];
+
+function hrmsFormatsDir(): string | null {
+  const candidates = [
+    path.join(process.cwd(), "apps/api/formats/hrms"),
+    path.join(process.cwd(), "formats/hrms"),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || null;
+}
+
+/** Copy the official letter and scorecard masters into SPDC_HRMS so HR can compare them on SharePoint. Once per process. */
+let mastersTask: Promise<void> | null = null;
+export function fileHrmsMasterFormats(): Promise<void> {
+  if (!mastersTask) {
+    mastersTask = uploadHrmsMasterFormats().catch((err) => {
+      mastersTask = null;
+      console.warn("[HRMS] master formats:", err instanceof Error ? err.message : err);
+    });
+  }
+  return mastersTask;
+}
+
+async function uploadHrmsMasterFormats() {
+  const dir = hrmsFormatsDir();
+  if (!dir) return;
+  const docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  for (const [src, name] of HR_LETTER_MASTERS) {
+    const abs = path.join(dir, src);
+    if (!fs.existsSync(abs)) continue;
+    await mockOneDrive.upload(HR_VAULT_DRIVE_CODE, "02_Templates_Letters", name, fs.readFileSync(abs), docx, { replace: true });
+  }
+  const scorecard = path.join(dir, "SPDC_Interview_Assessment_Scoring_System.xlsx");
+  if (fs.existsSync(scorecard)) {
+    await mockOneDrive.upload(
+      HR_VAULT_DRIVE_CODE,
+      "03_Formats",
+      "SPDC_Interview_Assessment_Scoring_System.xlsx",
+      fs.readFileSync(scorecard),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      { replace: true },
+    );
+  }
 }
 
 function indexPayload(user: { fullName: string; email: string }, profile: { empCode?: string | null } | null) {

@@ -364,8 +364,11 @@ export {
   candidateStageLabel,
   candidateStageTone,
   INTERVIEWER_SEATS,
+  SPDC_HIRING_ROLES,
+  isSpdcHiringRole,
   type CandidateStageId,
   type InterviewerSeatId,
+  type SpdcHiringRole,
 } from "./hrmsStages.js";
 
 export {

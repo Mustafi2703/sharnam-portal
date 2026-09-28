@@ -53,19 +53,22 @@ export function InterviewScorecard({
   }, [token]);
 
   useEffect(() => {
-    if (framework && !position) setPosition(framework.roles[0] || "");
-  }, [framework, position]);
+    if (!framework?.roles.length) return;
+    if (framework.roles.includes(position)) return;
+    const hint = positionHint && framework.roles.includes(positionHint) ? positionHint : framework.roles[0];
+    if (hint) setPosition(hint);
+  }, [framework, position, positionHint]);
 
   const lines = useMemo(() => {
     if (!framework || !position) return [];
-    return framework.params.filter((p) => (p.weights[position] || 0) > 0);
+    return framework.params.map((p) => ({ ...p, weight: p.weights[position] || 0 }));
   }, [framework, position]);
 
   const preview = useMemo(() => {
     const weighted = lines.reduce((acc, p) => {
       const n = Number(scores[p.code]);
-      if (!n) return acc;
-      return { sum: acc.sum + (n / 5) * p.weights[position], w: acc.w + p.weights[position] };
+      if (!n || !p.weight) return acc;
+      return { sum: acc.sum + (n / 5) * p.weight, w: acc.w + p.weight };
     }, { sum: 0, w: 0 });
     const percent = weighted.w ? (weighted.sum / weighted.w) * 100 : 0;
     const grade = percent >= 85 ? "A" : percent >= 75 ? "B" : percent >= 65 ? "C" : "D";
@@ -108,20 +111,21 @@ export function InterviewScorecard({
           </thead>
           <tbody>
             {lines.map((p) => (
-              <tr key={p.code} className="border-t border-line">
+              <tr key={p.code} className={`border-t border-line ${p.weight ? "" : "opacity-50"}`}>
                 <td className="px-2 py-1">
                   <span className="font-mono text-[10px] text-steel-muted mr-1">{p.code}</span>
                   {p.parameter}
                   <div className="text-[10px] text-steel-muted">{p.category}</div>
                 </td>
-                <td className="px-2 py-1">{p.weights[position]}%</td>
+                <td className="px-2 py-1">{p.weight ? `${p.weight}%` : "—"}</td>
                 <td className="px-2 py-1">
                   <input
                     type="number"
                     min={1}
                     max={5}
-                    className="w-16 border border-line rounded px-1 py-0.5"
-                    value={scores[p.code] || ""}
+                    disabled={!p.weight}
+                    className="w-16 border border-line rounded px-1 py-0.5 disabled:bg-sand"
+                    value={p.weight ? scores[p.code] || "" : ""}
                     onChange={(e) => setScores({ ...scores, [p.code]: e.target.value })}
                   />
                 </td>
@@ -130,6 +134,9 @@ export function InterviewScorecard({
           </tbody>
         </table>
       </div>
+      <p className="text-[11px] text-steel-muted">
+        All 23 competencies from the SPDC sheet are listed. A row with no weight for this position stays blank. Saving stores the official Excel scorecard on SharePoint even when only some rows are scored.
+      </p>
       {err ? <p className="text-xs text-danger">{err}</p> : null}
       <Button
         type="button"
@@ -139,6 +146,7 @@ export function InterviewScorecard({
           setErr("");
           const payload: Record<string, number[]> = {};
           for (const [code, raw] of Object.entries(scores)) {
+            if (!lines.some((p) => p.code === code && p.weight > 0)) continue;
             const n = Number(raw);
             if (n >= 1 && n <= 5) payload[code] = [n];
           }
@@ -152,7 +160,7 @@ export function InterviewScorecard({
             .finally(() => setBusy(false));
         }}
       >
-        {busy ? "Saving…" : "Save scorecard"}
+        {busy ? "Saving…" : "Save scorecard to SharePoint"}
       </Button>
     </div>
   );

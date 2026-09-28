@@ -1,15 +1,7 @@
-export const INTERVIEW_ROLES = [
-  "Project Manager (Site)",
-  "Planning Engineer",
-  "Billing / QS Engineer",
-  "Project Coordinator",
-  "Senior Site Engineer (Civil)",
-  "Junior Engineer",
-  "QA/QC Engineer",
-  "MEP Engineer",
-  "Safety Officer",
-  "HR & Admin Executive"
-] as const;
+import { SPDC_HIRING_ROLES } from "@sharnam/shared";
+
+/** Same names as the Framework sheet — do not add roles that are not in the SPDC workbook. */
+export const INTERVIEW_ROLES = SPDC_HIRING_ROLES;
 
 export type InterviewParam = {
   code: string;

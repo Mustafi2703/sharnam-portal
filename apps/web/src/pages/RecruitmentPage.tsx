@@ -6,7 +6,7 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { InterviewScorecard } from "../components/InterviewScorecard";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
-import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_SEATS } from "@sharnam/shared";
+import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_SEATS, SPDC_HIRING_ROLES } from "@sharnam/shared";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -142,7 +142,12 @@ function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }
                 </option>
               ))}
             </Select>
-            <Input placeholder="Designation" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required />
+            <Select value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required>
+              <option value="">Position</option>
+              {SPDC_HIRING_ROLES.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </Select>
             <Input placeholder="Head count" type="number" value={form.count} onChange={(e) => setForm({ ...form, count: Number(e.target.value) })} />
             <Select value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
               {["Permanent", "Contract", "Consultant", "Intern"].map((v) => <option key={v}>{v}</option>)}
@@ -154,7 +159,7 @@ function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }
             </Select>
             <Input placeholder="CTC min (₹/yr)" type="number" value={form.ctcRangeMin} onChange={(e) => setForm({ ...form, ctcRangeMin: e.target.value })} />
             <Input placeholder="CTC max (₹/yr)" type="number" value={form.ctcRangeMax} onChange={(e) => setForm({ ...form, ctcRangeMax: e.target.value })} />
-            <TextArea rows={2} placeholder="Business justification" value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} className="md:col-span-4" />
+            <TextArea rows={2} placeholder="Job description" value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} className="md:col-span-4" />
             <Button type="submit" className="md:col-span-4">Submit requisition</Button>
           </form>
         </Card>
@@ -226,11 +231,26 @@ function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, t
             Publish here logs the posting in Sharnam and Activity. Posting to LinkedIn/Naukri is manual — note channels below.
           </p>
           <form onSubmit={add} className="grid md:grid-cols-3 gap-2">
-            <Select value={form.requisitionId} onChange={(e) => setForm({ ...form, requisitionId: e.target.value })}>
+            <Select
+              value={form.requisitionId}
+              onChange={(e) => {
+                const requisitionId = e.target.value;
+                const linked = approvedReqs.find((r: { id: string; designation?: string }) => r.id === requisitionId);
+                const title = linked && (SPDC_HIRING_ROLES as readonly string[]).includes(linked.designation || "")
+                  ? linked.designation || ""
+                  : form.title;
+                setForm({ ...form, requisitionId, title });
+              }}
+            >
               <option value="">Link approved requisition (optional)</option>
               {approvedReqs.map((r: any) => <option key={r.id} value={r.id}>{r.requisitionNo} · {r.designation}</option>)}
             </Select>
-            <Input placeholder="Job title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+            <Select value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required>
+              <option value="">Position</option>
+              {SPDC_HIRING_ROLES.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </Select>
             <Select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
               <option value="">Department</option>
               {departments.map((d: any) => (
@@ -622,6 +642,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
   const [rounds, setRounds] = useState<any[]>([]);
   const [diary, setDiary] = useState<any[]>([]);
   const [form, setForm] = useState({
+    position: "",
     roundType: "Technical",
     scheduledAt: "",
     durationMins: 60,
@@ -641,7 +662,12 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
       return;
     }
     api<any[]>(`/api/hrm/candidates/${candidateId}/interviews`, { token }).then(setRounds).catch(() => setRounds([]));
-  }, [candidateId, token]);
+    const person = candidates.find((c: { id: string; posting?: { title?: string } }) => c.id === candidateId);
+    const title = person?.posting?.title || "";
+    if ((SPDC_HIRING_ROLES as readonly string[]).includes(title)) {
+      setForm((prev) => ({ ...prev, position: title }));
+    }
+  }, [candidateId, token, candidates]);
 
   async function schedule(e: FormEvent) {
     e.preventDefault();
@@ -668,6 +694,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
         method: "POST",
         token,
         body: JSON.stringify({
+          position: form.position,
           roundType: form.roundType,
           scheduledAt: form.scheduledAt,
           durationMins: form.durationMins,
@@ -679,6 +706,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
       });
       setRounds((prev) => [...prev, r]);
       setForm({
+        position: "",
         roundType: "Technical",
         scheduledAt: "",
         durationMins: 60,
@@ -776,6 +804,12 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
           <h3 className="font-semibold text-sm mb-2">Schedule meeting · interviewers</h3>
           <form onSubmit={schedule} className="space-y-3">
             <div className="grid md:grid-cols-4 gap-2">
+              <Select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} required className="md:col-span-2">
+                <option value="">Position applied</option>
+                {SPDC_HIRING_ROLES.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </Select>
               <Select value={form.roundType} onChange={(e) => setForm({ ...form, roundType: e.target.value })}>
                 {["Technical", "HR", "Management", "Client", "Assessment"].map((v) => <option key={v}>{v}</option>)}
               </Select>
@@ -880,7 +914,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                   <div className="grid md:grid-cols-4 gap-2 text-xs pt-2 border-t border-line">
                     <InterviewScorecard
                       token={token}
-                      positionHint={candidate.applyingFor || candidate.currentDesign || ""}
+                      positionHint={candidate.posting?.title || candidate.applyingFor || ""}
                       roundHint={r.roundType}
                       saved={(() => {
                         try {
@@ -891,7 +925,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       })()}
                       onSave={async (scorecard) => {
                         await updateRound(r.id, { scorecard, status: "Completed" });
-                        setMsg(`Scorecard saved for ${candidate.fullName} · round ${r.roundNumber}.`);
+                        setMsg(`Scorecard saved for ${candidate.fullName} · round ${r.roundNumber}. The SPDC Excel file is on SharePoint. Next: upload background documents, then convert to an employee.`);
                       }}
                     />
                     <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Evidence / notes" rows={2} className="md:col-span-4 border border-line rounded px-2 py-1" />

@@ -49,6 +49,30 @@ export function candidateStageTone(
   return "neutral";
 }
 
+/**
+ * Positions SPDC hires against — Framework sheet of SPDC_Interview_Assessment_Scoring_System.xlsx.
+ * Requisition, job posting, and the interview scorecard use this list only.
+ */
+export const SPDC_HIRING_ROLES = [
+  "Project Manager (Site)",
+  "Planning Engineer",
+  "Billing / QS Engineer",
+  "Project Coordinator",
+  "Senior Site Engineer (Civil)",
+  "Junior Engineer",
+  "QA/QC Engineer",
+  "MEP Engineer",
+  "Safety Officer",
+  "HR & Admin Executive",
+] as const;
+
+export type SpdcHiringRole = (typeof SPDC_HIRING_ROLES)[number];
+
+export function isSpdcHiringRole(value: string | null | undefined): value is SpdcHiringRole {
+  if (!value) return false;
+  return (SPDC_HIRING_ROLES as readonly string[]).includes(value.trim());
+}
+
 /** Seats on an HR interview meeting (interviewer side). Interviewee is always the candidate. */
 export const INTERVIEWER_SEATS = [
   { id: "Technical", label: "Technical interviewer" },

@@ -10,6 +10,7 @@ import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { isSpdcHiringRole } from "@sharnam/shared";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
   employeeLetterFolder,
@@ -70,11 +71,15 @@ hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
 });
 
 hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const designation = s(req.body.designation);
+  if (!isSpdcHiringRole(designation)) {
+    return res.status(400).json({ error: "Choose a position from the SPDC hiring roles." });
+  }
   const row = await prisma.manpowerRequisition.create({
     data: {
       requisitionNo: s(req.body.requisitionNo) || `MR-${Date.now()}`,
       department: s(req.body.department) || "General",
-      designation: s(req.body.designation) || "Executive",
+      designation,
       count: Number(req.body.count || 1),
       employmentType: s(req.body.employmentType) || "Permanent",
       reportingManager: s(req.body.reportingManager),
@@ -126,11 +131,15 @@ hrmRecruitmentRouter.get("/postings", async (_req, res) => {
 });
 
 hrmRecruitmentRouter.post("/postings", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const title = s(req.body.title);
+  if (!isSpdcHiringRole(title)) {
+    return res.status(400).json({ error: "Choose a position from the SPDC hiring roles." });
+  }
   const channels = Array.isArray(req.body.channels) ? req.body.channels : req.body.channels ? String(req.body.channels).split(",").map((c: string) => c.trim()) : [];
   const row = await prisma.jobPosting.create({
     data: {
       requisitionId: s(req.body.requisitionId),
-      title: s(req.body.title) || "Position",
+      title,
       department: s(req.body.department),
       location: s(req.body.location),
       employmentType: s(req.body.employmentType) || "Permanent",
@@ -611,13 +620,17 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   if (!candidate.resumeUrl) {
     return res.status(400).json({ error: "Upload the resume first. The stage moves to Resume received, then you can schedule the interview." });
   }
+  const appliedRole = [s(req.body.position), candidate.posting?.title].find((v) => isSpdcHiringRole(v)) || "";
+  if (!appliedRole) {
+    return res.status(400).json({ error: "Choose the position from the SPDC hiring roles." });
+  }
   const priorRounds = await prisma.interviewRound.count({ where: { candidateId: candidate.id } });
   const interviewee: IntervieweeSeat = {
     candidateId: candidate.id,
     name: candidate.fullName,
     email: candidate.email || "",
     phone: candidate.phone || "",
-    applyingFor: candidate.posting?.title || s(req.body.applyingFor) || "",
+    applyingFor: appliedRole,
   };
   const rawInterviewers = Array.isArray(req.body.interviewers) ? req.body.interviewers : [];
   const fromPanel = Array.isArray(req.body.panel) ? req.body.panel : req.body.panel ? [req.body.panel] : [];
@@ -674,11 +687,11 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   let scorecardJson: string | null = null;
   try {
     const blank = scoreInterviewRound({
-      position: candidate.posting?.title || candidate.currentDesign || "",
+      position: appliedRole,
       round: scorecardRound,
       scores: {},
     });
-    const xlsx = await scorecardWorkbook(candidate.fullName, blank);
+    const xlsx = await scorecardWorkbook(candidate.fullName, blank, { interviewDate: s(req.body.scheduledAt) || null });
     const safeName = (candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
     const filed = await mockOneDrive.upload(
       HR_DRIVE,
@@ -782,7 +795,9 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
 
   if (scorecardFile) {
     try {
-      const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scorecardFile.scored);
+      const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scorecardFile.scored, {
+        interviewDate: before.scheduledAt,
+      });
       const filed = await mockOneDrive.upload(
         HR_DRIVE,
         interviewRecordFolder(),
