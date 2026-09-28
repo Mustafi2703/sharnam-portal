@@ -108,8 +108,14 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
   const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo") : null;
   const temps = clientFile ? [clientFile.file] : [];
 
-  const today = new Date();
-  const matrixDate = `${String(today.getDate()).padStart(2, "0")}-${String(today.getMonth() + 1).padStart(2, "0")}-${today.getFullYear()}`;
+  const matrixDate = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+    .format(new Date())
+    .replace(/\//g, "-");
   const banner = [
     `PROJECT : ${project.name}`,
     `CLIENT: ${project.clientName || "—"}`,

@@ -125,8 +125,7 @@ export default function HrmsFilesPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="max-w-xl">
           <p className="text-sm text-steel-muted">
-            Per-employee HR DMS on SharePoint / Drive — PAN, signed appointment, payslips, BGV. Files land under{" "}
-            <span className="font-mono text-xs">SPDC_HRMS/{HR_VAULT_ROOT}/{"{empCode}_{name}"}/01_Joining · 02_KYC · 03_Service_Letters · 04_Discipline · 05_Exit</span>.
+            Each person’s documents open from SharePoint. PAN, appointment, payslips, and background checks stay on that file.
           </p>
           <Link to="/hrm/documents" className="text-xs text-brand font-semibold underline mt-1 inline-block">
             Appointment letters register →
@@ -188,18 +187,7 @@ export default function HrmsFilesPage() {
 
       {canManage && !vaultPath ? (
         <Card className="!p-3 text-xs text-amber-900 bg-amber-50 border-amber-200">
-          No vault folder yet for this employee. Click <strong>Ensure vault folder</strong> before uploading — existing
-          documents will be re-filed under <span className="font-mono">SPDC_HRMS/06_Records_Employee_Files/{"{empCode}_{name}"}/</span> with
-          names like <span className="font-mono">PAN_SPDC-001_scan_2026-09-15.pdf</span>.
-        </Card>
-      ) : null}
-
-      {vaultPath ? (
-        <Card className="!p-3 text-xs text-steel-muted font-mono break-all">
-          SharePoint path: <span className="text-ink">{vaultPath}</span>
-          <span className="block font-sans text-[11px] mt-1 normal-case">
-            Subfolders: Letters · Onboarding · Documents
-          </span>
+          No folder yet for this employee. Click Ensure Vault Folder before uploading.
         </Card>
       ) : null}
 
@@ -249,11 +237,6 @@ export default function HrmsFilesPage() {
                     <a href={mediaUrl(f.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
                       Open
                     </a>
-                    {f.storagePath ? (
-                      <div className="text-[10px] text-steel-muted font-mono mt-0.5 truncate max-w-[220px]" title={f.storagePath}>
-                        {f.storagePath}
-                      </div>
-                    ) : null}
                   </td>
                 </tr>
               ))}
