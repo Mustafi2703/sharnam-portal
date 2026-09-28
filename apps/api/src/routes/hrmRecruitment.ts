@@ -191,6 +191,7 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
         posting: { select: { title: true, department: true } },
         interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true, scoreOverall: true } },
         offers: { select: { id: true, offerNo: true, status: true, onboard: { select: { userId: true } } } },
+        documents: { select: { id: true, category: true, title: true, fileUrl: true }, orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -225,6 +226,7 @@ hrmRecruitmentRouter.post("/registers/clear", requireRoles("admin", "office"), a
 });
 
 async function deleteCandidateTree(candidateId: string) {
+  await prisma.candidateDocument.deleteMany({ where: { candidateId } });
   const offers = await prisma.offer.findMany({ where: { candidateId }, select: { id: true } });
   const offerIds = offers.map((o) => o.id);
   if (offerIds.length) {
@@ -387,6 +389,36 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
   res.json(row);
 });
 
+const BGV_CATEGORIES = ["PAN", "Aadhaar", "Bank", "Education", "Address proof", "Photo", "Other"] as const;
+
+hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "office", "hr"), upload.single("file"), async (req: AuthedRequest, res) => {
+  const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  if (!req.file) return res.status(400).json({ error: "Choose a document." });
+  const category = BGV_CATEGORIES.includes(String(req.body.category) as (typeof BGV_CATEGORIES)[number])
+    ? String(req.body.category)
+    : "Other";
+  const safeName = before.fullName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const saved = await mockOneDrive.upload(
+    HR_DRIVE,
+    "05_Records_Recruitment/02_Shortlisted_and_Interviewed",
+    `kyc-${category.replace(/\s+/g, "_")}-${safeName}-${Date.now()}${extOf(req.file)}`,
+    req.file.buffer,
+  );
+  const fileUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
+  const doc = await prisma.candidateDocument.create({
+    data: {
+      candidateId: before.id,
+      category,
+      title: s(req.body.title) || `${category} · ${before.fullName}`,
+      fileUrl,
+      storagePath: saved.sharePointPath || saved.path,
+    },
+  });
+  await audit("hrms.candidate.document", { userId: req.user!.id, entity: "CandidateDocument", entityId: doc.id, meta: { candidateId: before.id, category } });
+  res.status(201).json(doc);
+});
+
 hrmRecruitmentRouter.delete("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
@@ -403,6 +435,10 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
   if (!candidate) return res.status(404).json({ error: "not found" });
   const email = (candidate.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "Add an email on this candidate before converting them to an employee." });
+  const bgv = await prisma.candidateDocument.count({ where: { candidateId: candidate.id } });
+  if (!bgv) {
+    return res.status(400).json({ error: "Upload background documents (PAN and the rest) before converting this person to an employee." });
+  }
   let user = await prisma.user.findUnique({ where: { email } });
   let created = false;
   if (!user) {
@@ -430,6 +466,22 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
     const { ensureDefaultLeaveBalancesForUser } = await import("../services/spdcLeaveSeed.js");
     await ensureDefaultLeaveBalancesForUser(user.id);
     created = true;
+  }
+  const kyc = await prisma.candidateDocument.findMany({ where: { candidateId: candidate.id } });
+  for (const doc of kyc) {
+    const already = await prisma.employeeDocument.findFirst({
+      where: { userId: user.id, category: doc.category, fileUrl: doc.fileUrl },
+    });
+    if (already) continue;
+    await prisma.employeeDocument.create({
+      data: {
+        userId: user.id,
+        category: doc.category,
+        title: doc.title,
+        fileUrl: doc.fileUrl,
+        storagePath: doc.storagePath,
+      },
+    });
   }
   const offer = candidate.offers.find((o) => o.status === "Accepted" || o.status === "Joined") || candidate.offers[0];
   if (offer) {

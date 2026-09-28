@@ -76,7 +76,7 @@ export default function RecruitmentPage() {
       <Card className="!p-4 bg-brand-soft/20 border-brand/20">
         <p className="text-sm text-ink font-semibold">Hiring steps</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          Add the person and resume → schedule the interview and fill the scorecard → convert to an employee → upload PAN and other documents → then open Generate letters for that person. Letters are not created when you add the candidate.
+          Add the person and resume → interview and scorecard → upload background documents (PAN and the rest) → convert to an employee → then Generate letters. Letters are not created when you add the candidate.
         </p>
       </Card>
       <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
@@ -298,6 +298,9 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
   const [openId, setOpenId] = useState<string | null>(null);
   const [edit, setEdit] = useState<any>(null);
   const [editFile, setEditFile] = useState<File | null>(null);
+  const [docsFor, setDocsFor] = useState<string | null>(null);
+  const [docCategory, setDocCategory] = useState("PAN");
+  const [docFile, setDocFile] = useState<File | null>(null);
 
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -393,6 +396,24 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
     }
   }
 
+  async function uploadDocument(c: any) {
+    if (!docFile) {
+      setMsg("Choose the background document to upload.");
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("file", docFile);
+      fd.append("category", docCategory);
+      await api(`/api/hrm/candidates/${c.id}/documents`, { method: "POST", token, body: fd });
+      setDocFile(null);
+      setMsg(`${docCategory} filed for ${c.fullName}. When PAN and the other checks are in, convert them to an employee, then generate letters.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not upload the document");
+    }
+  }
+
   async function convertEmployee(c: any) {
     try {
       const res = await api<{ userId: string; created: boolean; fullName: string }>("/api/hrm/candidates/" + c.id + "/convert", { method: "POST", token });
@@ -476,6 +497,7 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
             const scored = (c.interviews || []).some((r: any) => r.scoreOverall != null);
             const lettersReady = Boolean(employee);
             const hasResume = Boolean(c.resumeUrl);
+            const docCount = (c.documents || []).length;
             const stage = !hasResume && (c.status === "New" || c.status === "Upload" || !c.status) ? "Upload" : c.status;
             return (
               <li key={c.id} className="px-4 py-3">
@@ -491,6 +513,7 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${hasResume ? "border-brand text-brand" : "border-line text-steel-muted"}`}>{hasResume ? "Resume received" : "Upload resume"}</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${(c.interviews || []).length ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Interview</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${scored ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Score</span>
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${docCount ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Documents{docCount ? ` ${docCount}` : ""}</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${employee ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Employee</span>
                   <span className={`text-[11px] rounded-full border px-2 py-0.5 ${lettersReady ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Letters</span>
                 </div>
@@ -509,14 +532,48 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
                   )}
                   {canManage && <button type="button" className="text-xs font-semibold" onClick={() => openEdit(c)}>Edit</button>}
                   {canManage && <button type="button" className="text-xs font-semibold text-danger" onClick={() => void removeCandidate(c)}>Delete</button>}
-                  {canManage && !employee && <button type="button" className="text-xs font-semibold" onClick={() => void convertEmployee(c)}>Convert to employee</button>}
-                  {employee && <Link to={`/hrm/files?userId=${employee.id}`} className="text-xs text-brand font-semibold">Upload PAN & documents</Link>}
+                  {canManage && (
+                    <button type="button" className="text-xs font-semibold text-brand" onClick={() => setDocsFor(docsFor === c.id ? null : c.id)}>
+                      Background documents
+                    </button>
+                  )}
+                  {canManage && !employee && (
+                    <button type="button" className="text-xs font-semibold disabled:opacity-40" disabled={!docCount} onClick={() => void convertEmployee(c)}>
+                      {docCount ? "Convert to employee" : "Convert after documents"}
+                    </button>
+                  )}
                   {lettersReady ? (
                     <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className="text-xs text-brand font-semibold">Generate letters</Link>
                   ) : (
                     <span className="text-xs text-steel-muted">Generate letters after they are an employee</span>
                   )}
                 </div>
+                {docsFor === c.id && (
+                  <form
+                    className="mt-3 grid md:grid-cols-4 gap-2 border-t border-line pt-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void uploadDocument(c);
+                    }}
+                  >
+                    <p className="md:col-span-4 text-[11px] text-steel-muted">Background check files stay on this person until you convert them. Then they move into the employee file, and letters can be generated.</p>
+                    {(c.documents || []).map((d: any) => (
+                      <a key={d.id} href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand font-semibold">
+                        {d.category}
+                      </a>
+                    ))}
+                    <Select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
+                      {["PAN", "Aadhaar", "Bank", "Education", "Address proof", "Photo", "Other"].map((v) => (
+                        <option key={v}>{v}</option>
+                      ))}
+                    </Select>
+                    <label className="md:col-span-2 text-xs text-steel-muted">
+                      File
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => setDocFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
+                    </label>
+                    <Button type="submit">Upload document</Button>
+                  </form>
+                )}
                 {openId === c.id && edit && (
                   <form
                     className="mt-3 grid md:grid-cols-4 gap-2 border-t border-line pt-3"

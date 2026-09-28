@@ -30,6 +30,7 @@ import {
   letterFormUsesPromotionExtras,
   letterFormUsesSeparationReason,
   letterFormUsesWarningExtras,
+  LETTER_VARIABLES,
 } from "./hrmsLetterDesk";
 
 export default function HrmsDocumentsPage() {
@@ -591,7 +592,11 @@ export default function HrmsDocumentsPage() {
                       </label>
                       <label className="space-y-1">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">Gender</span>
-                        <Input value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} />
+                        <Select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                          <option value="">Mr. / Ms.</option>
+                          <option value="Male">Male · Mr. / he</option>
+                          <option value="Female">Female · Ms. / she</option>
+                        </Select>
                       </label>
                       <label className="space-y-1 sm:col-span-2">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">Project / client site</span>
@@ -656,6 +661,28 @@ export default function HrmsDocumentsPage() {
                           <TextArea rows={2} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
                         </label>
                       )}
+                      <div className="sm:col-span-3 border-t border-line pt-3 space-y-2">
+                        <p className="text-[11px] font-semibold text-ink">Variable sheet · {KIND_OPTIONS.find((k) => k.key === form.kind)?.label}</p>
+                        <p className="text-[11px] text-steel-muted">
+                          These fields print into the Word letter. Offer, appointment and promotion salary lines (basic, HRA, gross, net, annual CTC) fill from the CTC amount above.
+                        </p>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {(LETTER_VARIABLES[form.kind] || []).map((field) => {
+                            const value = form.sheet[field.key] ?? field.default ?? "";
+                            const onChange = (next: string) => setForm({ ...form, sheet: { ...form.sheet, [field.key]: next } });
+                            return (
+                              <label key={field.key} className={`space-y-1 ${field.wide ? "sm:col-span-3" : ""}`}>
+                                <span className="text-[11px] text-steel-muted uppercase font-mono">{field.label}</span>
+                                {field.type === "textarea" ? (
+                                  <TextArea rows={2} value={value} placeholder={field.hint} onChange={(e) => onChange(e.target.value)} />
+                                ) : (
+                                  <Input type={field.type === "date" ? "date" : "text"} value={value} placeholder={field.hint} onChange={(e) => onChange(e.target.value)} />
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
                       {letterFormUsesWarningExtras(form.kind) && (
                         <>
                           <label className="space-y-1 sm:col-span-3">

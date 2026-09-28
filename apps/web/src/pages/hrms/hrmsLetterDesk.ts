@@ -116,6 +116,7 @@ export type LetterFormState = {
   issueInBrief: string;
   impact: string;
   correctiveAction: string;
+  sheet: Record<string, string>;
 };
 
 export function emptyLetterForm(kind: DocKind = "Appointment"): LetterFormState {
@@ -145,6 +146,7 @@ export function emptyLetterForm(kind: DocKind = "Appointment"): LetterFormState 
     issueInBrief: "",
     impact: "",
     correctiveAction: "",
+    sheet: {},
   };
 }
 
@@ -266,9 +268,19 @@ export function letterDataPayload(form: LetterFormState) {
     correctiveAction: form.correctiveAction,
     facts: form.issueInBrief || form.reason,
     separationReason: form.reason || "resignation",
-    natureOfWork: "site supervision, planning, quality control and billing verification",
-    period: form.effectiveDate ? `${form.effectiveDate} to ${form.effectiveDate}` : "",
+    natureOfWork: form.sheet.natureOfWork || "site supervision, planning, quality control and billing verification",
+    period: form.sheet.period || (form.effectiveDate ? `${form.effectiveDate} to ${form.effectiveDate}` : ""),
+    ...filledSheet(form),
   };
+}
+
+function filledSheet(form: LetterFormState): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const field of LETTER_VARIABLES[form.kind] || []) {
+    const v = (form.sheet[field.key] || field.default || "").trim();
+    if (v) out[field.key] = v;
+  }
+  return out;
 }
 
 export function docMatchesSubject(row: DocRow, form: Pick<LetterFormState, "employeeUserId" | "employeeName" | "candidateEmail">) {
@@ -355,7 +367,18 @@ export function hydrateLetterFormFromDoc(row: DocRow, form: LetterFormState): Le
     issueInBrief: str("issueInBrief", form.issueInBrief),
     impact: str("impact", form.impact),
     correctiveAction: str("correctiveAction", form.correctiveAction),
+    sheet: sheetFromData(data, form.sheet),
   };
+}
+
+function sheetFromData(data: Record<string, unknown>, prev: Record<string, string>): Record<string, string> {
+  const sheet = { ...prev };
+  const keys = new Set(Object.values(LETTER_VARIABLES).flat().map((f) => f.key));
+  for (const key of keys) {
+    const v = data[key];
+    if (v != null && String(v).trim()) sheet[key] = String(v);
+  }
+  return sheet;
 }
 
 export function letterFormFingerprint(form: LetterFormState): string {
@@ -382,3 +405,170 @@ export function letterFormUsesAssetExtras(kind: DocKind): boolean {
 export function letterFormUsesSeparationReason(kind: DocKind): boolean {
   return kind === "Warning" || kind === "Exit" || kind === "Relieving";
 }
+
+export type LetterVar = {
+  key: string;
+  label: string;
+  hint?: string;
+  type?: "text" | "date" | "textarea";
+  wide?: boolean;
+  default?: string;
+};
+
+const TERMS: LetterVar[] = [
+  { key: "probationMonths", label: "Probation (months)", default: "6" },
+  { key: "probationNotice", label: "Probation notice (days)", default: "15" },
+  { key: "employeeNotice", label: "Employee notice (days)", default: "60" },
+  { key: "companyNotice", label: "Company notice (days)", default: "30" },
+  { key: "clDays", label: "Casual leave (days)", default: "12" },
+  { key: "slDays", label: "Sick leave (days)", default: "6" },
+  { key: "workingHours", label: "Working hours", default: "9:00 AM to 6:30 PM", wide: true },
+  { key: "grade", label: "Grade", default: "As per SPDC Grade Structure" },
+];
+
+/** Variable sheet for each SPDC letter. Salary lines on offer, appointment and promotion come from the CTC figure. */
+export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
+  Offer: [
+    { key: "applicationDate", label: "Application date", type: "date" },
+    { key: "interviewDates", label: "Interview dates" },
+    ...TERMS,
+    { key: "reportingTime", label: "Reporting time", default: "9:30 AM" },
+    { key: "reportingAddress", label: "Reporting address", wide: true },
+    { key: "acceptanceDate", label: "Acceptance date", type: "date" },
+    { key: "disclosure", label: "Disclosure", default: "None", wide: true },
+    { key: "kraNote", label: "Role KRAs", default: "KRAs as per SPDC role master for this designation", type: "textarea", wide: true },
+  ],
+  Appointment: [
+    { key: "offerRefNo", label: "Offer reference no." },
+    { key: "offerDate", label: "Offer date", type: "date" },
+    ...TERMS,
+    { key: "lateMarks", label: "Late marks allowed", default: "3" },
+    { key: "payDay", label: "Pay day", default: "7th" },
+    { key: "giftLimit", label: "Gift limit (INR)", default: "1,000" },
+    { key: "trainingThreshold", label: "Training threshold (INR)", default: "10,000" },
+    { key: "retirementAge", label: "Retirement age", default: "58" },
+    { key: "noOfCheques", label: "Number of security cheques" },
+    { key: "bank", label: "Bank" },
+    { key: "last4", label: "Account last 4" },
+    { key: "chqNo", label: "Cheque numbers" },
+    { key: "kraNote", label: "Role KRAs", default: "KRAs as per SPDC role master for this designation", type: "textarea", wide: true },
+  ],
+  Confirmation: [
+    { key: "appointmentRefNo", label: "Appointment reference no." },
+    { key: "appointmentDate", label: "Appointment date", type: "date" },
+    { key: "probationEndDate", label: "Probation end date", type: "date" },
+    { key: "employeeNotice", label: "Employee notice (days)", default: "60" },
+    { key: "companyNotice", label: "Company notice (days)", default: "30" },
+    { key: "revisedCtc", label: "Revised CTC, or No change", default: "No change" },
+    { key: "focusArea1", label: "Focus area 1", default: "Timely delivery of assigned work", wide: true },
+    { key: "focusArea2", label: "Focus area 2", default: "Client communication and documentation", wide: true },
+    { key: "focusArea3", label: "Focus area 3", default: "HSE and quality compliance", wide: true },
+  ],
+  AssetReturn: [
+    { key: "submissionDate", label: "Submission date", type: "date" },
+    { key: "reason", label: "Reason for return", default: "your separation", wide: true },
+    { key: "otherItem", label: "Other item" },
+    { key: "officialEmail", label: "Official email" },
+    { key: "forwardTo", label: "Forward to", default: "HR & Admin" },
+    { key: "recoveryAmount", label: "Recovery amount", default: "Nil" },
+    { key: "inspectionDays", label: "Inspection days", default: "7" },
+    { key: "remarks", label: "Remarks", type: "textarea", wide: true },
+  ],
+  Relieving: [
+    { key: "resignationDate", label: "Resignation date", type: "date" },
+    { key: "exitLetterRef", label: "Exit letter reference" },
+    { key: "noticeServed", label: "Notice served" },
+    { key: "noticeRequired", label: "Notice required", default: "60" },
+    { key: "waiverRef", label: "Waiver reference" },
+    { key: "successorName", label: "Successor name" },
+    { key: "assetLetterRef", label: "Asset letter reference" },
+    { key: "fnfStatus", label: "Full and final status", default: "Pending clearance", wide: true },
+  ],
+  Exit: [
+    { key: "resignationDate", label: "Resignation date", type: "date" },
+    { key: "lastWorkingDate", label: "Last working date", type: "date" },
+    { key: "noticeRequired", label: "Notice required", default: "60" },
+    { key: "noticeServed", label: "Notice served" },
+    { key: "shortfall", label: "Notice shortfall", default: "Nil" },
+    { key: "waivedDays", label: "Days waived", default: "0" },
+    { key: "approver", label: "Approver" },
+    { key: "successorName", label: "Successor name" },
+    { key: "successorDesignation", label: "Successor designation" },
+    { key: "handoverDate", label: "Handover date", type: "date" },
+    { key: "clientName", label: "Client name" },
+    { key: "postExitAddress", label: "Address after exit", wide: true },
+    { key: "personalEmail", label: "Personal email" },
+    { key: "newEmployer", label: "New employer" },
+    { key: "separationReason", label: "Separation", default: "resignation" },
+  ],
+  Promotion: [
+    { key: "achievement", label: "Achievement", wide: true },
+    { key: "reviewCycle", label: "Review cycle", default: "Half-yearly" },
+    { key: "reviewMonths", label: "Review after (months)", default: "6" },
+    { key: "previousGrade", label: "Current grade" },
+    { key: "newGrade", label: "New grade" },
+    { key: "previousDepartment", label: "Current department" },
+    { key: "currentTeam", label: "Current team" },
+    { key: "newTeam", label: "New team" },
+    { key: "previousReporting", label: "Current reporting" },
+    { key: "currentNotice", label: "Current notice (days)", default: "60" },
+    { key: "newNotice", label: "New notice (days)", default: "60" },
+    { key: "currentLimit", label: "Current authority limit" },
+    { key: "newLimit", label: "New authority limit" },
+    { key: "kra1", label: "KRA 1", default: "Deliver assigned projects to approved schedule", wide: true },
+    { key: "kra2", label: "KRA 2", default: "Client satisfaction and stakeholder communication", wide: true },
+    { key: "kra3", label: "KRA 3", default: "Cost control and billing accuracy", wide: true },
+    { key: "kra4", label: "KRA 4", default: "HSE performance and compliance", wide: true },
+    { key: "kra5", label: "KRA 5", default: "Team development and mentoring", wide: true },
+  ],
+  Warning: [
+    { key: "letterType", label: "Letter type", default: "Concern" },
+    { key: "severity", label: "Severity", default: "minor" },
+    { key: "facts", label: "Facts (what, where, who reported)", type: "textarea", wide: true },
+    { key: "evidence", label: "Evidence", default: "DPR, email records", wide: true },
+    { key: "clausePolicy", label: "Clause / policy", default: "Clause 14 of your Appointment Letter", wide: true },
+    { key: "previousWarnings", label: "Previous warnings", default: "None", wide: true },
+    { key: "replyHours", label: "Reply within (hours)", default: "72" },
+    { key: "dutyAuthority", label: "Duty / authority" },
+    { key: "reviewDate", label: "Review date", type: "date" },
+    { key: "reviewer", label: "Reviewer" },
+  ],
+  Experience: [
+    { key: "from1", label: "Role 1 from", type: "date" },
+    { key: "to1", label: "Role 1 to", type: "date" },
+    { key: "designation2", label: "Later designation (if promoted)" },
+    { key: "from2", label: "Role 2 from", type: "date" },
+    { key: "to2", label: "Role 2 to", type: "date" },
+    { key: "project1", label: "Project 1", wide: true },
+    { key: "project2", label: "Project 2" },
+    { key: "period", label: "Period of service", wide: true },
+    { key: "natureOfWork", label: "Nature of work", default: "site supervision, planning, quality control and billing verification", type: "textarea", wide: true },
+    { key: "exitMode", label: "Issued", default: "on resignation" },
+  ],
+  NdaJoining: [
+    { key: "fatherOrSpouseName", label: "Father or spouse name" },
+    { key: "age", label: "Age" },
+    { key: "permanentAddress", label: "Permanent address", type: "textarea", wide: true },
+    { key: "appointmentRefNo", label: "Appointment reference no." },
+    { key: "appointmentDate", label: "Appointment date", type: "date" },
+    { key: "clientProject", label: "Client / project", wide: true },
+  ],
+  NdaPostEmployment: [
+    { key: "fatherOrSpouseName", label: "Father or spouse name" },
+    { key: "age", label: "Age" },
+    { key: "permanentAddress", label: "Permanent address", type: "textarea", wide: true },
+    { key: "appointmentRefNo", label: "Appointment reference no." },
+    { key: "ndaJoiningRef", label: "Joining NDA reference" },
+    { key: "ndaJoiningDate", label: "Joining NDA date", type: "date" },
+    { key: "lastWorkingDate", label: "Last working date", type: "date" },
+    { key: "separationReason", label: "Separation", default: "resignation" },
+    { key: "assetLetterRef", label: "Asset letter reference" },
+    { key: "exitLetterRef", label: "Exit letter reference" },
+    { key: "clientName", label: "Client" },
+    { key: "fromTo", label: "Project period (from–to)" },
+    { key: "confidentialItems", label: "Confidential items", default: "drawings, BOQ, rates, RA bills, claims", wide: true },
+    { key: "postExitAddress", label: "Address after exit", wide: true },
+    { key: "personalEmail", label: "Personal email" },
+    { key: "newEmployer", label: "New employer" },
+  ],
+};

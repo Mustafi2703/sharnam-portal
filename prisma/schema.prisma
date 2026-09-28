@@ -1185,7 +1185,7 @@ model Candidate {
   experienceYears  Float?
   skills           String?
   location         String?
-  /// New | Screened | Shortlisted | Interview | Interviewed | Selected | SalaryDiscussion | Offered | Accepted | Joined | Rejected | Withdrawn
+  /// Upload | New | Screened | Shortlisted | Interview | Interviewed | Selected | SalaryDiscussion | Offered | Accepted | Joined | Rejected | Withdrawn
   status           String   @default("New")
   screenedById     String?
   rejectionReason  String?
@@ -1193,9 +1193,25 @@ model Candidate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
 
-  posting    JobPosting?      @relation(fields: [postingId], references: [id])
+  posting    JobPosting?         @relation(fields: [postingId], references: [id])
   interviews InterviewRound[]
   offers     Offer[]
+  documents  CandidateDocument[]
+}
+
+/** Background-check files collected before the person is converted to an employee. */
+model CandidateDocument {
+  id          String   @id @default(cuid())
+  candidateId String
+  category    String
+  title       String
+  fileUrl     String
+  storagePath String?
+  createdAt   DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
 }
 
 /**
