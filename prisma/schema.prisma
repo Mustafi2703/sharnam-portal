@@ -1138,7 +1138,8 @@ model ManpowerRequisition {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @default(now()) @updatedAt
 
-  postings JobPosting[]
+  postings   JobPosting[]
+  candidates Candidate[]
 }
 
 /**
@@ -1172,6 +1173,7 @@ model JobPosting {
 model Candidate {
   id               String   @id @default(cuid())
   postingId        String?
+  requisitionId    String?
   fullName         String
   email            String?
   phone            String?
@@ -1193,10 +1195,13 @@ model Candidate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
 
-  posting    JobPosting?         @relation(fields: [postingId], references: [id])
-  interviews InterviewRound[]
+  posting     JobPosting?          @relation(fields: [postingId], references: [id])
+  requisition ManpowerRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
+  interviews  InterviewRound[]
   offers     Offer[]
   documents  CandidateDocument[]
+
+  @@index([requisitionId])
 }
 
 /** Background-check files collected before the person is converted to an employee. */

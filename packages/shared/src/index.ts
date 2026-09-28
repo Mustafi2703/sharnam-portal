@@ -366,9 +366,17 @@ export {
   INTERVIEWER_SEATS,
   SPDC_HIRING_ROLES,
   isSpdcHiringRole,
+  SPDC_HIRING_DEPARTMENTS,
+  SPDC_DESIGNATIONS,
+  isSpdcDesignation,
+  designationRow,
+  designationsForDepartment,
+  scorecardRoleForDesignation,
   type CandidateStageId,
   type InterviewerSeatId,
   type SpdcHiringRole,
+  type SpdcHiringDepartment,
+  type SpdcDesignation,
 } from "./hrmsStages.js";
 
 export {

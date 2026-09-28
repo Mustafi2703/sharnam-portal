@@ -10,7 +10,7 @@ import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
-import { isSpdcHiringRole } from "@sharnam/shared";
+import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
   employeeLetterFolder,
@@ -64,7 +64,10 @@ hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
   await safeHrmList("requisitions", () =>
     prisma.manpowerRequisition.findMany({
       orderBy: { createdAt: "desc" },
-      include: { postings: { select: { id: true, title: true, status: true } } },
+      include: {
+        postings: { select: { id: true, title: true, status: true } },
+        _count: { select: { candidates: true } },
+      },
     }),
     res
   );
@@ -72,14 +75,16 @@ hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
 
 hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const designation = s(req.body.designation);
-  if (!isSpdcHiringRole(designation)) {
-    return res.status(400).json({ error: "Choose a position from the SPDC hiring roles." });
+  const picked = designationRow(designation);
+  const department = s(req.body.department);
+  if (!picked || picked.department !== department) {
+    return res.status(400).json({ error: "Choose a department and one of its designations." });
   }
   const row = await prisma.manpowerRequisition.create({
     data: {
       requisitionNo: s(req.body.requisitionNo) || `MR-${Date.now()}`,
-      department: s(req.body.department) || "General",
-      designation,
+      department: picked.department,
+      designation: picked.title,
       count: Number(req.body.count || 1),
       employmentType: s(req.body.employmentType) || "Permanent",
       reportingManager: s(req.body.reportingManager),
@@ -102,10 +107,28 @@ hrmRecruitmentRouter.patch("/requisitions/:id", requireRoles("admin", "office", 
   const nextStatus = s(req.body.status) || before.status;
   const isApproving = before.status !== "Approved" && nextStatus === "Approved";
   const isRejecting = before.status !== "Rejected" && nextStatus === "Rejected";
+  const nextDesignation = s(req.body.designation) || before.designation;
+  const nextDepartment = s(req.body.department) || before.department;
+  const picked = designationRow(nextDesignation);
+  if (req.body.designation !== undefined || req.body.department !== undefined) {
+    if (!picked || picked.department !== nextDepartment) {
+      return res.status(400).json({ error: "Choose a department and one of its designations." });
+    }
+  }
   const row = await prisma.manpowerRequisition.update({
     where: { id: req.params.id },
     data: {
       status: nextStatus,
+      department: nextDepartment,
+      designation: nextDesignation,
+      count: req.body.count !== undefined ? Number(req.body.count) || before.count : before.count,
+      employmentType: s(req.body.employmentType) || before.employmentType,
+      reportingManager: req.body.reportingManager !== undefined ? s(req.body.reportingManager) : before.reportingManager,
+      justification: req.body.justification !== undefined ? s(req.body.justification) : before.justification,
+      urgency: s(req.body.urgency) || before.urgency,
+      location: req.body.location !== undefined ? s(req.body.location) : before.location,
+      ctcRangeMin: req.body.ctcRangeMin !== undefined ? n(req.body.ctcRangeMin) : before.ctcRangeMin,
+      ctcRangeMax: req.body.ctcRangeMax !== undefined ? n(req.body.ctcRangeMax) : before.ctcRangeMax,
       rejectionReason: s(req.body.rejectionReason) || before.rejectionReason,
       approvedById: isApproving ? req.user!.id : before.approvedById,
       approvedAt: isApproving ? new Date() : before.approvedAt,
@@ -116,6 +139,22 @@ hrmRecruitmentRouter.patch("/requisitions/:id", requireRoles("admin", "office", 
     { userId: req.user!.id, entity: "ManpowerRequisition", entityId: row.id, meta: { from: before.status, to: nextStatus } }
   );
   res.json(row);
+});
+
+hrmRecruitmentRouter.delete("/requisitions/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const before = await prisma.manpowerRequisition.findUnique({
+    where: { id: req.params.id },
+    include: { _count: { select: { candidates: true } } },
+  });
+  if (!before) return res.status(404).json({ error: "not found" });
+  await prisma.manpowerRequisition.delete({ where: { id: before.id } });
+  await audit("hrms.requisition.delete", {
+    userId: req.user!.id,
+    entity: "ManpowerRequisition",
+    entityId: before.id,
+    meta: { requisitionNo: before.requisitionNo, candidatesDetached: before._count.candidates },
+  });
+  res.json({ ok: true, candidatesDetached: before._count.candidates });
 });
 
 /* ═════════════════════════════════════  JOB POSTING  ═════════════════════════════════════ */
@@ -198,6 +237,7 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
       },
       include: {
         posting: { select: { title: true, department: true } },
+        requisition: { select: { id: true, requisitionNo: true, department: true, designation: true, status: true } },
         interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true, scoreOverall: true } },
         offers: { select: { id: true, offerNo: true, status: true, onboard: { select: { userId: true } } } },
         documents: { select: { id: true, category: true, title: true, fileUrl: true }, orderBy: { createdAt: "desc" } },
@@ -318,9 +358,17 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
     );
     resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   }
+  const requisitionId = s(req.body.requisitionId);
+  const requisition = requisitionId
+    ? await prisma.manpowerRequisition.findUnique({ where: { id: requisitionId } })
+    : null;
+  if (!requisition || requisition.status !== "Approved") {
+    return res.status(400).json({ error: "Approve the requisition first, then add the candidate to that requisition." });
+  }
   const row = await prisma.candidate.create({
     data: {
       postingId: s(req.body.postingId),
+      requisitionId: requisition.id,
       fullName: s(req.body.fullName) || "Candidate",
       email,
       phone: s(req.body.phone),
@@ -362,6 +410,7 @@ hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office", "h
       location: req.body.location !== undefined ? s(req.body.location) : before.location,
       skills: req.body.skills !== undefined ? s(req.body.skills) : before.skills,
       postingId: req.body.postingId !== undefined ? s(req.body.postingId) : before.postingId,
+      requisitionId: req.body.requisitionId !== undefined ? s(req.body.requisitionId) : before.requisitionId,
       status: nextStatus,
       screenedById: nextStatus === "Screened" ? req.user!.id : before.screenedById,
       rejectionReason: s(req.body.rejectionReason) || before.rejectionReason,
@@ -424,8 +473,26 @@ hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "of
       storagePath: saved.sharePointPath || saved.path,
     },
   });
+  if (before.email) {
+    const employee = await prisma.user.findUnique({ where: { email: before.email.trim().toLowerCase() } });
+    if (employee) {
+      await prisma.employeeDocument.create({
+        data: { userId: employee.id, category, title: doc.title, fileUrl, storagePath: doc.storagePath },
+      });
+    }
+  }
   await audit("hrms.candidate.document", { userId: req.user!.id, entity: "CandidateDocument", entityId: doc.id, meta: { candidateId: before.id, category } });
   res.status(201).json(doc);
+});
+
+hrmRecruitmentRouter.delete("/candidates/:id/documents/:docId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const doc = await prisma.candidateDocument.findFirst({
+    where: { id: req.params.docId, candidateId: req.params.id },
+  });
+  if (!doc) return res.status(404).json({ error: "not found" });
+  await prisma.candidateDocument.delete({ where: { id: doc.id } });
+  await audit("hrms.candidate.document.delete", { userId: req.user!.id, entity: "CandidateDocument", entityId: doc.id, meta: { candidateId: req.params.id } });
+  res.json({ ok: true });
 });
 
 hrmRecruitmentRouter.delete("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
@@ -444,10 +511,10 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
   if (!candidate) return res.status(404).json({ error: "not found" });
   const email = (candidate.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "Add an email on this candidate before converting them to an employee." });
-  const bgv = await prisma.candidateDocument.count({ where: { candidateId: candidate.id } });
-  if (!bgv) {
-    return res.status(400).json({ error: "Upload background documents (PAN and the rest) before converting this person to an employee." });
-  }
+  const hiredAs = await prisma.candidate.findUnique({
+    where: { id: candidate.id },
+    select: { requisition: { select: { designation: true, department: true } }, currentDesign: true },
+  });
   let user = await prisma.user.findUnique({ where: { email } });
   let created = false;
   if (!user) {
@@ -468,7 +535,8 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
       data: {
         userId: user.id,
         empCode: `EMP-${Date.now().toString().slice(-6)}`,
-        designation: candidate.currentDesign,
+        designation: hiredAs?.requisition?.designation || candidate.currentDesign,
+        department: hiredAs?.requisition?.department || null,
         joinDate: new Date(),
       },
     });
@@ -614,15 +682,17 @@ hrmRecruitmentRouter.get("/candidates/:id/interviews", async (req, res) => {
 hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const candidate = await prisma.candidate.findUnique({
     where: { id: req.params.id },
-    include: { posting: { select: { title: true } } },
+    include: { posting: { select: { title: true } }, requisition: { select: { designation: true, department: true, status: true } } },
   });
   if (!candidate) return res.status(404).json({ error: "not found" });
   if (!candidate.resumeUrl) {
     return res.status(400).json({ error: "Upload the resume first. The stage moves to Resume received, then you can schedule the interview." });
   }
-  const appliedRole = [s(req.body.position), candidate.posting?.title].find((v) => isSpdcHiringRole(v)) || "";
+  const fromSheet = isSpdcHiringRole(s(req.body.position)) ? s(req.body.position) : null;
+  const fromReq = candidate.requisition?.designation ? scorecardRoleForDesignation(candidate.requisition.designation) : null;
+  const appliedRole = fromSheet || fromReq || "";
   if (!appliedRole) {
-    return res.status(400).json({ error: "Choose the position from the SPDC hiring roles." });
+    return res.status(400).json({ error: "Attach the candidate to an approved requisition before scheduling the interview." });
   }
   const priorRounds = await prisma.interviewRound.count({ where: { candidateId: candidate.id } });
   const interviewee: IntervieweeSeat = {

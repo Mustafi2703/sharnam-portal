@@ -49,10 +49,7 @@ export function candidateStageTone(
   return "neutral";
 }
 
-/**
- * Positions SPDC hires against — Framework sheet of SPDC_Interview_Assessment_Scoring_System.xlsx.
- * Requisition, job posting, and the interview scorecard use this list only.
- */
+/** Scorecard weight columns. A designation maps onto one of these so the Excel file still calculates. */
 export const SPDC_HIRING_ROLES = [
   "Project Manager (Site)",
   "Planning Engineer",
@@ -71,6 +68,65 @@ export type SpdcHiringRole = (typeof SPDC_HIRING_ROLES)[number];
 export function isSpdcHiringRole(value: string | null | undefined): value is SpdcHiringRole {
   if (!value) return false;
   return (SPDC_HIRING_ROLES as readonly string[]).includes(value.trim());
+}
+
+/** Hiring departments. Each of the 23 designations sits in one of these. */
+export const SPDC_HIRING_DEPARTMENTS = ["Office", "Site", "HR"] as const;
+
+export type SpdcHiringDepartment = (typeof SPDC_HIRING_DEPARTMENTS)[number];
+
+export type SpdcDesignation = {
+  title: string;
+  department: SpdcHiringDepartment;
+  scorecardRole: SpdcHiringRole;
+};
+
+/** 23 designations. scorecardRole is the workbook column used when this person is scored. */
+export const SPDC_DESIGNATIONS: readonly SpdcDesignation[] = [
+  { title: "Director", department: "Office", scorecardRole: "Project Manager (Site)" },
+  { title: "Project Coordinator", department: "Office", scorecardRole: "Project Coordinator" },
+  { title: "Planning Engineer", department: "Office", scorecardRole: "Planning Engineer" },
+  { title: "Billing / QS Engineer", department: "Office", scorecardRole: "Billing / QS Engineer" },
+  { title: "Estimation Engineer", department: "Office", scorecardRole: "Planning Engineer" },
+  { title: "Contracts Engineer", department: "Office", scorecardRole: "Billing / QS Engineer" },
+  { title: "Document Controller", department: "Office", scorecardRole: "Project Coordinator" },
+  { title: "Accountant", department: "Office", scorecardRole: "Billing / QS Engineer" },
+  { title: "Project Manager (Site)", department: "Site", scorecardRole: "Project Manager (Site)" },
+  { title: "Senior Site Engineer (Civil)", department: "Site", scorecardRole: "Senior Site Engineer (Civil)" },
+  { title: "Site Engineer – Civil", department: "Site", scorecardRole: "Senior Site Engineer (Civil)" },
+  { title: "Junior Engineer", department: "Site", scorecardRole: "Junior Engineer" },
+  { title: "Site Supervisor", department: "Site", scorecardRole: "Senior Site Engineer (Civil)" },
+  { title: "QA/QC Engineer", department: "Site", scorecardRole: "QA/QC Engineer" },
+  { title: "MEP Engineer", department: "Site", scorecardRole: "MEP Engineer" },
+  { title: "Safety Officer", department: "Site", scorecardRole: "Safety Officer" },
+  { title: "Store Keeper", department: "Site", scorecardRole: "Junior Engineer" },
+  { title: "Surveyor", department: "Site", scorecardRole: "Junior Engineer" },
+  { title: "Foreman", department: "Site", scorecardRole: "Senior Site Engineer (Civil)" },
+  { title: "HR & Admin Executive", department: "HR", scorecardRole: "HR & Admin Executive" },
+  { title: "HR Executive", department: "HR", scorecardRole: "HR & Admin Executive" },
+  { title: "Admin Executive", department: "HR", scorecardRole: "HR & Admin Executive" },
+  { title: "Payroll Executive", department: "HR", scorecardRole: "HR & Admin Executive" },
+];
+
+export function isSpdcDesignation(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return SPDC_DESIGNATIONS.some((row) => row.title === value.trim());
+}
+
+export function designationRow(title: string | null | undefined): SpdcDesignation | null {
+  if (!title) return null;
+  return SPDC_DESIGNATIONS.find((row) => row.title === title.trim()) || null;
+}
+
+export function designationsForDepartment(department: string | null | undefined): SpdcDesignation[] {
+  return SPDC_DESIGNATIONS.filter((row) => row.department === department);
+}
+
+export function scorecardRoleForDesignation(title: string | null | undefined): SpdcHiringRole {
+  const row = designationRow(title);
+  if (row) return row.scorecardRole;
+  if (isSpdcHiringRole(title)) return title.trim() as SpdcHiringRole;
+  return SPDC_HIRING_ROLES[0];
 }
 
 /** Seats on an HR interview meeting (interviewer side). Interviewee is always the candidate. */

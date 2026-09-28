@@ -6,7 +6,16 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { InterviewScorecard } from "../components/InterviewScorecard";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
-import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_SEATS, SPDC_HIRING_ROLES } from "@sharnam/shared";
+import {
+  CANDIDATE_STAGES,
+  candidateStageLabel,
+  candidateStageTone,
+  designationsForDepartment,
+  INTERVIEWER_SEATS,
+  scorecardRoleForDesignation,
+  SPDC_HIRING_DEPARTMENTS,
+  SPDC_HIRING_ROLES,
+} from "@sharnam/shared";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -15,10 +24,9 @@ import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_
 
 const TABS = [
   { id: "requisitions", label: "1 · Manpower Requisition" },
-  { id: "postings", label: "2 · Job Postings" },
-  { id: "candidates", label: "3 · Candidates / Resume DB" },
-  { id: "interviews", label: "4 · Interviews & scorecard" },
-  { id: "offers", label: "5 · Offers" },
+  { id: "candidates", label: "2 · Resume DB" },
+  { id: "interviews", label: "3 · Interviews & scorecard" },
+  { id: "offers", label: "4 · Offers" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -35,7 +43,8 @@ export default function RecruitmentPage() {
   const { token, user } = useAuth();
   const canManage = canManageHrms(user);
   const [sp, setSp] = useSearchParams();
-  const tab = (sp.get("tab") as TabId) || "requisitions";
+  const requested = (sp.get("tab") as TabId) || "requisitions";
+  const tab: TabId = requested === ("postings" as TabId) || !TABS.some((t) => t.id === requested) ? "requisitions" : requested;
 
   const [reqs, setReqs] = useState<any[]>([]);
   const [postings, setPostings] = useState<any[]>([]);
@@ -76,7 +85,7 @@ export default function RecruitmentPage() {
       <Card className="!p-4 bg-brand-soft/20 border-brand/20">
         <p className="text-sm text-ink font-semibold">Hiring steps</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          Add the person and resume → interview and scorecard → upload background documents (PAN and the rest) → convert to an employee → then Generate letters. Letters are not created when you add the candidate.
+          Raise a requisition (department and designation) and approve it. Add candidates to that requisition in the resume database. Score them, compare the people on the same requisition, convert the one you select, upload the background documents, then generate letters. Job postings stay off for now.
         </p>
       </Card>
       <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
@@ -99,9 +108,8 @@ export default function RecruitmentPage() {
       ) : null}
       {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
 
-      {tab === "requisitions" && <RequisitionsTab reqs={reqs} departments={departments} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
-      {tab === "postings" && <PostingsTab reqs={reqs} postings={postings} departments={departments} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
-      {tab === "candidates" && <CandidatesTab postings={postings} candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "candidates" && <CandidatesTab reqs={reqs} candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OffersTab candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
     </div>
@@ -110,17 +118,38 @@ export default function RecruitmentPage() {
 
 /* ────────────────────────────  1  Requisitions  ──────────────────────────── */
 
-function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }: any) {
-  const [form, setForm] = useState({ requisitionNo: "", department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" });
+function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
+  const blank = { requisitionNo: "", department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" };
+  const [form, setForm] = useState(blank);
+  const [editId, setEditId] = useState<string | null>(null);
+  const designationOptions = designationsForDepartment(form.department);
   async function add(e: FormEvent) {
     e.preventDefault();
     try {
-      await api("/api/hrm/requisitions", { method: "POST", token, body: JSON.stringify(form) });
-      setForm({ requisitionNo: "", department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" });
-      setMsg("Requisition submitted.");
+      if (editId) {
+        await api(`/api/hrm/requisitions/${editId}`, { method: "PATCH", token, body: JSON.stringify(form) });
+        setMsg("Requisition updated.");
+      } else {
+        await api("/api/hrm/requisitions", { method: "POST", token, body: JSON.stringify(form) });
+        setMsg("Requisition submitted.");
+      }
+      setEditId(null);
+      setForm(blank);
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
+    }
+  }
+  async function removeReq(r: any) {
+    const n = r._count?.candidates || 0;
+    const extra = n ? ` ${n} resume${n === 1 ? "" : "s"} stay in the database, no longer attached to this requisition.` : "";
+    if (!window.confirm(`Delete ${r.requisitionNo}?${extra}`)) return;
+    try {
+      await api(`/api/hrm/requisitions/${r.id}`, { method: "DELETE", token });
+      setMsg(`${r.requisitionNo} deleted.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete the requisition");
     }
   }
   async function transition(id: string, status: string, note?: string) {
@@ -134,18 +163,20 @@ function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }
           <h3 className="font-semibold text-sm mb-2">Raise a manpower requisition</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Input placeholder="Req No (auto)" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
-            <Select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required>
+            <Select
+              value={form.department}
+              onChange={(e) => setForm({ ...form, department: e.target.value, designation: "" })}
+              required
+            >
               <option value="">Department</option>
-              {departments.map((d: any) => (
-                <option key={d.id} value={d.name}>
-                  {d.name}
-                </option>
+              {SPDC_HIRING_DEPARTMENTS.map((name) => (
+                <option key={name} value={name}>{name}</option>
               ))}
             </Select>
             <Select value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required>
-              <option value="">Position</option>
-              {SPDC_HIRING_ROLES.map((role) => (
-                <option key={role} value={role}>{role}</option>
+              <option value="">{form.department ? "Designation" : "Pick a department first"}</option>
+              {designationOptions.map((row) => (
+                <option key={row.title} value={row.title}>{row.title}</option>
               ))}
             </Select>
             <Input placeholder="Head count" type="number" value={form.count} onChange={(e) => setForm({ ...form, count: Number(e.target.value) })} />
@@ -160,7 +191,12 @@ function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }
             <Input placeholder="CTC min (₹/yr)" type="number" value={form.ctcRangeMin} onChange={(e) => setForm({ ...form, ctcRangeMin: e.target.value })} />
             <Input placeholder="CTC max (₹/yr)" type="number" value={form.ctcRangeMax} onChange={(e) => setForm({ ...form, ctcRangeMax: e.target.value })} />
             <TextArea rows={2} placeholder="Job description" value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} className="md:col-span-4" />
-            <Button type="submit" className="md:col-span-4">Submit requisition</Button>
+            <div className="md:col-span-4 flex gap-2">
+              <Button type="submit">{editId ? "Save requisition" : "Submit requisition"}</Button>
+              {editId ? (
+                <Button type="button" variant="secondary" onClick={() => { setEditId(null); setForm(blank); }}>Cancel</Button>
+              ) : null}
+            </div>
           </form>
         </Card>
       )}
@@ -172,7 +208,7 @@ function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }
         <div className="overflow-x-auto">
           <table className="min-w-[900px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">Req No</th><th>Dept</th><th>Designation</th><th>Count</th><th>Type</th><th>Range</th><th>Urgency</th><th>Postings</th><th>Status</th><th className="no-print"></th></tr>
+              <tr><th className="p-2">Req No</th><th>Dept</th><th>Designation</th><th>Count</th><th>Type</th><th>Range</th><th>Urgency</th><th>Resumes</th><th>Status</th><th className="no-print"></th></tr>
             </thead>
             <tbody>
               {reqs.map((r: any) => (
@@ -184,13 +220,39 @@ function RequisitionsTab({ reqs, departments, canManage, reload, setMsg, token }
                   <td>{r.employmentType}</td>
                   <td>{r.ctcRangeMin ? money(r.ctcRangeMin) : "—"} – {r.ctcRangeMax ? money(r.ctcRangeMax) : "—"}</td>
                   <td>{r.urgency}</td>
-                  <td>{r.postings?.length ?? 0}</td>
+                  <td>{r._count?.candidates ?? 0}</td>
                   <td><Badge tone={r.status === "Approved" ? "ok" : r.status === "Rejected" ? "danger" : "warn"}>{r.status}</Badge></td>
                   <td>
-                    {canManage && r.status === "Submitted" && (
-                      <span className="flex gap-1">
-                        <button className="text-brand text-[10px] font-semibold" onClick={() => transition(r.id, "Approved")}>Approve</button>
-                        <button className="text-danger text-[10px] font-semibold" onClick={() => transition(r.id, "Rejected", "not approved")}>Reject</button>
+                    {canManage && (
+                      <span className="flex gap-2">
+                        {r.status === "Submitted" && (
+                          <>
+                            <button className="text-brand text-[10px] font-semibold" onClick={() => transition(r.id, "Approved")}>Approve</button>
+                            <button className="text-danger text-[10px] font-semibold" onClick={() => transition(r.id, "Rejected", "not approved")}>Reject</button>
+                          </>
+                        )}
+                        <button
+                          className="text-[10px] font-semibold"
+                          onClick={() => {
+                            setEditId(r.id);
+                            setForm({
+                              requisitionNo: r.requisitionNo || "",
+                              department: r.department || "",
+                              designation: r.designation || "",
+                              count: r.count || 1,
+                              employmentType: r.employmentType || "Permanent",
+                              reportingManager: r.reportingManager || "",
+                              justification: r.justification || "",
+                              urgency: r.urgency || "Normal",
+                              ctcRangeMin: r.ctcRangeMin ?? "",
+                              ctcRangeMax: r.ctcRangeMax ?? "",
+                              location: r.location || "",
+                            });
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button className="text-danger text-[10px] font-semibold" onClick={() => void removeReq(r)}>Delete</button>
                       </span>
                     )}
                   </td>
@@ -309,8 +371,9 @@ function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, t
 
 /* ────────────────────────────  3  Candidates / Resume DB  ──────────────────────────── */
 
-function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg, token }: any) {
-  const [form, setForm] = useState({ postingId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
+function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, token }: any) {
+  const [form, setForm] = useState({ requisitionId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
+  const [filterReq, setFilterReq] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const [filterStage, setFilterStage] = useState("");
@@ -331,7 +394,7 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, String(v)));
       if (file) fd.append("resume", file);
       await api("/api/hrm/candidates", { method: "POST", token, body: fd });
-      setForm({ postingId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
+      setForm({ requisitionId: form.requisitionId, fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
       setFile(null);
       setMsg(
         file
@@ -416,6 +479,17 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
     }
   }
 
+  async function removeDocument(c: any, doc: any) {
+    if (!window.confirm(`Remove the ${doc.category} file for ${c.fullName}?`)) return;
+    try {
+      await api(`/api/hrm/candidates/${c.id}/documents/${doc.id}`, { method: "DELETE", token });
+      setMsg(`${doc.category} removed.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete the document");
+    }
+  }
+
   async function uploadDocument(c: any) {
     if (!docFile) {
       setMsg("Choose the background document to upload.");
@@ -444,14 +518,22 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
     }
   }
 
+  const approvedReqs = (reqs || []).filter((r: any) => r.status === "Approved");
   const filtered = candidates.filter((c: any) => {
+    if (filterReq && c.requisition?.id !== filterReq && c.requisitionId !== filterReq) return false;
     if (filterStage && c.status !== filterStage) return false;
     if (search) {
       const q = search.toLowerCase();
-      return [c.fullName, c.email, c.phone, c.skills].some((v) => (v || "").toLowerCase().includes(q));
+      return [c.fullName, c.email, c.phone, c.skills, c.requisition?.requisitionNo, c.requisition?.designation].some((v) => (v || "").toLowerCase().includes(q));
     }
     return true;
   });
+  const compared = filterReq
+    ? [...filtered].sort((a, b) => {
+        const score = (row: any) => Math.max(0, ...(row.interviews || []).map((r: any) => Number(r.scoreOverall) || 0));
+        return score(b) - score(a);
+      })
+    : [];
 
   return (
     <div className="space-y-3">
@@ -459,9 +541,11 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
         <Card>
           <h3 className="font-semibold text-sm mb-2">Add candidate (resume DB)</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
-            <Select value={form.postingId} onChange={(e) => setForm({ ...form, postingId: e.target.value })}>
-              <option value="">Link posting (optional)</option>
-              {postings.map((p: any) => <option key={p.id} value={p.id}>{p.title}</option>)}
+            <Select value={form.requisitionId} onChange={(e) => setForm({ ...form, requisitionId: e.target.value })} required className="md:col-span-2">
+              <option value="">Approved requisition</option>
+              {approvedReqs.map((r: any) => (
+                <option key={r.id} value={r.id}>{r.requisitionNo} · {r.department} · {r.designation}</option>
+              ))}
             </Select>
             <Input placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
             <Input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
@@ -482,7 +566,7 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
               <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
             </label>
             <Button type="submit" className="md:col-span-4" disabled={saving}>{saving ? "Adding…" : "Add candidate"}</Button>
-            <p className="md:col-span-4 text-[11px] text-steel-muted">With a resume the stage is Resume received. Without one it stays Upload resume until you attach the file.</p>
+            <p className="md:col-span-4 text-[11px] text-steel-muted">The person is filed on the requisition you pick. With a resume the stage is Resume received. Without one it stays Upload resume until you attach the file.</p>
           </form>
         </Card>
       )}
@@ -499,6 +583,12 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
             </Button>
           </>
         )}
+        <Select value={filterReq} onChange={(e) => setFilterReq(e.target.value)} className="max-w-xs">
+          <option value="">All requisitions</option>
+          {(reqs || []).map((r: any) => (
+            <option key={r.id} value={r.id}>{r.requisitionNo} · {r.designation}</option>
+          ))}
+        </Select>
         <Select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="max-w-xs">
           <option value="">All stages</option>
           {CANDIDATE_STAGES.map((s) => (
@@ -509,6 +599,44 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
         </Select>
         <span className="text-xs text-steel-muted">{filtered.length} / {candidates.length}</span>
       </div>
+
+      {filterReq && (
+        <Card padding={false}>
+          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">
+            Compare · {(reqs || []).find((r: any) => r.id === filterReq)?.requisitionNo} · {(reqs || []).find((r: any) => r.id === filterReq)?.designation}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[640px] w-full text-xs">
+              <thead className="text-left text-steel-muted">
+                <tr>
+                  <th className="p-2">Rank</th>
+                  <th>Name</th>
+                  <th>Stage</th>
+                  <th className="text-right">Best score</th>
+                  <th>Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compared.map((c: any, i: number) => {
+                  const rounds = c.interviews || [];
+                  const best = rounds.reduce((n: number, r: any) => Math.max(n, Number(r.scoreOverall) || 0), 0);
+                  const decision = rounds.map((r: any) => r.decision).filter(Boolean).slice(-1)[0];
+                  return (
+                    <tr key={c.id} className="border-t border-line">
+                      <td className="p-2">{i + 1}</td>
+                      <td className="font-medium">{c.fullName}</td>
+                      <td>{candidateStageLabel(c.status)}</td>
+                      <td className="text-right">{best ? `${best}%` : "—"}</td>
+                      <td>{decision || "—"}</td>
+                    </tr>
+                  );
+                })}
+                {!compared.length && <tr><td colSpan={5} className="py-4 text-center text-steel-muted">No resumes on this requisition yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card padding={false}>
         <ul className="divide-y divide-line">
@@ -524,7 +652,10 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-semibold text-sm">{c.fullName}</div>
-                    <div className="text-xs text-steel-muted">{[c.currentDesign, c.currentCompany].filter(Boolean).join(" · ") || "No company yet"}</div>
+                    <div className="text-xs text-steel-muted">
+                      {c.requisition ? `${c.requisition.requisitionNo} · ${c.requisition.department} · ${c.requisition.designation}` : "No requisition"}
+                      {c.currentCompany ? ` · ${c.currentCompany}` : ""}
+                    </div>
                     <div className="text-xs mt-0.5">{c.email || "No email"} · {c.phone || "No phone"} · {money(c.expectedCtc)} expected</div>
                   </div>
                   <Badge tone={candidateStageTone(stage)}>{candidateStageLabel(stage)}</Badge>
@@ -558,8 +689,8 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
                     </button>
                   )}
                   {canManage && !employee && (
-                    <button type="button" className="text-xs font-semibold disabled:opacity-40" disabled={!docCount} onClick={() => void convertEmployee(c)}>
-                      {docCount ? "Convert to employee" : "Convert after documents"}
+                    <button type="button" className="text-xs font-semibold disabled:opacity-40" disabled={!scored} onClick={() => void convertEmployee(c)}>
+                      {scored ? "Convert to employee" : "Convert after the scorecard"}
                     </button>
                   )}
                   {lettersReady ? (
@@ -576,11 +707,14 @@ function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg,
                       void uploadDocument(c);
                     }}
                   >
-                    <p className="md:col-span-4 text-[11px] text-steel-muted">Background check files stay on this person until you convert them. Then they move into the employee file, and letters can be generated.</p>
+                    <p className="md:col-span-4 text-[11px] text-steel-muted">Upload PAN and the other checks after you convert them. The files stay on the person and on the employee file. Then use Generate letters.</p>
                     {(c.documents || []).map((d: any) => (
-                      <a key={d.id} href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand font-semibold">
-                        {d.category}
-                      </a>
+                      <span key={d.id} className="inline-flex items-center gap-2 text-xs">
+                        <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand font-semibold">{d.category}</a>
+                        {canManage && (
+                          <button type="button" className="text-danger font-semibold" onClick={() => void removeDocument(c, d)}>Delete</button>
+                        )}
+                      </span>
                     ))}
                     <Select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
                       {["PAN", "Aadhaar", "Bank", "Education", "Address proof", "Photo", "Other"].map((v) => (
@@ -662,11 +796,9 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
       return;
     }
     api<any[]>(`/api/hrm/candidates/${candidateId}/interviews`, { token }).then(setRounds).catch(() => setRounds([]));
-    const person = candidates.find((c: { id: string; posting?: { title?: string } }) => c.id === candidateId);
-    const title = person?.posting?.title || "";
-    if ((SPDC_HIRING_ROLES as readonly string[]).includes(title)) {
-      setForm((prev) => ({ ...prev, position: title }));
-    }
+    const person = candidates.find((c: { id: string; requisition?: { designation?: string }; posting?: { title?: string } }) => c.id === candidateId);
+    const title = person?.requisition?.designation || person?.posting?.title || "";
+    if (title) setForm((prev) => ({ ...prev, position: scorecardRoleForDesignation(title) }));
   }, [candidateId, token, candidates]);
 
   async function schedule(e: FormEvent) {
@@ -793,7 +925,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
           <div className="mt-3 grid sm:grid-cols-2 gap-2 text-sm rounded-lg border border-line bg-sand/30 p-3">
             <div><span className="text-[11px] uppercase text-steel-muted block">Name</span>{candidate.fullName}</div>
             <div><span className="text-[11px] uppercase text-steel-muted block">Email / phone</span>{candidate.email || "—"} · {candidate.phone || "—"}</div>
-            <div><span className="text-[11px] uppercase text-steel-muted block">Applying for</span>{candidate.posting?.title || candidate.currentDesign || "—"}</div>
+            <div><span className="text-[11px] uppercase text-steel-muted block">Requisition</span>{candidate.requisition ? `${candidate.requisition.requisitionNo} · ${candidate.requisition.department} · ${candidate.requisition.designation}` : "—"}</div>
             <div><span className="text-[11px] uppercase text-steel-muted block">Stage</span><Badge tone={candidateStageTone(candidate.status)}>{candidateStageLabel(candidate.status)}</Badge></div>
           </div>
         )}
@@ -914,7 +1046,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                   <div className="grid md:grid-cols-4 gap-2 text-xs pt-2 border-t border-line">
                     <InterviewScorecard
                       token={token}
-                      positionHint={candidate.posting?.title || candidate.applyingFor || ""}
+                      positionHint={scorecardRoleForDesignation(candidate.requisition?.designation || candidate.posting?.title || "")}
                       roundHint={r.roundType}
                       saved={(() => {
                         try {
