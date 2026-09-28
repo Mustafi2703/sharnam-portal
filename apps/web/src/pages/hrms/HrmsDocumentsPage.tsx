@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, apiBase, mediaUrl } from "../../api";
+import { api, apiBase } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
@@ -295,6 +295,16 @@ export default function HrmsDocumentsPage() {
       clearPreview();
     }
   }, [currentFingerprint, previewFingerprint]);
+
+  async function openOnSharePoint(row: DocRow, file: "primary" | "html" | "docx" | "signed" | "annexure" = "primary") {
+    setMsg("");
+    try {
+      const r = await api<{ sharePointUrl: string }>(`/api/hrm/hrms-documents/${row.id}/sharepoint?file=${file}`, { token });
+      window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "SharePoint link is not ready");
+    }
+  }
 
   async function openPreview(id: string, title: string) {
     setMsg("");
@@ -753,44 +763,34 @@ export default function HrmsDocumentsPage() {
                     <Badge tone={r.status === "Signed" ? "ok" : r.status === "Cancelled" ? "danger" : "brand"}>{r.status}</Badge>
                   </td>
                   <td className="max-w-[200px]">
-                    {letterSharePointLink(r) ? (
-                      <a
-                        href={mediaUrl(letterSharePointLink(r))}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-brand underline block text-[11px] break-all"
-                        title={letterSharePointLink(r)!}
-                      >
-                        Open in SharePoint
-                      </a>
-                    ) : r.storagePath ? (
-                      <span className="text-[10px] font-mono text-steel-muted break-all" title={r.storagePath}>
-                        {r.storagePath}
-                      </span>
-                    ) : (
-                      <span className="text-steel-muted">—</span>
-                    )}
+                    <button
+                      type="button"
+                      className="text-brand underline block text-[11px] text-left"
+                      onClick={() => void openOnSharePoint(r, "primary")}
+                    >
+                      Open in SharePoint
+                    </button>
                   </td>
                   <td className="space-y-1">
                     {r.generatedPdfUrl && (
-                      <a href={mediaUrl(r.generatedPdfUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Print-ready letter (HTML → PDF)
-                      </a>
+                      <button type="button" className="text-brand underline block text-[11px] text-left" onClick={() => void openOnSharePoint(r, "html")}>
+                        Print-ready letter on SharePoint
+                      </button>
                     )}
                     {editableDocxUrl(r) && (
-                      <a href={mediaUrl(editableDocxUrl(r)!)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Editable letter (.docx)
-                      </a>
+                      <button type="button" className="text-brand underline block text-[11px] text-left" onClick={() => void openOnSharePoint(r, "docx")}>
+                        Editable letter on SharePoint
+                      </button>
                     )}
                     {annexureXlsxUrl(r) && (
-                      <a href={mediaUrl(annexureXlsxUrl(r)!)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Annexure I · CTC (.xlsx)
-                      </a>
+                      <button type="button" className="text-brand underline block text-[11px] text-left" onClick={() => void openOnSharePoint(r, "annexure")}>
+                        Annexure I · CTC on SharePoint
+                      </button>
                     )}
                     {r.uploadedFileUrl && (
-                      <a href={mediaUrl(r.uploadedFileUrl)} target="_blank" rel="noreferrer" className="text-brand underline block text-[11px]">
-                        Signed copy
-                      </a>
+                      <button type="button" className="text-brand underline block text-[11px] text-left" onClick={() => void openOnSharePoint(r, "signed")}>
+                        Signed copy on SharePoint
+                      </button>
                     )}
                     {!r.generatedPdfUrl && !editableDocxUrl(r) && !r.uploadedFileUrl && !annexureXlsxUrl(r) && (
                       <span className="text-steel-muted">—</span>

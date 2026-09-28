@@ -11,7 +11,7 @@ import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { ensureHrCompanyTree } from "../services/hrEmployeeVault.js";
-import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scoreInterviewRound } from "../services/interviewScorecard.js";
+import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
   employeeLetterFolder,
   HR_DRIVE,
@@ -472,12 +472,25 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
       round: String(req.body.scorecard.round || before.roundType || "R2"),
       scores: req.body.scorecard.scores || {},
     });
-    scorecardJson = JSON.stringify({ ...req.body.scorecard, result: scored });
+    const safeName = (before.candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scored);
+    const filed = await mockOneDrive.upload(
+      HR_DRIVE,
+      interviewRecordFolder(),
+      `${safeName}_${scored.round}_scorecard.xlsx`,
+      xlsx,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      { replace: true },
+    );
+    scorecardJson = JSON.stringify({
+      ...req.body.scorecard,
+      result: scored,
+      sharePointUrl: filed.sharePointUrl || filed.url || null,
+    });
     scoreOverall = scored.percent;
     if (!s(req.body.decision)) {
       decision = scored.grade === "D" ? "Reject" : scored.grade === "C" ? "Hold" : "Advance";
     }
-    const safeName = (before.candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
     await mockOneDrive.upload(
       HR_DRIVE,
       interviewRecordFolder(),

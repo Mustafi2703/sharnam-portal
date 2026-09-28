@@ -2937,6 +2937,19 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
  * Templates live in apps/api/formats/hrms/<kind>.docx (or fallback .html/.txt).
  * Also stamps the Sharnam logo via brandedExport if the fallback path is used.
  */
+hrmRouter.get("/hrms-documents/:id/sharepoint", hrmDesk, async (req, res) => {
+  const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "not found" });
+  const which = String(req.query.file || "primary");
+  const file = which === "html" || which === "docx" || which === "signed" || which === "annexure" ? which : "primary";
+  const { ensureLetterSharePointLink } = await import("../services/hrmsLetter.js");
+  const sharePointUrl = await ensureLetterSharePointLink(row, file);
+  if (!sharePointUrl) {
+    return res.status(404).json({ error: "This letter is not on SharePoint yet. Generate it again so it is filed in SPDC_HRMS." });
+  }
+  res.json({ sharePointUrl });
+});
+
 hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedRequest, res) => {
   const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });

@@ -71,6 +71,27 @@ export function scoreInterviewRound(input: ScorecardInput): ScorecardResult {
   };
 }
 
+export async function scorecardWorkbook(candidateName: string, result: ScorecardResult): Promise<Buffer> {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Scorecard");
+  ws.addRow(["SPDC interview scorecard"]);
+  ws.addRow(["Candidate", candidateName]);
+  ws.addRow(["Position", result.position]);
+  ws.addRow(["Round", result.round]);
+  ws.addRow(["Percent", result.percent]);
+  ws.addRow(["Grade", result.grade]);
+  ws.addRow(["Decision", result.decision]);
+  ws.addRow(["Knock-out", result.knockout ? "Yes" : "No"]);
+  ws.addRow([]);
+  ws.addRow(["Code", "Category", "Parameter", "Weight %", "Average"]);
+  for (const line of result.lines) {
+    ws.addRow([line.code, line.category, line.parameter, line.weight, Math.round(line.average * 10) / 10]);
+  }
+  const out = await wb.xlsx.writeBuffer();
+  return Buffer.from(out);
+}
+
 export function compositePercent(rounds: { round: string; percent: number }[]) {
   const byId = new Map(INTERVIEW_ROUNDS.map((r) => [r.id, r.weight]));
   let acc = 0;

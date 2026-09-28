@@ -242,7 +242,10 @@ export default function HrmsLeavePage() {
         </Card>
 
         <Card>
-          <h3 className="font-semibold mb-2">{canManage ? "All requests" : "My requests"}</h3>
+          <h3 className="font-semibold mb-1">{canManage ? "Leave register" : "My requests"}</h3>
+          {canManage ? (
+            <p className="text-xs text-steel-muted mb-2">Status only. Approve or reject in Leave approval below — that step is separate from raising a request.</p>
+          ) : null}
           <ul className="text-sm space-y-2">
             {shownLeave.map((l) => (
               <li key={l.id} className="border-b border-line pb-2">
@@ -259,63 +262,38 @@ export default function HrmsLeavePage() {
                   </span>
                 </div>
                 {l.reason ? <p className="text-xs text-steel-muted mt-0.5">{l.reason}</p> : null}
-                {canManage && (
-                  <div className="flex flex-wrap gap-2 mt-2 items-center">
-                    {l.status === "Pending" && (
-                      <>
-                        <button type="button" className="text-brand text-xs font-semibold" onClick={() => void patchLeave(l.id, { status: "Approved" })}>
-                          Approve
-                        </button>
-                        <button type="button" className="text-danger text-xs font-semibold" onClick={() => void patchLeave(l.id, { status: "Rejected" })}>
-                          Reject
-                        </button>
-                        <Select
-                          className="!py-1 !text-xs max-w-[10rem]"
-                          value={l.leaveType?.id || ""}
-                          onChange={(e) => {
-                            if (e.target.value && e.target.value !== l.leaveType?.id) {
-                              void patchLeave(l.id, { convertToLeaveTypeId: e.target.value });
-                            }
-                          }}
-                        >
-                          <option value="">Convert to…</option>
-                          {types.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.code}
-                            </option>
-                          ))}
-                        </Select>
-                      </>
-                    )}
-                    {l.status === "Approved" && (
-                      <>
-                        <Select
-                          className="!py-1 !text-xs max-w-[10rem]"
-                          defaultValue=""
-                          onChange={(e) => {
-                            if (e.target.value) void patchLeave(l.id, { convertToLeaveTypeId: e.target.value });
-                          }}
-                        >
-                          <option value="">Reclassify to…</option>
-                          {types.filter((t) => t.id !== l.leaveType?.id).map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.code}
-                            </option>
-                          ))}
-                        </Select>
-                        <button type="button" className="text-xs text-steel-muted underline" onClick={() => void patchLeave(l.id, { status: "Cancelled" })}>
-                          Cancel &amp; restore balance
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
               </li>
             ))}
             {!shownLeave.length && <li className="text-steel-muted">No requests yet.</li>}
           </ul>
         </Card>
       </div>
+
+      {canManage && (
+        <Card className="space-y-3">
+          <h3 className="font-semibold">Leave approval</h3>
+          <p className="text-xs text-steel-muted">Pending requests only. This is not the leave request form.</p>
+          <ul className="text-sm space-y-2">
+            {shownLeave.filter((l) => l.status === "Pending").map((l) => (
+              <li key={l.id} className="border-b border-line pb-2 flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {l.user?.fullName ? `${l.user.fullName} · ` : ""}
+                  {l.leaveType?.name || "Leave"} · {l.days}d · {String(l.fromDate).slice(0, 10)} → {String(l.toDate).slice(0, 10)}
+                </span>
+                <span className="flex gap-2">
+                  <button type="button" className="text-brand text-xs font-semibold" onClick={() => void patchLeave(l.id, { status: "Approved" })}>
+                    Approve
+                  </button>
+                  <button type="button" className="text-danger text-xs font-semibold" onClick={() => void patchLeave(l.id, { status: "Rejected" })}>
+                    Reject
+                  </button>
+                </span>
+              </li>
+            ))}
+            {!shownLeave.some((l) => l.status === "Pending") && <li className="text-steel-muted">Nothing waiting for approval.</li>}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }

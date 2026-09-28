@@ -801,6 +801,74 @@ export async function attachHrmsLetterToEmployeeVault(
   });
 }
 
+function asSharePointWebUrl(url: string | null | undefined) {
+  const u = (url || "").trim();
+  return /sharepoint\.com/i.test(u) ? u : null;
+}
+
+async function webUrlFromUpload(saved: { sharePointUrl?: string | null; sharePointPath?: string | null }) {
+  const direct = asSharePointWebUrl(saved.sharePointUrl);
+  if (direct) return direct;
+  if (!saved.sharePointPath) return null;
+  const { driveItemWebUrl } = await import("./graph.js");
+  return driveItemWebUrl(saved.sharePointPath);
+}
+
+/** Turn a portal /uploads/onedrive path into the SharePoint file link, uploading the local copy if Graph does not have it yet. */
+export async function sharePointUrlForStoredFile(raw: string | null | undefined) {
+  const value = (raw || "").trim();
+  const direct = asSharePointWebUrl(value);
+  if (direct) return direct;
+  const marker = "/uploads/onedrive/";
+  const idx = value.indexOf(marker);
+  const rel = idx >= 0 ? decodeURIComponent(value.slice(idx + marker.length)) : value.replace(/^\/+/, "");
+  const slash = rel.indexOf("/");
+  if (slash < 0) return null;
+  const drive = rel.slice(0, slash);
+  const fileRel = rel.slice(slash + 1);
+  if (!fileRel || fileRel.includes("..")) return null;
+  const { driveItemWebUrl, SHAREPOINT_SANDBOX_ROOT } = await import("./graph.js");
+  const full = `${SHAREPOINT_SANDBOX_ROOT}/${drive}/${fileRel}`;
+  const existing = await driveItemWebUrl(full);
+  if (existing) return existing;
+  const buf = mockOneDrive.readFile(drive, fileRel);
+  if (!buf) return null;
+  const folder = fileRel.includes("/") ? fileRel.slice(0, fileRel.lastIndexOf("/")) : "";
+  const name = fileRel.slice(fileRel.lastIndexOf("/") + 1);
+  const saved = await mockOneDrive.upload(drive, folder, name, buf, undefined, { replace: true });
+  return asSharePointWebUrl(saved.sharePointUrl) || (saved.sharePointPath ? driveItemWebUrl(saved.sharePointPath) : null);
+}
+
+function annexureStoredUrl(row: HrmsDocument) {
+  try {
+    const data = row.dataJson ? (JSON.parse(row.dataJson) as { annexureXlsxUrl?: string }) : {};
+    return data.annexureXlsxUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureLetterSharePointLink(
+  row: HrmsDocument,
+  which: "html" | "docx" | "signed" | "annexure" | "primary" = "primary",
+) {
+  const pick =
+    which === "html"
+      ? row.generatedPdfUrl
+      : which === "docx"
+        ? row.generatedDocxUrl
+        : which === "signed"
+          ? row.uploadedFileUrl
+          : which === "annexure"
+            ? annexureStoredUrl(row)
+            : row.sharePointUrl || row.generatedDocxUrl || row.generatedPdfUrl || row.uploadedFileUrl;
+  const web = await sharePointUrlForStoredFile(pick);
+  if (web && web !== row.sharePointUrl) {
+    await prisma.hrmsDocument.update({ where: { id: row.id }, data: { sharePointUrl: web } });
+  }
+  return web;
+}
+
 async function uploadHrmsFile(
   folders: string[],
   fileName: string,
@@ -874,17 +942,20 @@ export async function generateHrmsLetter(row: HrmsDocument) {
         docxBuf,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       );
-      docxUrl = docxSaved.sharePointUrl || docxSaved.url || `/uploads/onedrive/${HR_DRIVE}/${docxSaved.path}`;
-      docxSharePointUrl = docxSaved.sharePointUrl || null;
+      docxUrl = (await webUrlFromUpload(docxSaved)) || docxSaved.url;
+      docxSharePointUrl = asSharePointWebUrl(docxUrl);
     }
   }
 
+  const htmlWeb = await webUrlFromUpload(htmlSaved);
+  const xlsxWeb = await webUrlFromUpload(xlsxSaved);
+
   return {
-    docxUrl,
-    annexureXlsxUrl: xlsxSaved.sharePointUrl || xlsxSaved.url || `/uploads/onedrive/${HR_DRIVE}/${xlsxSaved.path}`,
-    pdfUrl: htmlSaved.sharePointUrl || htmlSaved.url || `/uploads/onedrive/${HR_DRIVE}/${htmlSaved.path}`,
+    docxUrl: docxSharePointUrl || docxUrl,
+    annexureXlsxUrl: xlsxWeb || xlsxSaved.url || `/uploads/onedrive/${HR_DRIVE}/${xlsxSaved.path}`,
+    pdfUrl: htmlWeb || htmlSaved.url || `/uploads/onedrive/${HR_DRIVE}/${htmlSaved.path}`,
     storagePath: htmlSaved.sharePointPath || htmlSaved.path,
-    sharePointUrl: docxSharePointUrl || htmlSaved.sharePointUrl || htmlSaved.url || null,
+    sharePointUrl: docxSharePointUrl || htmlWeb || xlsxWeb,
     folder: employeeFolder,
   };
 }

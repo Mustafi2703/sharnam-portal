@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { AttendanceCalendar } from "./AttendanceCalendar";
@@ -49,6 +50,15 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   const [busy, setBusy] = useState(false);
 
   const site = variant === "site";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const desk = searchParams.get("desk") || "attendance";
+  const sections = [
+    { id: "attendance", label: "Attendance" },
+    { id: "leave", label: "Leave" },
+    { id: "calendar", label: "Calendar" },
+    { id: "documents", label: "Documents" },
+    { id: "separation", label: "Separation" },
+  ];
 
   async function load() {
     if (!user?.id) return;
@@ -144,10 +154,30 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
         actions={undefined}
       />
 
+      <div className="flex flex-wrap gap-2">
+        {sections.map((section) => (
+          <Button
+            key={section.id}
+            type="button"
+            variant={desk === section.id ? "primary" : "secondary"}
+            className="!text-xs"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              if (section.id === "attendance") next.delete("desk");
+              else next.set("desk", section.id);
+              setSearchParams(next);
+            }}
+          >
+            {section.label}
+          </Button>
+        ))}
+      </div>
+
       {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
 
-      <AttendancePunchPanel variant="full" showRoster={false} />
+      {desk === "attendance" && <AttendancePunchPanel variant="full" showRoster={false} />}
 
+      {desk === "leave" && (
       <section className="space-y-3">
         <h2 className="font-display text-lg">Leave left</h2>
         <div className="grid sm:grid-cols-3 gap-3">
@@ -166,6 +196,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
         </div>
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Request leave</h3>
+          <p className="text-xs text-steel-muted">This sends a request. Approval is a separate HR step — you cannot approve your own leave here.</p>
           <form className="grid sm:grid-cols-2 gap-2" onSubmit={applyLeave}>
             <Input type="date" required value={leaveFrom} onChange={(e) => setLeaveFrom(e.target.value)} />
             <Input type="date" required value={leaveTo} onChange={(e) => setLeaveTo(e.target.value)} />
@@ -194,9 +225,11 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
           )}
         </Card>
       </section>
+      )}
 
-      <AttendanceCalendar compact />
+      {desk === "calendar" && <AttendanceCalendar compact />}
 
+      {desk === "documents" && (
       <section className="space-y-3">
         <h2 className="font-display text-lg">My documents</h2>
         <p className="text-sm text-steel-muted">
@@ -229,7 +262,9 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
           </ul>
         </Card>
       </section>
+      )}
 
+      {desk === "separation" && (
       <section className="space-y-3">
         <h2 className="font-display text-lg">Separation</h2>
         <p className="text-sm text-steel-muted">
@@ -262,6 +297,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
           )}
         </Card>
       </section>
+      )}
     </div>
   );
 }

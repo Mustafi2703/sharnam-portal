@@ -76,11 +76,7 @@ export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, str
         ["ActivityInspection", "Activity checklist"],
       ];
     case "comms":
-      return [
-        ["All", "All"],
-        ["RequestForInformation", "Ask (PMC)"],
-        ["ClientConcern", "Client"],
-      ];
+      return [["ClientConcern", "Client"]];
     default:
       return [
         ["All", "All"],
@@ -184,7 +180,7 @@ export function rfiKindAllowedInModuleScope(scope: RfiModuleScope, rfiKind: stri
     case "inspection":
       return kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection";
     case "comms":
-      return kind === "RequestForInformation" || kind === "ClientConcern" || kind === "Manual";
+      return kind === "ClientConcern";
     default:
       return true;
   }

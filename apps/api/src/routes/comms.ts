@@ -82,6 +82,8 @@ commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       { replace: true },
     );
+    const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+    void fileWonProjectPack(project.id).catch(() => undefined);
     res.json({
       sharePointUrl: saved.sharePointUrl || null,
       url: saved.url,
@@ -127,6 +129,8 @@ commsRouter.post("/contacts/:projectId", requireRoles("admin", "office"), async 
     },
   });
   await audit("comms.contact.create", { userId: req.user!.id, entity: "CommunicationContact", entityId: row.id });
+  const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+  void fileWonProjectPack(row.projectId).catch(() => undefined);
   res.status(201).json(row);
 });
 
@@ -146,6 +150,8 @@ commsRouter.patch("/contacts/:id", requireRoles("admin", "office"), async (req: 
       orgName: req.body.orgName,
     },
   });
+  const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+  void fileWonProjectPack(row.projectId).catch(() => undefined);
   res.json(row);
 });
 

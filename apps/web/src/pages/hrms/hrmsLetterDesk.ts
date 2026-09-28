@@ -298,10 +298,10 @@ export function editableDocxUrl(row: DocRow): string | null {
   return url;
 }
 
-/** Primary SharePoint / DMS link for maintenance (set on generate). */
+/** Real SharePoint web link only. Portal /uploads/onedrive copies are not SharePoint. */
 export function letterSharePointLink(row: DocRow): string | null {
-  const u = row.sharePointUrl?.trim();
-  return u || null;
+  const u = row.sharePointUrl?.trim() || "";
+  return /sharepoint\.com/i.test(u) ? u : null;
 }
 
 export function createBodyFromForm(form: LetterFormState) {

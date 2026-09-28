@@ -149,6 +149,31 @@ app.get("/api/health", async (_req, res) => {
   });
 });
 
+app.get("/api/health/deploys", (_req, res) => {
+  let running =
+    process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.SOURCE_VERSION || "";
+  if (!running) {
+    try {
+      running = fs.readFileSync(path.resolve(process.cwd(), ".deploy-revision"), "utf8").trim();
+    } catch {
+      running = "local";
+    }
+  }
+  let history: { commit: string; summary: string }[] = [];
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "deploy-history.json"), "utf8"));
+    history = Array.isArray(raw?.history) ? raw.history : [];
+  } catch {
+    history = [];
+  }
+  const runningShort = running.slice(0, 7);
+  res.json({
+    running,
+    matched: history.some((row) => running.startsWith(row.commit) || row.commit.startsWith(runningShort)),
+    history,
+  });
+});
+
 app.get("/api/health/sharepoint", async (_req, res) => {
   try {
     const { probeSharePoint } = await import("./services/graph.js");

@@ -71,7 +71,9 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
   if (tail === "closure") return "closure";
 
   if (tail === "rfis") {
-    const kind = new URLSearchParams(search).get("kind");
+    const params = new URLSearchParams(search);
+    const kind = params.get("kind");
+    if (params.get("view") === "register") return "drawings";
     if (kind === "DrawingChecklist") return "drawings";
     if (kind === "RequestForInformation") return "drawings";
     if (kind === "QualityInspection") return "quality";

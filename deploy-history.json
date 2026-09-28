@@ -1,0 +1,85 @@
+{
+  "generatedAt": "2026-09-28T01:39:06.468Z",
+  "history": [
+    {
+      "commit": "e1c727d",
+      "summary": "File HR and CRM documents in the SPDC SharePoint directories and issue the letter pack when a candidate is added."
+    },
+    {
+      "commit": "3036e50",
+      "summary": "Let every HR letter be edited or deleted, including a full register clear."
+    },
+    {
+      "commit": "7d5a8e9",
+      "summary": "Fix the Hostinger web build and ship the pending portal updates."
+    },
+    {
+      "commit": "1b203a8",
+      "summary": "Set SPDC company roles on the project setup team list."
+    },
+    {
+      "commit": "cc7d667",
+      "summary": "Reset a representative portal password from the same edit form."
+    },
+    {
+      "commit": "2bbe575",
+      "summary": "Let office edit a client representative name, email, and role."
+    },
+    {
+      "commit": "65d60bc",
+      "summary": "Use HRMS company roles on the communication matrix."
+    },
+    {
+      "commit": "e3624b9",
+      "summary": "Show the client card email as a representative with portal status."
+    },
+    {
+      "commit": "168d87b",
+      "summary": "Open communication matrix edits in a popup and brand exports."
+    },
+    {
+      "commit": "01cf4e4",
+      "summary": "Fix project team removal and client rep visibility on jobs."
+    },
+    {
+      "commit": "2217883",
+      "summary": "Rename project card staff block to Team with HR company roles."
+    },
+    {
+      "commit": "e7ac260",
+      "summary": "Split HR staff management from office-wide portal access."
+    },
+    {
+      "commit": "aefb96f",
+      "summary": "Fix HR letter preview scroll, strip template highlights, and expand proposal form."
+    },
+    {
+      "commit": "a6409ec",
+      "summary": "Wire HR letter desk to in-browser Word preview and SharePoint links."
+    },
+    {
+      "commit": "b3662f1",
+      "summary": "Render HR letter preview from filled Word templates."
+    },
+    {
+      "commit": "f0c2c7b",
+      "summary": "Restore bulk import section in Hostinger env checklist."
+    },
+    {
+      "commit": "1978d68",
+      "summary": "Fix HR letter desk preview flow and seed UAT letters on deploy."
+    },
+    {
+      "commit": "691a484",
+      "summary": "Improve HR letter desk UX and split RFI logs by module."
+    },
+    {
+      "commit": "67a2ad7",
+      "summary": "Default PL to 12 days and expand HR leave management."
+    },
+    {
+      "commit": "b31642c",
+      "summary": "HRMS items 11–12: letter templates, attendance Excel, vouchers, leave, holidays."
+    }
+  ]
+}

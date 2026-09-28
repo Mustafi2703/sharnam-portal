@@ -260,6 +260,10 @@ async function syncMasterRegisterFromRevision(opts: {
       building: opts.buildingArea || line.building,
     },
   });
+  const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
+  await publishDrawingRegistersToDrive(opts.projectId).catch((err) =>
+    console.warn("[drawings] SharePoint register:", err instanceof Error ? err.message : err),
+  );
 }
 
 function primaryRevisionFile(rev: {
@@ -624,6 +628,10 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
+  const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+  void fileWonProjectPack(project.id).catch((err) =>
+    console.warn("[CRM] won folder:", err instanceof Error ? err.message : err),
+  );
   res.status(created ? 201 : 200).json({ ...project, alreadyExists: !created });
 });
 
@@ -1206,6 +1214,8 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     }
   }
   await audit("project.settings", { userId: req.user!.id, entity: "Project", entityId: project.id });
+  const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+  void fileWonProjectPack(project.id).catch(() => undefined);
   res.json(project);
 });
 
@@ -2027,6 +2037,8 @@ drawingsRouter.post(
         remarks: body.remarks,
       },
     });
+    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
+    await publishDrawingRegistersToDrive(req.params.projectId).catch(() => undefined);
     res.status(201).json(row);
   }
 );
@@ -2049,6 +2061,8 @@ drawingsRouter.patch(
       where: { id: req.params.id },
       data,
     });
+    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
+    await publishDrawingRegistersToDrive(row.projectId).catch(() => undefined);
     res.json(row);
   }
 );

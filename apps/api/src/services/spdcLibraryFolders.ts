@@ -143,6 +143,13 @@ export function inquiryFolderName(quotationNo: string | null | undefined, client
   return `${code}_${client}`.slice(0, 64);
 }
 
+/** Won project card — leads stay under proposals; a project card is an order. */
+export function wonOrderFolder(projectCode: string, clientName?: string | null) {
+  const code = safeSeg(projectCode || "Project");
+  const client = safeSeg(clientName || "Client");
+  return `04_Orders_Won/${code}_${client}`.slice(0, 90);
+}
+
 /** 03_Proposals / 04_Orders_Won / 05_Lost, with working vs submitted inside an inquiry. */
 export function crmProposalFolder(opts: {
   quotationNo?: string | null;

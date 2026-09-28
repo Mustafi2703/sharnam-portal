@@ -7,9 +7,12 @@ export default function AuditPage() {
   const { token, user } = useAuth();
   const [events, setEvents] = useState<any[]>([]);
   const [loadError, setLoadError] = useState("");
-  if (user?.role !== "admin" && user?.role !== "office") return <Navigate to="/" replace />;
+  const [deploys, setDeploys] = useState<{ running: string; matched: boolean; history: { commit: string; summary: string }[] } | null>(null);
 
   useEffect(() => {
+    api<any>("/api/health/deploys")
+      .then(setDeploys)
+      .catch(() => setDeploys(null));
     api<any[]>("/api/audit", { token })
       .then((rows) => {
         setEvents(rows);
@@ -21,10 +24,29 @@ export default function AuditPage() {
       });
   }, [token]);
 
+  if (user?.role !== "admin" && user?.role !== "office") return <Navigate to="/" replace />;
+
   return (
     <div className="space-y-6">
       <h1 className="font-display text-4xl">Audit trail</h1>
       <p className="text-steel-muted">Logins, checklist submits, drawing uploads, cost imports, and HRMS staff actions.</p>
+      {deploys && (
+        <div className="rounded-2xl border border-black/5 bg-white p-4 space-y-2">
+          <h2 className="font-display text-xl">Deployment history</h2>
+          <p className="text-sm text-steel-muted">
+            Running commit <span className="font-mono">{deploys.running.slice(0, 7)}</span>
+            {deploys.matched ? " matches this list." : " is the live Hostinger revision. Compare it with the build log."}
+          </p>
+          <ul className="text-sm space-y-1">
+            {deploys.history.map((row) => (
+              <li key={row.commit} className="flex gap-3">
+                <span className="font-mono text-xs text-brand w-16 shrink-0">{row.commit}</span>
+                <span>{row.summary}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {loadError ? (
         <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
           {loadError}

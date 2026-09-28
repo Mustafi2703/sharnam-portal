@@ -721,7 +721,24 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
                     </div>
                     {r.scorecardJson && (
-                      <p className="md:col-span-4 text-[11px] text-steel-muted">Saved score {r.scoreOverall ?? "—"}%</p>
+                      <p className="md:col-span-4 text-[11px] text-steel-muted">
+                        Saved score {r.scoreOverall ?? "—"}%
+                        {(() => {
+                          try {
+                            const url = JSON.parse(r.scorecardJson).sharePointUrl as string | undefined;
+                            return url ? (
+                              <>
+                                {" · "}
+                                <a href={url} target="_blank" rel="noreferrer" className="text-brand font-semibold">
+                                  Scorecard on SharePoint
+                                </a>
+                              </>
+                            ) : null;
+                          } catch {
+                            return null;
+                          }
+                        })()}
+                      </p>
                     )}
                   </div>
                 )}

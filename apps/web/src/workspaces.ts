@@ -136,13 +136,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Complete quality checklists and IR responses assigned to your company.",
     },
     {
-      to: "drawings/precheck",
-      label: "Fill drawing checklist",
-      fillFamily: "DrawingCheck",
-      roles: ["vendor"],
-      blurb: "Fill Drawing Check without opening the Drawings hub.",
-    },
-    {
       to: "inspections",
       label: "Dashboard",
       roles: ["admin", "office", "site_employee", "employee", "client"],
@@ -534,20 +527,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   comms: [
     {
-      to: "rfis",
-      label: "My RFIs & responses",
-      end: true,
-      roles: ["vendor"],
-      blurb: "Answer PMC RFIs and submit checklist fills — logged to Sharnam office.",
-    },
-    {
-      to: "drawings/precheck",
-      label: "Fill drawing checklist",
-      fillFamily: "DrawingCheck",
-      roles: ["vendor"],
-      blurb: "Drawing Check fill on the comms desk — no Drawings hub required.",
-    },
-    {
       to: "comms",
       label: "Communication matrix",
       end: true,
@@ -565,13 +544,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "comms", label: "MoM", query: "tab=mom", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Minutes + action items." },
     { to: "comms", label: "Follow-up", query: "tab=followup", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Open actions from MoM." },
     { to: "comms", label: "Comm log", query: "tab=log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Communication log entries." },
-    {
-      to: "rfis",
-      label: "Ask (PMC RFI)",
-      query: "kind=RequestForInformation",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Classic request for information — link drawing revision.",
-    },
     {
       to: "inspection-register",
       label: "Quality IR (F-01)",

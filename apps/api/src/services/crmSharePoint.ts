@@ -4,7 +4,7 @@ import { mockOneDrive } from "./mockOneDrive.js";
 import { resolveR2TemplatePath } from "./comparativeStatement.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "./proposalTemplate.js";
 import { ensureSandboxLibraryFolders } from "./graph.js";
-import { CRM_DRIVE, CRM_LIBRARY_FOLDERS, crmProposalFolder } from "./spdcLibraryFolders.js";
+import { CRM_DRIVE, CRM_LIBRARY_FOLDERS, crmProposalFolder, wonOrderFolder } from "./spdcLibraryFolders.js";
 
 function sanitizeSegment(s: string) {
   return s.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -134,4 +134,50 @@ export async function syncProposalSummaryFile(
     await syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.pmcProposals, fileName, buffer).catch(() => undefined);
   }
   return saved;
+}
+
+/** Project cards (won jobs, not leads) and their communication matrix, on SPDC_CRM / 04_Orders_Won. */
+export async function fileWonProjectPack(projectId: string) {
+  const { prisma } = await import("../prisma.js");
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, code: true, name: true, clientName: true, location: true, status: true, clientEmail: true },
+  });
+  if (!project) return null;
+  await ensureCrmLibraryTree();
+  const folder = wonOrderFolder(project.code, project.clientName);
+  const card = [
+    `Project: ${project.name}`,
+    `Code: ${project.code}`,
+    `Client: ${project.clientName || ""}`,
+    `Location: ${project.location || ""}`,
+    `Status: ${project.status}`,
+    `Email: ${project.clientEmail || ""}`,
+    `Filed: ${new Date().toISOString()}`,
+  ].join("\n");
+  const cardSaved = await mockOneDrive.upload(
+    CRM_DRIVE,
+    folder,
+    `${sanitizeSegment(project.code)}_Project_Card.txt`,
+    Buffer.from(card, "utf8"),
+    "text/plain",
+    { replace: true },
+  );
+  const { buildMatrixXlsx } = await import("./matrixExport.js");
+  for (const kind of ["TECHNICAL", "COMMERCIAL"] as const) {
+    try {
+      const buf = await buildMatrixXlsx(project.id, kind);
+      await mockOneDrive.upload(
+        CRM_DRIVE,
+        folder,
+        `Communication-Matrix-${kind}.xlsx`,
+        buf,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        { replace: true },
+      );
+    } catch (err) {
+      console.warn("[CRM] matrix file", kind, err instanceof Error ? err.message : err);
+    }
+  }
+  return { folder, sharePointUrl: cardSaved.sharePointUrl || cardSaved.url || null };
 }
