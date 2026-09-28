@@ -2116,6 +2116,11 @@ html.is-standalone-form #root {
   min-height: 0 !important;
   overflow: visible !important;
 }
+.hrms-module table th,
+.hrms-module table td {
+  padding: 0.5rem 0.7rem;
+  vertical-align: middle;
+}
 
 /* Quality module — dashboard / QI / checklist summary scroll in the middle column */
 .quality-module {

@@ -312,7 +312,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           <table className="min-w-[1100px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-sand/20">
               <tr>
-                <th className="p-2">User</th>
+                <th>User</th>
                 <th>Days</th>
                 <th className="text-right">Basic</th>
                 <th className="text-right">HRA</th>

@@ -89,18 +89,20 @@ export default function HrmsMastersPage() {
         <Card>
           <h3 className="font-semibold mb-3">Leave types</h3>
           {canManage && (
-            <form className="grid sm:grid-cols-3 gap-2 mb-3" onSubmit={addType}>
+            <form className="flex flex-col gap-2 mb-3" onSubmit={addType}>
               <Input placeholder="Code (CL / SL / PL)" value={typeForm.code} onChange={(e) => setTypeForm({ ...typeForm, code: e.target.value })} required />
               <Input placeholder="Name" value={typeForm.name} onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })} required />
               <Input placeholder="Days / year" type="number" value={typeForm.daysPerYear} onChange={(e) => setTypeForm({ ...typeForm, daysPerYear: e.target.value })} />
-              <label className="text-xs flex items-center gap-2 col-span-1">
-                <input type="checkbox" checked={typeForm.isPaid} onChange={(e) => setTypeForm({ ...typeForm, isPaid: e.target.checked })} />
-                Paid
-              </label>
-              <label className="text-xs flex items-center gap-2 col-span-1">
-                <input type="checkbox" checked={typeForm.carryForward} onChange={(e) => setTypeForm({ ...typeForm, carryForward: e.target.checked })} />
-                Carry-fwd
-              </label>
+              <div className="flex flex-wrap gap-3">
+                <label className="text-xs flex items-center gap-2">
+                  <input type="checkbox" checked={typeForm.isPaid} onChange={(e) => setTypeForm({ ...typeForm, isPaid: e.target.checked })} />
+                  Paid
+                </label>
+                <label className="text-xs flex items-center gap-2">
+                  <input type="checkbox" checked={typeForm.carryForward} onChange={(e) => setTypeForm({ ...typeForm, carryForward: e.target.checked })} />
+                  Carry-fwd
+                </label>
+              </div>
               <Button type="submit">Add leave type</Button>
             </form>
           )}
@@ -121,13 +123,11 @@ export default function HrmsMastersPage() {
           <h3 className="font-semibold mb-3">Holidays · {new Date().getFullYear()}</h3>
           {canManage && (
             <>
-            <form className="grid sm:grid-cols-4 gap-2 mb-3" onSubmit={addHol}>
+            <form className="flex flex-col gap-2 mb-3" onSubmit={addHol}>
               <Input type="date" value={holForm.date} onChange={(e) => setHolForm({ ...holForm, date: e.target.value })} required />
-              <Input placeholder="Name" value={holForm.name} onChange={(e) => setHolForm({ ...holForm, name: e.target.value })} required className="sm:col-span-2" />
+              <Input placeholder="Name" value={holForm.name} onChange={(e) => setHolForm({ ...holForm, name: e.target.value })} required />
               <Input placeholder="Region" value={holForm.region} onChange={(e) => setHolForm({ ...holForm, region: e.target.value })} />
-              <Button type="submit" className="sm:col-span-4">
-                Add holiday
-              </Button>
+              <Button type="submit">Add holiday</Button>
             </form>
             <label className="block text-xs text-steel-muted mb-3">
               Upload holiday calendar (CSV: date, name, region, optional)

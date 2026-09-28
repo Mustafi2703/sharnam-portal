@@ -232,9 +232,9 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
           <span className="text-[11px] text-steel-muted">{reqs.length} entries</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] w-full text-xs">
+          <table className="min-w-[980px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-white">
-              <tr><th className="p-2">Req No</th><th>Dept</th><th>Designation</th><th>Count</th><th>Type</th><th>Range</th><th>Urgency</th><th>Resumes</th><th>Status</th><th className="no-print"></th></tr>
+              <tr><th>Req No</th><th>Dept</th><th>Designation</th><th>Count</th><th>Type</th><th>Range</th><th>Urgency</th><th>Resumes</th><th>Status</th><th className="no-print"></th></tr>
             </thead>
             <tbody>
               {reqs.map((r: any) => (

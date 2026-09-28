@@ -152,8 +152,7 @@ function OfferOnboardingPage() {
   const [timeline, setTimeline] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
   const [letterHtml, setLetterHtml] = useState("");
-  const [policyHtml, setPolicyHtml] = useState("");
-  const [policyUrl, setPolicyUrl] = useState("");
+  const [logOpen, setLogOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [vaultDocs, setVaultDocs] = useState<Array<{ id: string; category: string; title: string; fileUrl: string; storagePath?: string | null; createdAt: string }>>([]);
   const signedUploadRef = useRef<HTMLInputElement | null>(null);
@@ -171,7 +170,6 @@ function OfferOnboardingPage() {
     try {
       const onboardRow = await api<any>(`/api/hrm/onboarding/${offerId}`, { token });
       setOnboard(onboardRow);
-      if (onboardRow?.itemsCompletedAt?._hrPolicyUrl) setPolicyUrl(onboardRow.itemsCompletedAt._hrPolicyUrl);
     } catch {
       setOnboard(null);
     }
@@ -186,10 +184,6 @@ function OfferOnboardingPage() {
         if (res.ok) setLetterHtml(await res.text());
       }
     }
-    const policyRes = await fetch(`${apiBase()}/api/hrm/onboarding/${offerId}/hr-policy`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (policyRes.ok) setPolicyHtml(await policyRes.text());
     if (o?.onboard?.userId) {
       const docs = await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(o.onboard.userId)}`, { token }).catch(() => []);
       setVaultDocs(docs);
@@ -218,31 +212,8 @@ function OfferOnboardingPage() {
     if (!offerId) return;
     const r = await api<any>(`/api/hrm/onboarding/${offerId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
     setOnboard(r);
-    if (r?.hrPolicyUrl) setPolicyUrl(r.hrPolicyUrl);
-    else if (r?.itemsCompletedAt?._hrPolicyUrl) setPolicyUrl(r.itemsCompletedAt._hrPolicyUrl);
     setMsg("Onboarding updated.");
     await load();
-  }
-
-  async function fileHrPolicy() {
-    if (!offerId) return;
-    try {
-      const r = await api<{ url?: string; folder?: string; employeeName?: string }>(`/api/hrm/onboarding/${offerId}/hr-policy`, {
-        method: "POST",
-        token,
-      });
-      if (r.url) setPolicyUrl(r.url);
-      setMsg(
-        `HR policy acknowledgement filed under 06.02 Employee Files / ${r.employeeName || offer?.candidate?.fullName} / Onboarding.`,
-      );
-      const policyRes = await fetch(`${apiBase()}/api/hrm/onboarding/${offerId}/hr-policy`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (policyRes.ok) setPolicyHtml(await policyRes.text());
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not file HR policy");
-    }
   }
 
   async function uploadPreJoinDocs(files: FileList | null, category: string) {
@@ -473,35 +444,6 @@ function OfferOnboardingPage() {
         </Card>
       )}
 
-      <Card className="!p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold text-sm">HR policy acknowledgement · {offer?.candidate?.fullName}</div>
-            <p className="text-[11px] text-steel-muted">
-              Renders with this candidate&apos;s name. Filing saves it to SharePoint 06.02 Employee Files /{" "}
-              {offer?.candidate?.fullName} / Onboarding.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {policyUrl ? (
-              <a href={mediaUrl(policyUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
-                Open filed copy
-              </a>
-            ) : null}
-            {canHrWrite ? (
-              <Button type="button" variant="secondary" onClick={() => void fileHrPolicy()}>
-                File acknowledgement
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        {policyHtml ? (
-          <iframe title="HR policy acknowledgement" srcDoc={policyHtml} className="w-full h-[420px] border-0 bg-white" />
-        ) : (
-          <p className="px-4 py-6 text-sm text-steel-muted">Loading policy…</p>
-        )}
-      </Card>
-
       {canHrWrite && preJoin ? (
         <Card>
           <h3 className="font-semibold text-sm mb-1">Upload pre-joining documents</h3>
@@ -678,10 +620,6 @@ function OfferOnboardingPage() {
                   type="checkbox"
                   checked={!!onboard[item.key]}
                   onChange={(e) => {
-                    if (item.key === "hrPolicyAcknowledged" && e.target.checked) {
-                      void fileHrPolicy();
-                      return;
-                    }
                     void updateOnboard({ [item.key]: e.target.checked });
                   }}
                   disabled={!canHrWrite}
@@ -689,11 +627,6 @@ function OfferOnboardingPage() {
                 />
                 <div className="flex-1">
                   <div>{item.label}</div>
-                  {item.key === "hrPolicyAcknowledged" && (
-                    <div className="text-[10px] text-steel-muted mt-0.5">
-                      Opens the policy with {offer?.candidate?.fullName}&apos;s name and files it in their HR folder.
-                    </div>
-                  )}
                   {onboard.itemsCompletedAt?.[item.key] && (
                     <div className="text-[10px] text-steel-muted mt-0.5">
                       Completed {new Date(onboard.itemsCompletedAt[item.key]).toLocaleString("en-IN")}
@@ -717,23 +650,32 @@ function OfferOnboardingPage() {
       </Card>
 
       {canHrWrite ? (
-      <Card padding={false}>
-        <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">Employee audit log</div>
-        <ul className="divide-y max-h-96 overflow-y-auto">
-          {timeline.map((e) => (
-            <li key={e.id} className="px-4 py-2 text-xs">
-              <div className="flex justify-between">
-                <span className="font-mono">{e.action}</span>
-                <span className="text-steel-muted">{new Date(e.createdAt).toLocaleString("en-IN")}</span>
+        <>
+          <Button type="button" variant="secondary" onClick={() => setLogOpen(true)}>
+            Activity log ({timeline.length})
+          </Button>
+          {logOpen ? (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/45" role="dialog" aria-modal="true" aria-label="Onboarding activity">
+              <div className="bg-paper border border-line rounded-xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-xl">
+                <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-3">
+                  <p className="font-semibold text-sm">Activity · {offer?.candidate?.fullName}</p>
+                  <Button type="button" variant="secondary" onClick={() => setLogOpen(false)}>Close</Button>
+                </div>
+                <ul className="divide-y overflow-y-auto">
+                  {timeline.map((e) => (
+                    <li key={e.id} className="px-4 py-2 text-xs">
+                      <div className="flex justify-between gap-3">
+                        <span className="font-mono">{e.action}</span>
+                        <span className="text-steel-muted whitespace-nowrap">{new Date(e.createdAt).toLocaleString("en-IN")}</span>
+                      </div>
+                    </li>
+                  ))}
+                  {!timeline.length && <li className="px-4 py-8 text-center text-sm text-steel-muted">No activity for this person yet.</li>}
+                </ul>
               </div>
-              {e.metaJson && (
-                <div className="text-[10px] text-steel-muted mt-0.5 font-mono truncate">{e.metaJson}</div>
-              )}
-            </li>
-          ))}
-          {!timeline.length && <li className="px-4 py-4 text-center text-sm text-steel-muted">No audit events for this candidate yet.</li>}
-        </ul>
-      </Card>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
