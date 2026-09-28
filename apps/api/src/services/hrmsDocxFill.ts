@@ -110,8 +110,8 @@ export function buildHrmsDocxTokenMap(
   const lta = moneyFromBreakdown(breakdown, "leave travel", offerMonthly);
   const children = moneyFromBreakdown(breakdown, "children", offerMonthly);
   const specialParts = moneyFromBreakdown(breakdown, "special", offerMonthly) + lta + children;
-  const special = offerMonthly ? Math.max(0, Math.round(gross - basic - hra - conveyance)) : specialParts;
   const gross = offerMonthly ? breakdown?.partA.gross.perMonth ?? 0 : breakdown?.partA.gross.perAnnum ?? 0;
+  const special = offerMonthly ? Math.max(0, Math.round(gross - basic - hra - conveyance)) : specialParts;
   const net = offerMonthly ? breakdown?.partC.indicativeNet.perMonth ?? 0 : breakdown?.partC.indicativeNet.perAnnum ?? 0;
   const medical = offerMonthly ? 0 : rowFromBreakdown(breakdown, "mediclaim");
   const siteAllowance = 0;

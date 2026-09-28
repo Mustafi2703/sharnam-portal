@@ -132,10 +132,14 @@ export async function enrichHrmsLetterDataFromProfile(
   }
 
   const projectName = user?.memberships?.[0]?.project?.name || "";
+  const filled = (v: unknown) => {
+    if (v == null) return false;
+    const s = String(v).trim();
+    return Boolean(s) && !/^[_\-—.\s]+$/.test(s);
+  };
   const pick = (key: string, ...vals: unknown[]) => {
-    const cur = data[key];
-    if (cur != null && String(cur).trim()) return data;
-    const hit = vals.find((v) => v != null && String(v).trim());
+    if (filled(data[key])) return data;
+    const hit = vals.find((v) => filled(v));
     if (hit != null) data[key] = hit;
     return data;
   };
