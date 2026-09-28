@@ -121,7 +121,8 @@ function ensureLocalFolder(relPath: string) {
   return abs;
 }
 
-let hrTreeReady = false;
+/** One in-flight SharePoint folder walk. Parallel HR clicks must not each recreate the tree. */
+let hrTreeTask: Promise<void> | null = null;
 
 /** Ensure the company HR tree exists on the global `_HR` drive (not inside project folders). */
 export async function ensureHrCompanyTree() {
@@ -129,14 +130,15 @@ export async function ensureHrCompanyTree() {
   for (const rel of folders) {
     ensureLocalFolder(rel);
   }
-  if (!hrTreeReady) {
-    try {
-      await ensureSandboxLibraryFolders(HR_VAULT_DRIVE_CODE, folders);
-      hrTreeReady = true;
-    } catch (err) {
-      console.warn("[HRMS] SharePoint folder tree:", err instanceof Error ? err.message : err);
-    }
+  if (!hrTreeTask) {
+    hrTreeTask = ensureSandboxLibraryFolders(HR_VAULT_DRIVE_CODE, folders)
+      .then(() => undefined)
+      .catch((err) => {
+        hrTreeTask = null;
+        console.warn("[HRMS] SharePoint folder tree:", err instanceof Error ? err.message : err);
+      });
   }
+  await hrTreeTask;
   return { driveCode: HR_VAULT_DRIVE_CODE, folders };
 }
 

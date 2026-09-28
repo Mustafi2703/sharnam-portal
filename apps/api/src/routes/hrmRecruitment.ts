@@ -10,7 +10,6 @@ import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
-import { ensureHrCompanyTree } from "../services/hrEmployeeVault.js";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
   employeeLetterFolder,
@@ -30,10 +29,6 @@ import {
 export const hrmRecruitmentRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 hrmRecruitmentRouter.use(requireAuth);
-hrmRecruitmentRouter.use(async (_req, _res, next) => {
-  await ensureHrCompanyTree().catch(() => undefined);
-  next();
-});
 
 function n(v: unknown): number | null {
   if (v === undefined || v === null || v === "") return null;
@@ -203,7 +198,42 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   );
 });
 
+hrmRecruitmentRouter.post("/registers/clear", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  if (String(req.body?.confirm || "").trim() !== "CLEAR") {
+    return res.status(400).json({ error: "Send confirm: CLEAR to empty the HR registers." });
+  }
+  const interviews = await prisma.interviewRound.deleteMany({});
+  const onboarding = await prisma.onboardingChecklist.deleteMany({});
+  const preJoin = await prisma.preJoiningChecklist.deleteMany({});
+  const offers = await prisma.offer.deleteMany({});
+  const candidates = await prisma.candidate.deleteMany({});
+  const postings = await prisma.jobPosting.deleteMany({});
+  const requisitions = await prisma.manpowerRequisition.deleteMany({});
+  const letters = await prisma.hrmsDocument.deleteMany({});
+  const deleted = {
+    interviews: interviews.count,
+    onboarding: onboarding.count,
+    preJoin: preJoin.count,
+    offers: offers.count,
+    candidates: candidates.count,
+    postings: postings.count,
+    requisitions: requisitions.count,
+    letters: letters.count,
+  };
+  await audit("hrms.registers.clear", { userId: req.user!.id, entity: "Candidate", meta: deleted });
+  res.json({ ok: true, deleted });
+});
+
 hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), upload.single("resume"), async (req: AuthedRequest, res) => {
+  const email = s(req.body.email);
+  if (email) {
+    const existing = await prisma.candidate.findFirst({ where: { email } });
+    if (existing) {
+      return res.status(409).json({
+        error: `${existing.fullName} is already in the resume database (${email}). Open that row instead of adding again.`,
+      });
+    }
+  }
   let resumeUrl: string | undefined;
   if (req.file) {
     const saved = await mockOneDrive.upload(
@@ -218,7 +248,7 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
     data: {
       postingId: s(req.body.postingId),
       fullName: s(req.body.fullName) || "Candidate",
-      email: s(req.body.email),
+      email,
       phone: s(req.body.phone),
       sourceChannel: s(req.body.sourceChannel),
       resumeUrl,
@@ -234,14 +264,7 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
     },
   });
   await audit("hrms.candidate.create", { userId: req.user!.id, entity: "Candidate", entityId: row.id, meta: { fullName: row.fullName, source: row.sourceChannel } });
-  const { issueCandidateLetterPack } = await import("../services/hrmsLetter.js");
-  const letters = await issueCandidateLetterPack({
-    fullName: row.fullName,
-    email: row.email,
-    designation: row.currentDesign,
-    createdById: req.user!.id,
-  });
-  res.status(201).json({ ...row, letters });
+  res.status(201).json(row);
 });
 
 hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
@@ -429,11 +452,40 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     }
   }
 
+  const roundType = s(req.body.roundType) || "Technical";
+  const scorecardRound = /hr/i.test(roundType) ? "R1" : /manag/i.test(roundType) ? "R3" : "R2";
+  let scorecardJson: string | null = null;
+  try {
+    const blank = scoreInterviewRound({
+      position: candidate.posting?.title || candidate.currentDesign || "",
+      round: scorecardRound,
+      scores: {},
+    });
+    const xlsx = await scorecardWorkbook(candidate.fullName, blank);
+    const safeName = (candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const filed = await mockOneDrive.upload(
+      HR_DRIVE,
+      interviewRecordFolder(),
+      `${safeName}_${scorecardRound}_scorecard.xlsx`,
+      xlsx,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      { replace: true },
+    );
+    scorecardJson = JSON.stringify({
+      position: blank.position,
+      round: scorecardRound,
+      scores: {},
+      sharePointUrl: filed.sharePointUrl || null,
+    });
+  } catch (err) {
+    console.warn("[HRMS] scorecard file:", err instanceof Error ? err.message : err);
+  }
+
   const row = await prisma.interviewRound.create({
     data: {
       candidateId: candidate.id,
       roundNumber: Number(req.body.roundNumber) || priorRounds + 1,
-      roundType: s(req.body.roundType) || "Technical",
+      roundType,
       panelJson: JSON.stringify({ version: 1, interviewers, interviewee }),
       scheduledAt,
       durationMins,
@@ -441,6 +493,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
       meetingLink,
       meetingId,
       status: "Scheduled",
+      scorecardJson,
     },
   });
   await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Interview" } });
@@ -526,14 +579,6 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
         result: scorecardFile.scored,
         sharePointUrl: filed.sharePointUrl || null,
       });
-      await mockOneDrive.upload(
-        HR_DRIVE,
-        interviewRecordFolder(),
-        `${scorecardFile.name}_${scorecardFile.scored.round}_scorecard.json`,
-        Buffer.from(withLink, "utf8"),
-        "application/json",
-        { replace: true },
-      );
       await prisma.interviewRound.update({ where: { id: row.id }, data: { scorecardJson: withLink } });
       row.scorecardJson = withLink;
     } catch (err) {

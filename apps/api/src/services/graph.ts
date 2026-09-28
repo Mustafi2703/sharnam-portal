@@ -80,7 +80,7 @@ async function getAccessToken(): Promise<string> {
 }
 
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 /** One Graph call at a time, with a short gap, so a letter pack or folder launch does not get throttled. */

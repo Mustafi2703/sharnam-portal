@@ -300,9 +300,12 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
   const [file, setFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const [filterStage, setFilterStage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function add(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => v && fd.append(k, String(v)));
@@ -310,10 +313,24 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
       await api("/api/hrm/candidates", { method: "POST", token, body: fd });
       setForm({ postingId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
       setFile(null);
-      setMsg("Candidate added.");
+      setMsg("Candidate added. The resume is filed. Generate letters from the Letters desk when you are ready.");
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearRegisters() {
+    const ok = window.confirm("Delete every recruitment row, interview, offer, and letter? Staff logins stay. This cannot be undone.");
+    if (!ok) return;
+    try {
+      await api("/api/hrm/registers/clear", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR" }) });
+      setMsg("HR registers cleared. Add one candidate, then schedule one interview — the scorecard opens on that round.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not clear registers");
     }
   }
   async function transition(id: string, status: string, reason?: string) {
@@ -358,13 +375,19 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
               Resume (PDF / DOC)
               <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
             </label>
-            <Button type="submit" className="md:col-span-4">Add candidate</Button>
+            <Button type="submit" className="md:col-span-4" disabled={saving}>{saving ? "Adding…" : "Add candidate"}</Button>
+            <p className="md:col-span-4 text-[11px] text-steel-muted">Saves this person and the resume only. Letters are generated one at a time from the Letters desk.</p>
           </form>
         </Card>
       )}
 
       <div className="flex flex-wrap gap-2 items-center">
         <Input placeholder="Search name / email / skill" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+        {canManage && (
+          <Button type="button" variant="secondary" onClick={() => void clearRegisters()}>
+            Clear HR registers
+          </Button>
+        )}
         <Select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="max-w-xs">
           <option value="">All stages</option>
           {CANDIDATE_STAGES.map((s) => (
@@ -730,7 +753,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                     </div>
                     {r.scorecardJson && (
                       <p className="md:col-span-4 text-[11px] text-steel-muted">
-                        Saved score {r.scoreOverall ?? "—"}%
+                        {r.scoreOverall != null ? `Saved score ${r.scoreOverall}%` : "Scorecard workbook is on SharePoint — fill the scores below."}
                         {(() => {
                           try {
                             const url = JSON.parse(r.scorecardJson).sharePointUrl as string | undefined;

@@ -531,12 +531,19 @@ async function buildAnnexureXlsx(row: HrmsDocument, ctx: Record<string, unknown>
 }
 
 const DOCX_PREVIEW_CSS = `
-  @page { size: A4; margin: 18mm 16mm; }
-  body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; padding: 8px 12px; }
-  .preview-banner { font-size: 10px; color: #555; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 16px; }
+  @page { size: A4; margin: 16mm 18mm; }
+  html { background: #d9d9d9; }
+  body { margin: 0; padding: 16px 0; font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.35; color: #111; }
+  .sheet { background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto; padding: 16mm 18mm; box-sizing: border-box; }
+  .sheet img { max-width: 220px; height: auto; }
   table { border-collapse: collapse; width: 100%; margin: 8px 0; }
   td, th { border: 1px solid #bbb; padding: 4px 8px; vertical-align: top; }
-  p { margin: 0.45em 0; }
+  p { margin: 0.35em 0; }
+  h1, h2, h3 { font-weight: 700; margin: 0.6em 0 0.3em; }
+  @media print {
+    html, body { background: #fff; padding: 0; }
+    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; }
+  }
 `;
 
 async function ctcBreakdownForLetter(
@@ -584,7 +591,17 @@ export async function renderHrmsLetterPreviewHtml(row: HrmsDocument, merged: Rec
   if (!docxBuf) return assembleHtml(row, merged);
 
   const mammoth = await import("mammoth");
-  const { value: bodyHtml } = await mammoth.convertToHtml({ buffer: docxBuf });
+  const images = (mammoth as { images?: { imgElement: (fn: (image: { contentType: string; read: (enc: "base64") => Promise<string> }) => Promise<{ src: string }>) => unknown } }).images;
+  const convertImage = images?.imgElement
+    ? images.imgElement(async (image) => {
+        const b64 = await image.read("base64");
+        return { src: `data:${image.contentType};base64,${b64}` };
+      })
+    : undefined;
+  const { value: bodyHtml } = await mammoth.convertToHtml(
+    { buffer: docxBuf },
+    convertImage ? { convertImage: convertImage as never } : undefined,
+  );
   const title = `${escapeHtml(row.kind)} · ${escapeHtml(row.refNo)}`;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -594,8 +611,9 @@ export async function renderHrmsLetterPreviewHtml(row: HrmsDocument, merged: Rec
   <style>${DOCX_PREVIEW_CSS}</style>
 </head>
 <body>
-  <div class="preview-banner"><strong>Word template preview</strong> — same content as the editable .docx download (official SPDC format).</div>
+  <article class="sheet">
   ${bodyHtml}
+  </article>
 </body>
 </html>`;
 }
