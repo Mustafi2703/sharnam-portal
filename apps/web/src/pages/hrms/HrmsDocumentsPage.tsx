@@ -51,7 +51,6 @@ export default function HrmsDocumentsPage() {
   const [offers, setOffers] = useState<OfferRow[]>([]);
   const [previewDocxBlob, setPreviewDocxBlob] = useState<Blob | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
-  const [previewBusy, setPreviewBusy] = useState(false);
   const [generateBusy, setGenerateBusy] = useState(false);
   const [previewFingerprint, setPreviewFingerprint] = useState("");
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -59,7 +58,6 @@ export default function HrmsDocumentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [registerScope, setRegisterScope] = useState<"all" | "person">("all");
   const formPanelRef = useRef<HTMLDivElement | null>(null);
-  const previewPanelRef = useRef<HTMLDivElement | null>(null);
 
   const subjectKey = subjectKeyFromForm(form);
   const subjectOptions = useMemo(() => buildSubjectOptions(staff, offers), [staff, offers]);
@@ -138,7 +136,6 @@ export default function HrmsDocumentsPage() {
   }
 
   const currentFingerprint = useMemo(() => letterFormFingerprint(form), [form]);
-  const previewIsCurrent = previewFingerprint === currentFingerprint && !!previewDocxBlob;
 
   async function fetchPreviewDocx(url: string, body?: object): Promise<Blob> {
     const res = await fetch(url, {
@@ -201,36 +198,9 @@ export default function HrmsDocumentsPage() {
     return created.id;
   }
 
-  async function previewKind(kind: DocKind) {
+  async function generateKind(kind: DocKind, _opts?: { skipPreviewCheck?: boolean }) {
     if (!form.employeeName.trim()) {
       setMsg("Select a person first.");
-      return;
-    }
-    setMsg("");
-    setPreviewBusy(true);
-    try {
-      const body = { ...createBodyFromForm({ ...form, kind }), kind };
-      const blob = await fetchPreviewDocx(`${apiBase()}/api/hrm/hrms-documents/preview.docx`, body);
-      setPreviewDocxBlob(blob);
-      setPreviewTitle(`${KIND_OPTIONS.find((k) => k.key === kind)?.label || kind} · ${form.employeeName}`);
-      setPreviewFingerprint(letterFormFingerprint({ ...form, kind }));
-      setPreviewExpanded(false);
-      window.setTimeout(() => previewPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Preview failed");
-    } finally {
-      setPreviewBusy(false);
-    }
-  }
-
-  async function generateKind(kind: DocKind, opts?: { skipPreviewCheck?: boolean }) {
-    if (!form.employeeName.trim()) {
-      setMsg("Select a person first.");
-      return;
-    }
-    if (!opts?.skipPreviewCheck && !previewIsCurrent) {
-      setMsg("Preview the letter with current fields first, then Generate.");
-      await previewKind(kind);
       return;
     }
     setMsg("");
@@ -245,7 +215,6 @@ export default function HrmsDocumentsPage() {
           : `${kind} generated — download .docx from the register.`,
       );
       await load();
-      await openPreview(id, `${kind} · ${form.employeeName}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Generate failed");
     } finally {
@@ -365,7 +334,7 @@ export default function HrmsDocumentsPage() {
       <HrmsPageHero
         eyebrow="Documents · Letters"
         title="HR letter desk"
-        subtitle="Pick one person. Preview renders the official Word template (same as .docx download). Generate files the filled .docx + print HTML + employee vault."
+        subtitle="Pick one person, fill the fields, then Generate & file. The Word file and the print copy land in that person’s employee folder on SharePoint."
         workflow={
           <>
             <span>
@@ -375,13 +344,10 @@ export default function HrmsDocumentsPage() {
               <strong className="text-ink font-semibold">2.</strong> Edit fields
             </span>
             <span>
-              <strong className="text-ink font-semibold">3.</strong> Preview Word
+              <strong className="text-ink font-semibold">3.</strong> Generate & file
             </span>
             <span>
-              <strong className="text-ink font-semibold">4.</strong> Generate & file
-            </span>
-            <span>
-              <strong className="text-ink font-semibold">5.</strong> Upload signed copy
+              <strong className="text-ink font-semibold">4.</strong> Upload signed copy
             </span>
           </>
         }
@@ -416,11 +382,11 @@ export default function HrmsDocumentsPage() {
           <div className="px-4 py-3 border-b border-line bg-sand/40">
             <div className="font-semibold text-sm">Letter composer</div>
             <p className="text-[11px] text-steel-muted mt-0.5">
-              One employee · all template variables · Preview Word (same file as download), then Generate & file to SharePoint.
+              One employee · all template variables · Generate & file to SharePoint.
             </p>
             {editingId ? (
               <p className="text-xs text-brand mt-2">
-                Editing a letter already on the register. Preview, then Generate, updates that row.
+                Editing a letter already on the register. Generate updates that row.
                 <button type="button" className="ml-2 underline" onClick={() => setEditingId(null)}>
                   Cancel edit
                 </button>
@@ -482,23 +448,11 @@ export default function HrmsDocumentsPage() {
                       <p className="text-[11px] text-steel-muted">{activeKindMeta.hint}</p>
                     </div>
                     <div className="flex flex-wrap gap-1 items-center">
-                      <Badge tone={previewIsCurrent ? "ok" : "warn"}>
-                        {previewIsCurrent ? "Preview up to date" : "Preview required before generate"}
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!py-1 !text-xs"
-                        disabled={previewBusy}
-                        onClick={() => void previewKind(form.kind)}
-                      >
-                        {previewBusy ? "Loading preview…" : "Preview Word"}
-                      </Button>
                       <Button
                         type="button"
                         className="!py-1 !text-xs"
-                        disabled={generateBusy || previewBusy}
-                        onClick={() => void generateKind(form.kind)}
+                        disabled={generateBusy}
+                        onClick={() => void generateKind(form.kind, { skipPreviewCheck: true })}
                       >
                         {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>
@@ -667,43 +621,11 @@ export default function HrmsDocumentsPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2 pt-1">
-                      <Button type="button" variant="secondary" disabled={previewBusy} onClick={() => void previewKind(form.kind)}>
-                        {previewBusy ? "Loading preview…" : "Preview Word"}
-                      </Button>
-                      <Button type="submit" disabled={generateBusy || previewBusy}>
+                      <Button type="submit" disabled={generateBusy}>
                         {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>
                     </div>
                   </form>
-
-                  <div
-                    ref={previewPanelRef}
-                    className="rounded-lg border border-line bg-white flex flex-col min-h-[280px]"
-                  >
-                    <div className="px-3 py-2 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-mono uppercase text-steel-muted">Letter preview (official Word template)</span>
-                      {previewDocxBlob ? (
-                        <Button type="button" variant="secondary" className="!py-0.5 !text-[11px]" onClick={clearPreview}>
-                          Clear
-                        </Button>
-                      ) : null}
-                    </div>
-                    {previewDocxBlob ? (
-                      <>
-                        <HrmsDocxPreview blob={previewDocxBlob} layout="panel" />
-                        <div className="px-3 py-2 border-t border-line flex flex-wrap gap-2">
-                          <Button type="button" className="!text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
-                            {previewIsCurrent ? "Generate & file (SharePoint)" : "Preview again, then generate"}
-                          </Button>
-                          <Button type="button" variant="secondary" className="!text-xs" onClick={() => setPreviewExpanded(true)}>
-                            Full screen
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      <HrmsDocxPreview blob={null} />
-                    )}
-                  </div>
                 </div>
               </div>
             )}

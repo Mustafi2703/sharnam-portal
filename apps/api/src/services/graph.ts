@@ -702,6 +702,33 @@ export function sharePointPathFromWebUrl(webUrl: string): string | null {
   }
 }
 
+/** Move a file into another sandbox folder. Does not delete it. */
+export async function moveDriveItem(itemId: string, destinationFolderPath: string) {
+  const drive = await resolveDefaultDrive();
+  const folder = await ensureDriveFolder(drive.driveId, destinationFolderPath);
+  await graphFetch(`/drives/${drive.driveId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parentReference: { id: folder.id } }),
+  });
+}
+
+export async function listDriveFiles(itemPath: string) {
+  const drive = await resolveDefaultDrive();
+  const encoded = encodeDrivePath(itemPath);
+  const files: { id: string; name: string; folder?: unknown }[] = [];
+  let next = `/drives/${drive.driveId}/root:/${encoded}:/children?$top=200&$select=id,name,folder,file`;
+  while (next) {
+    const page = await graphFetch<{ value?: { id: string; name: string; folder?: unknown }[]; "@odata.nextLink"?: string }>(next);
+    for (const item of page.value || []) {
+      if (!item.folder) files.push(item);
+    }
+    const link = page["@odata.nextLink"];
+    next = link ? link.replace("https://graph.microsoft.com/v1.0", "") : "";
+  }
+  return files;
+}
+
 export async function listProjectLibrary(projectCode: string, relFolder = "") {
   const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();

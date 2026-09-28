@@ -74,11 +74,11 @@ export function employeeVaultRelPath(
 /** Map upload category → SPDC_HRMS subfolder under the employee file. */
 export function vaultSubfolderForCategory(category: string): (typeof VAULT_SUBFOLDERS)[number] {
   const c = String(category || "").toLowerCase();
+  if (/passport|photo|pan|aadhaar|education|experience|salary|address|bank|pf|esic|kyc|medical|bgv|id-card|id card/.test(c)) return "02_KYC_and_Statutory";
   if (/warning|concern|discipline/.test(c)) return "04_Discipline";
-  if (/reliev|exit|experience|separation/.test(c)) return "05_Exit";
+  if (/reliev|exit|separation/.test(c)) return "05_Exit";
   if (/offer|appointment|joining|nda/.test(c)) return "01_Joining";
   if (/letter|promotion|confirmation/.test(c)) return "03_Service_Letters";
-  if (/(pan|aadhaar|bank|pf|esic|kyc|id-card|id card)/.test(c)) return "02_KYC_and_Statutory";
   return letterRecordSubfolder(category) === "03_Service_Letters" && !/letter/.test(c)
     ? "02_KYC_and_Statutory"
     : letterRecordSubfolder(category);

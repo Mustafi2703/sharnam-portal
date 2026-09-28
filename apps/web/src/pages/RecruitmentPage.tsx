@@ -6,6 +6,7 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { InterviewScorecard } from "../components/InterviewScorecard";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
+import { hrFileContentUrl, isHrImage } from "../lib/hrFileView";
 import {
   CANDIDATE_STAGES,
   candidateStageLabel,
@@ -767,6 +768,9 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                     <div className="md:col-span-4 max-h-36 overflow-y-auto space-y-1">
                     {(c.documents || []).map((d: any) => (
                       <span key={d.id} className="flex items-center gap-2 text-xs">
+                        {isHrImage(d) ? (
+                          <img src={hrFileContentUrl(d.id, token)} alt={d.category} className="h-10 w-10 rounded border border-line object-cover bg-sand" />
+                        ) : null}
                         <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
                         {canManage && (
                           <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeDocument(c, d)}>Delete</Button>
@@ -775,7 +779,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                     ))}
                     </div>
                     <Select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
-                      {["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"].map((v) => (
+                      {["Passport photo", "Photo", "PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Bank", "PF-ESIC", "Medical", "BGV", "Other"].map((v) => (
                         <option key={v}>{v}</option>
                       ))}
                     </Select>

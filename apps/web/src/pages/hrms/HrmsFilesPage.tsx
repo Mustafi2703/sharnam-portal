@@ -5,8 +5,9 @@ import { useAuth } from "../../auth";
 import { UploadModal } from "../../components/UploadModal";
 import { Badge, Button, Card, Select } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
+import { HR_FILE_KINDS, hrFileContentUrl, isHrImage } from "../../lib/hrFileView";
 
-const FILE_KINDS = ["PAN", "Aadhaar", "Bank", "PF-ESIC", "Offer", "Appointment", "Promotion", "Payslip", "Medical", "BGV", "ID-card", "Other"];
+const FILE_KINDS = HR_FILE_KINDS;
 const HR_VAULT_ROOT = "06_Records_Employee_Files";
 
 function vaultFolderName(person: StaffRow | undefined) {
@@ -234,9 +235,14 @@ export default function HrmsFilesPage() {
                     {new Date(f.issuedOn || f.createdAt).toLocaleDateString("en-IN")}
                   </td>
                   <td className="px-4 py-2.5">
-                    <a href={mediaUrl(f.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
-                      Open
-                    </a>
+                    <div className="flex items-center gap-2">
+                      {isHrImage(f) ? (
+                        <img src={hrFileContentUrl(f.id, token)} alt={f.title || f.category} className="h-12 w-12 rounded border border-line object-cover bg-sand" />
+                      ) : null}
+                      <a href={mediaUrl(f.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
+                        Open
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))}

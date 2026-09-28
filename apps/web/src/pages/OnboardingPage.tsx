@@ -4,6 +4,7 @@ import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
+import { HR_FILE_KINDS, hrFileContentUrl, isHrImage } from "../lib/hrFileView";
 
 /**
  * Onboarding hub — top level shows all offers past "Accepted" with a live pre-join +
@@ -512,15 +513,9 @@ function OfferOnboardingPage() {
             <label className="text-xs flex flex-col gap-1">
               <span className="text-steel-muted">Category</span>
               <select id="prejoin-doc-category" defaultValue="PAN" className="border border-line rounded px-2 py-1.5 text-sm">
-                <option value="PAN">PAN card</option>
-                <option value="Aadhaar">Aadhaar</option>
-                <option value="Bank">Bank proof / cancelled cheque</option>
-                <option value="Education">Education / experience</option>
-                <option value="Photo">Passport photo</option>
-                <option value="PF-ESIC">PF / ESIC</option>
-                <option value="Medical">Medical fitness</option>
-                <option value="BGV">BGV report</option>
-                <option value="Other">Other pre-join</option>
+                {HR_FILE_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>{kind}</option>
+                ))}
               </select>
             </label>
             <input
@@ -549,9 +544,14 @@ function OfferOnboardingPage() {
               <ul className="divide-y text-xs max-h-64 overflow-y-auto">
                 {vaultDocs.map((d) => (
                   <li key={d.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
-                    <span>
-                      <Badge tone="brand">{d.category}</Badge>{" "}
-                      <span className="text-steel-muted">{d.title}</span>
+                    <span className="flex items-center gap-2 min-w-0">
+                      {isHrImage(d) ? (
+                        <img src={hrFileContentUrl(d.id, token)} alt={d.title || d.category} className="h-14 w-14 rounded border border-line object-cover bg-sand" />
+                      ) : null}
+                      <span>
+                        <Badge tone="brand">{d.category}</Badge>{" "}
+                        <span className="text-steel-muted">{d.title}</span>
+                      </span>
                     </span>
                     <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline shrink-0">
                       Open

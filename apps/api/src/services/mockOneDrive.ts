@@ -9,6 +9,23 @@ import {
   PROJECT_LIBRARY_FOLDERS,
 } from "./graph.js";
 
+const MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+export function mimeForFileName(fileName: string) {
+  return MIME_BY_EXT[path.extname(fileName).toLowerCase()] || "application/octet-stream";
+}
+
 export type DriveNode = {
   name: string;
   path: string;
@@ -191,9 +208,10 @@ export class MockOneDriveService {
       sharePointPath: null as string | null,
     };
 
+    const mime = contentType && contentType !== "application/octet-stream" ? contentType : mimeForFileName(safe);
     if (liveSharePoint()) {
       try {
-        const sp = await uploadToProjectLibrary(projectCode, relFolder, safe, buffer, contentType, {
+        const sp = await uploadToProjectLibrary(projectCode, relFolder, safe, buffer, mime, {
           replace: opts?.replace,
         });
         return {

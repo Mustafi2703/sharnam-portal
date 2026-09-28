@@ -8,8 +8,8 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
-import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, SHAREPOINT_SANDBOX_ROOT } from "../services/graph.js";
-import { mockOneDrive } from "../services/mockOneDrive.js";
+import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, listDriveFiles, moveDriveItem, SHAREPOINT_SANDBOX_ROOT, uploadToProjectLibrary } from "../services/graph.js";
+import { mimeForFileName, mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, scorecardRoundId, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
@@ -237,6 +237,14 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   const status = req.query.status ? String(req.query.status) : undefined;
   const postingId = req.query.postingId ? String(req.query.postingId) : undefined;
   const search = req.query.q ? String(req.query.q).toLowerCase() : undefined;
+  void organizeRecruitmentFolders().catch((err) => {
+    pushRuntimeLog({
+      level: "error",
+      source: "hrm.files",
+      message: "Could not organise recruitment folders",
+      detail: errorDetail(err),
+    });
+  });
   try {
     const rows = await prisma.candidate.findMany({
       where: {
@@ -550,7 +558,7 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
   res.json(row);
 });
 
-const BGV_CATEGORIES = ["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"] as const;
+const BGV_CATEGORIES = ["Passport photo", "Photo", "PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Bank", "PF-ESIC", "Medical", "BGV", "Other"] as const;
 
 function storedFileName(storagePath: string | null | undefined, fileUrl: string, fallback: string) {
   const raw = (storagePath || fileUrl || fallback).split("?")[0];
@@ -677,6 +685,70 @@ export async function ensurePersonRecords(candidateId: string) {
   }
 }
 
+let recruitmentOrganizeStarted = false;
+
+/** Loose files dumped in the recruitment buckets are moved into Requisition / Person. Images are rewritten so SharePoint can open them. */
+export async function organizeRecruitmentFolders() {
+  if (recruitmentOrganizeStarted) return;
+  recruitmentOrganizeStarted = true;
+  const people = await prisma.candidate.findMany({
+    include: {
+      requisition: { select: { requisitionNo: true, designation: true } },
+      interviews: { select: { id: true }, take: 1 },
+    },
+  });
+  const ranked = people
+    .map((person) => {
+      const rel = candidateRecruitmentFolder({
+        fullName: person.fullName,
+        status: person.status,
+        requisitionNo: person.requisition?.requisitionNo,
+        designation: person.requisition?.designation,
+        interviewed: person.interviews.length > 0,
+      });
+      const token = rel.split("/").pop() || "";
+      return { token, rel, full: `${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${rel}` };
+    })
+    .filter((row) => row.token.length > 2)
+    .sort((a, b) => b.token.length - a.token.length);
+  const buckets = [
+    "05_Records_Recruitment/01_Resumes_Received",
+    "05_Records_Recruitment/02_Shortlisted_and_Interviewed",
+    "05_Records_Recruitment/03_Rejected",
+  ];
+  for (const bucket of buckets) {
+    let files: { id: string; name: string }[] = [];
+    try {
+      files = await listDriveFiles(`${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${bucket}`);
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      const hit = ranked.find((row) => file.name.includes(row.token));
+      if (!hit) continue;
+      const current = `${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${bucket}/${file.name}`;
+      try {
+        if (/\.(png|jpe?g|gif|webp)$/i.test(file.name)) {
+          const buf = await downloadDriveFile(current);
+          await uploadToProjectLibrary(HR_DRIVE, bucket, file.name, buf, mimeForFileName(file.name), { replace: true });
+        }
+        if (!hit.full.startsWith(`${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${bucket}/`)) {
+          await moveDriveItem(file.id, hit.full);
+        } else if (hit.rel !== bucket) {
+          await moveDriveItem(file.id, hit.full);
+        }
+      } catch (err) {
+        pushRuntimeLog({
+          level: "error",
+          source: "hrm.files",
+          message: `Could not file ${file.name} into the requisition folder`,
+          detail: errorDetail(err),
+        });
+      }
+    }
+  }
+}
+
 async function recruitmentFolderFor(candidateId: string) {
   const candidate = await prisma.candidate.findUnique({
     where: { id: candidateId },
@@ -762,6 +834,19 @@ hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "of
   if (employee) await mirrorCandidateDocsToStaff(before.id, employee.id);
   await audit("hrms.candidate.document", { userId: req.user!.id, entity: "CandidateDocument", entityId: doc.id, meta: { candidateId: before.id, category } });
   res.status(201).json(doc);
+});
+
+hrmRecruitmentRouter.get("/stored-file/:id", async (req: AuthedRequest, res) => {
+  const staff = await prisma.employeeDocument.findUnique({ where: { id: req.params.id } });
+  const cand = staff ? null : await prisma.candidateDocument.findUnique({ where: { id: req.params.id } });
+  const row = staff || cand;
+  if (!row) return res.status(404).json({ error: "not found" });
+  const name = storedFileName(row.storagePath, row.fileUrl, "file");
+  const buf = await readStoredFile(row.storagePath);
+  if (!buf) return res.status(404).json({ error: "File is not on SharePoint yet." });
+  res.setHeader("Content-Type", mimeForFileName(name));
+  res.setHeader("Content-Disposition", `inline; filename="${name.replace(/"/g, "")}"`);
+  res.send(buf);
 });
 
 hrmRecruitmentRouter.delete("/candidates/:id/documents/:docId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
