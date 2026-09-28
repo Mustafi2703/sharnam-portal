@@ -743,7 +743,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       Documents{docCount ? ` (${docCount})` : ""}
                     </Button>
                   )}
-                  {canManage && scored && (
+                  {canManage && onboardReady(c) && (
                     <Button type="button" className={rowBtn} onClick={() => void goOnboard(c)}>Onboard</Button>
                   )}
                   {lettersReady ? (
@@ -850,6 +850,25 @@ function scheduledRoundId(roundType: string): "R1" | "R2" | "R3" | null {
 
 function roundHit(c: any, id: "R1" | "R2" | "R3") {
   return (c.interviews || []).find((r: any) => scheduledRoundId(String(r.roundType || "")) === id);
+}
+
+function roundsByCode(interviews: any[]) {
+  const best = new Map<string, any>();
+  for (const row of interviews || []) {
+    const id = scheduledRoundId(String(row.roundType || "")) || `other-${row.id}`;
+    const prev = best.get(id);
+    const score = Number(row.scoreOverall) || 0;
+    const prevScore = prev ? Number(prev.scoreOverall) || 0 : -1;
+    if (!prev || score > prevScore) best.set(id, row);
+  }
+  return [...best.values()];
+}
+
+function onboardReady(c: any) {
+  if (c.status === "Rejected" || c.status === "Withdrawn") return false;
+  const sat = roundsByCode(c.interviews || []).filter((r) => scheduledRoundId(String(r.roundType || "")));
+  if (!sat.length) return false;
+  return sat.every((r) => r.decision === "Advance");
 }
 
 function sheetLink(c: any) {
@@ -966,7 +985,7 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
                       <span className="text-xs text-steel-muted">Decision {decision || "—"}</span>
                       <div className="flex flex-wrap gap-1.5">
                           <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
-                          {canManage && best > 0 && (
+                          {canManage && onboardReady(c) && (
                             <Button type="button" className={rowBtn} onClick={() => void openOnboardingDesk(c.id, token).then((desk) => navigate(`/hrm/onboarding/${desk.offerId}`)).catch((err) => setMsg(err instanceof Error ? err.message : "Could not open onboarding"))}>Onboard</Button>
                           )}
                         {sheet ? <a href={sheet} target="_blank" rel="noreferrer" className={linkBtn}>SharePoint</a> : null}
@@ -1011,23 +1030,25 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
   }, [token]);
 
   useEffect(() => {
-    if (!candidateId) {
-      setRounds([]);
-      return;
-    }
-    api<any[]>(`/api/hrm/candidates/${candidateId}/interviews`, { token }).then(setRounds).catch(() => setRounds([]));
+    setRounds([]);
+    setForm((prev) => ({ ...prev, roundType: "R1" }));
+  }, [candidateId]);
+
+  useEffect(() => {
+    if (!candidateId) return;
+    api<any[]>(`/api/hrm/candidates/${candidateId}/interviews`, { token }).then((rows) => {
+      setRounds(rows);
+      setForm((prev) => {
+        const taken = (id: string) => rows.some((row) => scheduledRoundId(row.roundType) === id);
+        if (!taken(prev.roundType)) return prev;
+        const open = SCHEDULE_ROUNDS.find((opt) => !taken(opt.id));
+        return open ? { ...prev, roundType: open.id } : prev;
+      });
+    }).catch(() => setRounds([]));
     const person = candidates.find((c: { id: string; requisition?: { designation?: string }; posting?: { title?: string } }) => c.id === candidateId);
     const title = person?.requisition?.designation || person?.posting?.title || "";
     if (title) setForm((prev) => ({ ...prev, position: scorecardRoleForDesignation(title) }));
   }, [candidateId, token, candidates]);
-
-  useEffect(() => {
-    const open = SCHEDULE_ROUNDS.find((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id));
-    if (!open) return;
-    if (rounds.some((row) => scheduledRoundId(row.roundType) === form.roundType)) {
-      setForm((prev) => ({ ...prev, roundType: open.id }));
-    }
-  }, [rounds, form.roundType]);
 
   async function schedule(e: FormEvent) {
     e.preventDefault();
@@ -1231,8 +1252,8 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 Add interviewer
               </Button>
             </div>
-            <Button type="submit" disabled={rounds.length >= 3 || !SCHEDULE_ROUNDS.some((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id))}>Schedule interview meeting</Button>
-            {rounds.length >= 3 ? <p className="text-[11px] text-steel-muted">Three rounds are already on file. Score the ones this candidate sat, then use Onboard.</p> : null}
+            <Button type="submit" disabled={!SCHEDULE_ROUNDS.some((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id))}>Schedule interview meeting</Button>
+            {!SCHEDULE_ROUNDS.some((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id)) ? <p className="text-[11px] text-steel-muted">R1, R2, and R3 are already on file. Score the rounds they sat. Onboard opens when each of those rounds is Advance. A skipped round does not block it.</p> : null}
           </form>
           <p className="text-[10px] text-steel-muted mt-2">
             Schedule only R1, R2, or R3. Skip any round this candidate does not need. Three is the maximum. The scorecard sheet uses the candidate’s name. Teams meetings are created on the SPDC mailbox when Graph is connected.
@@ -1244,11 +1265,11 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
         <Card padding={false}>
           <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">Rounds for {candidate.fullName}</div>
           <ul className="divide-y max-h-[32rem] overflow-y-auto">
-            {rounds.map((r) => (
+            {roundsByCode(rounds).map((r) => (
               <li key={r.id} className="p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <div>
-                    <span className="font-semibold">Round {r.roundNumber} · {r.roundType}</span>
+                    <span className="font-semibold">{SCHEDULE_ROUNDS.find((opt) => opt.id === scheduledRoundId(String(r.roundType || "")))?.label || `Round ${r.roundNumber} · ${r.roundType}`}</span>
                     <span className="text-xs text-steel-muted ml-2">
                       {r.scheduledAt ? new Date(r.scheduledAt).toLocaleString("en-IN") : "Unscheduled"} · {r.durationMins}m · {r.mode}
                     </span>
@@ -1289,7 +1310,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       })()}
                       onSave={async (scorecard) => {
                         await updateRound(r.id, { scorecard, status: "Completed" });
-                        setMsg(`Scorecard saved for ${candidate.fullName}. Open Onboard to start the checklist.`);
+                        setMsg(`Scorecard saved for ${candidate.fullName}. Onboard opens on the resume row when every round they sat is Advance.`);
                       }}
                     />
                     <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Evidence / notes" rows={2} className="md:col-span-4 border border-line rounded px-2 py-1" />
@@ -1298,7 +1319,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Hold" })} variant="secondary">Hold</Button>
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
                     </div>
-                    {r.scoreOverall != null && canManage && (
+                    {onboardReady(candidate) && canManage && (
                       <div className="md:col-span-4">
                         <Button
                           type="button"

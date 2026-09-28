@@ -90,6 +90,12 @@ export const HRMS_SECTIONS: HrmsSection[] = [
         icon: "master",
         subtitle: "Leave types, holiday calendar, and HR reference data.",
       },
+      {
+        to: "training",
+        label: "Training",
+        icon: "reports",
+        subtitle: "HR walkthroughs for recruitment, onboarding, attendance, and letters.",
+      },
     ],
   },
   {

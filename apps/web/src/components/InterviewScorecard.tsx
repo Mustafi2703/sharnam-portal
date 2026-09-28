@@ -47,7 +47,7 @@ export function InterviewScorecard({
 }) {
   const [framework, setFramework] = useState<Framework | null>(null);
   const [position, setPosition] = useState(saved?.position || positionHint || "");
-  const [round, setRound] = useState(() => roundId(saved?.round || roundHint));
+  const [round, setRound] = useState(() => roundId(roundHint || saved?.round));
   const [scores, setScores] = useState<Record<string, string>>(() => {
     const next: Record<string, string> = {};
     for (const [code, vals] of Object.entries(saved?.scores || {})) {
@@ -65,8 +65,8 @@ export function InterviewScorecard({
   }, [token]);
 
   useEffect(() => {
-    setRound(roundId(saved?.round || roundHint));
-  }, [saved?.round, roundHint]);
+    setRound(roundId(roundHint || saved?.round));
+  }, [roundHint]);
 
   useEffect(() => {
     if (!framework?.roles.length) return;

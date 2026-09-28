@@ -72,12 +72,22 @@ commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "
   if (!project) return res.status(404).json({ error: "Not found" });
   const { buildMatrixXlsx } = await import("../services/matrixExport.js");
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
+  const { driveItemWebUrl, sanitizeProjectCode, SHAREPOINT_SANDBOX_ROOT } = await import("../services/graph.js");
+  const fileName = `Communication-Matrix-${kind}.xlsx`;
+  const folder = "01_CONTEXT_AND_GOVERNANCE/01.02_Stakeholders_and_Communication";
   try {
+    if (!req.body?.refresh) {
+      const existingPath = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}/${folder}/${fileName}`;
+      const existing = await driveItemWebUrl(existingPath);
+      if (existing) {
+        return res.json({ sharePointUrl: existing, fileName, reused: true });
+      }
+    }
     const buf = await buildMatrixXlsx(project.id, kind);
     const saved = await mockOneDrive.upload(
       project.code,
       "01_CONTEXT_AND_GOVERNANCE/01.02_Stakeholders_and_Communication",
-      `Communication-Matrix-${kind}.xlsx`,
+      fileName,
       buf,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       { replace: true },

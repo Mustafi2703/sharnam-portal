@@ -193,6 +193,7 @@ export default function App() {
           <Route path="masters" element={<HrmsMastersPage />} />
           <Route path="activity" element={<HrmsActivityPage />} />
           <Route path="users" element={<HrmsUsersPage />} />
+          <Route path="training" element={<TrainingPage />} />
           <Route path="vendors" element={<Navigate to="/hrm/users" replace />} />
         </Route>
       </Route>

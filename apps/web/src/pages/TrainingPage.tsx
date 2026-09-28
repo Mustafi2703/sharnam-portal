@@ -11,7 +11,7 @@
  * Reports · Master · Audit) and searchable across title, roles, and steps.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Badge, Card, Input, PageHeader } from "../components/ui";
 import { useAuth } from "../auth";
 
@@ -333,11 +333,11 @@ const G: Guide[] = [
     who: ["admin", "office"],
     when: "New position needs to be filled.",
     steps: [
-      "HRMS → Recruitment → 'New requisition' from the hiring department (auto-routed to HR for approval).",
-      "Once approved, add candidates (paste résumé, upload PDF, or import from LinkedIn CSV).",
-      "Schedule interviews → interviewer submits feedback + scorecard. HR sees ranked shortlist.",
-      "Click 'Make offer' on the selected candidate — pick the CTC template, fill 12 salary inputs, portal generates Annexure I + offer letter (Sharnam letterhead).",
-      "Candidate accepts (magic link email) → HRMS → Onboarding page auto-opens for document collection.",
+      "HR desk → Recruitment. Approve the requisition, then add the person on that requisition.",
+      "Open Scorecard. Schedule only the rounds they need: R1 HR Screening, R2 Technical, R3 Management. Three is the maximum. A round they skip is left off the form.",
+      "Each scheduled round is one card. Pick the round inside that card, enter the scores, and Save Scorecard. The Excel file is filed on SharePoint under that person’s name.",
+      "Mark Advance, Hold, or Reject on each round they sat. Onboard appears on the resume row when every round they sat is Advance. A rejected person does not get Onboard.",
+      "Compare ranks people on the same requisition after their scorecards are saved.",
     ],
     inputs: [
       "Requisition: department, designation, headcount, budget band, reporting manager.",
@@ -352,10 +352,11 @@ const G: Guide[] = [
     who: ["admin", "office"],
     when: "Accepted candidate is joining.",
     steps: [
-      "HRMS → Onboarding → the candidate's task list is auto-populated (documents, medical, bank, PAN, Aadhaar, IT asset request, ID card).",
-      "Trigger 'Generate appointment letter' — the SPDC_Letter_of_Appointment.docx template is filled and rendered as PDF + editable copy.",
-      "Assign an employee code (auto-suggested from department).",
-      "Once every task is ticked, click 'Onboard' — employee is added to Directory and gets portal access at their assigned role.",
+      "HR desk → Onboarding. Search the joinee at the top. The list scrolls as more people are converted.",
+      "Open Checklist. Upload the required documents first. They are stored in that person’s SharePoint employee file.",
+      "Finish document collection, background check, medical, and employee code, then generate the appointment letter. File the signed copy on step 5.",
+      "IT asset, email, ID card, and welcome kit can be saved after the letter is generated. Generate one letter at a time from Letters.",
+      "Portal login is added from the checklist. Do not use Send from this desk during a live test.",
     ],
     inputs: [
       "Employee code, department, designation, reporting manager, project assignment.",
@@ -473,10 +474,11 @@ const ROLE_LABEL: Record<Role, string> = {
 
 export default function TrainingPage() {
   const { user } = useAuth();
+  const hrDesk = useLocation().pathname.startsWith("/hrm");
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState<Guide["group"] | "All">("All");
+  const [group, setGroup] = useState<Guide["group"] | "All">(hrDesk ? "HRMS" : "All");
   const [roleOnly, setRoleOnly] = useState(false);
-  const [selectedId, setSelectedId] = useState<string>(G[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState<string>(hrDesk ? "hrms-recruit" : G[0]?.id ?? "");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -23,23 +23,34 @@ function OnboardingList() {
   const [rows, setRows] = useState<any[]>([]);
   const [loadError, setLoadError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [search, setSearch] = useState("");
 
   async function load() {
     try {
       setRows(await api<any[]>("/api/hrm/onboarding-board", { token }));
       setLoadError("");
     } catch (err) {
-      setRows([]);
       setLoadError(err instanceof Error ? err.message : "Could not load onboarding");
     }
   }
 
   useEffect(() => {
     void load();
+    const timer = window.setInterval(() => { void load(); }, 15000);
     const onFocus = () => { void load(); };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [token]);
+
+  const visible = rows.filter((row) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [row.fullName, row.email, row.designation, row.department, row.requisitionNo, row.empCode, row.offerNo]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  });
 
   async function openDesk(row: any) {
     if (row.offerId) {
@@ -81,9 +92,13 @@ function OnboardingList() {
           {loadError}
         </p>
       ) : null}
-      <div className="grid lg:grid-cols-2 gap-3 max-h-[36rem] overflow-y-auto pr-1">
-        {rows.map((row) => (
-          <Card key={row.candidateId} className="!p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, code, requisition" className="max-w-sm" />
+        <p className="text-xs text-steel-muted">{visible.length} of {rows.length} joinees</p>
+      </div>
+      <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-line bg-paper divide-y">
+        {visible.map((row) => (
+          <div key={row.candidateId} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold">{row.fullName}</p>
@@ -126,8 +141,11 @@ function OnboardingList() {
                 </Link>
               ) : null}
             </div>
-          </Card>
+          </div>
         ))}
+        {rows.length > 0 && !visible.length ? (
+          <p className="p-4 text-sm text-steel-muted">No joinee matches that search.</p>
+        ) : null}
       </div>
       {!rows.length && !loadError ? (
         <Card>

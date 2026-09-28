@@ -452,7 +452,7 @@ function encodeDrivePath(relPath: string) {
 /** All portal writes stay inside this sandbox — never touch other site folders/files. */
 export const SHAREPOINT_SANDBOX_ROOT = "Sharnam Portal";
 
-function sanitizeProjectCode(projectCode: string) {
+export function sanitizeProjectCode(projectCode: string) {
   const clean = projectCode
     .trim()
     .replace(/[^a-zA-Z0-9._-]/g, "_")

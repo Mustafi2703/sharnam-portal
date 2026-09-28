@@ -934,11 +934,14 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   if (!roundType) {
     return res.status(400).json({ error: "Schedule R1, R2, or R3 only. A candidate does not need every round." });
   }
-  if (priorRounds.length >= 3) {
-    return res.status(400).json({ error: "This candidate already has 3 rounds. Score the rounds they sat, then onboard." });
+  const usedRounds = new Set(
+    priorRounds.map((row) => canonicalInterviewRound(row.roundType)).filter((id): id is "R1" | "R2" | "R3" => !!id),
+  );
+  if (usedRounds.size >= 3) {
+    return res.status(400).json({ error: "This candidate already has R1, R2, and R3. Score the rounds they sat, then onboard." });
   }
-  if (priorRounds.some((row) => canonicalInterviewRound(row.roundType) === roundType)) {
-    return res.status(400).json({ error: `${roundType} is already scheduled for this candidate.` });
+  if (usedRounds.has(roundType)) {
+    return res.status(400).json({ error: `${roundType} is already scheduled for this candidate. Open that card and save the score.` });
   }
   const interviewee: IntervieweeSeat = {
     candidateId: candidate.id,
@@ -1104,9 +1107,21 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
       payload: req.body.scorecard,
     };
   }
+  const currentRound = canonicalInterviewRound(before.roundType);
+  const pickedRound = req.body.scorecard ? canonicalInterviewRound(String(req.body.scorecard.round || "")) : null;
+  if (pickedRound && pickedRound !== currentRound) {
+    const others = await prisma.interviewRound.findMany({
+      where: { candidateId: before.candidateId, id: { not: before.id } },
+      select: { roundType: true },
+    });
+    if (others.some((row) => canonicalInterviewRound(row.roundType) === pickedRound)) {
+      return res.status(400).json({ error: `${pickedRound} is already on another meeting. Use that card, or pick a free round.` });
+    }
+  }
   const row = await prisma.interviewRound.update({
     where: { id: req.params.id },
     data: {
+      ...(pickedRound ? { roundType: pickedRound, roundNumber: pickedRound === "R1" ? 1 : pickedRound === "R3" ? 3 : 2 } : {}),
       status: s(req.body.status) || before.status,
       decision,
       feedbackTechnical: s(req.body.feedbackTechnical) ?? before.feedbackTechnical,
