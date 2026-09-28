@@ -922,9 +922,47 @@ projectsRouter.post("/:id/complete-setup", requireRoles("admin", "office"), asyn
   res.json(out);
 });
 
+projectsRouter.post("/:id/file-drive", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true, code: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  try {
+    const folders = await mockOneDrive.ensureProjectTree(project.id);
+    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
+    await publishDrawingRegistersToDrive(project.id);
+    const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+    const pack = await fileWonProjectPack(project.id);
+    res.json({
+      ok: true,
+      folders: folders.folders.length,
+      provider: folders.provider,
+      crmFolder: pack?.folder || null,
+      sharePointUrl: pack?.sharePointUrl || null,
+    });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : "Could not file this project on SharePoint" });
+  }
+});
+
+projectsRouter.get("/:id/onboarding-preview", requireRoles("admin", "office"), async (req, res) => {
+  const { getOnboardedMatrixEmails } = await import("../services/matrixContacts.js");
+  const lists = await getOnboardedMatrixEmails(req.params.id);
+  res.json({ to: lists.to, cc: lists.cc, count: lists.all.length });
+});
+
 projectsRouter.post("/:id/send-portal-invites", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
+  if (req.body?.fromMatrix) {
+    const { sendOnboardingFromMatrix } = await import("../services/portalInvites.js");
+    const out = await sendOnboardingFromMatrix(project.id, req.user!.id);
+    await audit("project.portal_invites", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: project.id,
+      meta: { sent: out.sent.length, fromMatrix: true },
+    });
+    return res.json(out);
+  }
   const { sendProjectPortalInvites } = await import("../services/portalInvites.js");
   const extra = Array.isArray(req.body?.people) ? req.body.people : [];
   const memberIds = Array.isArray(req.body?.memberIds) ? req.body.memberIds.map(String) : [];
@@ -1451,6 +1489,40 @@ dmsRouter.get("/shared/:token/file", async (req, res) => {
 
 dmsRouter.use(requireAuth);
 
+const COMPANY_LIBRARIES = new Set(["SPDC_HRMS", "SPDC_CRM"]);
+
+async function companyLibraryFolders(code: string) {
+  const { HR_LIBRARY_FOLDERS, CRM_LIBRARY_FOLDERS, hrFyRecordFolders } = await import("../services/spdcLibraryFolders.js");
+  if (code === "SPDC_HRMS") return [...HR_LIBRARY_FOLDERS, ...hrFyRecordFolders()];
+  return [...CRM_LIBRARY_FOLDERS];
+}
+
+dmsRouter.get("/library/:code/folders", requireRoles("admin", "office"), async (req, res) => {
+  const code = String(req.params.code || "").toUpperCase();
+  if (!COMPANY_LIBRARIES.has(code)) return res.status(404).json({ error: "Unknown library" });
+  res.json({ projectCode: code, folders: await companyLibraryFolders(code) });
+});
+
+dmsRouter.get("/library/:code/browse", requireRoles("admin", "office"), async (req, res) => {
+  const code = String(req.params.code || "").toUpperCase();
+  if (!COMPANY_LIBRARIES.has(code)) return res.status(404).json({ error: "Unknown library" });
+  const folderPath = String(req.query.path || "");
+  const children = await mockOneDrive.listChildrenLive(code, folderPath);
+  res.json({
+    projectCode: code,
+    path: folderPath,
+    fullPath: `/onedrive/${code}/${folderPath}`.replace(/\/+/g, "/"),
+    children,
+    folders: await companyLibraryFolders(code),
+    provider: resultProvider(children),
+    directOpen: true,
+    note:
+      code === "SPDC_HRMS"
+        ? "Company HR library. Letters, scorecards, and employee files filed by the app."
+        : "Company CRM library. Won project cards, communication matrices, and proposals filed by the app.",
+  });
+});
+
 dmsRouter.get("/shared/:token", async (req: AuthedRequest, res) => {
   const { loadApprovedShare, shareLinkForToken } = await import("../services/driveFileAccess.js");
   const row = await loadApprovedShare(req.params.token, req.user);
@@ -1540,7 +1612,7 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     provider: resultProvider(children),
     directOpen,
     access,
-    note: "Project ISO library only. Company HR files live on HRMS → Employee files (_HR vault).",
+    note: "Project library. Registers stay in the portal database; a copy is filed here with the drawings and other documents.",
   });
 });
 

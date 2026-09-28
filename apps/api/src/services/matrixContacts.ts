@@ -40,23 +40,49 @@ export async function getProjectMatrixEmails(
   return { to, cc, all, csv: all.join(", ") };
 }
 
+/** Matrix To/CC limited to people already onboarded on this project (a portal login on the team). */
+export async function getOnboardedMatrixEmails(
+  projectId: string,
+  matrixKind?: string | null,
+): Promise<MatrixEmailLists> {
+  const matrix = await getProjectMatrixEmails(projectId, matrixKind);
+  const members = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { user: { select: { email: true } } },
+  });
+  const allowed = new Set(members.map((m) => normEmail(m.user.email)).filter((e): e is string => Boolean(e)));
+  const to = matrix.to.filter((e) => allowed.has(e));
+  const toSet = new Set(to);
+  const cc = matrix.cc.filter((e) => allowed.has(e) && !toSet.has(e));
+  const all = Array.from(new Set([...to, ...cc]));
+  return { to, cc, all, csv: all.join(", ") };
+}
+
 /** Prefer explicit override, then matrix, then project notification list. */
 export async function resolveMeetingRecipients(
   projectId: string,
   override?: string | null
-): Promise<{ csv: string; source: "override" | "matrix" | "project" | "none" }> {
+): Promise<{ csv: string; to: string[]; cc: string[]; source: "override" | "matrix" | "project" | "none" }> {
   const trimmed = (override || "").trim();
-  if (trimmed) return { csv: trimmed, source: "override" };
+  if (trimmed) {
+    const to = trimmed.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
+    return { csv: trimmed, to, cc: [], source: "override" };
+  }
 
-  const matrix = await getProjectMatrixEmails(projectId);
-  if (matrix.all.length) return { csv: matrix.csv, source: "matrix" };
+  const listed = await getProjectMatrixEmails(projectId);
+  const matrix = await getOnboardedMatrixEmails(projectId);
+  if (matrix.all.length) return { csv: matrix.csv, to: matrix.to, cc: matrix.cc, source: "matrix" };
+  if (listed.all.length) return { csv: "", to: [], cc: [], source: "none" };
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { notificationEmails: true },
   });
   const projectCsv = (project?.notificationEmails || "").trim();
-  if (projectCsv) return { csv: projectCsv, source: "project" };
+  if (projectCsv) {
+    const to = projectCsv.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
+    return { csv: projectCsv, to, cc: [], source: "project" };
+  }
 
-  return { csv: "", source: "none" };
+  return { csv: "", to: [], cc: [], source: "none" };
 }

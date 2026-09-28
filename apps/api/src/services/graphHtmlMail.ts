@@ -17,6 +17,7 @@ export function buildGraphInlineLogoAttachment() {
 
 export async function sendGraphHtmlMail(opts: {
   to: string[];
+  cc?: string[];
   subject: string;
   bodyHtml: string;
   mailbox?: string;
@@ -35,6 +36,8 @@ export async function sendGraphHtmlMail(opts: {
     body: { contentType: "HTML", content: html },
     toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
   };
+  const cc = (opts.cc || []).filter((address) => address && !opts.to.includes(address));
+  if (cc.length) message.ccRecipients = cc.map((address) => ({ emailAddress: { address } }));
   if (attachment) message.attachments = [attachment];
   if (opts.internetMessageHeaders?.length) message.internetMessageHeaders = opts.internetMessageHeaders;
 

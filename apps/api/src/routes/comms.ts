@@ -397,7 +397,8 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
     req.params.projectId,
     typeof req.body.attendeeEmails === "string" ? req.body.attendeeEmails : undefined
   );
-  const attendeeRaw = recipients.csv;
+  const attendeeRaw = recipients.to.join(", ");
+  const ccRaw = recipients.cc.join(", ");
 
   let invite: Record<string, unknown> | null = null;
   try {
@@ -415,6 +416,7 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
       createdByName: req.user!.fullName || undefined,
       createdById: req.user!.id,
       attendeeEmails: attendeeRaw || undefined,
+      ccEmails: ccRaw || undefined,
       createTeams: req.body.createTeams !== false,
       agendaItems: agendaFromBody,
     });
@@ -790,9 +792,10 @@ commsRouter.post(
       const ownerEmails = meeting.items
         .map((it) => it.assignedTo?.email)
         .filter((e): e is string => Boolean(e));
-      const { getProjectMatrixEmails } = await import("../services/matrixContacts.js");
-      const matrixEmails = await getProjectMatrixEmails(meeting.projectId);
-      const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.all]));
+      const { getOnboardedMatrixEmails } = await import("../services/matrixContacts.js");
+      const matrixEmails = await getOnboardedMatrixEmails(meeting.projectId);
+      const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.to]));
+      const cc = matrixEmails.cc.filter((email) => !to.includes(email));
 
       const { queueProjectEmail } = await import("../services/email.js");
       const result = await queueProjectEmail({
@@ -802,6 +805,7 @@ commsRouter.post(
         bodyHtml: html,
         context: `MoM ${meeting.id}`,
         toOverride: to.join(", "),
+        ccOverride: cc.join(", "),
         createdById: req.user!.id,
       });
 
@@ -836,9 +840,10 @@ commsRouter.post(
           .split(/[,;\s]+/)
           .filter(Boolean);
     const ownerEmails = meeting.items.map((it) => it.assignedTo?.email).filter((e): e is string => Boolean(e));
-    const { getProjectMatrixEmails } = await import("../services/matrixContacts.js");
-    const matrixEmails = await getProjectMatrixEmails(meeting.projectId);
-    const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.all]));
+    const { getOnboardedMatrixEmails } = await import("../services/matrixContacts.js");
+    const matrixEmails = await getOnboardedMatrixEmails(meeting.projectId);
+    const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.to]));
+    const cc = matrixEmails.cc.filter((email) => !to.includes(email));
 
     const portal = process.env.PORTAL_ORIGIN || process.env.APP_URL || "http://localhost:5173";
     const link = `${portal}/projects/${meeting.projectId}/comms?tab=followup&meeting=${meeting.id}`;
@@ -863,6 +868,7 @@ commsRouter.post(
       bodyHtml: `<p>Open follow-up actions for <strong>${meeting.title}</strong>:</p><ul>${openItems.map((i) => `<li>${i.description}</li>`).join("")}</ul><p><a href="${link}">Open follow-up in Sharnam portal</a></p>`,
       context: `meeting.followup.send ${meeting.id}`,
       toOverride: to.join(", "),
+      ccOverride: cc.join(", "),
       createdById: req.user!.id,
     });
 

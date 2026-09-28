@@ -159,6 +159,7 @@ export default function CrmProjectSetupPage() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mailPreview, setMailPreview] = useState<{ to: string[]; cc: string[] } | null>(null);
   const [createForm, setCreateForm] = useState(EMPTY_PROJECT);
   const [details, setDetails] = useState(EMPTY_PROJECT);
   const [consultantIds, setConsultantIds] = useState<string[]>([]);
@@ -385,6 +386,58 @@ export default function CrmProjectSetupPage() {
       setStep("project", projectId);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (step !== "launch" || !projectId || !token) return;
+    void api<{ to: string[]; cc: string[] }>(`/api/projects/${projectId}/onboarding-preview`, { token })
+      .then((row) => setMailPreview(row))
+      .catch(() => setMailPreview(null));
+  }, [step, projectId, token]);
+
+  async function launchDrive() {
+    if (!projectId) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ crmFolder?: string | null; sharePointUrl?: string | null }>(`/api/projects/${projectId}/file-drive`, {
+        method: "POST",
+        token,
+      });
+      setMsg(
+        out.sharePointUrl
+          ? `SharePoint folders are ready. Project card filed in CRM: ${out.crmFolder || "04_Orders_Won"}.`
+          : "SharePoint folders are ready. The project card is filed under SPDC_CRM / Orders won, and the drawing register copy is in the project drawings folder.",
+      );
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not launch SharePoint folders");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendOnboarding() {
+    if (!projectId) return;
+    const to = mailPreview?.to.length ? mailPreview.to.join(", ") : "nobody in To";
+    const cc = mailPreview?.cc.length ? mailPreview.cc.join(", ") : "nobody in CC";
+    const ok = window.confirm(
+      `Send onboarding mail now?\n\nTo: ${to}\nCC: ${cc}\n\nThis sends real login emails. Use a spare project if these are live addresses.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ sent?: { email: string }[]; reason?: string }>(`/api/projects/${projectId}/send-portal-invites`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ fromMatrix: true }),
+      });
+      setMsg(out.sent?.length ? `Onboarding mail queued for ${out.sent.length} people.` : out.reason || "No onboarded people to mail.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Onboarding mail was not sent");
     } finally {
       setBusy(false);
     }
@@ -899,22 +952,15 @@ export default function CrmProjectSetupPage() {
             Status is <strong>{summary?.project.status}</strong>. Create the SharePoint folders if they are missing — existing folders are left as they are.
             Use step 1 to add consultants, vendors, or team members during the job.
           </p>
+          <p className="text-xs text-steel-muted">
+            Onboarding mail uses the communication matrix. To: {mailPreview?.to.join(", ") || "—"}. CC: {mailPreview?.cc.join(", ") || "—"}. Only people already on the project team are included. Nothing is sent until you click Send onboarding.
+          </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                const code = summary?.project.code;
-                if (!code) return;
-                setBusy(true);
-                setMsg("");
-                void api(`/api/graph/ensure-project-tree`, { method: "POST", token, body: JSON.stringify({ projectCode: code }) })
-                  .then(() => setMsg("SharePoint folders are ready for this project."))
-                  .catch((err) => setMsg(err instanceof Error ? err.message : "Could not create SharePoint folders"))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              Create SharePoint folders
+            <Button type="button" disabled={busy} onClick={() => void launchDrive()}>
+              Launch
+            </Button>
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void sendOnboarding()}>
+              Send onboarding
             </Button>
             <Button type="button" variant="secondary" onClick={() => setStep("project")}>
               Edit card & team
@@ -943,9 +989,15 @@ export default function CrmProjectSetupPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" disabled={busy} onClick={() => void completeSetup()}>
-                Complete setup
+                Launch
+              </Button>
+              <Button type="button" variant="secondary" disabled={busy} onClick={() => void sendOnboarding()}>
+                Send onboarding
               </Button>
             </div>
+            <p className="text-xs text-steel-muted">
+              Launch creates the SharePoint folders and files the project card in SPDC CRM. Send onboarding mails only the people already on the matrix and the team. To: {mailPreview?.to.join(", ") || "—"}. CC: {mailPreview?.cc.join(", ") || "—"}.
+            </p>
           </div>
           <ul className="grid sm:grid-cols-2 gap-2">
             {(status?.checks || []).map((c) => (

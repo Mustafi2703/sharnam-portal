@@ -94,6 +94,17 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus } });
   }
 
+  let drive: { folder?: string; sharePointUrl?: string | null; error?: string } = {};
+  try {
+    const { publishDrawingRegistersToDrive } = await import("./drawingRegisterDrive.js");
+    await publishDrawingRegistersToDrive(projectId);
+    const { fileWonProjectPack } = await import("./crmSharePoint.js");
+    const pack = await fileWonProjectPack(projectId);
+    drive = { folder: pack?.folder, sharePointUrl: pack?.sharePointUrl || null };
+  } catch (err) {
+    drive = { error: err instanceof Error ? err.message : "Could not file the project card" };
+  }
+
   return {
     projectId,
     status: nextStatus,
@@ -104,6 +115,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     contractorPortals: contractorPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
     stakeholderPortals: stakeholderPortals.map((p) => ({ email: p.email, created: p.created, tempPassword: p.tempPassword })),
     reports,
+    drive,
   };
 }
 

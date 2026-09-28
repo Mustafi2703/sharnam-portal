@@ -30,6 +30,7 @@ function threadHeaders(opts: { messageId: string; inReplyTo?: string | null; ref
 
 async function sendViaGraph(opts: {
   to: string[];
+  cc?: string[];
   subject: string;
   body: string;
   bodyHtml?: string;
@@ -41,6 +42,7 @@ async function sendViaGraph(opts: {
   if (useHtml) {
     await sendGraphHtmlMail({
       to: opts.to,
+      cc: opts.cc,
       subject: opts.subject,
       bodyHtml: opts.bodyHtml!,
       internetMessageHeaders: threadHeaders(opts),
@@ -57,6 +59,9 @@ async function sendViaGraph(opts: {
         subject: opts.subject,
         body: { contentType: "Text", content: opts.body },
         toRecipients: opts.to.map((address) => ({ emailAddress: { address } })),
+        ccRecipients: (opts.cc || [])
+          .filter((address) => !opts.to.includes(address))
+          .map((address) => ({ emailAddress: { address } })),
         internetMessageHeaders: threadHeaders(opts),
       },
       saveToSentItems: true,
@@ -73,14 +78,16 @@ export async function queueProjectEmail(opts: {
   context?: string;
   createdById?: string;
   toOverride?: string;
+  /** Communication-matrix CC. Only people already onboarded on the project. */
+  ccOverride?: string;
 }) {
   const project = await prisma.project.findUnique({ where: { id: opts.projectId } });
   if (!project) return { skipped: true as const, reason: "no_project" };
   if (!project.emailEnabled) {
     return { skipped: true as const, reason: "email_disabled" };
   }
-  const toRaw = (opts.toOverride || project.notificationEmails || "").trim();
-  if (!toRaw) return { skipped: true as const, reason: "no_recipients" };
+  const toRaw = (opts.toOverride || (!opts.ccOverride ? project.notificationEmails : "") || "").trim();
+  if (!toRaw && !(opts.ccOverride || "").trim()) return { skipped: true as const, reason: "no_recipients" };
 
   const fromName = project.emailFromName || "शरणम् Portal";
   const threadKey = opts.context || null;
@@ -104,6 +111,8 @@ export async function queueProjectEmail(opts: {
     ? `${bodyPlain}\n\n[HTML version sent via Graph]`
     : bodyPlain;
   const recipients = parseRecipients(toRaw);
+  const cc = parseRecipients(opts.ccOverride || "").filter((address) => !recipients.includes(address));
+  if (!recipients.length && cc.length) recipients.push(...cc.splice(0, cc.length));
   if (!recipients.length) return { skipped: true as const, reason: "no_valid_recipients" };
 
   const messageId = `<sharnam-${Date.now()}-${Math.random().toString(36).slice(2, 10)}@spdc.in>`;
@@ -115,7 +124,7 @@ export async function queueProjectEmail(opts: {
   const row = await prisma.emailOutbox.create({
     data: {
       projectId: project.id,
-      toEmails: recipients.join(", "),
+      toEmails: cc.length ? `${recipients.join(", ")}\nCC: ${cc.join(", ")}` : recipients.join(", "),
       subject,
       body: bodyStore,
       context: opts.context || null,
@@ -130,6 +139,7 @@ export async function queueProjectEmail(opts: {
     try {
       await sendViaGraph({
         to: recipients,
+        cc,
         subject,
         body: bodyPlain,
         bodyHtml: opts.bodyHtml ? `${opts.bodyHtml}` : undefined,

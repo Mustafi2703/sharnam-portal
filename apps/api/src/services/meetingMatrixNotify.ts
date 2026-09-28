@@ -1,6 +1,6 @@
 import { prisma } from "../prisma.js";
 import { queueProjectEmail } from "./email.js";
-import { getProjectMatrixEmails } from "./matrixContacts.js";
+import { getOnboardedMatrixEmails } from "./matrixContacts.js";
 import { portalOrigin } from "./rfiFlowNotify.js";
 
 type MeetingStage = "agenda" | "mom" | "followup" | "invite";
@@ -36,8 +36,8 @@ export async function notifyMeetingMatrixContacts(opts: {
   });
   if (!meeting) return { skipped: true as const, reason: "meeting_not_found" };
 
-  const { all } = await getProjectMatrixEmails(opts.projectId);
-  if (!all.length) return { skipped: true as const, reason: "no_matrix_emails" };
+  const { all, to, cc } = await getOnboardedMatrixEmails(opts.projectId);
+  if (!all.length) return { skipped: true as const, reason: "no_onboarded_matrix_emails" };
 
   const portal = portalOrigin();
   const link = `${portal}/projects/${opts.projectId}/comms?tab=${opts.stage === "mom" ? "mom" : opts.stage === "followup" ? "followup" : "agenda"}&meeting=${opts.meetingId}`;
@@ -70,7 +70,8 @@ export async function notifyMeetingMatrixContacts(opts: {
     bodyHtml,
     context: `meeting.${opts.stage}`,
     createdById: opts.createdById,
-    toOverride: all.join(", "),
+    toOverride: to.join(", "),
+    ccOverride: cc.join(", "),
   });
 
   return { ok: true as const, to: all, result };

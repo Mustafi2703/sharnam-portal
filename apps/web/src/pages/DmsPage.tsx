@@ -130,6 +130,7 @@ export default function DmsPage({
   hubLink,
   projectId: projectIdProp,
   initialPath,
+  libraryCode,
 }: {
   mode?: DmsPageMode;
   embedded?: boolean;
@@ -140,6 +141,8 @@ export default function DmsPage({
   hubLink?: string;
   projectId?: string;
   initialPath?: string;
+  /** Company library under Sharnam Portal — SPDC_HRMS or SPDC_CRM. */
+  libraryCode?: "SPDC_HRMS" | "SPDC_CRM";
 }) {
   const { id: routeId } = useParams();
   const id = projectIdProp || routeId;
@@ -189,13 +192,13 @@ export default function DmsPage({
 
   const load = useCallback(
     async (folderPath = path) => {
-      if (!id) return;
+      if (!libraryCode && !id) return;
       setSyncing(true);
       try {
-        const res = await api<BrowseData>(
-          `/api/dms/${id}/browse?path=${encodeURIComponent(folderPath)}&sync=0`,
-          { token }
-        );
+        const browse = libraryCode
+          ? `/api/dms/library/${libraryCode}/browse?path=${encodeURIComponent(folderPath)}`
+          : `/api/dms/${id}/browse?path=${encodeURIComponent(folderPath)}&sync=0`;
+        const res = await api<BrowseData>(browse, { token });
         setData(res);
       } catch (err) {
         setMsg(err instanceof Error ? err.message : "Browse failed");
@@ -203,15 +206,16 @@ export default function DmsPage({
         setSyncing(false);
       }
     },
-    [id, path, token]
+    [id, libraryCode, path, token]
   );
 
   useEffect(() => {
-    if (!id) return;
-    api<{ folders: string[] }>(`/api/dms/${id}/folders`, { token })
+    if (!libraryCode && !id) return;
+    const foldersUrl = libraryCode ? `/api/dms/library/${libraryCode}/folders` : `/api/dms/${id}/folders`;
+    api<{ folders: string[] }>(foldersUrl, { token })
       .then((r) => setFolderPaths(r.folders || []))
       .catch(() => setFolderPaths([]));
-  }, [id, token]);
+  }, [id, libraryCode, token]);
 
   useEffect(() => {
     void load(path);
@@ -283,6 +287,11 @@ export default function DmsPage({
   const files = contents.filter((c) => c.type === "file");
 
   async function fullSync() {
+    if (libraryCode) {
+      await load(path);
+      setMsg("Library refreshed from SharePoint.");
+      return;
+    }
     if (!id) return;
     setMsg("Syncing project library…");
     const r = await api<any>(`/api/dms/${id}/sync`, { method: "POST", token });
@@ -464,20 +473,32 @@ export default function DmsPage({
       )}
 
       <PageHeader
-        eyebrow={isModule ? moduleEyebrow || "Module files" : isDrawings ? "Drawings · files" : "Documents"}
-        title={isModule ? moduleTitle || "Module file library" : isDrawings ? "Drawing file library" : "Document manager"}
+        eyebrow={libraryCode ? "Company library" : isModule ? moduleEyebrow || "Module files" : isDrawings ? "Drawings · files" : "Documents"}
+        title={
+          libraryCode === "SPDC_HRMS"
+            ? "SPDC HRMS"
+            : libraryCode === "SPDC_CRM"
+              ? "SPDC CRM"
+              : isModule
+                ? moduleTitle || "Module file library"
+                : isDrawings
+                  ? "Drawing file library"
+                  : "Document manager"
+        }
         subtitle={
           isModule
             ? moduleSubtitle ||
               "Browse the ISO SharePoint folder for this module — preview PDFs in-app or open files in SharePoint."
             : isDrawings
             ? "Drawing PDFs/DWG only — discipline folders under 04.02. Office users preview in-app; SharePoint opens in a new tab when required."
-            : "Procore-style browse of the ISO folder tree — contracts, HSE, daily records, and all non-drawing project files."
+            : libraryCode
+              ? "Files the app has stored in this SharePoint library."
+              : "Project folders, drawings, and a SharePoint copy of each register. The live register stays in the portal database."
         }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone={isSharePoint ? "ok" : "warn"}>{isSharePoint ? "SharePoint" : "Local mock"}</Badge>
-            {canUpload && (
+            {canUpload && !libraryCode && (
               <Button type="button" onClick={() => setUploadOpen(true)}>
                 Upload
               </Button>
@@ -485,7 +506,7 @@ export default function DmsPage({
             <Button type="button" variant="secondary" disabled={syncing} onClick={() => void fullSync()}>
               {syncing ? "Syncing…" : "Sync library"}
             </Button>
-            {canUpload && (
+            {canUpload && !libraryCode && (
               <Button
                 type="button"
                 variant="secondary"

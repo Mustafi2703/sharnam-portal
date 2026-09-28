@@ -135,6 +135,41 @@ export async function sendProjectPortalInvites(
   return { sent, sharePassword, loginBase: portalOrigin() };
 }
 
+/**
+ * Mail portal logins only to communication-matrix people already onboarded on the project.
+ * To and CC follow the matrix. Does nothing until this function is called.
+ */
+export async function sendOnboardingFromMatrix(projectId: string, createdById: string) {
+  const { getOnboardedMatrixEmails } = await import("./matrixContacts.js");
+  const lists = await getOnboardedMatrixEmails(projectId);
+  if (!lists.all.length) {
+    return { sent: [] as Array<{ email: string; role: string; mailRole: "TO" | "CC" }>, to: lists.to, cc: lists.cc, held: true, reason: "No onboarded matrix people to mail." };
+  }
+  const users = await prisma.user.findMany({
+    where: { email: { in: lists.all } },
+    select: { email: true, fullName: true, role: true },
+  });
+  const byEmail = new Map(users.map((u) => [u.email.trim().toLowerCase(), u]));
+  const sharePassword = process.env.SEED_PASSWORD || "Demo@1234";
+  const sent: Array<{ email: string; role: string; mailRole: "TO" | "CC" }> = [];
+  for (const mailRole of ["TO", "CC"] as const) {
+    for (const email of mailRole === "TO" ? lists.to : lists.cc) {
+      const user = byEmail.get(email);
+      if (!user) continue;
+      await emailPortalCredentials({
+        projectId,
+        createdById,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        password: sharePassword,
+      });
+      sent.push({ email: user.email, role: user.role, mailRole });
+    }
+  }
+  return { sent, to: lists.to, cc: lists.cc, sharePassword, loginBase: portalOrigin() };
+}
+
 /** Held — setup must not mail the full people list to the client. */
 export async function emailProjectSetupBrief(_opts: {
   projectId: string;

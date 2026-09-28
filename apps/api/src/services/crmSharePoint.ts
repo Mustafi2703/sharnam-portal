@@ -7,7 +7,7 @@ import { ensureSandboxLibraryFolders } from "./graph.js";
 import { CRM_DRIVE, CRM_LIBRARY_FOLDERS, crmProposalFolder, wonOrderFolder } from "./spdcLibraryFolders.js";
 
 function sanitizeSegment(s: string) {
-  return s.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return s.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/\.+$/g, "").replace(/_+$/g, "") || "file";
 }
 
 /** ISO 19650 procurement folders under each project library. */

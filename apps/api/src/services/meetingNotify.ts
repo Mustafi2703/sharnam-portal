@@ -24,6 +24,8 @@ export type ScheduleMeetingWithInviteOpts = {
   createdById?: string;
   /** Comma-separated — one formatted email to all (single Graph sendMail) */
   attendeeEmails?: string;
+  /** Communication-matrix CC for people already onboarded. */
+  ccEmails?: string;
   createTeams?: boolean;
   agendaItems?: string[];
 };
@@ -105,6 +107,7 @@ export async function scheduleMeetingWithInvite(
           context: "meeting.schedule",
           createdById: opts.createdById,
           toOverride: opts.attendeeEmails,
+          ccOverride: opts.ccEmails,
         })
       : { skipped: true as const, reason: "no_recipients" };
 

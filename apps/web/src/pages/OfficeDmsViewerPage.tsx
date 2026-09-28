@@ -7,6 +7,11 @@ import DmsPage from "./DmsPage";
 
 type ProjectRow = { id: string; code: string; name: string; clientName?: string | null; location?: string | null };
 
+const COMPANY_LIBRARIES = [
+  { code: "SPDC_HRMS" as const, name: "HR letters, employee files, attendance, payroll" },
+  { code: "SPDC_CRM" as const, name: "Won project cards, matrices, proposals" },
+];
+
 const QUALITY_ISO = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans";
 
 /** Office/admin — browse every project's ISO library from one desk. */
@@ -18,6 +23,7 @@ export default function OfficeDmsViewerPage() {
   const [filter, setFilter] = useState("");
   const [folderJump, setFolderJump] = useState("");
   const selectedId = searchParams.get("project") || "";
+  const libraryCode = (searchParams.get("library") || "") as "SPDC_HRMS" | "SPDC_CRM" | "";
 
   useEffect(() => {
     if (!canBrowse || !token) return;
@@ -36,10 +42,19 @@ export default function OfficeDmsViewerPage() {
 
   function selectProject(id: string, folder = "") {
     const q = new URLSearchParams(searchParams);
+    q.delete("library");
     if (id) q.set("project", id);
     else q.delete("project");
     setSearchParams(q, { replace: true });
     setFolderJump(folder);
+  }
+
+  function selectLibrary(code: "SPDC_HRMS" | "SPDC_CRM") {
+    const q = new URLSearchParams(searchParams);
+    q.delete("project");
+    q.set("library", code);
+    setSearchParams(q, { replace: true });
+    setFolderJump("");
   }
 
   if (!canBrowse) {
@@ -59,7 +74,7 @@ export default function OfficeDmsViewerPage() {
       <PageHeader
         eyebrow="Office · Documents"
         title="All-project DMS"
-        subtitle="Pick any delivery project and browse its ISO folder tree — QAP, checklists, drawings, and commercial files."
+        subtitle="Every project library, plus SPDC HRMS and SPDC CRM. Files the app stores in SharePoint show up here."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="neutral">{projects.length} projects</Badge>
@@ -76,6 +91,23 @@ export default function OfficeDmsViewerPage() {
         <Card className="!p-3 space-y-2 lg:sticky lg:top-3">
           <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search code, name, client…" />
           <ul className="max-h-[70vh] overflow-y-auto divide-y border rounded-xl bg-paper">
+            {COMPANY_LIBRARIES.map((lib) => {
+              const active = libraryCode === lib.code;
+              return (
+                <li key={lib.code}>
+                  <button
+                    type="button"
+                    className={`w-full text-left px-3 py-2.5 text-sm hover:bg-brand-soft/40 ${
+                      active ? "bg-brand-soft/70 ring-1 ring-brand/30" : ""
+                    }`}
+                    onClick={() => selectLibrary(lib.code)}
+                  >
+                    <div className="font-semibold font-mono text-ink">{lib.code}</div>
+                    <div className="text-xs text-steel-muted">{lib.name}</div>
+                  </button>
+                </li>
+              );
+            })}
             {filtered.map((p) => {
               const active = p.id === selectedId;
               return (
@@ -101,7 +133,9 @@ export default function OfficeDmsViewerPage() {
         </Card>
 
         <div className="min-w-0 space-y-3">
-          {selected ? (
+          {libraryCode ? (
+            <DmsPage key={libraryCode} libraryCode={libraryCode} embedded />
+          ) : selected ? (
             <>
               <Card className="!p-3 flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold flex-1 min-w-[12rem]">
