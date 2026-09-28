@@ -189,8 +189,8 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
       },
       include: {
         posting: { select: { title: true, department: true } },
-        interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true } },
-        offers: { select: { id: true, offerNo: true, status: true } },
+        interviews: { select: { id: true, roundNumber: true, roundType: true, status: true, decision: true, scoreOverall: true } },
+        offers: { select: { id: true, offerNo: true, status: true, onboard: { select: { userId: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -222,6 +222,69 @@ hrmRecruitmentRouter.post("/registers/clear", requireRoles("admin", "office"), a
   };
   await audit("hrms.registers.clear", { userId: req.user!.id, entity: "Candidate", meta: deleted });
   res.json({ ok: true, deleted });
+});
+
+async function deleteCandidateTree(candidateId: string) {
+  const offers = await prisma.offer.findMany({ where: { candidateId }, select: { id: true } });
+  const offerIds = offers.map((o) => o.id);
+  if (offerIds.length) {
+    await prisma.onboardingChecklist.deleteMany({ where: { offerId: { in: offerIds } } });
+    await prisma.preJoiningChecklist.deleteMany({ where: { offerId: { in: offerIds } } });
+    await prisma.offer.deleteMany({ where: { id: { in: offerIds } } });
+  }
+  await prisma.interviewRound.deleteMany({ where: { candidateId } });
+  await prisma.candidate.delete({ where: { id: candidateId } });
+}
+
+function candidateKeepScore(row: {
+  status: string;
+  resumeUrl: string | null;
+  interviews: { scoreOverall: number | null }[];
+  offers: { id: string }[];
+}) {
+  return (
+    (row.status === "Joined" ? 40 : 0) +
+    row.interviews.length * 10 +
+    (row.interviews.some((r) => r.scoreOverall != null) ? 8 : 0) +
+    row.offers.length * 8 +
+    (row.resumeUrl ? 4 : 0)
+  );
+}
+
+hrmRecruitmentRouter.post("/candidates/dedupe", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const rows = await prisma.candidate.findMany({
+    include: {
+      interviews: { select: { scoreOverall: true } },
+      offers: { select: { id: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const groups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const email = (row.email || "").trim().toLowerCase();
+    const key = email || `name:${row.fullName.trim().toLowerCase()}|${(row.phone || "").replace(/\s+/g, "")}`;
+    const list = groups.get(key) || [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  let removed = 0;
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const ranked = [...list].sort((a, b) => candidateKeepScore(b) - candidateKeepScore(a) || a.createdAt.getTime() - b.createdAt.getTime());
+    const keep = ranked[0];
+    if (!keep.resumeUrl) {
+      const withResume = list.find((r) => r.resumeUrl);
+      if (withResume?.resumeUrl) {
+        await prisma.candidate.update({ where: { id: keep.id }, data: { resumeUrl: withResume.resumeUrl } });
+      }
+    }
+    for (const dup of ranked.slice(1)) {
+      await deleteCandidateTree(dup.id);
+      removed++;
+    }
+  }
+  await audit("hrms.candidate.dedupe", { userId: req.user!.id, entity: "Candidate", meta: { removed } });
+  res.json({ removed, remaining: rows.length - removed });
 });
 
 hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), upload.single("resume"), async (req: AuthedRequest, res) => {
@@ -270,10 +333,24 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
 hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "not found" });
+  const nextEmail = req.body.email !== undefined ? s(req.body.email) : before.email;
+  if (nextEmail && nextEmail !== before.email) {
+    const clash = await prisma.candidate.findFirst({ where: { email: nextEmail, NOT: { id: before.id } } });
+    if (clash) return res.status(409).json({ error: `${clash.fullName} already uses ${nextEmail}.` });
+  }
   const nextStatus = s(req.body.status) || before.status;
   const row = await prisma.candidate.update({
     where: { id: req.params.id },
     data: {
+      fullName: s(req.body.fullName) ?? before.fullName,
+      email: nextEmail,
+      phone: req.body.phone !== undefined ? s(req.body.phone) : before.phone,
+      sourceChannel: req.body.sourceChannel !== undefined ? s(req.body.sourceChannel) : before.sourceChannel,
+      currentCompany: req.body.currentCompany !== undefined ? s(req.body.currentCompany) : before.currentCompany,
+      currentDesign: req.body.currentDesign !== undefined ? s(req.body.currentDesign) : before.currentDesign,
+      location: req.body.location !== undefined ? s(req.body.location) : before.location,
+      skills: req.body.skills !== undefined ? s(req.body.skills) : before.skills,
+      postingId: req.body.postingId !== undefined ? s(req.body.postingId) : before.postingId,
       status: nextStatus,
       screenedById: nextStatus === "Screened" ? req.user!.id : before.screenedById,
       rejectionReason: s(req.body.rejectionReason) || before.rejectionReason,
@@ -281,10 +358,89 @@ hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office", "h
       currentCtc: n(req.body.currentCtc) ?? before.currentCtc,
       expectedCtc: n(req.body.expectedCtc) ?? before.expectedCtc,
       noticePeriodDays: req.body.noticePeriodDays !== undefined ? Number(req.body.noticePeriodDays) || null : before.noticePeriodDays,
+      experienceYears: req.body.experienceYears !== undefined ? n(req.body.experienceYears) : before.experienceYears,
     },
   });
   await audit("hrms.candidate.status", { userId: req.user!.id, entity: "Candidate", entityId: row.id, meta: { from: before.status, to: nextStatus } });
   res.json(row);
+});
+
+hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "office", "hr"), upload.single("resume"), async (req: AuthedRequest, res) => {
+  const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  if (!req.file) return res.status(400).json({ error: "Choose a resume file." });
+  const saved = await mockOneDrive.upload(
+    HR_DRIVE,
+    resumeFolder(),
+    `resume-${before.fullName.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}${extOf(req.file)}`,
+    req.file.buffer,
+  );
+  const resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
+  const row = await prisma.candidate.update({ where: { id: before.id }, data: { resumeUrl } });
+  await audit("hrms.candidate.resume", { userId: req.user!.id, entity: "Candidate", entityId: row.id });
+  res.json(row);
+});
+
+hrmRecruitmentRouter.delete("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  await deleteCandidateTree(before.id);
+  await audit("hrms.candidate.delete", { userId: req.user!.id, entity: "Candidate", entityId: before.id, meta: { fullName: before.fullName } });
+  res.json({ ok: true });
+});
+
+hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: req.params.id },
+    include: { offers: { include: { onboard: true } } },
+  });
+  if (!candidate) return res.status(404).json({ error: "not found" });
+  const email = (candidate.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "Add an email on this candidate before converting them to an employee." });
+  let user = await prisma.user.findUnique({ where: { email } });
+  let created = false;
+  if (!user) {
+    const bcrypt = await import("bcryptjs");
+    const { portalForRole } = await import("@sharnam/shared");
+    const hash = await bcrypt.hash(process.env.SEED_PASSWORD || "Demo@1234", 10);
+    user = await prisma.user.create({
+      data: {
+        email,
+        fullName: candidate.fullName,
+        role: "employee",
+        portal: portalForRole("employee"),
+        phone: candidate.phone,
+        passwordHash: hash,
+      },
+    });
+    await prisma.employeeProfile.create({
+      data: {
+        userId: user.id,
+        empCode: `EMP-${Date.now().toString().slice(-6)}`,
+        designation: candidate.currentDesign,
+        joinDate: new Date(),
+      },
+    });
+    const { ensureDefaultLeaveBalancesForUser } = await import("../services/spdcLeaveSeed.js");
+    await ensureDefaultLeaveBalancesForUser(user.id);
+    created = true;
+  }
+  const offer = candidate.offers.find((o) => o.status === "Accepted" || o.status === "Joined") || candidate.offers[0];
+  if (offer) {
+    await prisma.onboardingChecklist.upsert({
+      where: { offerId: offer.id },
+      create: { offerId: offer.id, userId: user.id },
+      update: { userId: user.id },
+    });
+  }
+  await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Joined" } });
+  await audit("hrms.candidate.convert", {
+    userId: req.user!.id,
+    entity: "User",
+    entityId: user.id,
+    meta: { candidateId: candidate.id, created, email },
+  });
+  res.json({ userId: user.id, created, email: user.email, fullName: user.fullName });
 });
 
 /* ═════════════════════════════════════  INTERVIEW ROUNDS  ═════════════════════════════════════ */

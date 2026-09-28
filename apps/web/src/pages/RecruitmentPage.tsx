@@ -74,15 +74,9 @@ export default function RecruitmentPage() {
   return (
     <div className="space-y-6">
       <Card className="!p-4 bg-brand-soft/20 border-brand/20">
-        <p className="text-sm text-ink font-semibold">1 · Recruitment &amp; Interview Management</p>
+        <p className="text-sm text-ink font-semibold">Hiring steps</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          Manpower requisition → HR approval → job posting → resume database &amp; screening → shortlist → interview line-up
-          &amp; schedule → feedback &amp; scorecard → final selection → salary discussion → offer approval → offer letter →
-          acceptance → joining confirmation. Accepted offers move to{" "}
-          <Link to="/hrm/onboarding" className="text-brand font-semibold underline">
-            Pre-joining &amp; Onboarding
-          </Link>
-          .
+          Add the person and resume → schedule the interview and fill the scorecard → convert to an employee → upload PAN and other documents → then open Generate letters for that person. Letters are not created when you add the candidate.
         </p>
       </Card>
       <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
@@ -107,7 +101,7 @@ export default function RecruitmentPage() {
 
       {tab === "requisitions" && <RequisitionsTab reqs={reqs} departments={departments} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "postings" && <PostingsTab reqs={reqs} postings={postings} departments={departments} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
-      {tab === "candidates" && <CandidatesTab postings={postings} candidates={candidates} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "candidates" && <CandidatesTab postings={postings} candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OffersTab candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
     </div>
@@ -295,12 +289,15 @@ function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, t
 
 /* ────────────────────────────  3  Candidates / Resume DB  ──────────────────────────── */
 
-function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token }: any) {
+function CandidatesTab({ postings, candidates, staff, canManage, reload, setMsg, token }: any) {
   const [form, setForm] = useState({ postingId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
   const [file, setFile] = useState<File | null>(null);
   const [search, setSearch] = useState("");
   const [filterStage, setFilterStage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [edit, setEdit] = useState<any>(null);
+  const [editFile, setEditFile] = useState<File | null>(null);
 
   async function add(e: FormEvent) {
     e.preventDefault();
@@ -313,7 +310,7 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
       await api("/api/hrm/candidates", { method: "POST", token, body: fd });
       setForm({ postingId: "", fullName: "", email: "", phone: "", sourceChannel: "LinkedIn", currentCompany: "", currentDesign: "", currentCtc: "", expectedCtc: "", noticePeriodDays: "", experienceYears: "", skills: "", location: "" });
       setFile(null);
-      setMsg("Candidate added. The resume is filed. Generate letters from the Letters desk when you are ready.");
+      setMsg("Candidate and resume saved in SPDC_HRMS. Next: interview, scorecard, convert to employee, then PAN and letters.");
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -333,9 +330,73 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
       setMsg(err instanceof Error ? err.message : "Could not clear registers");
     }
   }
-  async function transition(id: string, status: string, reason?: string) {
-    await api(`/api/hrm/candidates/${id}`, { method: "PATCH", token, body: JSON.stringify({ status, rejectionReason: reason }) });
-    await reload();
+  function openEdit(c: any) {
+    setOpenId(c.id);
+    setEditFile(null);
+    setEdit({
+      fullName: c.fullName || "",
+      email: c.email || "",
+      phone: c.phone || "",
+      currentCompany: c.currentCompany || "",
+      currentDesign: c.currentDesign || "",
+      location: c.location || "",
+      currentCtc: c.currentCtc ?? "",
+      expectedCtc: c.expectedCtc ?? "",
+      noticePeriodDays: c.noticePeriodDays ?? "",
+      experienceYears: c.experienceYears ?? "",
+      skills: c.skills || "",
+      sourceChannel: c.sourceChannel || "LinkedIn",
+      status: c.status,
+    });
+  }
+
+  async function saveEdit(id: string) {
+    try {
+      await api(`/api/hrm/candidates/${id}`, { method: "PATCH", token, body: JSON.stringify(edit) });
+      if (editFile) {
+        const fd = new FormData();
+        fd.append("resume", editFile);
+        await api(`/api/hrm/candidates/${id}/resume`, { method: "POST", token, body: fd });
+      }
+      setMsg("Candidate updated.");
+      setOpenId(null);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not save");
+    }
+  }
+
+  async function removeCandidate(c: any) {
+    if (!window.confirm(`Delete ${c.fullName}? Their interviews and offers are removed. Staff logins stay.`)) return;
+    try {
+      await api(`/api/hrm/candidates/${c.id}`, { method: "DELETE", token });
+      if (openId === c.id) setOpenId(null);
+      setMsg(`${c.fullName} removed from the register.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete");
+    }
+  }
+
+  async function removeDuplicates() {
+    if (!window.confirm("Keep one row per email (the one with an interview, score, or resume) and delete the copies?")) return;
+    try {
+      const res = await api<{ removed: number; remaining: number }>("/api/hrm/candidates/dedupe", { method: "POST", token });
+      setMsg(res.removed ? `Removed ${res.removed} duplicate rows. ${res.remaining} people remain.` : "No duplicate rows.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not remove duplicates");
+    }
+  }
+
+  async function convertEmployee(c: any) {
+    try {
+      const res = await api<{ userId: string; created: boolean; fullName: string }>("/api/hrm/candidates/" + c.id + "/convert", { method: "POST", token });
+      setMsg(res.created ? `${res.fullName} is now an employee. No email was sent — set their password from Users, then upload PAN.` : `${res.fullName} is already a login. Upload PAN, then generate letters.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not convert");
+    }
   }
 
   const filtered = candidates.filter((c: any) => {
@@ -376,7 +437,7 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
               <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
             </label>
             <Button type="submit" className="md:col-span-4" disabled={saving}>{saving ? "Adding…" : "Add candidate"}</Button>
-            <p className="md:col-span-4 text-[11px] text-steel-muted">Saves this person and the resume only. Letters are generated one at a time from the Letters desk.</p>
+            <p className="md:col-span-4 text-[11px] text-steel-muted">Saves this person and the resume in SPDC_HRMS. Letters come later, from Generate letters on their row.</p>
           </form>
         </Card>
       )}
@@ -384,9 +445,14 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
       <div className="flex flex-wrap gap-2 items-center">
         <Input placeholder="Search name / email / skill" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
         {canManage && (
-          <Button type="button" variant="secondary" onClick={() => void clearRegisters()}>
-            Clear HR registers
-          </Button>
+          <>
+            <Button type="button" variant="secondary" onClick={() => void removeDuplicates()}>
+              Remove duplicates
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => void clearRegisters()}>
+              Clear HR registers
+            </Button>
+          </>
         )}
         <Select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="max-w-xs">
           <option value="">All stages</option>
@@ -399,66 +465,76 @@ function CandidatesTab({ postings, candidates, canManage, reload, setMsg, token 
         <span className="text-xs text-steel-muted">{filtered.length} / {candidates.length}</span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {CANDIDATE_STAGES.map((s) => {
-          const n = candidates.filter((c: any) => c.status === s.id).length;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setFilterStage(filterStage === s.id ? "" : s.id)}
-              className={`text-[11px] rounded-full border px-2.5 py-1 ${
-                filterStage === s.id ? "border-ink bg-ink text-white" : "border-line bg-paper text-steel-muted hover:border-ink"
-              }`}
-            >
-              {s.label}
-              <span className="ml-1 font-mono tabular-nums">{n}</span>
-            </button>
-          );
-        })}
-      </div>
-
       <Card padding={false}>
-        <div className="overflow-x-auto">
-          <table className="min-w-[1200px] w-full text-xs">
-            <thead className="text-left text-steel-muted bg-sand/40">
-              <tr><th className="p-2">Name</th><th>Contact</th><th>Current</th><th>Exp</th><th>Notice</th><th className="text-right">Current CTC</th><th className="text-right">Expected CTC</th><th>Source</th><th>Resume</th><th>Stage</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {filtered.map((c: any) => (
-                <tr key={c.id} className="border-t border-line">
-                  <td className="p-2">
-                    <div className="font-medium">{c.fullName}</div>
-                    <Badge tone={candidateStageTone(c.status)} className="mt-1">
-                      {candidateStageLabel(c.status)}
-                    </Badge>
-                  </td>
-                  <td>{c.email}<br/>{c.phone}</td>
-                  <td>{c.currentCompany || "—"}<br/><span className="text-steel-muted">{c.currentDesign || ""}</span></td>
-                  <td className="text-right">{c.experienceYears || "—"}</td>
-                  <td className="text-right">{c.noticePeriodDays || "—"}d</td>
-                  <td className="text-right">{money(c.currentCtc)}</td>
-                  <td className="text-right">{money(c.expectedCtc)}</td>
-                  <td>{c.sourceChannel || "—"}</td>
-                  <td>{c.resumeUrl ? <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className="text-brand">↗ Open</a> : "—"}</td>
-                  <td>
-                    <Select value={c.status} onChange={(e) => transition(c.id, e.target.value)} disabled={!canManage} className="!py-1">
-                      {CANDIDATE_STAGES.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
-                        </option>
-                      ))}
+        <ul className="divide-y divide-line">
+          {filtered.map((c: any) => {
+            const employee = (staff || []).find((s: any) => c.email && s.email && String(s.email).toLowerCase() === String(c.email).toLowerCase());
+            const scored = (c.interviews || []).some((r: any) => r.scoreOverall != null);
+            const lettersReady = Boolean(employee);
+            return (
+              <li key={c.id} className="px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">{c.fullName}</div>
+                    <div className="text-xs text-steel-muted">{[c.currentDesign, c.currentCompany].filter(Boolean).join(" · ") || "No company yet"}</div>
+                    <div className="text-xs mt-0.5">{c.email || "No email"} · {c.phone || "No phone"} · {money(c.expectedCtc)} expected</div>
+                  </div>
+                  <Badge tone={candidateStageTone(c.status)}>{candidateStageLabel(c.status)}</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${c.resumeUrl ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Resume</span>
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${(c.interviews || []).length ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Interview</span>
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${scored ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Score</span>
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${employee ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Employee</span>
+                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${lettersReady ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Letters</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 items-center">
+                  {c.resumeUrl ? <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand font-semibold">Open resume</a> : <span className="text-xs text-steel-muted">No resume</span>}
+                  <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className="text-xs text-brand font-semibold">Interview</Link>
+                  {canManage && <button type="button" className="text-xs font-semibold" onClick={() => openEdit(c)}>Edit</button>}
+                  {canManage && <button type="button" className="text-xs font-semibold text-danger" onClick={() => void removeCandidate(c)}>Delete</button>}
+                  {canManage && !employee && <button type="button" className="text-xs font-semibold" onClick={() => void convertEmployee(c)}>Convert to employee</button>}
+                  {employee && <Link to={`/hrm/files?userId=${employee.id}`} className="text-xs text-brand font-semibold">Upload PAN & documents</Link>}
+                  {lettersReady ? (
+                    <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className="text-xs text-brand font-semibold">Generate letters</Link>
+                  ) : (
+                    <span className="text-xs text-steel-muted">Generate letters after they are an employee</span>
+                  )}
+                </div>
+                {openId === c.id && edit && (
+                  <form
+                    className="mt-3 grid md:grid-cols-4 gap-2 border-t border-line pt-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveEdit(c.id);
+                    }}
+                  >
+                    <Input value={edit.fullName} onChange={(e) => setEdit({ ...edit, fullName: e.target.value })} required />
+                    <Input value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} placeholder="Email" />
+                    <Input value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} placeholder="Phone" />
+                    <Input value={edit.currentCompany} onChange={(e) => setEdit({ ...edit, currentCompany: e.target.value })} placeholder="Company" />
+                    <Input value={edit.currentDesign} onChange={(e) => setEdit({ ...edit, currentDesign: e.target.value })} placeholder="Designation" />
+                    <Input value={edit.location} onChange={(e) => setEdit({ ...edit, location: e.target.value })} placeholder="Location" />
+                    <Input type="number" value={edit.experienceYears} onChange={(e) => setEdit({ ...edit, experienceYears: e.target.value })} placeholder="Experience (yrs)" />
+                    <Input type="number" value={edit.expectedCtc} onChange={(e) => setEdit({ ...edit, expectedCtc: e.target.value })} placeholder="Expected CTC" />
+                    <Select value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })}>
+                      {CANDIDATE_STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </Select>
-                  </td>
-                  <td>
-                    <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className="text-brand text-[10px] font-semibold">Schedule ↗</Link>
-                  </td>
-                </tr>
-              ))}
-              {!filtered.length && <tr><td colSpan={11} className="py-4 text-center text-steel-muted">No candidates match.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+                    <label className="md:col-span-3 text-xs text-steel-muted">
+                      Replace resume
+                      <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setEditFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
+                    </label>
+                    <div className="md:col-span-4 flex gap-2">
+                      <Button type="submit">Save</Button>
+                      <Button type="button" variant="secondary" onClick={() => setOpenId(null)}>Close</Button>
+                    </div>
+                  </form>
+                )}
+              </li>
+            );
+          })}
+          {!filtered.length && <li className="px-4 py-8 text-center text-sm text-steel-muted">No candidates match.</li>}
+        </ul>
       </Card>
     </div>
   );
