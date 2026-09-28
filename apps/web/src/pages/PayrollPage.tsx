@@ -267,24 +267,51 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
               Blank overrides use the SPDC CTC calculator (same monthly basic, HRA, conveyance, special, PF and professional tax as the offer letter). The payslip is filed on SharePoint.
             </p>
           </div>
-          <form onSubmit={generate} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <Select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} required>
-              <option value="">Pick employee</option>
-              {staffWithCtc.map((emp: any) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.fullName}
-                  {emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}
-                  {emp.profile?.ctcAnnual ? ` · ₹${Number(emp.profile.ctcAnnual).toLocaleString("en-IN")}/yr` : ""}
-                </option>
-              ))}
-            </Select>
-            <Input placeholder="Working days" type="number" value={form.workingDays} onChange={(e) => setForm({ ...form, workingDays: Number(e.target.value) })} />
-            <Input placeholder="LOP days" type="number" value={form.lopDays} onChange={(e) => setForm({ ...form, lopDays: Number(e.target.value) })} />
-            <Input placeholder="TDS (₹)" type="number" value={form.incomeTax} onChange={(e) => setForm({ ...form, incomeTax: Number(e.target.value) })} />
-            <Input placeholder="Basic override" type="number" value={form.basic} onChange={(e) => setForm({ ...form, basic: e.target.value })} />
-            <Input placeholder="HRA override" type="number" value={form.hra} onChange={(e) => setForm({ ...form, hra: e.target.value })} />
-            <Input placeholder="Special allow" type="number" value={form.specialAllow} onChange={(e) => setForm({ ...form, specialAllow: e.target.value })} />
-            <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+          <form onSubmit={generate} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <label className="text-xs font-semibold text-steel-muted sm:col-span-2 lg:col-span-4">
+              Employee
+              <Select className="mt-1" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} required>
+                <option value="">Pick employee</option>
+                {staffWithCtc.map((emp: any) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.fullName}
+                    {emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}
+                    {emp.profile?.ctcAnnual ? ` · ₹${Number(emp.profile.ctcAnnual).toLocaleString("en-IN")}/yr` : ""}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Working days
+              <Input className="mt-1" type="number" value={form.workingDays} onChange={(e) => setForm({ ...form, workingDays: Number(e.target.value) })} />
+              <span className="mt-1 block text-[10px] font-normal">Paid days in this month. Usually 30.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Loss of pay (days)
+              <Input className="mt-1" type="number" value={form.lopDays} onChange={(e) => setForm({ ...form, lopDays: Number(e.target.value) })} />
+              <span className="mt-1 block text-[10px] font-normal">Unpaid leave. Put 0 if none.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              TDS (₹)
+              <Input className="mt-1" type="number" value={form.incomeTax} onChange={(e) => setForm({ ...form, incomeTax: Number(e.target.value) })} />
+              <span className="mt-1 block text-[10px] font-normal">Income tax deducted this month. Put 0 if none.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Basic override (₹)
+              <Input className="mt-1" type="number" placeholder="Leave blank" value={form.basic} onChange={(e) => setForm({ ...form, basic: e.target.value })} />
+              <span className="mt-1 block text-[10px] font-normal">Optional. Blank uses the CTC basic.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              HRA override (₹)
+              <Input className="mt-1" type="number" placeholder="Leave blank" value={form.hra} onChange={(e) => setForm({ ...form, hra: e.target.value })} />
+              <span className="mt-1 block text-[10px] font-normal">Optional. Blank uses the CTC HRA.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Special allowance override (₹)
+              <Input className="mt-1" type="number" placeholder="Leave blank" value={form.specialAllow} onChange={(e) => setForm({ ...form, specialAllow: e.target.value })} />
+              <span className="mt-1 block text-[10px] font-normal">Optional. Blank uses the CTC special allowance.</span>
+            </label>
+            <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-4">
               <Button type="submit">Generate one</Button>
               <Button type="button" variant="secondary" onClick={() => void generateAll()}>
                 Generate all staff ({staffWithCtc.length})
