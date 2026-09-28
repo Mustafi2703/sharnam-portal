@@ -10,7 +10,7 @@
  * Templates live at apps/api/formats/hrms/<kind>.html (or .txt); if the format file is missing we
  * fall back to a built-in template so the workflow keeps working while HR ships the real format.
  *
- * All artefacts are written to uploads/onedrive/_HR/06_HR_AND_ADMIN/06.01_Letters/<refNo>/
+ * Generated letters are filed on `_HR` under `06_Records_Employee_Files/{person}/` (SPDC_HRMS).
  * so they surface in the DMS tree the same as project files. When SharePoint is configured we can
  * push these to the office library — that hook is left to the caller.
  */
@@ -24,8 +24,7 @@ import { mockOneDrive } from "./mockOneDrive.js";
 import { ensureHrCompanyTree } from "./hrEmployeeVault.js";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
 
-const HRMS_LETTERS_FOLDER = "06_HR_AND_ADMIN/06.01_Letters";
-const HRMS_FILE_FOLDER = "06_HR_AND_ADMIN/06.02_Employee_Files";
+import { employeeLetterFolder, HR_DRIVE } from "./spdcLibraryFolders.js";
 
 export function hrPersonFolder(name: string) {
   return String(name || "Unknown")
@@ -810,7 +809,7 @@ async function uploadHrmsFile(
 ) {
   let saved: Awaited<ReturnType<typeof mockOneDrive.upload>> | null = null;
   for (const folder of folders) {
-    saved = await mockOneDrive.upload("_HR", folder, fileName, buffer, contentType, { replace: true });
+    saved = await mockOneDrive.upload(HR_DRIVE, folder, fileName, buffer, contentType, { replace: true });
   }
   return saved!;
 }
@@ -825,12 +824,12 @@ export async function generateHrmsLetter(row: HrmsDocument) {
   }
   ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
   const merged = letterMergeContext(row, ctx);
-  const personFolder = hrPersonFolder(String(merged.employeeName || ""));
-  const letterFolder = `${HRMS_LETTERS_FOLDER}/${personFolder}`;
-  const employeeFolder = `${HRMS_FILE_FOLDER}/${personFolder}/Letters`;
-
+  const personName = String(merged.employeeName || "");
+  const empCodeRaw = String(merged.empCode || "");
+  const empCode = /to be assigned/i.test(empCodeRaw) ? null : empCodeRaw;
+  const employeeFolder = employeeLetterFolder(empCode, personName, row.kind);
+  const uploadFolders = [employeeFolder];
   const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const uploadFolders = [employeeFolder, `${letterFolder}/${personFolder}`];
   const html = await renderHrmsLetterPreviewHtml(row, merged);
   const htmlSaved = await uploadHrmsFile(
     uploadFolders,
@@ -875,17 +874,87 @@ export async function generateHrmsLetter(row: HrmsDocument) {
         docxBuf,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       );
-      docxUrl = docxSaved.sharePointUrl || docxSaved.url || `/uploads/onedrive/_HR/${docxSaved.path}`;
+      docxUrl = docxSaved.sharePointUrl || docxSaved.url || `/uploads/onedrive/${HR_DRIVE}/${docxSaved.path}`;
       docxSharePointUrl = docxSaved.sharePointUrl || null;
     }
   }
 
   return {
     docxUrl,
-    annexureXlsxUrl: xlsxSaved.sharePointUrl || xlsxSaved.url || `/uploads/onedrive/_HR/${xlsxSaved.path}`,
-    pdfUrl: htmlSaved.sharePointUrl || htmlSaved.url || `/uploads/onedrive/_HR/${htmlSaved.path}`,
+    annexureXlsxUrl: xlsxSaved.sharePointUrl || xlsxSaved.url || `/uploads/onedrive/${HR_DRIVE}/${xlsxSaved.path}`,
+    pdfUrl: htmlSaved.sharePointUrl || htmlSaved.url || `/uploads/onedrive/${HR_DRIVE}/${htmlSaved.path}`,
     storagePath: htmlSaved.sharePointPath || htmlSaved.path,
     sharePointUrl: docxSharePointUrl || htmlSaved.sharePointUrl || htmlSaved.url || null,
     folder: employeeFolder,
   };
+}
+
+const CANDIDATE_LETTER_KINDS = [
+  "Offer",
+  "Appointment",
+  "NdaJoining",
+  "AssetReturn",
+  "Confirmation",
+  "Promotion",
+  "Warning",
+  "Relieving",
+  "Exit",
+  "Experience",
+  "NdaPostEmployment",
+] as const;
+
+function candidateLetterRef(kind: string) {
+  const yy = new Date().getFullYear();
+  const yn = String(yy).slice(-2);
+  const nx = String((yy + 1) % 100).padStart(2, "0");
+  const seq = `${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`;
+  return `SPDC/HR/${kind}/${yn}-${nx}/${seq}`;
+}
+
+/** File the SPDC letter set for a new candidate into SPDC_HRMS on SharePoint. */
+export async function issueCandidateLetterPack(opts: {
+  fullName: string;
+  email?: string | null;
+  designation?: string | null;
+  createdById?: string | null;
+}) {
+  await ensureHrCompanyTree();
+  const generated: string[] = [];
+  const failed: string[] = [];
+  for (const kind of CANDIDATE_LETTER_KINDS) {
+    try {
+      const row = await prisma.hrmsDocument.create({
+        data: {
+          kind,
+          refNo: candidateLetterRef(kind),
+          employeeName: opts.fullName,
+          candidateEmail: opts.email || null,
+          designation: opts.designation || null,
+          dataJson: JSON.stringify({
+            employeeName: opts.fullName,
+            designation: opts.designation || "",
+            candidateEmail: opts.email || "",
+          }),
+          status: "Draft",
+          createdById: opts.createdById || null,
+        },
+      });
+      const gen = await generateHrmsLetter(row);
+      await prisma.hrmsDocument.update({
+        where: { id: row.id },
+        data: {
+          generatedDocxUrl: gen.docxUrl,
+          generatedPdfUrl: gen.pdfUrl,
+          storagePath: gen.storagePath,
+          sharePointUrl: gen.sharePointUrl,
+          status: "Generated",
+        },
+      });
+      generated.push(kind);
+    } catch (err) {
+      failed.push(kind);
+      console.warn("[HRMS] candidate letter", kind, err instanceof Error ? err.message : err);
+    }
+  }
+  return { generated, failed, drive: HR_DRIVE };
 }

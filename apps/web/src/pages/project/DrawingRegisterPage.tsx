@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { PieChart } from "../../components/PieChart";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
 import { Badge, Card, PageHeader } from "../../components/ui";
@@ -14,6 +13,91 @@ import {
 } from "../../lib/masterDrawingRegister";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
+
+function PivotTable({
+  title,
+  headers,
+  rows,
+}: {
+  title: string;
+  headers: string[];
+  rows: (string | number)[][];
+}) {
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <div className="px-3 py-2 border-b border-line bg-sand/40 text-[10px] font-mono uppercase tracking-wider text-steel-muted">
+        {title}
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[10px] uppercase text-steel-muted">
+            {headers.map((h) => (
+              <th key={h} className="px-3 py-2 font-semibold">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={headers.length} className="px-3 py-3 text-steel-muted">
+                No lines yet
+              </td>
+            </tr>
+          ) : (
+            rows.map((row, i) => (
+              <tr key={i} className="border-t border-line">
+                {row.map((cell, j) => (
+                  <td key={j} className="px-3 py-1.5">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+function DrawingRegisterDashboard({ data }: { data: any }) {
+  const buildingRows = (data.pivots?.byBuildingDiscipline || []).map((r: any) => [r.building, r.discipline, r.count]);
+  const disciplineRows = (data.pivots?.byDiscipline || []).map((r: any) => [r.label, r.value]);
+  const criticalRows = (data.pivots?.byCritical || []).map((r: any) => [r.label, r.value]);
+  const delayRows = (data.pivots?.delayByResponsibility || []).map((r: any) => [r.label, r.days]);
+  const consultantRows = (data.pivots?.byConsultant || []).map((r: any) => [r.label, r.value]);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          ["Week", data.dashboard?.weekLabel ?? "Week #"],
+          ["Total drawings", data.totals?.lines || 0],
+          ["GFC type", data.totals?.gfc ?? 0],
+          ["Critical", data.totals?.critical ?? 0],
+          ["Linked to GFC upload", data.totals?.linkedGfc ?? 0],
+        ].map(([l, v]) => (
+          <Card key={l as string} className="!p-4">
+            <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+            <div className="text-2xl font-display mt-1">{v as string | number}</div>
+          </Card>
+        ))}
+      </div>
+      <p className="text-xs text-steel-muted">
+        Same pivots as DRAWING REGISTER - 01.xlsx Dashboard: building × discipline, discipline totals, critical drawings, delay responsibility, and consultant. Numbers are this project's register only.
+      </p>
+      <div className="grid lg:grid-cols-2 gap-4">
+        <PivotTable title="Building × discipline" headers={["Building", "Discipline", "Count"]} rows={buildingRows} />
+        <PivotTable title="Discipline" headers={["Discipline", "Count"]} rows={disciplineRows} />
+        <PivotTable title="Critical drawing" headers={["Critical", "Count"]} rows={criticalRows} />
+        <PivotTable title="Delay responsibility" headers={["Responsibility", "Sum of delay (days)"]} rows={delayRows} />
+        <PivotTable title="Consultant" headers={["Consultant name", "Count"]} rows={consultantRows} />
+      </div>
+    </div>
+  );
+}
 
 export default function DrawingRegisterPage() {
   const { id } = useParams();
@@ -97,7 +181,7 @@ export default function DrawingRegisterPage() {
         subtitle={
           sheetKey === "master"
             ? "Master Drawing Register — full DCI schedule from DRAWING REGISTER - 01.xlsx. Add/edit lines here; upload PDF/DWG on GFC register only."
-            : `${sheetView.sheet} — KPIs and charts from client workbook.`
+            : "Drawing Register Dashboard — counts from this project's master register, in the workbook pivot layout."
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -117,32 +201,7 @@ export default function DrawingRegisterPage() {
       {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2 shrink-0">{msg}</p>}
 
       {sheetKey === "" && data && (
-        <div className="space-y-4">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {[
-              ["Week", data.dashboard?.weekLabel ?? "Week #"],
-              ["Total drawings", data.dashboard?.totalDrawings || data.totals?.lines || 0],
-              ["GFC type", data.totals?.gfc ?? 0],
-              ["Critical", data.totals?.critical ?? 0],
-              ["Linked to GFC upload", data.totals?.linkedGfc ?? 0],
-            ].map(([l, v]) => (
-              <Card key={l as string} className="!p-4">
-                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                <div className="text-2xl font-display mt-1">{v as string | number}</div>
-              </Card>
-            ))}
-          </div>
-          <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
-              DRAWING REGISTER - 01.xlsx — breakdown
-            </p>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              <PieChart title="By discipline" items={data.charts?.byDiscipline || []} />
-              <PieChart title="By drawing type" items={data.charts?.byDrawingType || []} />
-              <PieChart title="Critical drawings" items={data.charts?.byCritical || []} />
-            </div>
-          </div>
-        </div>
+        <DrawingRegisterDashboard data={data} />
       )}
 
       {sheetKey === "master" && canEdit && (
@@ -181,8 +240,7 @@ export default function DrawingRegisterPage() {
       {sheetKey === "" && (
         <Card className="text-sm text-steel-muted">
           <p>
-            Use <strong>Master register</strong> for full DCI columns from{" "}
-            <code className="text-xs">DRAWING REGISTER - 01.xlsx</code>. Upload PDF/DWG via{" "}
+            Counts above come from lines saved on this project. The Excel file's Package A / Tower 1 rows are a sample and are not loaded here. Use <strong>Master register</strong> for the DCI columns, then upload PDF/DWG via{" "}
             <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
               GFC register
             </Link>{" "}

@@ -501,7 +501,7 @@ function OfferOnboardingPage() {
               </ul>
             </div>
           ) : (
-            <p className="text-[11px] text-steel-muted mt-3">Uploaded files are stored under _HR/06.02 Employee Files with names like PAN_{`{empCode}`}_scan.pdf</p>
+            <p className="text-[11px] text-steel-muted mt-3">Uploaded files are stored in SharePoint under SPDC_HRMS/06_Records_Employee_Files, in KYC or the matching letter folder.</p>
           )}
         </Card>
       ) : null}

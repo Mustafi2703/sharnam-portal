@@ -7,21 +7,26 @@ export type MarkupPageDraft = { pageNumber: number; file: File };
 export function DrawingUploadFilePicker({
   pdfFile,
   dwgFile,
+  extraPdfFiles = [],
   onPdfFile,
   onDwgFile,
+  onExtraPdfFiles,
   onMarkupPdf,
   markupPageCount = 0,
   disabled,
 }: {
   pdfFile: File | null;
   dwgFile: File | null;
+  extraPdfFiles?: File[];
   onPdfFile: (f: File | null) => void;
   onDwgFile: (f: File | null) => void;
+  onExtraPdfFiles?: (files: File[]) => void;
   onMarkupPdf?: () => void;
   markupPageCount?: number;
   disabled?: boolean;
 }) {
   const pdfRef = useRef<HTMLInputElement>(null);
+  const extraRef = useRef<HTMLInputElement>(null);
   const dwgRef = useRef<HTMLInputElement>(null);
 
   const canMarkup =
@@ -63,6 +68,29 @@ export function DrawingUploadFilePicker({
               </Button>
             </div>
           )}
+          {onExtraPdfFiles && (
+            <div className="space-y-1">
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={disabled}
+                onClick={() => extraRef.current?.click()}
+              >
+                {formatUiText(extraPdfFiles.length ? "Add more PDFs" : "More drawings on this revision")}
+              </Button>
+              {extraPdfFiles.map((file) => (
+                <div key={file.name} className="rounded border border-line bg-white px-2 py-1 text-[11px] font-mono truncate">
+                  {file.name}
+                </div>
+              ))}
+              {extraPdfFiles.length > 0 && (
+                <Button type="button" variant="ghost" className="!text-xs" onClick={() => onExtraPdfFiles([])}>
+                  {formatUiText("Clear extra PDFs")}
+                </Button>
+              )}
+            </div>
+          )}
           {markupPageCount > 0 && (
             <p className="text-[11px] text-brand font-medium">
               {formatUiText(`${markupPageCount} marked page(s) ready to save`)}
@@ -101,6 +129,18 @@ export function DrawingUploadFilePicker({
         accept=".pdf,application/pdf"
         className="hidden"
         onChange={(e) => onPdfFile(e.target.files?.[0] || null)}
+      />
+      <input
+        ref={extraRef}
+        type="file"
+        accept=".pdf,application/pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const picked = Array.from(e.target.files || []);
+          if (picked.length && onExtraPdfFiles) onExtraPdfFiles([...extraPdfFiles, ...picked]);
+          e.target.value = "";
+        }}
       />
       <input
         ref={dwgRef}

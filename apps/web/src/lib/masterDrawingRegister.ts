@@ -24,36 +24,28 @@ export type MasterRegisterForm = {
   remarks: string;
 };
 
-export const MASTER_REGISTER_PACKAGES = ["Package A", "Package B", "Package C", "Package D"] as const;
-
-export const MASTER_REGISTER_BUILDINGS = [
-  "Tower 1",
-  "Tower 2",
-  "Tower 3",
-  "Tower 4",
-  "Tower 5",
-] as const;
-
-export const MASTER_REGISTER_DISCIPLINES = ["Architecture", "Structural", "MEPF", "Facade", "Interior"] as const;
+/** DRAWING REGISTER - 01.xlsx · Input sheet. Package and building are typed per project — the workbook's Package A / Tower 1 rows are a sample, not a live list. */
+export const MASTER_REGISTER_DISCIPLINES = ["Architecture", "Structural", "MEPF"] as const;
 
 export const MASTER_REGISTER_DRAWING_TYPES = [
-  "Good For Construction (GFC)",
-  "Tender Drawings",
-  "Detailed Design (DD) Drawings",
-  "Shop Drawing",
-  "Schematic Drawings",
   "Concept Drawings",
+  "Schematic Drawings",
+  "Detailed Design (DD) Drawings",
+  "Tender Drawings",
+  "Good For Construction (GFC)",
 ] as const;
+
+export const MASTER_REGISTER_LATEST = ["Yes", "No"] as const;
 
 export const MASTER_REGISTER_ISSUED_TO = ["Main Contractor", "PMC / Client"] as const;
 
 export const MASTER_REGISTER_DELAY_RESP = [
-  "Consultant",
   "Architecture Consultant",
   "Structural Consultant",
   "MEPF Consultant",
-  "Main Contractor",
-  "Client",
+  "BIM Consultant",
+  "Contractor",
+  "PMC",
 ] as const;
 
 /** Package chip colours for table + filters */
@@ -72,8 +64,8 @@ export function packageTone(pkg?: string | null) {
 export function emptyMasterRegisterForm(): MasterRegisterForm {
   return {
     srNo: "",
-    projectPackage: "Package A",
-    building: "Tower 1",
+    projectPackage: "",
+    building: "",
     discipline: "Architecture",
     drawingNumber: "",
     drawingTitle: "",

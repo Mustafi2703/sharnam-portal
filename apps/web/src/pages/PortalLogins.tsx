@@ -53,9 +53,9 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   site: {
     key: "site", title: "Site", shortLabel: "Site",
     headline: "Site field desk",
-    subtitle: "Attendance, day logs, checklists, and site RFIs.",
+    subtitle: "Check in, see leave left, store your documents, and raise separation. Letters are issued once at onboarding.",
     demoEmail: "site@sharnam.demo", allowedRoles: ["site_employee"],
-    points: ["Selfie + GPS check-in", "Day logs & checklists", "Photos & RFIs"],
+    points: ["Selfie + GPS check-in", "Leave balance & calendar", "Documents & separation"],
     cta: "Sign in", tone: "#15803D", icon: "ST",
     landingPath: "/attendance", workspaceKey: "comms", group: "role",
     policies: [...SHARNAM_PORTAL_POLICIES, "Check in with selfie and location before other site tools."],
@@ -63,11 +63,11 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   vendor: {
     key: "vendor", title: "Vendor", shortLabel: "Vendor",
     headline: "Vendor / contractor portal",
-    subtitle: "Apply on open bids — download Comparative Statement R2 (.xlsx), fill rates per work package, upload BOQs. RFIs & checklist fills on assigned projects.",
+    subtitle: "Check in, see leave left, then open bid management. Letters are issued once at onboarding.",
     demoEmail: "vendor@sharnam.demo", allowedRoles: ["vendor"],
-    points: ["R2 bid BOQs per discipline", "Only packages you are invited to", "Project RFIs after award"],
+    points: ["Attendance, leave, calendar", "Your documents & separation", "R2 bid BOQs after check-in"],
     cta: "Sign in", tone: "#C45C26", icon: "VN",
-    landingPath: "/crm/vendor-bids", workspaceKey: "comms", group: "role",
+    landingPath: "/vendor-desk", workspaceKey: "comms", group: "role",
     policies: [...SHARNAM_PORTAL_POLICIES, "Submit BOQs only for packages you are invited to. Use the R2 template — one upload per work package."],
   },
   client: {

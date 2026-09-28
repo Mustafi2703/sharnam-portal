@@ -76,7 +76,7 @@ export function homePathForUser(
 ): string {
   if (!user) return "/login";
   if (user.hrDeskOnly || user.role === "hr") return "/hrm";
-  if (user.role === "vendor") return "/crm/vendor-bids";
+  if (user.role === "vendor") return "/vendor-desk";
   if (user.role === "site_employee") return "/attendance";
   if (user.role === "employee") {
     if (user.vendorId) return "/stakeholder";

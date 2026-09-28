@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { OfficeClockInCard } from "../components/OfficeClockInCard";
@@ -95,26 +95,11 @@ export default function DashboardPage() {
     { label: "Cube tests", value: kpis?.cubeTests ?? 0, color: "bg-[#0B6A78]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
   ];
 
+  if (user?.role === "vendor") return <Navigate to="/vendor-desk" replace />;
+
   return (
     <div className="space-y-5">
       <OfficeClockInCard />
-      {user?.role === "vendor" && (
-        <Card className="!p-4 space-y-2">
-          <h3 className="font-semibold text-sm">Contractor desk</h3>
-          <p className="text-xs text-steel-muted">No clock-in. Open bid management, then fill checklists on the awarded project.</p>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <Link to="/crm/vendor-bids" className="font-semibold text-brand">
-              Bid management →
-            </Link>
-            <Link to="/crm/vendor-bids?desk=projects" className="font-semibold text-brand">
-              My projects →
-            </Link>
-            <Link to="/crm/vendor-bids?desk=inbox" className="font-semibold text-brand">
-              Checklist inbox →
-            </Link>
-          </div>
-        </Card>
-      )}
       {dues && (dues.overdue > 0 || dues.dueSoon > 0 || dues.items.length > 0) && (
         <Card className="!p-4 border-amber-200 bg-amber-50/60">
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">

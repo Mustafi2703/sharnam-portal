@@ -33,17 +33,8 @@ import {
 } from "../../lib/gfcRegister";
 import { MASTER_REGISTER_DISCIPLINES } from "../../lib/masterDrawingRegister";
 
-const GFC_DISCIPLINE_TABS = [
-  "Architecture",
-  "Structural",
-  "MEPF",
-  "Civil",
-  "Facade",
-  "Interior",
-  "Fire",
-  "Electrical",
-  "Mechanical",
-] as const;
+const GFC_DISCIPLINE_TABS = ["Architecture", "Structural", "MEPF"] as const;
+const GFC_REVISION_CHOICES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"] as const;
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -90,6 +81,7 @@ export default function DrawingsPage() {
   const [registerDwg, setRegisterDwg] = useState<File | null>(null);
   const [revPdf, setRevPdf] = useState<File | null>(null);
   const [revDwg, setRevDwg] = useState<File | null>(null);
+  const [extraPdfs, setExtraPdfs] = useState<File[]>([]);
   const [registerIssue, setRegisterIssue] = useState(emptyDrawingIssueDraft);
   const [revIssue, setRevIssue] = useState(emptyDrawingIssueDraft);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
@@ -275,10 +267,7 @@ export default function DrawingsPage() {
     if (!uploadTarget || !replaceRevisionId) return null;
     return (uploadTarget.revisions || []).find((r: any) => r.id === replaceRevisionId) || null;
   }, [uploadTarget, replaceRevisionId]);
-  const revModalOpen =
-    revUploadMode === "new"
-      ? !!uploadForId && !!revUnlockToken
-      : !!uploadForId && !!replaceRevisionId;
+  const revModalOpen = !!uploadForId && !!uploadTarget;
 
   async function exportCsv() {
     const res = await fetch(`${API_BASE}/api/drawings/project/${id}/export.csv`, {
@@ -312,8 +301,18 @@ export default function DrawingsPage() {
     }
   }
 
+  function extraFileList(rev: any): { fileUrl: string; fileName: string }[] {
+    if (!rev?.extraFilesJson) return [];
+    try {
+      const parsed = JSON.parse(rev.extraFilesJson);
+      return Array.isArray(parsed) ? parsed.filter((f) => f?.fileUrl) : [];
+    } catch {
+      return [];
+    }
+  }
+
   function revisionHasFiles(rev: any) {
-    return !!(rev?.pdfFileUrl || rev?.dwgFileUrl || rev?.fileUrl);
+    return !!(rev?.pdfFileUrl || rev?.dwgFileUrl || rev?.fileUrl || extraFileList(rev).length);
   }
 
   function openLatestViewer(d: any) {
@@ -323,9 +322,10 @@ export default function DrawingsPage() {
     setViewer(previewFromRev(d, latest));
   }
 
-  async function openRevisionSharePoint(revId: string) {
+  async function openRevisionSharePoint(revId: string, fileUrl?: string) {
     try {
-      const r = await api<{ sharePointUrl?: string | null }>(`/api/drawings/revision/${revId}/sharepoint`, { token });
+      const q = fileUrl ? `?fileUrl=${encodeURIComponent(fileUrl)}` : "";
+      const r = await api<{ sharePointUrl?: string | null }>(`/api/drawings/revision/${revId}/sharepoint${q}`, { token });
       if (r.sharePointUrl) window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
       else setMsg("PDF stays in this viewer. The SharePoint link appears once the file is in the project library.");
     } catch (err) {
@@ -348,7 +348,7 @@ export default function DrawingsPage() {
       setFormError("Complete Drawing Check Master first.");
       return;
     }
-    if (!registerPdf && !registerDwg) {
+    if (!registerPdf && !registerDwg && !extraPdfs.length) {
       setFormError("Choose at least one of PDF or DWG.");
       return;
     }
@@ -362,6 +362,7 @@ export default function DrawingsPage() {
       if (plannedDate) fd.append("plannedDate", plannedDate);
       if (actualDate) fd.append("actualDate", actualDate);
       if (registerPdf) fd.append("pdf", registerPdf);
+      for (const extra of extraPdfs) fd.append("extraPdf", extra);
       if (registerDwg) fd.append("dwg", registerDwg);
       appendIssueToFormData(fd, registerIssue);
       await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
@@ -375,6 +376,7 @@ export default function DrawingsPage() {
         publish: true,
       });
       setRegisterPdf(null);
+      setExtraPdfs([]);
       setRegisterDwg(null);
       setRegisterIssue(emptyDrawingIssueDraft());
       setUnlockToken(null);
@@ -400,6 +402,7 @@ export default function DrawingsPage() {
   function resetRevUpload() {
     setUploadForId(null);
     setRevPdf(null);
+    setExtraPdfs([]);
     setRevDwg(null);
     setRevIssue(emptyDrawingIssueDraft());
     setRevUnlockToken(null);
@@ -420,11 +423,14 @@ export default function DrawingsPage() {
         return;
       }
     } else if (revUploadMode === "update") {
-      if (!revPdf && !revDwg && !issueDraftHasData(revIssue)) {
+      if (!revPdf && !revDwg && !extraPdfs.length && !issueDraftHasData(revIssue)) {
         setFormError("Choose PDF/DWG or optional receive/issue details.");
         return;
       }
-    } else if (!revPdf && !revDwg) {
+    } else if (revUploadMode === "new" && !revUnlockToken) {
+      setFormError("Complete Drawing Check Master before a new revision upload.");
+      return;
+    } else if (!revPdf && !revDwg && !extraPdfs.length) {
       setFormError("Choose at least one of PDF or DWG.");
       return;
     }
@@ -449,7 +455,7 @@ export default function DrawingsPage() {
         }
         setExpandedId(uploadForId);
         setMsg(`${revForm.revisionNumber} updated — same revision row; register stays in sync.`);
-      } else if (revUploadMode === "update" && replaceRevisionId && !revPdf && !revDwg && issueDraftHasData(revIssue)) {
+      } else if (revUploadMode === "update" && replaceRevisionId && !revPdf && !revDwg && !extraPdfs.length && issueDraftHasData(revIssue)) {
         const fd = new FormData();
         fd.append("note", revForm.revisionLabel || "Receive & issue update");
         appendIssueToFormData(fd, revIssue);
@@ -469,6 +475,7 @@ export default function DrawingsPage() {
         if (plannedDate) fd.append("plannedDate", plannedDate);
         if (actualDate) fd.append("actualDate", actualDate);
         if (revPdf) fd.append("pdf", revPdf);
+        for (const extra of extraPdfs) fd.append("extraPdf", extra);
         if (revDwg) fd.append("dwg", revDwg);
         appendIssueToFormData(fd, revIssue);
         const hadRev = (uploadTarget?.revisions || []).some(
@@ -493,25 +500,38 @@ export default function DrawingsPage() {
 
   function openUploadRev(d: any) {
     if (!id) return;
-    const next = gfcNextRevisionNumber(d.revisions || []);
+    const latest = gfcCurrentRevision(d);
     setUploadForId(d.id);
-    setRevUploadMode("new");
-    setReplaceRevisionId(null);
     setRevUnlockToken(null);
     setRevPdf(null);
+    setExtraPdfs([]);
     setRevDwg(null);
-    setRevIssue(emptyDrawingIssueDraft());
     setFormError("");
+    setPrecheckOpen(false);
     setPlannedDate("");
     setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
+    if (latest) {
+      setRevUploadMode("update");
+      setReplaceRevisionId(latest.id);
+      setRevIssue(issueFromRevision(latest));
+      setRevForm({
+        revisionNumber: latest.revisionNumber,
+        revisionLabel: latest.revisionLabel || latest.revisionNumber,
+        publish: !!latest.published,
+      });
+      setMsg("Choose the revision, then upload. Several drawings can share the same revision.");
+      return;
+    }
+    setRevUploadMode("new");
+    setReplaceRevisionId(null);
+    setRevIssue(emptyDrawingIssueDraft());
     setRevForm({
-      revisionNumber: next,
-      revisionLabel: `${next} — ${new Date().toLocaleDateString()}`,
+      revisionNumber: "R0",
+      revisionLabel: `R0 — ${new Date().toLocaleDateString()}`,
       publish: true,
     });
-    if (!launchDrawingCheck("revision", d)) return;
-    setMsg("Complete Drawing Check Master in the popup window — revision upload unlocks after.");
+    setMsg("Choose a revision. A brand-new revision needs Drawing Check before the files are saved.");
   }
 
   function openReplaceRevision(d: any, rev: any, role: "pdf" | "dwg" = "pdf") {
@@ -723,13 +743,15 @@ export default function DrawingsPage() {
           context={`Project · GFC register · check complete · ${form.discipline}`}
           file={registerPdf || registerDwg}
           onFile={() => undefined}
-          canSubmit={!!registerPdf || !!registerDwg}
+          canSubmit={!!registerPdf || !!registerDwg || extraPdfs.length > 0}
           filePicker={
             <DrawingUploadFilePicker
               pdfFile={registerPdf}
               dwgFile={registerDwg}
+              extraPdfFiles={extraPdfs}
               onPdfFile={setRegisterPdf}
               onDwgFile={setRegisterDwg}
+              onExtraPdfFiles={setExtraPdfs}
             />
           }
           primaryLabel={form.publish ? "Upload & publish" : "Upload to register"}
@@ -780,12 +802,12 @@ export default function DrawingsPage() {
               onChange: (v) => setForm({ ...form, tlNo: v }),
             },
             {
-              kind: "text",
+              kind: "select",
               name: "revisionNumber",
-              label: "First revision",
-              placeholder: "R0",
+              label: "Revision — several drawings can use the same one",
               value: form.revisionNumber,
               onChange: (v) => setForm({ ...form, revisionNumber: v }),
+              options: [...GFC_REVISION_CHOICES],
             },
             {
               kind: "text",
@@ -872,6 +894,13 @@ export default function DrawingsPage() {
                               Latest · Open
                             </button>
                             <span className="text-[10px] font-mono text-steel-muted">{latest.revisionNumber || d.currentRev}</span>
+                            <button
+                              type="button"
+                              className="text-[10px] font-semibold text-brand hover:underline text-left"
+                              onClick={() => void openRevisionSharePoint(latest.id)}
+                            >
+                              SharePoint
+                            </button>
                           </div>
                         ) : (
                           <span className="text-xs text-steel-muted">—</span>
@@ -901,6 +930,15 @@ export default function DrawingsPage() {
                             ) : (
                               gfcDateLabel(r)
                             )}
+                            {r?.id && revisionHasFiles(r) ? (
+                              <button
+                                type="button"
+                                className="block mx-auto text-[9px] font-semibold text-brand hover:underline"
+                                onClick={() => void openRevisionSharePoint(r.id)}
+                              >
+                                SharePoint
+                              </button>
+                            ) : null}
                           </td>
                         );
                       })}
@@ -971,6 +1009,20 @@ export default function DrawingsPage() {
                                   </div>
                                   {r.pdfFileName && <div className="text-[11px] font-mono mt-0.5">PDF · {r.pdfFileName}</div>}
                                   {r.dwgFileName && <div className="text-[11px] font-mono">DWG · {r.dwgFileName}</div>}
+                                  {extraFileList(r).map((f) => (
+                                    <div key={f.fileUrl} className="text-[11px] font-mono flex flex-wrap gap-2 mt-0.5">
+                                      <span>PDF · {f.fileName}</span>
+                                      <button type="button" className="text-brand font-semibold" onClick={() => {
+                                        setViewerRevId(r.id);
+                                        setViewer(previewFromRev(d, { ...r, pdfFileUrl: f.fileUrl, pdfFileName: f.fileName }));
+                                      }}>
+                                        View
+                                      </button>
+                                      <button type="button" className="text-brand font-semibold" onClick={() => void openRevisionSharePoint(r.id, f.fileUrl)}>
+                                        SharePoint
+                                      </button>
+                                    </div>
+                                  ))}
                                   {!r.pdfFileName && !r.dwgFileName && r.fileName && (
                                     <div className="text-[11px] font-mono mt-0.5">{r.fileName}</div>
                                   )}
@@ -1056,29 +1108,6 @@ export default function DrawingsPage() {
         </div>
       </Card>
 
-      {canUpload && uploadForId && uploadTarget && revUploadMode === "new" && !revUnlockToken && (
-        <Card className="border-brand/40 bg-brand-soft/40">
-          <h3 className="font-semibold text-sm">Waiting for Drawing Check Master</h3>
-          <p className="text-sm text-steel-muted mt-1">
-            Fill the checklist in the popup window for revision of {uploadTarget.drawingNumber}. When it unlocks, the upload form opens here.
-          </p>
-          <Button type="button" className="mt-3" onClick={() => openUploadRev(uploadTarget)}>
-            Re-open checklist window
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            className="mt-3 ml-2"
-            onClick={() => {
-              setUploadForId(null);
-              resetRevUpload();
-            }}
-          >
-            Cancel
-          </Button>
-        </Card>
-      )}
-
       {canUpload && uploadForId && uploadTarget && (
         <UploadModal
           open={revModalOpen}
@@ -1100,10 +1129,10 @@ export default function DrawingsPage() {
           onFile={() => undefined}
           canSubmit={
             revUploadMode === "replace"
-              ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) || issueDraftHasData(revIssue)
+              ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) || extraPdfs.length > 0 || issueDraftHasData(revIssue)
               : revUploadMode === "update"
-                ? !!revPdf || !!revDwg || issueDraftHasData(revIssue)
-                : !!revPdf || !!revDwg
+                ? !!revPdf || !!revDwg || extraPdfs.length > 0 || issueDraftHasData(revIssue)
+                : (!!revPdf || !!revDwg || extraPdfs.length > 0) && !!revUnlockToken
           }
           filePicker={
             revUploadMode === "replace" && revReplaceRole === "dwg" ? (
@@ -1124,8 +1153,10 @@ export default function DrawingsPage() {
               <DrawingUploadFilePicker
                 pdfFile={revPdf}
                 dwgFile={revDwg}
+                extraPdfFiles={extraPdfs}
                 onPdfFile={setRevPdf}
                 onDwgFile={setRevDwg}
+                onExtraPdfFiles={setExtraPdfs}
               />
             )
           }
@@ -1266,15 +1297,27 @@ export default function DrawingsPage() {
             {
               kind: "custom" as const,
               node: (
-                <DrawingIssueFields
-                  projectId={id!}
-                  token={token}
-                  value={revIssue}
-                  onChange={setRevIssue}
-                  existingClientSignUrl={replaceRev?.clientSignUrl}
-                  existingPmcSignUrl={replaceRev?.pmcSignUrl}
-                  existingSiteEngineerSignUrl={replaceRev?.siteEngineerSignUrl}
-                />
+                <div className="space-y-3">
+                  {revUploadMode === "new" && !revUnlockToken && (
+                    <div className="rounded-lg border border-brand/30 bg-brand-soft/40 px-3 py-2">
+                      <p className="text-sm text-ink">
+                        {revForm.revisionNumber} is a new column. Complete Drawing Check, then the files upload onto that revision.
+                      </p>
+                      <Button type="button" className="mt-2" onClick={() => launchDrawingCheck("revision", uploadTarget)}>
+                        Open Drawing Check
+                      </Button>
+                    </div>
+                  )}
+                  <DrawingIssueFields
+                    projectId={id!}
+                    token={token}
+                    value={revIssue}
+                    onChange={setRevIssue}
+                    existingClientSignUrl={replaceRev?.clientSignUrl}
+                    existingPmcSignUrl={replaceRev?.pmcSignUrl}
+                    existingSiteEngineerSignUrl={replaceRev?.siteEngineerSignUrl}
+                  />
+                </div>
               ),
             },
           ]}

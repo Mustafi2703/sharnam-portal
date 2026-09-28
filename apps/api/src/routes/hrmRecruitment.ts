@@ -10,6 +10,15 @@ import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { ensureHrCompanyTree } from "../services/hrEmployeeVault.js";
+import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scoreInterviewRound } from "../services/interviewScorecard.js";
+import {
+  employeeLetterFolder,
+  HR_DRIVE,
+  interviewRecordFolder,
+  payslipRecordFolder,
+  resumeFolder,
+} from "../services/spdcLibraryFolders.js";
 import {
   computeCtcBreakdown,
   buildAnnexureHtml,
@@ -21,9 +30,10 @@ import {
 export const hrmRecruitmentRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 hrmRecruitmentRouter.use(requireAuth);
-
-const HR_ISO_FOLDER = "03_SUPPORT_AND_RESOURCES/03.01_Competence_and_Training";
-const HR_STATUTORY_FOLDER = "06_STATUTORY_AND_LAND/06.03_Labour_and_Statutory_Compliance";
+hrmRecruitmentRouter.use(async (_req, _res, next) => {
+  await ensureHrCompanyTree().catch(() => undefined);
+  next();
+});
 
 function n(v: unknown): number | null {
   if (v === undefined || v === null || v === "") return null;
@@ -197,12 +207,12 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
   let resumeUrl: string | undefined;
   if (req.file) {
     const saved = await mockOneDrive.upload(
-      "GLOBAL",
-      HR_ISO_FOLDER,
+      HR_DRIVE,
+      resumeFolder(),
       `resume-${s(req.body.fullName)?.replace(/[^a-zA-Z0-9._-]/g, "_") || "candidate"}-${Date.now()}${extOf(req.file)}`,
       req.file.buffer
     );
-    resumeUrl = saved.url || `/uploads/onedrive/GLOBAL/${saved.path}`;
+    resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   }
   const row = await prisma.candidate.create({
     data: {
@@ -224,7 +234,14 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
     },
   });
   await audit("hrms.candidate.create", { userId: req.user!.id, entity: "Candidate", entityId: row.id, meta: { fullName: row.fullName, source: row.sourceChannel } });
-  res.status(201).json(row);
+  const { issueCandidateLetterPack } = await import("../services/hrmsLetter.js");
+  const letters = await issueCandidateLetterPack({
+    fullName: row.fullName,
+    email: row.email,
+    designation: row.currentDesign,
+    createdById: req.user!.id,
+  });
+  res.status(201).json({ ...row, letters });
 });
 
 hrmRecruitmentRouter.patch("/candidates/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
@@ -436,21 +453,53 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   res.status(201).json({ ...interviewPublic({ ...row, candidate }), teamsNote });
 });
 
+hrmRecruitmentRouter.get("/interview-framework", requireRoles("admin", "office", "hr"), (_req, res) => {
+  res.json({ roles: INTERVIEW_ROLES, params: INTERVIEW_PARAMS, rounds: ["R1", "R2", "R3"] });
+});
+
 hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
-  const before = await prisma.interviewRound.findUnique({ where: { id: req.params.id } });
+  const before = await prisma.interviewRound.findUnique({
+    where: { id: req.params.id },
+    include: { candidate: { select: { fullName: true } } },
+  });
   if (!before) return res.status(404).json({ error: "not found" });
+  let scorecardJson = before.scorecardJson;
+  let scoreOverall = n(req.body.scoreOverall) ?? before.scoreOverall;
+  let decision = s(req.body.decision) ?? before.decision;
+  if (req.body.scorecard && typeof req.body.scorecard === "object") {
+    const scored = scoreInterviewRound({
+      position: String(req.body.scorecard.position || ""),
+      round: String(req.body.scorecard.round || before.roundType || "R2"),
+      scores: req.body.scorecard.scores || {},
+    });
+    scorecardJson = JSON.stringify({ ...req.body.scorecard, result: scored });
+    scoreOverall = scored.percent;
+    if (!s(req.body.decision)) {
+      decision = scored.grade === "D" ? "Reject" : scored.grade === "C" ? "Hold" : "Advance";
+    }
+    const safeName = (before.candidate.fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    await mockOneDrive.upload(
+      HR_DRIVE,
+      interviewRecordFolder(),
+      `${safeName}_${scored.round}_scorecard.json`,
+      Buffer.from(scorecardJson, "utf8"),
+      "application/json",
+      { replace: true },
+    );
+  }
   const row = await prisma.interviewRound.update({
     where: { id: req.params.id },
     data: {
       status: s(req.body.status) || before.status,
-      decision: s(req.body.decision) ?? before.decision,
+      decision,
       feedbackTechnical: s(req.body.feedbackTechnical) ?? before.feedbackTechnical,
       feedbackHr: s(req.body.feedbackHr) ?? before.feedbackHr,
       feedbackMgmt: s(req.body.feedbackMgmt) ?? before.feedbackMgmt,
       scoreTechnical: n(req.body.scoreTechnical) ?? before.scoreTechnical,
       scoreCommunication: n(req.body.scoreCommunication) ?? before.scoreCommunication,
       scoreCulture: n(req.body.scoreCulture) ?? before.scoreCulture,
-      scoreOverall: n(req.body.scoreOverall) ?? before.scoreOverall,
+      scoreOverall,
+      scorecardJson,
     },
   });
 
@@ -616,18 +665,17 @@ hrmRecruitmentRouter.post(
     }
 
     const safeRef = letter.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const { employeeVaultRelPath } = await import("../services/hrEmployeeVault.js");
     let profile = null;
     if (offer.onboard?.userId) {
       profile = await prisma.employeeProfile.findFirst({ where: { userId: offer.onboard.userId } });
     }
     const saved = await mockOneDrive.upload(
-      "_HR",
-      `${employeeVaultRelPath(profile, offer.candidate.fullName)}/Letters`,
+      HR_DRIVE,
+      employeeLetterFolder(profile?.empCode, offer.candidate.fullName, letter.kind),
       `Appointment-${safeRef}-signed${extOf(req.file)}`,
       req.file.buffer,
     );
-    const signedUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+    const signedUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
 
     letter = await prisma.hrmsDocument.update({
       where: { id: letter.id },
@@ -685,10 +733,11 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office", "hr"), uplo
   if (!candidate) return res.status(400).json({ error: "candidateId required / not found" });
 
   let offerLetterUrl: string | undefined;
+  const joiningFolder = employeeLetterFolder(null, candidate.fullName, "Offer");
   if (req.file) {
     const saved = await mockOneDrive.upload(
-      "GLOBAL",
-      HR_STATUTORY_FOLDER,
+      HR_DRIVE,
+      joiningFolder,
       `offer-${candidate.fullName.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}${extOf(req.file)}`,
       req.file.buffer
     );
@@ -739,8 +788,8 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office", "hr"), uplo
 
         const xlsx = await buildAnnexureXlsx(breakdown);
         const savedAnnex = await mockOneDrive.upload(
-          "GLOBAL",
-          HR_STATUTORY_FOLDER,
+          HR_DRIVE,
+          joiningFolder,
           `Sharnam-Annexure-I-${candidate.fullName.replace(/[^a-zA-Z0-9._-]/g, "_")}-${Date.now()}.xlsx`,
           xlsx
         );
@@ -1032,8 +1081,8 @@ hrmRecruitmentRouter.post(
         fullName: user.fullName,
         originalName: file.originalname,
       });
-      const saved = await mockOneDrive.upload("_HR", `${vaultRel}/${subfolder}`, safeName, file.buffer);
-      const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+      const saved = await mockOneDrive.upload(HR_DRIVE, `${vaultRel}/${subfolder}`, safeName, file.buffer);
+      const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
       created.push(
         await prisma.employeeDocument.create({
           data: {
@@ -1067,7 +1116,6 @@ async function fileHrPolicyAcknowledgement(offerId: string, actorUserId: string)
   const stamps = JSON.parse(onboard.itemsCompletedAtJson || "{}") as Record<string, string>;
   stamps.hrPolicyAcknowledged = stamps.hrPolicyAcknowledged || new Date().toISOString();
   const { renderHrPolicyAcknowledgement } = await import("../services/hrmsLetter.js");
-  const { employeeVaultRelPath } = await import("../services/hrEmployeeVault.js");
   const ackDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
   const html = renderHrPolicyAcknowledgement({
     employeeName: offer.candidate.fullName,
@@ -1082,9 +1130,9 @@ async function fileHrPolicyAcknowledgement(offerId: string, actorUserId: string)
   if (onboard.userId) {
     profile = await prisma.employeeProfile.findFirst({ where: { userId: onboard.userId } });
   }
-  const folder = `${employeeVaultRelPath(profile, offer.candidate.fullName)}/Onboarding`;
+  const folder = employeeLetterFolder(profile?.empCode, offer.candidate.fullName, "joining");
   const saved = await mockOneDrive.upload(
-    "_HR",
+    HR_DRIVE,
     folder,
     `HR-Policy-Acknowledgement.html`,
     Buffer.from(html, "utf8"),
@@ -1393,15 +1441,15 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
   const emp = (profile?.empCode || user.fullName).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
   const ym = `${row.year}-${String(row.month).padStart(2, "0")}`;
   const saved = await mockOneDrive.upload(
-    "_HR",
-    `06_HR_AND_ADMIN/06.03_Payslips/${ym}`,
+    HR_DRIVE,
+    payslipRecordFolder(new Date(row.year, row.month - 1, 1)),
     `${emp}-${ym}.html`,
     Buffer.from(html, "utf8"),
     "text/html; charset=utf-8"
   );
   return prisma.payslip.update({
     where: { id: row.id },
-    data: { fileUrl: saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}` },
+    data: { fileUrl: saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}` },
   }).then(async (updated) => {
     const url = updated.fileUrl;
     if (!url) return updated;

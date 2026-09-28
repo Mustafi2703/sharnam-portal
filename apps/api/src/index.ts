@@ -34,6 +34,8 @@ import { siteIndexRouter } from "./routes/siteIndex.js";
 import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
 import { errorDetail, pushRuntimeLog } from "./services/runtimeLog.js";
 import { audit } from "./services/audit.js";
+import { ensureHrCompanyTree } from "./services/hrEmployeeVault.js";
+import { ensureCrmLibraryTree } from "./services/crmSharePoint.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -232,6 +234,9 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
 
 async function start() {
   await ensureDbConnected();
+  void Promise.all([ensureHrCompanyTree(), ensureCrmLibraryTree()])
+    .then(() => console.log("SharePoint global directories ready: SPDC_HRMS, SPDC_CRM"))
+    .catch((err) => console.warn("SPDC library folders:", err instanceof Error ? err.message : err));
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

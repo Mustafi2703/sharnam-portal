@@ -108,7 +108,7 @@ export const CRM_VENDOR_TOOLS: (CrmTool & { desk?: string })[] = [
       to: "vendor-bids",
       label: "Bid management",
       end: true,
-      subtitle: "Your BOQs, comparative totals, and award status — no clock-in.",
+      subtitle: "BOQs and award status for invited packages.",
     }),
   },
   {

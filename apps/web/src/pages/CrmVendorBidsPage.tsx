@@ -397,14 +397,6 @@ export default function CrmVendorBidsPage() {
         <p className="text-sm text-steel-muted">
           Sign in via the <strong>Contractor</strong> portal to fill bid BOQs here.
         </p>
-        <ul className="text-xs text-steel-muted mt-2 space-y-1">
-          <li>
-            <strong>vendor@sharnam.demo</strong> — M/s Bhavna Infra
-          </li>
-          <li>
-            <strong>nkinra@sharnam.demo</strong> — M/s Nikhra Infra
-          </li>
-        </ul>
         <Link to="/login/vendor" className="text-sm text-brand font-semibold mt-2 inline-block">
           Contractor login →
         </Link>
@@ -415,10 +407,18 @@ export default function CrmVendorBidsPage() {
   return (
     <div className="space-y-4 pb-4">
       <Card className="!p-4 bg-sand/40 border-brand/20">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-1">Contractor bid desk</p>
-        <h2 className="font-display text-lg text-ink">What you applied for</h2>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-1">
+          {desk === "projects" ? "Awarded work" : desk === "inbox" ? "Assigned work" : "Bid management"}
+        </p>
+        <h2 className="font-display text-lg text-ink">
+          {desk === "projects" ? "My projects" : desk === "inbox" ? "Checklist and RFI inbox" : "Packages you are bidding"}
+        </h2>
         <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-          Every R2 package assigned to your company — project, disciplines, and your uploaded BOQs. Fill or upload while the bid is open. Your totals stay on this desk after award.
+          {desk === "projects"
+            ? "Jobs opened after a bid invite or award. Checklists and RFIs open on the project, not on the bid list."
+            : desk === "inbox"
+              ? "Checklists and RFIs assigned to your company. This is separate from uploading BOQs."
+              : "BOQs for packages your company was invited to. Upload while the bid is open."}
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
           <Button
@@ -665,22 +665,9 @@ export default function CrmVendorBidsPage() {
             No open bid packages assigned to your company yet.
           </p>
           <ul className="text-xs text-steel-muted mt-3 space-y-1.5 list-disc pl-5">
-            <li>
-              Sign in as <strong>vendor@sharnam.demo</strong> (M/s Bhavna Infra) or <strong>nkinra@sharnam.demo</strong> (M/s Nikhra Infra) — password <strong>Demo@1234</strong>
-            </li>
-            <li>
-              Demo package: <strong>SPDC-DEMO-01 · Civil & structural — R2 demo bid</strong> — structural, civil, and other discipline BOQs
-            </li>
-            <li>
-              Office opens bids at{" "}
-              <Link to="/crm/bids" className="text-brand font-semibold">
-                CRM → Comparative bids
-              </Link>
-            </li>
+            <li>Office invites your company on a package. That package shows up here with its BOQ sheets.</li>
+            <li>Attendance, leave, and documents stay on My desk. They are not part of this bid list.</li>
           </ul>
-          <p className="text-xs text-steel-muted mt-3">
-            If this is a fresh server, run <code className="text-[10px]">npm run db:seed</code> to load demo bidders and pre-filled BOQs.
-          </p>
         </Card>
       )}
 

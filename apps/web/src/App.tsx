@@ -76,6 +76,7 @@ import CrmProjectSetupPage from "./pages/crm/CrmProjectSetupPage";
 import CrmProjectsPage from "./pages/crm/CrmProjectsPage";
 import CrmPackagesPage from "./pages/crm/CrmPackagesPage";
 import SiteAttendancePage from "./pages/SiteAttendancePage";
+import VendorDeskPage from "./pages/VendorDeskPage";
 import TrainingPage from "./pages/TrainingPage";
 import ClientPortalGate from "./components/ClientPortalGate";
 import { SiteAttendanceGate } from "./components/SiteAttendanceGate";
@@ -325,6 +326,7 @@ export default function App() {
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
                 <Route path="/stakeholder" element={<StakeholderDeskPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />
+                <Route path="/vendor-desk" element={<VendorDeskPage />} />
                 <Route path="/vouchers" element={<ExpenseVouchersPage />} />
               </Routes>
             </AppShell>

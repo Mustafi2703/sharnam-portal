@@ -7,12 +7,35 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { errorDetail, listRuntimeLogs, pushRuntimeLog } from "../services/runtimeLog.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
+import { ensureHrCompanyTree } from "../services/hrEmployeeVault.js";
+import {
+  attendanceRecordFolder,
+  employeeLetterFolder,
+  HR_DRIVE,
+  leaveApplicationFolder,
+  voucherRecordFolder,
+} from "../services/spdcLibraryFolders.js";
 import {
   buildDprPack,
   buildWprPack,
 } from "../services/reportPacks.js";
 import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
 import { isHrDeskOnly } from "../services/hrDesk.js";
+
+async function personFileStamp(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+  const profile = await prisma.employeeProfile.findUnique({ where: { userId }, select: { empCode: true } });
+  const code = (profile?.empCode || "EMP").replace(/[^a-zA-Z0-9._-]+/g, "_");
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return { code, fullName: user?.fullName || "Employee", empCode: profile?.empCode || null, stamp };
+}
+
+async function fileNamedHrNote(folder: string, fileName: string, body: string) {
+  await ensureHrCompanyTree().catch(() => undefined);
+  await mockOneDrive
+    .upload(HR_DRIVE, folder, fileName, Buffer.from(body, "utf8"), "text/plain")
+    .catch((err) => console.warn("[HRMS] record file:", err instanceof Error ? err.message : err));
+}
 
 /** Auto clock-out at 18:00 IST for open punches (same day after EOD, or any prior day). */
 const EOD_CLOCK_OUT = "18:00";
@@ -1335,7 +1358,7 @@ hrmRouter.use(requireAuth);
 /** HR desk metrics — office / admin only (portal UI is gated; API must match). */
 const hrmDesk = requireRoles("admin", "office", "hr");
 /** Field staff may punch and view roster; vendors/clients must not. */
-const hrmStaff = requireRoles("admin", "office", "hr", "site_employee", "employee");
+const hrmStaff = requireRoles("admin", "office", "hr", "site_employee", "employee", "vendor");
 const HRMS_STAFF_ROLES = ["admin", "office", "hr", "employee", "site_employee"] as const;
 const HRMS_ALL_LOGIN_ROLES = [...HRMS_STAFF_ROLES, "vendor", "client"] as const;
 
@@ -2205,7 +2228,7 @@ hrmRouter.get("/attendance/register.xlsx", hrmStaff, async (req: AuthedRequest, 
 /** Selfie + GPS punch — multipart: selfie (required), kind, lat, lng, accuracy, projectId */
 hrmRouter.post(
   "/attendance/punch",
-  requireRoles("admin", "office", "hr", "site_employee", "employee"),
+  requireRoles("admin", "office", "hr", "site_employee", "employee", "vendor"),
   hrmUpload.single("selfie"),
   async (req: AuthedRequest, res) => {
     if (!req.file) return res.status(400).json({ error: "selfie photo required" });
@@ -2246,6 +2269,7 @@ hrmRouter.post(
     const folder = "03_SUPPORT_AND_RESOURCES/03.02_Resources_and_Productivity/Attendance";
     const fname = `${kind}-${person}-${stamp}.jpg`;
     const saved = await mockOneDrive.upload(projectCode, folder, fname, req.file.buffer);
+    await mockOneDrive.upload(HR_DRIVE, attendanceRecordFolder(), fname, req.file.buffer, "image/jpeg", { replace: true });
     const photoUrl = saved.url;
 
     const punchedAt = new Date().toISOString();
@@ -2675,11 +2699,14 @@ hrmRouter.get("/employee-files", async (req: AuthedRequest, res) => {
 
 hrmRouter.post(
   "/employee-files",
-  hrmDesk,
+  requireRoles("admin", "office", "hr", "site_employee", "employee", "vendor"),
   hrmUpload.array("files", 12),
   async (req: AuthedRequest, res) => {
-    const userId = String(req.body.userId || "");
-    if (!userId) return res.status(400).json({ error: "userId required" });
+    const isHr = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "hr";
+    if (!isHr && req.body.userId && String(req.body.userId) !== req.user!.id) {
+      return res.status(403).json({ error: "You can only store your own documents" });
+    }
+    const userId = isHr && req.body.userId ? String(req.body.userId) : req.user!.id;
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: "employee not found" });
     const files = (req.files as Express.Multer.File[] | undefined) || [];
@@ -2705,12 +2732,12 @@ hrmRouter.post(
         originalName: file.originalname,
       });
       const saved = await mockOneDrive.upload(
-        "_HR",
+        HR_DRIVE,
         `${vaultRel}/${subfolder}`,
         safeName,
         file.buffer
       );
-      const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+      const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
       created.push(
         await prisma.employeeDocument.create({
           data: {
@@ -2745,7 +2772,7 @@ hrmRouter.delete("/employee-files/:id", hrmDesk, async (req: AuthedRequest, res)
  *   1. Fill the form -> we build a .docx from apps/api/formats/hrms/<kind>.docx
  *      (SPDC Letter of Appointment) plus print-ready HTML and Annexure I .xlsx when CTC applies.
  *   2. Upload the signed / scanned copy back -> attaches the file to the same record.
- * All artefacts land under 06_HR_AND_ADMIN/06.01_Letters on the mock OneDrive / SharePoint tree.
+ * Generated letters and signed copies land on `_HR` under SPDC_HRMS employee folders.
  */
 const HRMS_DOC_KINDS = [
   "Appointment",
@@ -2761,8 +2788,6 @@ const HRMS_DOC_KINDS = [
   "NdaPostEmployment",
 ] as const;
 type HrmsDocKind = (typeof HRMS_DOC_KINDS)[number];
-
-const HRMS_DOC_FOLDER = "06_HR_AND_ADMIN/06.01_Letters";
 
 function hrmsDocRefNo(kind: HrmsDocKind) {
   const yy = new Date().getFullYear();
@@ -2994,8 +3019,8 @@ hrmRouter.post(
     const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
     const ext = /\.([a-zA-Z0-9]{2,5})$/.exec(req.file.originalname || "")?.[0] || ".bin";
     const saved = await mockOneDrive.upload(
-      "_HR",
-      HRMS_DOC_FOLDER,
+      HR_DRIVE,
+      employeeLetterFolder(null, row.employeeName, row.kind),
       `${row.kind}-${safeRef}-signed-${Date.now()}${ext}`,
       req.file.buffer
     );
@@ -3042,6 +3067,36 @@ hrmRouter.delete("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res)
   res.json({ ok: true });
 });
 
+hrmRouter.post("/separation", requireRoles("admin", "office", "hr", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
+  const reason = String(req.body.reason || "").trim();
+  if (!reason) return res.status(400).json({ error: "Say why you are leaving" });
+  const last = req.body.lastWorkingDay ? new Date(String(req.body.lastWorkingDay)) : new Date();
+  if (Number.isNaN(last.getTime())) return res.status(400).json({ error: "Last working day is not a valid date" });
+  const row = await prisma.leaveRequest.create({
+    data: {
+      userId: req.user!.id,
+      fromDate: last,
+      toDate: last,
+      days: 0,
+      reason: `SEPARATION: ${reason}`,
+      status: "Pending",
+    },
+  });
+  await audit("hrm.separation.request", {
+    userId: req.user!.id,
+    entity: "LeaveRequest",
+    entityId: row.id,
+    meta: { lastWorkingDay: last.toISOString().slice(0, 10) },
+  });
+  const person = await personFileStamp(req.user!.id);
+  await fileNamedHrNote(
+    employeeLetterFolder(person.empCode, person.fullName, "separation"),
+    `${person.code}_Separation_${person.stamp}.txt`,
+    `Employee: ${person.fullName}\nEmp ID: ${person.empCode || ""}\nLast working day: ${last.toISOString().slice(0, 10)}\nReason: ${reason}\n`,
+  );
+  res.status(201).json(row);
+});
+
 hrmRouter.get("/leave", hrmStaff, async (req: AuthedRequest, res) => {
   const isHr = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "hr";
   const where =
@@ -3058,7 +3113,7 @@ hrmRouter.get("/leave", hrmStaff, async (req: AuthedRequest, res) => {
   res.json(rows);
 });
 
-hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const from = new Date(req.body.fromDate);
   const to = new Date(req.body.toDate);
   const halfDay = !!req.body.halfDay;
@@ -3083,6 +3138,22 @@ hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", 
   if (row.status === "Approved" && row.leaveTypeId) {
     await applyLeaveBalanceDelta(row.userId, row.leaveTypeId, from.getFullYear(), row.days);
   }
+  const person = await personFileStamp(row.userId);
+  const typeName = row.leaveType?.name || "Leave";
+  await fileNamedHrNote(
+    leaveApplicationFolder(row.fromDate),
+    `${person.code}_Leave_Application_${person.stamp}.txt`,
+    [
+      `Employee: ${person.fullName}`,
+      `Emp ID: ${person.empCode || ""}`,
+      `Type: ${typeName}`,
+      `From: ${row.fromDate.toISOString().slice(0, 10)}`,
+      `To: ${row.toDate.toISOString().slice(0, 10)}`,
+      `Days: ${row.days}`,
+      `Reason: ${row.reason || ""}`,
+      `Status: ${row.status}`,
+    ].join("\n"),
+  );
   res.status(201).json(row);
 });
 
@@ -3239,8 +3310,8 @@ hrmRouter.post(
       const stamp = Date.now();
       const safe = (f.originalname || "bill").replace(/[^a-zA-Z0-9._-]+/g, "_");
       const saved = await mockOneDrive.upload(
-        "_HR",
-        "06_HR_AND_ADMIN/06.05_Expense_Vouchers",
+        HR_DRIVE,
+        voucherRecordFolder(),
         `${person}-${stamp}-${safe}`,
         f.buffer,
       );

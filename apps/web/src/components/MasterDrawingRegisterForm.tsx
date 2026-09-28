@@ -2,12 +2,11 @@ import { FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button, Input, Select, TextArea } from "./ui";
 import {
-  MASTER_REGISTER_BUILDINGS,
   MASTER_REGISTER_DELAY_RESP,
   MASTER_REGISTER_DISCIPLINES,
   MASTER_REGISTER_DRAWING_TYPES,
   MASTER_REGISTER_ISSUED_TO,
-  MASTER_REGISTER_PACKAGES,
+  MASTER_REGISTER_LATEST,
   type MasterRegisterForm,
 } from "../lib/masterDrawingRegister";
 
@@ -95,18 +94,18 @@ export function MasterDrawingRegisterForm({
             <Input value={form.srNo} onChange={(e) => set({ srNo: e.target.value })} placeholder="1" />
           </Field>
           <Field label="Project package">
-            <Select value={form.projectPackage} onChange={(e) => set({ projectPackage: e.target.value })}>
-              {MASTER_REGISTER_PACKAGES.map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </Select>
+            <Input
+              value={form.projectPackage}
+              onChange={(e) => set({ projectPackage: e.target.value })}
+              placeholder="Package on this project"
+            />
           </Field>
           <Field label="Building">
-            <Select value={form.building} onChange={(e) => set({ building: e.target.value })}>
-              {MASTER_REGISTER_BUILDINGS.map((b) => (
-                <option key={b}>{b}</option>
-              ))}
-            </Select>
+            <Input
+              value={form.building}
+              onChange={(e) => set({ building: e.target.value })}
+              placeholder="Building / block"
+            />
           </Field>
           <Field label="Discipline">
             <Select value={form.discipline} onChange={(e) => set({ discipline: e.target.value })}>
@@ -162,8 +161,9 @@ export function MasterDrawingRegisterForm({
           </Field>
           <Field label="Latest revision">
             <Select value={form.latestRevision} onChange={(e) => set({ latestRevision: e.target.value })}>
-              <option>Yes</option>
-              <option>No</option>
+              {MASTER_REGISTER_LATEST.map((v) => (
+                <option key={v}>{v}</option>
+              ))}
             </Select>
           </Field>
           <Field label="Revision description" className="lg:col-span-4">

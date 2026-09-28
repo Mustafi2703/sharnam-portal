@@ -1,7 +1,10 @@
 import fs from "fs";
+import path from "path";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { resolveR2TemplatePath } from "./comparativeStatement.js";
 import { proposalDocxFilename, resolveProposalDocxPath } from "./proposalTemplate.js";
+import { ensureSandboxLibraryFolders } from "./graph.js";
+import { CRM_DRIVE, CRM_LIBRARY_FOLDERS, crmProposalFolder } from "./spdcLibraryFolders.js";
 
 function sanitizeSegment(s: string) {
   return s.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -23,6 +26,23 @@ export const CRM_SHAREPOINT = {
 
 /** Office library for PMC proposals that are not yet tied to a project. */
 export const CRM_OFFICE_LIBRARY = "PMC-CRM";
+
+let crmTreeReady = false;
+
+/** SPDC_CRM folder tree on `_CRM`. Sample INQ-000 and template files are not copied. */
+export async function ensureCrmLibraryTree() {
+  if (crmTreeReady) return { driveCode: CRM_DRIVE, folders: [...CRM_LIBRARY_FOLDERS] };
+  for (const rel of CRM_LIBRARY_FOLDERS) {
+    fs.mkdirSync(path.join(mockOneDrive.root(), "onedrive", CRM_DRIVE, rel), { recursive: true });
+  }
+  try {
+    await ensureSandboxLibraryFolders(CRM_DRIVE, [...CRM_LIBRARY_FOLDERS]);
+    crmTreeReady = true;
+  } catch (err) {
+    console.warn("[CRM] SharePoint folder tree:", err instanceof Error ? err.message : err);
+  }
+  return { driveCode: CRM_DRIVE, folders: [...CRM_LIBRARY_FOLDERS] };
+}
 
 export async function syncBufferToProjectSharePoint(
   projectCode: string,
@@ -48,13 +68,18 @@ export async function syncProposalDocx(
   clientName?: string,
   revisionNo = 0
 ) {
+  await ensureCrmLibraryTree();
   const buffer = fs.readFileSync(resolveProposalDocxPath());
-  return syncBufferToProjectSharePoint(
-    projectCode,
-    CRM_SHAREPOINT.pmcProposals,
-    proposalDocxFilename(quotationNo, clientName, revisionNo),
-    buffer
+  const fileName = proposalDocxFilename(quotationNo, clientName, revisionNo);
+  await mockOneDrive.upload(
+    CRM_DRIVE,
+    crmProposalFolder({ quotationNo, clientName, stage: "submitted" }),
+    fileName,
+    buffer,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    { replace: false },
   );
+  return syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.pmcProposals, fileName, buffer);
 }
 
 export async function createProjectProposalFile(
@@ -64,38 +89,49 @@ export async function createProjectProposalFile(
   revisionNo = 0,
   buffer?: Buffer
 ) {
+  await ensureCrmLibraryTree();
   const bytes = buffer ?? fs.readFileSync(resolveProposalDocxPath());
-  return syncBufferToProjectSharePoint(
-    projectCode,
-    CRM_SHAREPOINT.pmcProposals,
-    proposalDocxFilename(quotationNo, clientName, revisionNo),
-    bytes
+  const fileName = proposalDocxFilename(quotationNo, clientName, revisionNo);
+  const stage = revisionNo > 0 ? "submitted" : "working";
+  const saved = await mockOneDrive.upload(
+    CRM_DRIVE,
+    crmProposalFolder({ quotationNo, clientName, stage }),
+    fileName,
+    bytes,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    { replace: false },
   );
+  if (projectCode && projectCode !== CRM_OFFICE_LIBRARY && projectCode !== CRM_DRIVE) {
+    await syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.pmcProposals, fileName, bytes).catch(() => undefined);
+  }
+  return saved;
 }
 
 /** Copy the SPDC PMC proposal template into the office proposals folder, named for the client. */
 export async function createClientProposalFile(clientName: string, quotationNo?: string) {
-  const buffer = fs.readFileSync(resolveProposalDocxPath());
-  return mockOneDrive.upload(
-    CRM_OFFICE_LIBRARY,
-    CRM_SHAREPOINT.pmcProposals,
-    proposalDocxFilename(quotationNo, clientName),
-    buffer,
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  );
+  return createProjectProposalFile(CRM_DRIVE, clientName, quotationNo, 0);
 }
 
 export async function syncProposalSummaryFile(
   projectCode: string,
   quotationNo: string,
   buffer: Buffer,
-  ext: "html" | "doc"
+  ext: "html" | "doc",
+  clientName?: string
 ) {
+  await ensureCrmLibraryTree();
   const safe = quotationNo.replace(/[^a-zA-Z0-9._-]+/g, "-");
-  return syncBufferToProjectSharePoint(
-    projectCode,
-    CRM_SHAREPOINT.pmcProposals,
-    `${safe}-Summary.${ext}`,
-    buffer
+  const fileName = `${safe}-Summary.${ext}`;
+  const contentType = ext === "html" ? "text/html" : "application/msword";
+  const saved = await mockOneDrive.upload(
+    CRM_DRIVE,
+    crmProposalFolder({ quotationNo, clientName, stage: "submitted" }),
+    fileName,
+    buffer,
+    contentType,
   );
+  if (projectCode && projectCode !== CRM_OFFICE_LIBRARY && projectCode !== CRM_DRIVE) {
+    await syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.pmcProposals, fileName, buffer).catch(() => undefined);
+  }
+  return saved;
 }

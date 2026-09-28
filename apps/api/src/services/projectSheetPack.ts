@@ -83,7 +83,6 @@ export async function provisionProjectSheetPack(
     milestones,
     hindrance,
     drawings,
-    registerLines,
     checklistAssignments,
     progressRisk,
     progressLegal,
@@ -96,7 +95,6 @@ export async function provisionProjectSheetPack(
     prisma.progressMilestone.count({ where: { projectId } }),
     prisma.progressHindrance.count({ where: { projectId } }),
     prisma.drawing.count({ where: { projectId } }),
-    prisma.drawingRegisterLine.count({ where: { projectId } }),
     prisma.checklistAssignment.count({ where: { projectId } }),
     prisma.progressRisk.count({ where: { projectId } }),
     prisma.progressLegalApproval.count({ where: { projectId } }),
@@ -178,11 +176,8 @@ export async function provisionProjectSheetPack(
     return out.imported;
   });
 
-  await step("drawings", "progress", drawings >= 1 || registerLines >= 1, async () => {
-    const { syncDrawingRegisterToProject } = await import("./drawingRegisterSheets.js");
-    const out = await syncDrawingRegisterToProject(projectId, userId);
-    return out.drawings;
-  });
+  // DRAWING REGISTER - 01.xlsx Master sheet is a sample (Package A / Tower 1). Do not copy it onto live projects.
+  await step("drawings", "progress", true, async () => drawings);
 
   await step("risk-legal", "progress", progressRisk >= 1 && progressLegal >= 1, async () => {
     const { syncRiskFromTemplate, syncLegalFromTemplate } = await import("./progressRegistersImport.js");

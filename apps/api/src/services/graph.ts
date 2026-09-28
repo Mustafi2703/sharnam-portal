@@ -536,6 +536,26 @@ export async function ensureProjectSharePointTree(projectCode: string) {
   return { drive, rootFolder, folders: created };
 }
 
+/** SPDC_HRMS / SPDC_CRM trees under Sharnam Portal/{libraryCode}. No-op when Graph is off. */
+export async function ensureSandboxLibraryFolders(libraryCode: string, relFolders: string[]) {
+  const cfg = graphConfig();
+  if (!cfg.configured || cfg.mock) return { created: [] as string[] };
+  const code = sanitizeProjectCode(libraryCode);
+  const drive = await resolveDefaultDrive();
+  const created: string[] = [];
+  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
+  await ensureDriveFolder(drive.driveId, rootFolder);
+  created.push(rootFolder);
+  for (const rel of relFolders) {
+    const clean = rel.replace(/^\/+|\/+$/g, "");
+    if (!clean) continue;
+    const full = `${rootFolder}/${clean}`;
+    await ensureDriveFolder(drive.driveId, full);
+    created.push(full);
+  }
+  return { created };
+}
+
 /**
  * Upload into sandbox only.
  * Never overwrites an existing file — if name exists, writes a unique sibling name.

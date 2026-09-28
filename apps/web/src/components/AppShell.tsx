@@ -83,8 +83,13 @@ const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/vouchers", label: "Expense voucher", icon: "finance" },
 ];
 
-/** Contractor portal — discipline BOQ uploads per project */
-const vendorContractorNav: { to: string; label: string; icon: ModuleIconKey }[] = [
+/** Contractor home — attendance, leave, documents, separation. Not bid tools. */
+const vendorDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
+  { to: "/vendor-desk", label: "Attendance & leave", icon: "field" },
+];
+
+/** Contractor bids — kept apart from the home desk. */
+const vendorBidNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/crm/vendor-bids", label: "Bid management", icon: "cost" },
   { to: "/crm/vendor-bids?desk=projects", label: "My projects", icon: "modules" },
   { to: "/crm/vendor-bids?desk=inbox", label: "Checklist inbox", icon: "quality" },
@@ -132,10 +137,16 @@ function SideNavBody({
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const navItems = appNav.filter((n) => !user || n.roles.includes(user.role));
+  const navItems = appNav.filter((n) => {
+    if (!user) return true;
+    if (!n.roles.includes(user.role)) return false;
+    if (user.role === "vendor" && (n.to === "/dashboard" || n.to === "/workspace")) return false;
+    return true;
+  });
   const isOffice = user?.role === "admin" || user?.role === "office";
   const isSiteDesk = user?.role === "site_employee";
   const isVendor = user?.role === "vendor";
+  const homeTo = isVendor ? "/vendor-desk" : isSiteDesk ? "/attendance" : "/dashboard";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const modules = useMemo(
     () => WORKSPACES.filter((w) => !user || w.roles.includes(user.role)),
@@ -149,7 +160,7 @@ function SideNavBody({
   return (
     <div className="side-nav__inner">
       <div className="side-nav__head">
-        <Link to="/dashboard" className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
+        <Link to={homeTo} className="side-nav__brand" onClick={onNavigate} aria-label={`${BRAND_EN} home`}>
           <img src="/logo-transparent.png" alt={BRAND_EN} className="side-nav__logo" width={240} height={116} />
         </Link>
         {roleLabel ? (
@@ -204,13 +215,35 @@ function SideNavBody({
         )}
 
         {isVendor && (
-          <section className="side-nav__section side-nav__section--vendor" aria-label="Contractor bids">
+          <section className="side-nav__section side-nav__section--vendor" aria-label="Contractor desk">
             <div className="side-nav__section-head">
-              <p className="side-nav__label">Procurement</p>
-              <span className="side-nav__section-hint">Bids</span>
+              <p className="side-nav__label">My desk</p>
+              <span className="side-nav__section-hint">Home</span>
+            </div>
+            <nav className="side-nav__group" aria-label="Attendance and leave">
+              {vendorDeskNav.map((n) => (
+                <NavLink
+                  key={n.to}
+                  to={n.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
+                >
+                  <ModuleIcon name={n.icon} size={18} />
+                  <span>{formatUiText(n.label)}</span>
+                </NavLink>
+              ))}
+            </nav>
+          </section>
+        )}
+
+        {isVendor && (
+          <section className="side-nav__section" aria-label="Contractor bids">
+            <div className="side-nav__section-head">
+              <p className="side-nav__label">Bid management</p>
+              <span className="side-nav__section-hint">BOQ</span>
             </div>
             <nav className="side-nav__group" aria-label="Vendor bid uploads">
-              {vendorContractorNav.map((n) => (
+              {vendorBidNav.map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
@@ -479,6 +512,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isOffice = user?.role === "admin" || user?.role === "office";
   const isSiteDesk = user?.role === "site_employee";
   const isVendor = user?.role === "vendor";
+  const homeTo = isVendor ? "/vendor-desk" : isSiteDesk ? "/attendance" : "/dashboard";
   const isClient = user?.role === "client";
   const roleLabel = user?.role ? ROLE_LABELS[user.role] || user.role : "";
   const activeProject = projects.find((p) => p.id === projectId);
@@ -549,7 +583,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </button>
 
-            <Link to="/dashboard" className="app-topbar__brand min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
+            <Link to={homeTo} className="app-topbar__brand min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
               <img src="/logo-transparent.png" alt={BRAND_EN} className="app-topbar__logo" width={160} height={76} />
             </Link>
 
@@ -583,6 +617,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             {isVendor && (
               <div className="hidden sm:flex items-center gap-1.5">
+                <Link to="/vendor-desk" className="app-topbar__chip hover:border-brand">
+                  My desk
+                </Link>
                 <Link to="/crm/vendor-bids" className="app-topbar__chip hover:border-brand">
                   Bid management
                 </Link>

@@ -7,7 +7,7 @@ import { Badge, Button, Card, Select } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
 
 const FILE_KINDS = ["PAN", "Aadhaar", "Bank", "PF-ESIC", "Offer", "Appointment", "Promotion", "Payslip", "Medical", "BGV", "ID-card", "Other"];
-const HR_VAULT_ROOT = "06_HR_AND_ADMIN/06.02_Employee_Files";
+const HR_VAULT_ROOT = "06_Records_Employee_Files";
 
 function vaultFolderName(person: StaffRow | undefined) {
   if (!person) return "—";
@@ -85,7 +85,7 @@ export default function HrmsFilesPage() {
   }, [loadFiles]);
 
   const person = staff.find((s) => s.id === userId);
-  const vaultPath = person ? `_HR/${HR_VAULT_ROOT}/${vaultFolderName(person)}/` : null;
+  const vaultPath = person ? `SPDC_HRMS/${HR_VAULT_ROOT}/${vaultFolderName(person)}/` : null;
   const hiringForUser = useMemo(
     () => hiring.filter((o) => o.onboard?.userId === userId),
     [hiring, userId],
@@ -126,7 +126,7 @@ export default function HrmsFilesPage() {
         <div className="max-w-xl">
           <p className="text-sm text-steel-muted">
             Per-employee HR DMS on SharePoint / Drive — PAN, signed appointment, payslips, BGV. Files land under{" "}
-            <span className="font-mono text-xs">_HR/{HR_VAULT_ROOT}/{"{empCode or name}"}/Letters|Onboarding|Documents</span>.
+            <span className="font-mono text-xs">SPDC_HRMS/{HR_VAULT_ROOT}/{"{empCode}_{name}"}/01_Joining · 02_KYC · 03_Service_Letters · 04_Discipline · 05_Exit</span>.
           </p>
           <Link to="/hrm/documents" className="text-xs text-brand font-semibold underline mt-1 inline-block">
             Appointment letters register →
@@ -189,7 +189,7 @@ export default function HrmsFilesPage() {
       {canManage && !vaultPath ? (
         <Card className="!p-3 text-xs text-amber-900 bg-amber-50 border-amber-200">
           No vault folder yet for this employee. Click <strong>Ensure vault folder</strong> before uploading — existing
-          documents will be re-filed under <span className="font-mono">_HR/06.02 Employee Files/{"{empCode}"}/Documents/</span> with
+          documents will be re-filed under <span className="font-mono">SPDC_HRMS/06_Records_Employee_Files/{"{empCode}_{name}"}/</span> with
           names like <span className="font-mono">PAN_SPDC-001_scan_2026-09-15.pdf</span>.
         </Card>
       ) : null}

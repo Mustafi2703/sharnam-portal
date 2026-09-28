@@ -87,6 +87,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
   const [geoHint, setGeoHint] = useState("");
   const [attendance, setAttendance] = useState<any[]>([]);
   const isSite = user?.role === "site_employee";
+  const isField = isSite || user?.role === "vendor";
 
   const load = useCallback(async () => {
     const [today, roster, p] = await Promise.all([
@@ -127,12 +128,12 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
   }
 
   async function punch(kind: "in" | "out") {
-    if (isSite) {
+    if (isField) {
       if (!selfie[0]) {
         setMsg("Take a selfie first — tap Camera (front lens on phone).");
         return;
       }
-      if (!projectId) {
+      if ((isSite || projects.length > 0) && !projectId) {
         setMsg("Select the site / project you are checking in at.");
         return;
       }
@@ -176,15 +177,15 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
     <div className={`space-y-4 ${variant === "full" ? "attendance-punch--full" : ""}`}>
       <Card className={variant === "full" ? "attendance-punch__hero" : ""}>
         <h2 className="font-semibold text-sm mb-1">
-          {variant === "full" ? "Site attendance" : "Punch in / out"}
+          {variant === "full" ? (isSite ? "Site attendance" : "Attendance") : "Punch in / out"}
         </h2>
         <p className="text-xs text-steel-muted mb-3">
-          {isSite
-            ? "Allow camera and location when prompted. Selfie + GPS are required for every site punch."
+          {isField
+            ? "Allow camera and location when prompted. Selfie + GPS are required for every punch."
             : "Office punch — one tap check-in/out. Auto clock-out at 18:00 IST if you forget to check out."}
         </p>
 
-        {isSite && (
+        {isField && (
         <label className="text-xs font-semibold uppercase tracking-widest text-steel-muted block mb-1">
           Site / project
           <Select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="mt-1">
@@ -198,7 +199,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         </label>
         )}
 
-        {isSite && (
+        {isField && (
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-steel-muted mb-2">Selfie</p>
           <PhotoCapture

@@ -11,6 +11,7 @@ import { purgeProjectChildren, purgeProjectModuleData } from "../services/purgeP
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const drawingUpload = upload.fields([
   { name: "pdf", maxCount: 1 },
+  { name: "extraPdf", maxCount: 12 },
   { name: "dwg", maxCount: 1 },
   { name: "file", maxCount: 1 },
   { name: "contractorSignature", maxCount: 1 },
@@ -22,12 +23,40 @@ const drawingUpload = upload.fields([
 function drawingUploadFiles(req: AuthedRequest) {
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   const pdf = files?.pdf?.[0] || (files?.file?.[0] && /\.pdf$/i.test(files.file[0].originalname) ? files.file[0] : undefined);
+  const extraPdfs = files?.extraPdf || [];
   const dwg = files?.dwg?.[0] || (files?.file?.[0] && /\.dwg$/i.test(files.file[0].originalname) ? files.file[0] : undefined);
   const contractorSignature = files?.contractorSignature?.[0];
   const clientSignature = files?.clientSignature?.[0];
   const pmcSignature = files?.pmcSignature?.[0];
   const siteEngineerSignature = files?.siteEngineerSignature?.[0];
-  return { pdf, dwg, contractorSignature, clientSignature, pmcSignature, siteEngineerSignature };
+  return { pdf, extraPdfs, dwg, contractorSignature, clientSignature, pmcSignature, siteEngineerSignature };
+}
+
+type ExtraDrawingFile = { fileUrl: string; fileName: string };
+
+function parseExtraFiles(raw: string | null | undefined): ExtraDrawingFile[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((row) => {
+        const fileUrl = String((row as ExtraDrawingFile)?.fileUrl || "").trim();
+        const fileName = String((row as ExtraDrawingFile)?.fileName || "").trim();
+        return fileUrl ? { fileUrl, fileName: fileName || "drawing.pdf" } : null;
+      })
+      .filter((row): row is ExtraDrawingFile => !!row);
+  } catch {
+    return [];
+  }
+}
+
+function mergeExtraFiles(existing: ExtraDrawingFile[], added: ExtraDrawingFile[]) {
+  const byName = new Map<string, ExtraDrawingFile>();
+  for (const row of [...existing, ...added]) {
+    byName.set(row.fileName.toLowerCase(), row);
+  }
+  return [...byName.values()];
 }
 
 function parseIssueFields(body: Record<string, unknown>) {
@@ -320,6 +349,7 @@ async function storeDrawingFiles(opts: {
   revisionNumber: string;
   discipline?: string | null;
   pdf?: Express.Multer.File;
+  extraPdfs?: Express.Multer.File[];
   dwg?: Express.Multer.File;
 }) {
   const base = revisionStorageBase(opts.drawingNumber, opts.revisionNumber, opts.discipline);
@@ -327,6 +357,7 @@ async function storeDrawingFiles(opts: {
   let pdfFileName: string | undefined;
   let dwgFileUrl: string | undefined;
   let dwgFileName: string | undefined;
+  const extraFiles: ExtraDrawingFile[] = [];
 
   if (opts.pdf) {
     const rel = `${base}/PDF`;
@@ -341,6 +372,19 @@ async function storeDrawingFiles(opts: {
     );
     pdfFileUrl = storageUrl(saved);
     pdfFileName = opts.pdf.originalname;
+  }
+  for (const extra of opts.extraPdfs || []) {
+    const rel = `${base}/PDF`;
+    await touchStorageFolder(opts.projectId, rel);
+    const saved = await mockOneDrive.upload(
+      opts.projectCode,
+      rel,
+      extra.originalname,
+      extra.buffer,
+      contentTypeForFile(extra),
+      { replace: true }
+    );
+    extraFiles.push({ fileUrl: storageUrl(saved), fileName: extra.originalname });
   }
   if (opts.dwg) {
     const rel = `${base}/DWG`;
@@ -358,7 +402,16 @@ async function storeDrawingFiles(opts: {
   }
 
   const primary = primaryRevisionFile({ pdfFileUrl, pdfFileName, dwgFileUrl, dwgFileName, fileUrl: "", fileName: "" });
-  return { pdfFileUrl, pdfFileName, dwgFileUrl, dwgFileName, fileUrl: primary.fileUrl, fileName: primary.fileName, storageBase: base };
+  return {
+    pdfFileUrl,
+    pdfFileName,
+    dwgFileUrl,
+    dwgFileName,
+    extraFiles,
+    fileUrl: primary.fileUrl,
+    fileName: primary.fileName,
+    storageBase: base,
+  };
 }
 
 const revisionInclude = {
@@ -1631,8 +1684,8 @@ drawingsRouter.post(
       req.body;
     if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
 
-    const { pdf, dwg, contractorSignature, clientSignature } = drawingUploadFiles(req);
-    if (!pdf && !dwg) return res.status(400).json({ error: "At least one of PDF or DWG required after checklist" });
+    const { pdf, extraPdfs, dwg } = drawingUploadFiles(req);
+    if (!pdf && !dwg && !extraPdfs.length) return res.status(400).json({ error: "At least one of PDF or DWG required after checklist" });
 
     const existing = await prisma.drawing.findUnique({
       where: { projectId_drawingNumber: { projectId: project.id, drawingNumber } },
@@ -1650,16 +1703,20 @@ drawingsRouter.post(
       revisionNumber: rev,
       discipline,
     });
+    const leadPdf = pdf || extraPdfs[0];
+    const restPdfs = pdf ? extraPdfs : extraPdfs.slice(1);
     const stored = await storeDrawingFiles({
       projectCode: project.code,
       projectId: project.id,
       drawingNumber,
       revisionNumber: rev,
       discipline,
-      pdf,
+      pdf: leadPdf,
+      extraPdfs: restPdfs,
       dwg,
     });
-    const { fileUrl, fileName, pdfFileUrl, pdfFileName, dwgFileUrl, dwgFileName } = stored;
+    const { fileUrl, fileName, pdfFileUrl, pdfFileName, dwgFileUrl, dwgFileName, extraFiles } = stored;
+    const extraFilesJson = extraFiles.length ? JSON.stringify(extraFiles) : null;
 
     const published = publish === "true" || publish === true;
     const planned = plannedDate ? new Date(plannedDate) : null;
@@ -1688,6 +1745,7 @@ drawingsRouter.post(
             pdfFileName: pdfFileName || null,
             dwgFileUrl: dwgFileUrl || null,
             dwgFileName: dwgFileName || null,
+            extraFilesJson,
             published,
             plannedDate: planned,
             actualDate: actual,
@@ -1721,6 +1779,7 @@ drawingsRouter.post(
           pdfFileName: pdfFileName || null,
           dwgFileUrl: dwgFileUrl || null,
           dwgFileName: dwgFileName || null,
+          extraFilesJson,
           published,
           plannedDate: planned,
           actualDate: actual,
@@ -1834,15 +1893,11 @@ drawingsRouter.post(
 
 drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const { loadDrawingRegisterDashboard } = await import("../services/drawingRegisterSheets.js");
-  const [lines, dashboard] = await Promise.all([
-    prisma.drawingRegisterLine.findMany({
-      where: { projectId },
-      orderBy: { srNo: "asc" },
-      include: { drawing: { select: { id: true, isPublished: true, currentRev: true, drawingNumber: true } } },
-    }),
-    Promise.resolve(loadDrawingRegisterDashboard()),
-  ]);
+  const lines = await prisma.drawingRegisterLine.findMany({
+    where: { projectId },
+    orderBy: { srNo: "asc" },
+    include: { drawing: { select: { id: true, isPublished: true, currentRev: true, drawingNumber: true } } },
+  });
   const groupCount = (pick: (l: (typeof lines)[number]) => string) =>
     Object.entries(
       lines.reduce((acc: Record<string, number>, line) => {
@@ -1851,8 +1906,49 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
         return acc;
       }, {})
     ).map(([label, value]) => ({ label, value }));
+
+  const byBuildingDiscipline: { building: string; discipline: string; count: number }[] = [];
+  const buildingMap = new Map<string, Map<string, number>>();
+  for (const line of lines) {
+    const building = (line.building || "—").trim() || "—";
+    const discipline = (line.discipline || "Other").trim() || "Other";
+    const row = buildingMap.get(building) || new Map<string, number>();
+    row.set(discipline, (row.get(discipline) || 0) + 1);
+    buildingMap.set(building, row);
+  }
+  for (const [building, discs] of buildingMap) {
+    for (const [discipline, count] of discs) byBuildingDiscipline.push({ building, discipline, count });
+  }
+
+  const delayByResponsibility = Object.entries(
+    lines.reduce((acc: Record<string, number>, line) => {
+      const label = (line.delayResponsibility || "").trim();
+      if (!label) return acc;
+      acc[label] = (acc[label] || 0) + (line.submissionDelayDays ?? 0);
+      return acc;
+    }, {})
+  ).map(([label, days]) => ({ label, days }));
+
+  const now = new Date();
+  const utc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const day = utc.getUTCDay() || 7;
+  utc.setUTCDate(utc.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+
   res.json({
-    dashboard,
+    dashboard: {
+      weekLabel: `Week ${week}`,
+      totalDrawings: lines.length,
+      source: "project-register",
+    },
+    pivots: {
+      byBuildingDiscipline,
+      byDiscipline: groupCount((l) => l.discipline || "Other"),
+      byCritical: groupCount((l) => (/yes/i.test(l.criticalDrawing || "") ? "Yes" : "No")),
+      delayByResponsibility,
+      byConsultant: groupCount((l) => (l.consultantName || "").trim() || "—").filter((r) => r.label !== "—"),
+    },
     totals: {
       lines: lines.length,
       gfc: lines.filter((l) => /gfc|good for construction/i.test(l.drawingType || "")).length,
@@ -1964,7 +2060,14 @@ drawingsRouter.get("/revision/:revId/sharepoint", requireRoles("admin", "office"
   });
   if (!rev?.drawing.project) return res.status(404).json({ error: "Not found" });
   const code = rev.drawing.project.code;
-  const portalUrl = rev.pdfFileUrl || rev.fileUrl || "";
+  const known = [
+    rev.pdfFileUrl,
+    rev.fileUrl,
+    rev.dwgFileUrl,
+    ...parseExtraFiles(rev.extraFilesJson).map((f) => f.fileUrl),
+  ].filter(Boolean) as string[];
+  const requested = String(req.query.fileUrl || "");
+  const portalUrl = (requested && known.includes(requested) ? requested : null) || rev.pdfFileUrl || rev.fileUrl || "";
   const prefix = `/uploads/onedrive/${code}/`;
   const rel = portalUrl.startsWith(prefix) ? portalUrl.slice(prefix.length) : "";
   if (!rel) return res.json({ sharePointUrl: null, portalUrl: portalUrl || null });
@@ -2257,8 +2360,10 @@ drawingsRouter.post(
     const planned = req.body.plannedDate ? new Date(req.body.plannedDate) : null;
     const actual = req.body.actualDate ? new Date(req.body.actualDate) : new Date();
 
-    const { pdf, dwg } = drawingUploadFiles(req);
-    if (!pdf && !dwg) return res.status(400).json({ error: "At least one of PDF or DWG required for revision upload" });
+    const { pdf, extraPdfs, dwg } = drawingUploadFiles(req);
+    if (!pdf && !dwg && !extraPdfs.length) {
+      return res.status(400).json({ error: "At least one of PDF or DWG required for revision upload" });
+    }
 
     const issuePayload = await revisionIssuePayload({
       body: req.body,
@@ -2285,16 +2390,23 @@ drawingsRouter.post(
       unlockSubmissionId = unlock.submissionId;
     }
 
+    let primaryPdf = pdf;
+    let morePdfs = extraPdfs;
+    if (!existingRev && !primaryPdf && morePdfs.length) {
+      primaryPdf = morePdfs[0];
+      morePdfs = morePdfs.slice(1);
+    }
     const stored = await storeDrawingFiles({
       projectCode: drawing.project.code,
       projectId: drawing.projectId,
       drawingNumber: drawing.drawingNumber,
       revisionNumber,
       discipline: drawing.discipline,
-      pdf,
+      pdf: primaryPdf,
+      extraPdfs: morePdfs,
       dwg,
     });
-    const { fileUrl, fileName, pdfFileUrl, pdfFileName, dwgFileUrl, dwgFileName, storageBase } = stored;
+    const { fileUrl, fileName, pdfFileUrl, pdfFileName, dwgFileUrl, dwgFileName, extraFiles, storageBase } = stored;
 
     if (drawing.folderPath !== drawingIsoFolder(drawing.discipline)) {
       await prisma.drawing.update({
@@ -2330,6 +2442,7 @@ drawingsRouter.post(
           pdfFileName: pdf ? pdfFileName || null : existingRev.pdfFileName,
           dwgFileUrl: dwg ? dwgFileUrl || null : existingRev.dwgFileUrl,
           dwgFileName: dwg ? dwgFileName || null : existingRev.dwgFileName,
+          extraFilesJson: JSON.stringify(mergeExtraFiles(parseExtraFiles(existingRev.extraFilesJson), extraFiles)),
           published: publish ? true : existingRev.published,
           plannedDate: planned ?? existingRev.plannedDate,
           actualDate: actual,
@@ -2350,6 +2463,7 @@ drawingsRouter.post(
           pdfFileName: pdfFileName || null,
           dwgFileUrl: dwgFileUrl || null,
           dwgFileName: dwgFileName || null,
+          extraFilesJson: extraFiles.length ? JSON.stringify(extraFiles) : null,
           published: publish,
           plannedDate: planned,
           actualDate: actual,

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { SearchableSelect } from "../components/SearchableSelect";
+import { InterviewScorecard } from "../components/InterviewScorecard";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
 import { CANDIDATE_STAGES, candidateStageLabel, candidateStageTone, INTERVIEWER_SEATS } from "@sharnam/shared";
@@ -705,17 +706,23 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 )}
                 {canManage && r.status !== "Completed" && (
                   <div className="grid md:grid-cols-4 gap-2 text-xs pt-2 border-t border-line">
-                    <label>Technical<br/><input type="number" defaultValue={r.scoreTechnical || ""} onBlur={(e) => updateRound(r.id, { scoreTechnical: Number(e.target.value) })} placeholder="/10" className="w-full border border-line rounded px-2 py-1" /></label>
-                    <label>Communication<br/><input type="number" defaultValue={r.scoreCommunication || ""} onBlur={(e) => updateRound(r.id, { scoreCommunication: Number(e.target.value) })} placeholder="/10" className="w-full border border-line rounded px-2 py-1" /></label>
-                    <label>Culture<br/><input type="number" defaultValue={r.scoreCulture || ""} onBlur={(e) => updateRound(r.id, { scoreCulture: Number(e.target.value) })} placeholder="/10" className="w-full border border-line rounded px-2 py-1" /></label>
-                    <label>Overall<br/><input type="number" defaultValue={r.scoreOverall || ""} onBlur={(e) => updateRound(r.id, { scoreOverall: Number(e.target.value) })} placeholder="/10" className="w-full border border-line rounded px-2 py-1" /></label>
-                    <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Technical feedback" rows={2} className="md:col-span-2 border border-line rounded px-2 py-1" />
-                    <textarea defaultValue={r.feedbackHr || ""} onBlur={(e) => updateRound(r.id, { feedbackHr: e.target.value })} placeholder="HR feedback" rows={2} className="md:col-span-2 border border-line rounded px-2 py-1" />
+                    <InterviewScorecard
+                      token={token}
+                      positionHint={candidate.applyingFor || candidate.currentDesign || ""}
+                      roundHint={r.roundType}
+                      onSave={async (scorecard) => {
+                        await updateRound(r.id, { scorecard, status: "Completed" });
+                      }}
+                    />
+                    <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Evidence / notes" rows={2} className="md:col-span-4 border border-line rounded px-2 py-1" />
                     <div className="md:col-span-4 flex gap-2 pt-1">
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Advance" })} variant="secondary">Advance</Button>
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Hold" })} variant="secondary">Hold</Button>
                       <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
                     </div>
+                    {r.scorecardJson && (
+                      <p className="md:col-span-4 text-[11px] text-steel-muted">Saved score {r.scoreOverall ?? "—"}%</p>
+                    )}
                   </div>
                 )}
                 {r.decision && <div className="text-xs">Decision: <Badge tone={r.decision === "Advance" ? "ok" : r.decision === "Reject" ? "danger" : "warn"}>{r.decision}</Badge></div>}

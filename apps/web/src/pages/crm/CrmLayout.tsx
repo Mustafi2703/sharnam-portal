@@ -129,7 +129,12 @@ export default function CrmLayout() {
         <nav className="tool-strip px-2 sm:px-4 py-2 border-t border-line bg-paper" aria-label="CRM tools">
           <div className="flex gap-1.5 overflow-x-auto scrollbars-visible items-center">
             {isVendor ? (
-              tools.map((t) => {
+              <>
+                <NavLink to="/vendor-desk" className={() => tabClass(false)}>
+                  My desk
+                </NavLink>
+                <span className="crm-nav-divider" aria-hidden />
+                {tools.map((t) => {
                 const desk = "desk" in t ? t.desk : undefined;
                 const to = desk ? `/crm/vendor-bids?desk=${desk}` : "/crm/vendor-bids";
                 const active = loc.pathname.startsWith("/crm/vendor-bids") && vendorDesk === (desk || "");
@@ -145,7 +150,8 @@ export default function CrmLayout() {
                     {t.label}
                   </NavLink>
                 );
-              })
+              })}
+              </>
             ) : (
               <>
                 <NavLink

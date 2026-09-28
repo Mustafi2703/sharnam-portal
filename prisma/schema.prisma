@@ -287,6 +287,8 @@ model DrawingRevision {
   pdfFileName              String?
   dwgFileUrl               String?
   dwgFileName              String?
+  /// Extra PDFs on this same revision (JSON [{fileUrl,fileName}]). Primary PDF stays in pdfFileUrl.
+  extraFilesJson           String?   @db.Text
   published                Boolean   @default(false)
   /// Planned issue date (GFC register column)
   plannedDate              DateTime?
@@ -1218,6 +1220,8 @@ model InterviewRound {
   scoreCommunication Float?
   scoreCulture       Float?
   scoreOverall       Float?
+  /// SPDC/HR/F-INT-01 scorecard (position, round, parameter scores, grade).
+  scorecardJson      String?   @db.Text
   /// Scheduled | Completed | No-Show | Cancelled
   status             String    @default("Scheduled")
   /// Advance | Reject | Hold

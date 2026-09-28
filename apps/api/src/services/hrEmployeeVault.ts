@@ -1,39 +1,47 @@
 /**
- * HR employee DMS vault — `_HR/06_HR_AND_ADMIN/06.02_Employee_Files/{person}/`
- * Subfolders: Letters · Onboarding · Documents
+ * HR employee files — `_HR/06_Records_Employee_Files/{EmpID}_{Name}/`
+ * Subfolders follow SPDC_HRMS: Joining, KYC, Service letters, Discipline, Exit.
  */
 import fs from "fs";
 import path from "path";
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
-import { hrPersonFolder } from "./hrmsLetter.js";
+import { ensureSandboxLibraryFolders } from "./graph.js";
+import {
+  EMPLOYEE_FILE_SUBFOLDERS,
+  employeeRecordRoot,
+  hrFyRecordFolders,
+  HR_DRIVE,
+  HR_LIBRARY_FOLDERS,
+  letterRecordSubfolder,
+} from "./spdcLibraryFolders.js";
 
-export const HRMS_EMPLOYEE_FILES_ROOT = "06_HR_AND_ADMIN/06.02_Employee_Files";
-/** Company-wide mock/SharePoint drive code — not per project. */
-export const HR_VAULT_DRIVE_CODE = "_HR";
-/** Virtual path prefix used inside project DMS browse (`@_HR/06_HR_AND_ADMIN/...`). */
-export const HR_VAULT_VIRTUAL_PREFIX = "@_HR";
-export const HR_VAULT_TREE_ROOT = "06_HR_AND_ADMIN";
-export const HR_VAULT_LABEL = "06 HR & Admin (Company)";
+export const HRMS_EMPLOYEE_FILES_ROOT = "06_Records_Employee_Files";
+/** Company-wide SharePoint directory — Sharnam Portal/SPDC_HRMS, not a project. */
+export const HR_VAULT_DRIVE_CODE = HR_DRIVE;
+/** Virtual path prefix used inside project DMS browse. */
+export const HR_VAULT_VIRTUAL_PREFIX = "@SPDC_HRMS";
+const HR_VAULT_LEGACY_PREFIX = "@_HR";
+export const HR_VAULT_TREE_ROOT = "06_Records_Employee_Files";
+export const HR_VAULT_LABEL = "SPDC HRMS";
 
-const HR_COMPANY_FOLDERS = [
-  HR_VAULT_TREE_ROOT,
-  `${HR_VAULT_TREE_ROOT}/06.01_Letters`,
-  `${HR_VAULT_TREE_ROOT}/06.02_Employee_Files`,
-  `${HR_VAULT_TREE_ROOT}/06.03_Payslips`,
-  `${HR_VAULT_TREE_ROOT}/06.04_Letter_Templates`,
-] as const;
+const HR_COMPANY_FOLDERS = HR_LIBRARY_FOLDERS;
 
-const VAULT_SUBFOLDERS = ["Letters", "Onboarding", "Documents"] as const;
+const VAULT_SUBFOLDERS = EMPLOYEE_FILE_SUBFOLDERS;
 
 export function isHrVaultPath(folderPath: string) {
-  return folderPath === HR_VAULT_VIRTUAL_PREFIX || folderPath.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`);
+  return (
+    folderPath === HR_VAULT_VIRTUAL_PREFIX ||
+    folderPath.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`) ||
+    folderPath === HR_VAULT_LEGACY_PREFIX ||
+    folderPath.startsWith(`${HR_VAULT_LEGACY_PREFIX}/`)
+  );
 }
 
 export function hrRelFromVirtualPath(folderPath: string) {
-  if (folderPath === HR_VAULT_VIRTUAL_PREFIX) return "";
-  if (folderPath.startsWith(`${HR_VAULT_VIRTUAL_PREFIX}/`)) {
-    return folderPath.slice(HR_VAULT_VIRTUAL_PREFIX.length + 1);
+  for (const prefix of [HR_VAULT_VIRTUAL_PREFIX, HR_VAULT_LEGACY_PREFIX]) {
+    if (folderPath === prefix) return "";
+    if (folderPath.startsWith(`${prefix}/`)) return folderPath.slice(prefix.length + 1);
   }
   return "";
 }
@@ -52,28 +60,28 @@ export function employeeVaultFolderName(
   profile: { empCode?: string | null } | null | undefined,
   fullName: string,
 ) {
-  const code = profile?.empCode?.trim();
-  if (code) return hrPersonFolder(code);
-  return hrPersonFolder(fullName);
+  const root = employeeRecordRoot(profile?.empCode, fullName);
+  return root.slice(HRMS_EMPLOYEE_FILES_ROOT.length + 1);
 }
 
 export function employeeVaultRelPath(
   profile: { empCode?: string | null } | null | undefined,
   fullName: string,
 ) {
-  return `${HRMS_EMPLOYEE_FILES_ROOT}/${employeeVaultFolderName(profile, fullName)}`;
+  return employeeRecordRoot(profile?.empCode, fullName);
 }
 
-/** Map upload category → SharePoint subfolder under the employee vault. */
-export function vaultSubfolderForCategory(category: string): VaultSubfolder {
+/** Map upload category → SPDC_HRMS subfolder under the employee file. */
+export function vaultSubfolderForCategory(category: string): (typeof VAULT_SUBFOLDERS)[number] {
   const c = String(category || "").toLowerCase();
-  if (/(offer|appointment|promotion|relieving|experience|confirmation|warning|letter)/.test(c)) {
-    return "Letters";
-  }
-  if (/(onboard|policy|bgv|medical|welcome|id-card|id card)/.test(c)) {
-    return "Onboarding";
-  }
-  return "Documents";
+  if (/warning|concern|discipline/.test(c)) return "04_Discipline";
+  if (/reliev|exit|experience|separation/.test(c)) return "05_Exit";
+  if (/offer|appointment|joining|nda/.test(c)) return "01_Joining";
+  if (/letter|promotion|confirmation/.test(c)) return "03_Service_Letters";
+  if (/(pan|aadhaar|bank|pf|esic|kyc|id-card|id card)/.test(c)) return "02_KYC_and_Statutory";
+  return letterRecordSubfolder(category) === "03_Service_Letters" && !/letter/.test(c)
+    ? "02_KYC_and_Statutory"
+    : letterRecordSubfolder(category);
 }
 
 /** Canonical file name — e.g. PAN_SPDC-001_scan_2026-09-15.pdf under Documents/. */
@@ -104,7 +112,7 @@ export function vaultFileNameForUpload(opts: {
 }
 
 function uploadRoot() {
-  return path.join(mockOneDrive.root(), "onedrive", "_HR");
+  return path.join(mockOneDrive.root(), "onedrive", HR_VAULT_DRIVE_CODE);
 }
 
 function ensureLocalFolder(relPath: string) {
@@ -113,12 +121,23 @@ function ensureLocalFolder(relPath: string) {
   return abs;
 }
 
+let hrTreeReady = false;
+
 /** Ensure the company HR tree exists on the global `_HR` drive (not inside project folders). */
 export async function ensureHrCompanyTree() {
-  for (const rel of HR_COMPANY_FOLDERS) {
+  const folders = [...HR_COMPANY_FOLDERS, ...hrFyRecordFolders()];
+  for (const rel of folders) {
     ensureLocalFolder(rel);
   }
-  return { driveCode: HR_VAULT_DRIVE_CODE, folders: [...HR_COMPANY_FOLDERS] };
+  if (!hrTreeReady) {
+    try {
+      await ensureSandboxLibraryFolders(HR_VAULT_DRIVE_CODE, folders);
+      hrTreeReady = true;
+    } catch (err) {
+      console.warn("[HRMS] SharePoint folder tree:", err instanceof Error ? err.message : err);
+    }
+  }
+  return { driveCode: HR_VAULT_DRIVE_CODE, folders };
 }
 
 function indexPayload(user: { fullName: string; email: string }, profile: { empCode?: string | null } | null) {
@@ -126,7 +145,7 @@ function indexPayload(user: { fullName: string; email: string }, profile: { empC
     employee: user.fullName,
     email: user.email,
     empCode: profile?.empCode || null,
-    vaultRoot: `_HR/${HRMS_EMPLOYEE_FILES_ROOT}`,
+    vaultRoot: `${HR_VAULT_DRIVE_CODE}/${HRMS_EMPLOYEE_FILES_ROOT}`,
     subfolders: VAULT_SUBFOLDERS,
     updatedAt: new Date().toISOString(),
   };
@@ -144,7 +163,7 @@ export async function ensureEmployeeVault(opts: {
   }
   const indexJson = JSON.stringify(indexPayload(opts, opts.profile || null), null, 2);
   await mockOneDrive.upload(
-    "_HR",
+    HR_VAULT_DRIVE_CODE,
     vaultRel,
     "_vault-index.json",
     Buffer.from(indexJson, "utf8"),
@@ -159,8 +178,10 @@ function resolveLocalFile(storagePath?: string | null, fileUrl?: string | null):
     const fromPath = path.join(uploadRoot(), storagePath.replace(/^\/+/, ""));
     if (fs.existsSync(fromPath) && fs.statSync(fromPath).isFile()) return fromPath;
   }
-  if (fileUrl?.includes("/uploads/onedrive/_HR/")) {
-    const rel = fileUrl.split("/uploads/onedrive/_HR/")[1];
+  const marker = `/uploads/onedrive/${HR_VAULT_DRIVE_CODE}/`;
+  const legacy = "/uploads/onedrive/_HR/";
+  if (fileUrl?.includes(marker) || fileUrl?.includes(legacy)) {
+    const rel = fileUrl.includes(marker) ? fileUrl.split(marker)[1] : fileUrl.split(legacy)[1];
     if (rel) {
       const full = path.join(uploadRoot(), decodeURIComponent(rel));
       if (fs.existsSync(full) && fs.statSync(full).isFile()) return full;
@@ -197,8 +218,8 @@ export async function syncEmployeeVaultDocuments(userId: string) {
     }
     const base = path.basename(local);
     const buf = fs.readFileSync(local);
-    const saved = await mockOneDrive.upload("_HR", `${vaultRel}/${sub}`, base, buf, undefined, { replace: true });
-    const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/_HR/${saved.path}`;
+    const saved = await mockOneDrive.upload(HR_VAULT_DRIVE_CODE, `${vaultRel}/${sub}`, base, buf, undefined, { replace: true });
+    const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_VAULT_DRIVE_CODE}/${saved.path}`;
     await prisma.employeeDocument.update({
       where: { id: doc.id },
       data: { fileUrl: url, storagePath: saved.sharePointPath || saved.path },
