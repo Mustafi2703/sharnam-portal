@@ -46,8 +46,18 @@ function money(n?: number | null) {
   return `₹ ${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
+function payslipGaps(row: UserAccountRow) {
+  const p = row.profile;
+  const gaps: string[] = [];
+  if (!p?.ctcAnnual) gaps.push("CTC");
+  if (!p?.panNumber) gaps.push("PAN");
+  if (!p?.bankName || !p?.bankAccountNo || !p?.bankIfsc) gaps.push("Bank");
+  if (!p?.pfNumber && !p?.uanNumber) gaps.push("PF");
+  return gaps;
+}
+
 function hasPayrollSetup(row: UserAccountRow) {
-  return Boolean(row.profile?.ctcAnnual || row.profile?.basicMonthly);
+  return payslipGaps(row).length === 0;
 }
 
 function AddUserModal({
@@ -370,7 +380,7 @@ export default function HrmsUsersPage() {
           )}{" "}
           for all portal types.
           <span className="block mt-1">
-            <strong>{payrollStats.ready}</strong> of <strong>{payrollStats.total}</strong> have CTC on file ·{" "}
+            <strong>{payrollStats.ready}</strong> of <strong>{payrollStats.total}</strong> have PAN, bank, PF, and CTC on file ·{" "}
             <button type="button" className="text-brand font-semibold underline" onClick={() => setPayrollFilter("missing")}>
               {payrollStats.missing} need setup
             </button>
@@ -439,7 +449,7 @@ export default function HrmsUsersPage() {
             />
             <Select className="!w-40" value={payrollFilter} onChange={(ev) => setPayrollFilter(ev.target.value as typeof payrollFilter)}>
               <option value="all">All staff</option>
-              <option value="missing">Missing CTC</option>
+              <option value="missing">Needs setup</option>
               <option value="ready">Payroll ready</option>
             </Select>
             <Button type="button" variant="secondary" onClick={() => downloadCsv("users-empty.csv", [...USER_CSV_HEADERS], [])}>
@@ -483,7 +493,9 @@ export default function HrmsUsersPage() {
                   <td className="px-4 py-2.5 text-xs">{e.profile?.designation || "—"}</td>
                   <td className="px-4 py-2.5 text-xs whitespace-nowrap">{money(e.profile?.ctcAnnual)}</td>
                   <td className="px-4 py-2.5">
-                    <Badge tone={hasPayrollSetup(e) ? "ok" : "warn"}>{hasPayrollSetup(e) ? "Ready" : "Set CTC"}</Badge>
+                    <Badge tone={hasPayrollSetup(e) ? "ok" : "warn"}>
+                      {hasPayrollSetup(e) ? "Ready" : `Set ${payslipGaps(e).join(", ")}`}
+                    </Badge>
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1 max-w-[15rem]">

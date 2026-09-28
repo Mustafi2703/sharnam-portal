@@ -132,12 +132,20 @@ export function EmployeePayslipFields({
   return (
     <div className="space-y-2">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payslip identity</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Used on every payslip</p>
         <p className="text-[11px] text-steel-muted mt-1">
-          These print on the payslip. Fill them here once. Generate reads them automatically.
+          Set these once. Every month’s payslip prints them. Working days, loss of pay, and TDS are entered on Payroll for that month.
         </p>
       </div>
       <div className="grid sm:grid-cols-2 gap-2">
+        {field("panNumber", "PAN")}
+        {field("aadhaarNumber", "Aadhaar")}
+        {field("bankName", "Bank name")}
+        {field("bankAccountNo", "Bank account number")}
+        {field("bankIfsc", "IFSC")}
+        {field("pfNumber", "PF number")}
+        {field("uanNumber", "PF UAN")}
+        {field("esicNumber", "ESI number")}
         {field("joinDate", "Joining date", "date")}
         {field("dateOfBirth", "Date of birth", "date")}
         {field("grade", "Grade")}
@@ -145,14 +153,6 @@ export function EmployeePayslipFields({
         {field("workLocation", "Location")}
         {field("costCenter", "Cost center")}
         {field("payrollArea", "Payroll area")}
-        {field("panNumber", "PAN")}
-        {field("aadhaarNumber", "Aadhaar")}
-        {field("pfNumber", "PF number")}
-        {field("uanNumber", "PF UAN")}
-        {field("esicNumber", "ESI number")}
-        {field("bankName", "Bank name")}
-        {field("bankAccountNo", "Bank account number")}
-        {field("bankIfsc", "IFSC")}
       </div>
     </div>
   );
@@ -347,7 +347,7 @@ export function UserAccountEditModal({
       onSave={() => void save()}
       saving={busy}
       saveLabel="Save changes"
-      size="lg"
+      size="xl"
     >
       <div className="space-y-4">
         {err ? <p className="text-sm text-danger">{err}</p> : null}
@@ -367,32 +367,31 @@ export function UserAccountEditModal({
 
         {(kind === "staff" || forceKind === "staff") && (
           <div className="border-t border-line pt-3 space-y-3">
+            <EmployeePayslipFields value={payslip} onChange={setPayslip} />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Employee profile</p>
-              <p className="text-[11px] text-steel-muted mt-1">Dept, designation, and CTC drive payroll, letters, and onboarding.</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Role on the payslip</p>
             </div>
             <div className="grid sm:grid-cols-2 gap-2">
-              <Input
-                placeholder="Employee code"
-                value={form.empCode}
-                onChange={(e) => setForm({ ...form, empCode: e.target.value })}
-              />
-              <Select value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
-                <option value="">Department</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.name}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                className="sm:col-span-2"
-                placeholder="Designation"
-                value={form.designation}
-                onChange={(e) => setForm({ ...form, designation: e.target.value })}
-              />
+              <label className="text-xs font-semibold text-steel-muted">
+                Employee code
+                <Input className="mt-1" value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
+              </label>
+              <label className="text-xs font-semibold text-steel-muted">
+                Department
+                <Select className="mt-1" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
+                  <option value="">Department</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.name}>
+                      {d.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="text-xs font-semibold text-steel-muted sm:col-span-2">
+                Designation
+                <Input className="mt-1" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
+              </label>
             </div>
-            <EmployeePayslipFields value={payslip} onChange={setPayslip} />
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payroll · SPDC CTC split</p>
               <p className="text-[11px] text-steel-muted">
