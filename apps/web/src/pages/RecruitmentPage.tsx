@@ -80,13 +80,34 @@ export default function RecruitmentPage() {
     void reload();
   }, [token]);
 
+  async function deleteAllRecruitment() {
+    const ok = window.confirm("Delete all recruitment data? Requisitions, resumes, interviews, offers, and letters are removed. Staff logins and projects stay. This cannot be undone.");
+    if (!ok) return;
+    try {
+      await api("/api/hrm/registers/clear", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR" }) });
+      setMsg("Recruitment data deleted. Staff logins and projects are unchanged.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete recruitment data");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card className="!p-4 bg-brand-soft/20 border-brand/20">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
         <p className="text-sm text-ink font-semibold">Hiring steps</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
           Raise a requisition (department and designation) and approve it. Add candidates to that requisition in the resume database. Score them, compare the people on the same requisition, convert the one you select, upload the background documents, then generate letters. Job postings stay off for now.
         </p>
+          </div>
+          {canManage && (
+            <Button type="button" variant="secondary" onClick={() => void deleteAllRecruitment()}>
+              Delete all
+            </Button>
+          )}
+        </div>
       </Card>
       <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
         {TABS.map((t) => (
@@ -410,7 +431,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
   }
 
   async function clearRegisters() {
-    const ok = window.confirm("Delete every recruitment row, interview, offer, and letter? Staff logins stay. This cannot be undone.");
+    const ok = window.confirm("Delete all recruitment data? Requisitions, resumes, interviews, offers, and letters are removed. Staff logins and projects stay. This cannot be undone.");
     if (!ok) return;
     try {
       await api("/api/hrm/registers/clear", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR" }) });
@@ -579,7 +600,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
               Remove duplicates
             </Button>
             <Button type="button" variant="secondary" onClick={() => void clearRegisters()}>
-              Clear HR registers
+              Delete all
             </Button>
           </>
         )}

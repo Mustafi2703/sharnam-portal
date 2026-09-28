@@ -248,7 +248,7 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   );
 });
 
-hrmRecruitmentRouter.post("/registers/clear", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+hrmRecruitmentRouter.post("/registers/clear", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   if (String(req.body?.confirm || "").trim() !== "CLEAR") {
     return res.status(400).json({ error: "Send confirm: CLEAR to empty the HR registers." });
   }
