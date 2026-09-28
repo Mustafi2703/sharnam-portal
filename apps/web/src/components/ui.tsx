@@ -152,7 +152,7 @@ export function Button({
   style,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "dark";
+  variant?: "primary" | "secondary" | "ghost" | "dark" | "danger";
 }) {
   const variants = {
     primary:
@@ -160,6 +160,7 @@ export function Button({
     secondary: "bg-paper border border-line text-ink hover:bg-[var(--color-brand-soft)]",
     ghost: "text-steel-muted hover:text-ink hover:bg-sand/70",
     dark: "bg-ink text-white hover:bg-steel-2",
+    danger: "bg-white border border-red-300 text-danger hover:bg-red-50",
   };
   return (
     <button

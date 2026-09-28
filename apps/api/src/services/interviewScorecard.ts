@@ -10,6 +10,26 @@ export const INTERVIEW_ROUNDS = [
   { id: "R3", label: "R3 – Management", weight: 0.3 },
 ] as const;
 
+/** Which competencies that round scores. R2 is the full role-weighted sheet. */
+export const ROUND_FOCUS: Record<"R1" | "R2" | "R3", string[] | null> = {
+  R1: ["B2", "B6", "F1", "F2", "F3"],
+  R2: null,
+  R3: ["L1", "L2", "C1", "C2", "C3", "C4", "B3", "F2"],
+};
+
+export const ROUND_NOTE: Record<"R1" | "R2" | "R3", string> = {
+  R1: "HR screening — score Communication, Integrity, and Fit only.",
+  R2: "Technical — score every competency that has a weight for this position.",
+  R3: "Management — score Leadership, Commercial, client handling, and culture fit.",
+};
+
+export function scorecardRoundId(round: string | null | undefined): "R1" | "R2" | "R3" {
+  const raw = String(round || "");
+  if (/^R1\b/i.test(raw) || /hr|screen/i.test(raw)) return "R1";
+  if (/^R3\b/i.test(raw) || /manag/i.test(raw)) return "R3";
+  return "R2";
+}
+
 export type ScorecardInput = {
   position: string;
   round: string;
@@ -44,8 +64,10 @@ export function scoreInterviewRound(input: ScorecardInput): ScorecardResult {
   const position = INTERVIEW_ROLES.includes(input.position as (typeof INTERVIEW_ROLES)[number])
     ? input.position
     : INTERVIEW_ROLES[0];
+  const focus = ROUND_FOCUS[scorecardRoundId(input.round)];
   const lines = INTERVIEW_PARAMS.map((p) => {
-    const weight = p.weights[position] || 0;
+    const inRound = !focus || focus.includes(p.code);
+    const weight = inRound ? p.weights[position] || 0 : 0;
     const raw = (input.scores[p.code] || []).map(clampScore).filter((n) => n > 0);
     const average = raw.length ? raw.reduce((a, b) => a + b, 0) / raw.length : 0;
     return {

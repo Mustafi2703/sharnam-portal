@@ -10,13 +10,26 @@ type Param = {
   weights: Record<string, number>;
 };
 
-type Framework = { roles: string[]; params: Param[]; rounds: string[] };
+type Framework = {
+  roles: string[];
+  params: Param[];
+  rounds: string[];
+  roundFocus?: Record<string, string[] | null>;
+  roundNote?: Record<string, string>;
+};
 
 const ROUND_LABEL: Record<string, string> = {
   R1: "R1 – HR Screening",
   R2: "R2 – Technical",
   R3: "R3 – Management",
 };
+
+function roundId(round: string | null | undefined): "R1" | "R2" | "R3" {
+  const raw = String(round || "");
+  if (/^R1\b/i.test(raw) || /hr|screen/i.test(raw)) return "R1";
+  if (/^R3\b/i.test(raw) || /manag/i.test(raw)) return "R3";
+  return "R2";
+}
 
 /** SPDC/HR/F-INT-01 — one round, weights by position, scores 1–5. */
 export function InterviewScorecard({
@@ -34,9 +47,7 @@ export function InterviewScorecard({
 }) {
   const [framework, setFramework] = useState<Framework | null>(null);
   const [position, setPosition] = useState(saved?.position || positionHint || "");
-  const [round, setRound] = useState(
-    saved?.round?.startsWith("R") ? saved.round.slice(0, 2) : roundHint?.startsWith("R3") ? "R3" : roundHint?.startsWith("R1") ? "R1" : "R2",
-  );
+  const [round, setRound] = useState(() => roundId(saved?.round || roundHint));
   const [scores, setScores] = useState<Record<string, string>>(() => {
     const next: Record<string, string> = {};
     for (const [code, vals] of Object.entries(saved?.scores || {})) {
@@ -53,6 +64,10 @@ export function InterviewScorecard({
   }, [token]);
 
   useEffect(() => {
+    setRound(roundId(saved?.round || roundHint));
+  }, [saved?.round, roundHint]);
+
+  useEffect(() => {
     if (!framework?.roles.length) return;
     if (framework.roles.includes(position)) return;
     const hint = positionHint && framework.roles.includes(positionHint) ? positionHint : framework.roles[0];
@@ -61,8 +76,11 @@ export function InterviewScorecard({
 
   const lines = useMemo(() => {
     if (!framework || !position) return [];
-    return framework.params.map((p) => ({ ...p, weight: p.weights[position] || 0 }));
-  }, [framework, position]);
+    const focus = framework.roundFocus?.[round];
+    return framework.params
+      .filter((p) => !focus || focus.includes(p.code))
+      .map((p) => ({ ...p, weight: p.weights[position] || 0 }));
+  }, [framework, position, round]);
 
   const preview = useMemo(() => {
     const weighted = lines.reduce((acc, p) => {
@@ -90,16 +108,21 @@ export function InterviewScorecard({
         </label>
         <label className="text-xs">
           Round
-          <select className="mt-1 block border border-line rounded px-2 py-1" value={round} onChange={(e) => setRound(e.target.value)}>
+          <select className="mt-1 block border border-line rounded px-2 py-1" value={round} onChange={(e) => setRound(roundId(e.target.value))}>
             {framework.rounds.map((r) => (
               <option key={r} value={r}>{ROUND_LABEL[r] || r}</option>
             ))}
           </select>
         </label>
-        <span className="text-xs text-steel-muted pb-1">
+        <span className="text-xs font-semibold pb-1">
           Score {preview.percent.toFixed(1)}% · Grade {preview.grade}
         </span>
       </div>
+      <p className="text-xs rounded-lg border border-line bg-sand/40 px-3 py-2">
+        {framework.roundNote?.[round] || ROUND_LABEL[round]}
+        {" "}
+        {lines.filter((p) => p.weight).length} competencies apply to this round.
+      </p>
       <div className="max-h-64 overflow-auto border border-line rounded">
         <table className="w-full text-xs">
           <thead className="bg-sand/50 sticky top-0">
@@ -135,7 +158,7 @@ export function InterviewScorecard({
         </table>
       </div>
       <p className="text-[11px] text-steel-muted">
-        All 23 competencies from the SPDC sheet are listed. A row with no weight for this position stays blank. Saving stores the official Excel scorecard on SharePoint even when only some rows are scored.
+        Changing the round changes which competencies can be scored. A row with no weight for this position stays blank. Saving stores this round’s Excel scorecard on SharePoint.
       </p>
       {err ? <p className="text-xs text-danger">{err}</p> : null}
       <Button

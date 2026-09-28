@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
@@ -33,6 +33,9 @@ type TabId = (typeof TABS)[number]["id"];
 
 const OFFER_STAGES = ["Draft", "Approved", "Sent", "Accepted", "Declined", "Withdrawn", "Joined"] as const;
 const INTERVIEW_STAGES = ["Scheduled", "Completed", "No-Show", "Cancelled"] as const;
+
+const rowBtn = "!px-2.5 !py-1.5 !text-xs !rounded-lg whitespace-nowrap";
+const linkBtn = "inline-flex items-center justify-center rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-[var(--color-brand-soft)]";
 
 function money(n?: number | null) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
@@ -245,15 +248,17 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
                   <td><Badge tone={r.status === "Approved" ? "ok" : r.status === "Rejected" ? "danger" : "warn"}>{r.status}</Badge></td>
                   <td>
                     {canManage && (
-                      <span className="flex gap-2">
+                      <span className="flex flex-wrap gap-1.5">
                         {r.status === "Submitted" && (
                           <>
-                            <button className="text-brand text-[10px] font-semibold" onClick={() => transition(r.id, "Approved")}>Approve</button>
-                            <button className="text-danger text-[10px] font-semibold" onClick={() => transition(r.id, "Rejected", "not approved")}>Reject</button>
+                            <Button type="button" className={rowBtn} onClick={() => transition(r.id, "Approved")}>Approve</Button>
+                            <Button type="button" variant="danger" className={rowBtn} onClick={() => transition(r.id, "Rejected", "not approved")}>Reject</Button>
                           </>
                         )}
-                        <button
-                          className="text-[10px] font-semibold"
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className={rowBtn}
                           onClick={() => {
                             setEditId(r.id);
                             setForm({
@@ -272,8 +277,8 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
                           }}
                         >
                           Edit
-                        </button>
-                        <button className="text-danger text-[10px] font-semibold" onClick={() => void removeReq(r)}>Delete</button>
+                        </Button>
+                        <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeReq(r)}>Delete</Button>
                       </span>
                     )}
                   </td>
@@ -660,7 +665,19 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
       )}
 
       <Card padding={false}>
-        <ul className="divide-y divide-line">
+        <div className="overflow-x-auto">
+          <table className="min-w-[980px] w-full text-sm">
+            <thead className="text-left text-[11px] uppercase tracking-wide text-steel-muted bg-sand/50">
+              <tr>
+                <th className="px-3 py-2">Candidate</th>
+                <th className="px-3 py-2">Requisition</th>
+                <th className="px-3 py-2">Contact</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Progress</th>
+                <th className="px-3 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
           {filtered.map((c: any) => {
             const employee = (staff || []).find((s: any) => c.email && s.email && String(s.email).toLowerCase() === String(c.email).toLowerCase());
             const scored = (c.interviews || []).some((r: any) => r.scoreOverall != null);
@@ -668,61 +685,72 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
             const hasResume = Boolean(c.resumeUrl);
             const docCount = (c.documents || []).length;
             const stage = !hasResume && (c.status === "New" || c.status === "Upload" || !c.status) ? "Upload" : c.status;
+            const best = (c.interviews || []).reduce((n: number, r: any) => Math.max(n, Number(r.scoreOverall) || 0), 0);
             return (
-              <li key={c.id} className="px-4 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm">{c.fullName}</div>
-                    <div className="text-xs text-steel-muted">
-                      {c.requisition ? `${c.requisition.requisitionNo} · ${c.requisition.department} · ${c.requisition.designation}` : "No requisition"}
-                      {c.currentCompany ? ` · ${c.currentCompany}` : ""}
-                    </div>
-                    <div className="text-xs mt-0.5">{c.email || "No email"} · {c.phone || "No phone"} · {money(c.expectedCtc)} expected</div>
-                  </div>
+              <Fragment key={c.id}>
+              <tr className="border-t border-line align-top">
+                <td className="px-3 py-3">
+                  <div className="font-semibold">{c.fullName}</div>
+                  <div className="text-xs text-steel-muted">{c.currentCompany || c.currentDesign || "—"}</div>
+                </td>
+                <td className="px-3 py-3 text-xs">
+                  {c.requisition ? (
+                    <>
+                      <div className="font-medium">{c.requisition.requisitionNo}</div>
+                      <div className="text-steel-muted">{c.requisition.department} · {c.requisition.designation}</div>
+                    </>
+                  ) : "No requisition"}
+                </td>
+                <td className="px-3 py-3 text-xs">
+                  <div>{c.email || "No email"}</div>
+                  <div className="text-steel-muted">{c.phone || "No phone"}</div>
+                </td>
+                <td className="px-3 py-3">
                   <Badge tone={candidateStageTone(stage)}>{candidateStageLabel(stage)}</Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${hasResume ? "border-brand text-brand" : "border-line text-steel-muted"}`}>{hasResume ? "Resume received" : "Upload resume"}</span>
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${(c.interviews || []).length ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Interview</span>
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${scored ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Score</span>
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${docCount ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Documents{docCount ? ` ${docCount}` : ""}</span>
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${employee ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Employee</span>
-                  <span className={`text-[11px] rounded-full border px-2 py-0.5 ${lettersReady ? "border-brand text-brand" : "border-line text-steel-muted"}`}>Letters</span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 items-center">
+                  {best ? <div className="text-[11px] text-steel-muted mt-1">Best score {best}%</div> : null}
+                </td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap gap-1 max-w-[220px]">
+                    <Badge tone={hasResume ? "ok" : "neutral"}>{hasResume ? "Resume" : "No resume"}</Badge>
+                    <Badge tone={(c.interviews || []).length ? "ok" : "neutral"}>{(c.interviews || []).length ? "Interview" : "No interview"}</Badge>
+                    <Badge tone={scored ? "ok" : "neutral"}>{scored ? "Scored" : "No score"}</Badge>
+                    <Badge tone={docCount ? "ok" : "neutral"}>{docCount ? `${docCount} docs` : "No docs"}</Badge>
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                <div className="flex flex-wrap gap-1.5 max-w-[280px]">
                   {hasResume ? (
-                    <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand font-semibold">Open resume</a>
+                    <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className={linkBtn}>Open resume</a>
                   ) : canManage ? (
-                    <button type="button" className="text-xs font-semibold text-brand" onClick={() => openEdit(c)}>Upload resume</button>
-                  ) : (
-                    <span className="text-xs text-steel-muted">Upload resume</span>
-                  )}
+                    <Button type="button" className={rowBtn} onClick={() => openEdit(c)}>Upload resume</Button>
+                  ) : null}
                   {hasResume ? (
-                    <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className="text-xs text-brand font-semibold">Interview</Link>
-                  ) : (
-                    <span className="text-xs text-steel-muted">Interview after the resume</span>
-                  )}
-                  {canManage && <button type="button" className="text-xs font-semibold" onClick={() => openEdit(c)}>Edit</button>}
-                  {canManage && <button type="button" className="text-xs font-semibold text-danger" onClick={() => void removeCandidate(c)}>Delete</button>}
+                    <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Interview</Link>
+                  ) : null}
+                  {canManage && <Button type="button" variant="secondary" className={rowBtn} onClick={() => openEdit(c)}>Edit</Button>}
+                  {canManage && <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeCandidate(c)}>Delete</Button>}
                   {canManage && (
-                    <button type="button" className="text-xs font-semibold text-brand" onClick={() => setDocsFor(docsFor === c.id ? null : c.id)}>
-                      Background documents
-                    </button>
+                    <Button type="button" variant="secondary" className={rowBtn} onClick={() => setDocsFor(docsFor === c.id ? null : c.id)}>
+                      Documents{docCount ? ` (${docCount})` : ""}
+                    </Button>
                   )}
                   {canManage && !employee && (
-                    <button type="button" className="text-xs font-semibold disabled:opacity-40" disabled={!scored} onClick={() => void convertEmployee(c)}>
-                      {scored ? "Convert to employee" : "Convert after the scorecard"}
-                    </button>
+                    <Button type="button" className={rowBtn} disabled={!scored} onClick={() => void convertEmployee(c)}>
+                      {scored ? "Convert" : "Convert after score"}
+                    </Button>
                   )}
                   {lettersReady ? (
-                    <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className="text-xs text-brand font-semibold">Generate letters</Link>
-                  ) : (
-                    <span className="text-xs text-steel-muted">Generate letters after they are an employee</span>
-                  )}
+                    <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link>
+                  ) : null}
                 </div>
+                </td>
+              </tr>
+              {(docsFor === c.id || openId === c.id) && (
+              <tr className="border-t border-line bg-sand/20">
+                <td colSpan={6} className="px-3 py-3">
                 {docsFor === c.id && (
                   <form
-                    className="mt-3 grid md:grid-cols-4 gap-2 border-t border-line pt-3"
+                    className="grid md:grid-cols-4 gap-2"
                     onSubmit={(e) => {
                       e.preventDefault();
                       void uploadDocument(c);
@@ -731,9 +759,9 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                     <p className="md:col-span-4 text-[11px] text-steel-muted">Offer letter stays locked until these are on SharePoint: PAN, Aadhaar, Education, Experience, Salary slips, Address proof, Photo, and Bank. Delete removes the test file.</p>
                     {(c.documents || []).map((d: any) => (
                       <span key={d.id} className="inline-flex items-center gap-2 text-xs">
-                        <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand font-semibold">{d.category}</a>
+                        <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
                         {canManage && (
-                          <button type="button" className="text-danger font-semibold" onClick={() => void removeDocument(c, d)}>Delete</button>
+                          <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeDocument(c, d)}>Delete</Button>
                         )}
                       </span>
                     ))}
@@ -778,11 +806,16 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                     </div>
                   </form>
                 )}
-              </li>
+                </td>
+              </tr>
+              )}
+              </Fragment>
             );
           })}
-          {!filtered.length && <li className="px-4 py-8 text-center text-sm text-steel-muted">No candidates match.</li>}
-        </ul>
+          {!filtered.length && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-steel-muted">No candidates match.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
@@ -1066,6 +1099,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 {canManage && (
                   <div className="grid md:grid-cols-4 gap-2 text-xs pt-2 border-t border-line">
                     <InterviewScorecard
+                      key={r.id}
                       token={token}
                       positionHint={scorecardRoleForDesignation(candidate.requisition?.designation || candidate.posting?.title || "")}
                       roundHint={r.roundType}

@@ -11,7 +11,7 @@ import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { createTeamsSchedule } from "../services/graph.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
-import { INTERVIEW_PARAMS, INTERVIEW_ROLES, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
+import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
 import {
   employeeLetterFolder,
   HR_DRIVE,
@@ -811,7 +811,13 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
 });
 
 hrmRecruitmentRouter.get("/interview-framework", requireRoles("admin", "office", "hr"), (_req, res) => {
-  res.json({ roles: INTERVIEW_ROLES, params: INTERVIEW_PARAMS, rounds: ["R1", "R2", "R3"] });
+  res.json({
+    roles: INTERVIEW_ROLES,
+    params: INTERVIEW_PARAMS,
+    rounds: ["R1", "R2", "R3"],
+    roundFocus: ROUND_FOCUS,
+    roundNote: ROUND_NOTE,
+  });
 });
 
 hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
