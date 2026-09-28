@@ -22,7 +22,8 @@ export const HR_FILE_KINDS = [
 ];
 
 export function isHrImage(doc: { category?: string; title?: string; fileUrl?: string | null }) {
-  return /passport|photo/i.test(doc.category || "") || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(`${doc.title || ""} ${doc.fileUrl || ""}`);
+  const label = `${doc.category || ""} ${doc.title || ""} ${doc.fileUrl || ""}`;
+  return /passport|photo/i.test(doc.category || "") || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(label) || /\b(png|jpe?g|gif|webp)\b/i.test(doc.title || "");
 }
 
 export function hrFileContentUrl(id: string, token: string | null | undefined) {

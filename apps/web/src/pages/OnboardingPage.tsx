@@ -553,7 +553,7 @@ function OfferOnboardingPage() {
                         <span className="text-steel-muted">{d.title}</span>
                       </span>
                     </span>
-                    <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline shrink-0">
+                    <a href={isHrImage(d) ? hrFileContentUrl(d.id, token) : mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline shrink-0">
                       Open
                     </a>
                   </li>

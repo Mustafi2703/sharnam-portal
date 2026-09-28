@@ -728,9 +728,18 @@ export async function organizeRecruitmentFolders() {
       if (!hit) continue;
       const current = `${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${bucket}/${file.name}`;
       try {
-        if (/\.(png|jpe?g|gif|webp)$/i.test(file.name)) {
+        if (/\.(png|jpe?g|gif|webp)$/i.test(file.name) || /\b(png|jpe?g|photo)\b/i.test(file.name)) {
           const buf = await downloadDriveFile(current);
-          await uploadToProjectLibrary(HR_DRIVE, bucket, file.name, buf, mimeForFileName(file.name), { replace: true });
+          let mime = mimeForFileName(file.name);
+          let outName = file.name;
+          if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50) {
+            mime = "image/png";
+            if (!/\.png$/i.test(outName)) outName = `${outName}.png`;
+          } else if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8) {
+            mime = "image/jpeg";
+            if (!/\.jpe?g$/i.test(outName)) outName = `${outName}.jpg`;
+          }
+          await uploadToProjectLibrary(HR_DRIVE, hit.rel, outName, buf, mime, { replace: true });
         }
         if (!hit.full.startsWith(`${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}/${bucket}/`)) {
           await moveDriveItem(file.id, hit.full);
@@ -844,7 +853,13 @@ hrmRecruitmentRouter.get("/stored-file/:id", async (req: AuthedRequest, res) => 
   const name = storedFileName(row.storagePath, row.fileUrl, "file");
   const buf = await readStoredFile(row.storagePath);
   if (!buf) return res.status(404).json({ error: "File is not on SharePoint yet." });
-  res.setHeader("Content-Type", mimeForFileName(name));
+  let mime = mimeForFileName(name);
+  if (mime === "application/octet-stream") {
+    if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) mime = "image/png";
+    else if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8) mime = "image/jpeg";
+    else if (buf.length > 6 && buf.slice(0, 4).toString() === "GIF8") mime = "image/gif";
+  }
+  res.setHeader("Content-Type", mime);
   res.setHeader("Content-Disposition", `inline; filename="${name.replace(/"/g, "")}"`);
   res.send(buf);
 });

@@ -239,7 +239,7 @@ export default function HrmsFilesPage() {
                       {isHrImage(f) ? (
                         <img src={hrFileContentUrl(f.id, token)} alt={f.title || f.category} className="h-12 w-12 rounded border border-line object-cover bg-sand" />
                       ) : null}
-                      <a href={mediaUrl(f.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
+                      <a href={isHrImage(f) ? hrFileContentUrl(f.id, token) : mediaUrl(f.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline text-xs">
                         Open
                       </a>
                     </div>

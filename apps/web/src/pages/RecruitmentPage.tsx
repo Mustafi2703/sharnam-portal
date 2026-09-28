@@ -771,7 +771,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                         {isHrImage(d) ? (
                           <img src={hrFileContentUrl(d.id, token)} alt={d.category} className="h-10 w-10 rounded border border-line object-cover bg-sand" />
                         ) : null}
-                        <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
+                        <a href={isHrImage(d) ? hrFileContentUrl(d.id, token) : mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
                         {canManage && (
                           <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeDocument(c, d)}>Delete</Button>
                         )}
