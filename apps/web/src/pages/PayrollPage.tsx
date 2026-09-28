@@ -467,15 +467,50 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
   useEffect(() => {
     if (!form.userId) return;
     const emp = employees.find((e: any) => e.id === form.userId);
-    if (emp?.profile) {
-      setForm((prev) => ({
-        ...prev,
-        oldCtcAnnual: prev.oldCtcAnnual || emp.profile.ctcAnnual || "",
-        oldBasicMonthly: prev.oldBasicMonthly || emp.profile.basicMonthly || "",
-        oldHraMonthly: prev.oldHraMonthly || emp.profile.hraMonthly || "",
-      }));
-    }
-  }, [form.userId, employees]);
+    setForm((prev) => ({
+      ...prev,
+      oldCtcAnnual: emp?.profile?.ctcAnnual != null ? String(emp.profile.ctcAnnual) : "",
+      oldBasicMonthly: emp?.profile?.basicMonthly != null ? String(emp.profile.basicMonthly) : "",
+      oldHraMonthly: emp?.profile?.hraMonthly != null ? String(emp.profile.hraMonthly) : "",
+      newCtcAnnual: "",
+      newBasicMonthly: "",
+      newHraMonthly: "",
+    }));
+  }, [form.userId]);
+
+  useEffect(() => {
+    const ctc = Number(form.newCtcAnnual);
+    if (!token || !(ctc > 0)) return;
+    const emp = employees.find((e: any) => e.id === form.userId);
+    let cancel = false;
+    void api<{ partA: { rows: { label: string; perMonth: number }[] } }>("/api/hrm/ctc/compute", {
+      method: "POST",
+      token,
+      body: JSON.stringify({
+        candidateName: emp?.fullName || "Employee",
+        designation: emp?.profile?.designation || "Employee",
+        fixedCtcAnnual: ctc,
+      }),
+    })
+      .then((breakdown) => {
+        if (cancel) return;
+        const basic = breakdown.partA.rows.find((r) => r.label === "Basic Salary")?.perMonth;
+        const hra = breakdown.partA.rows.find((r) => r.label === "House Rent Allowance")?.perMonth;
+        setForm((prev) =>
+          prev.newCtcAnnual !== form.newCtcAnnual
+            ? prev
+            : {
+                ...prev,
+                newBasicMonthly: basic != null ? String(Math.round(basic)) : prev.newBasicMonthly,
+                newHraMonthly: hra != null ? String(Math.round(hra)) : prev.newHraMonthly,
+              },
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancel = true;
+    };
+  }, [form.newCtcAnnual, form.userId, token]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -498,25 +533,59 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
       {canWrite && (
         <Card>
           <h3 className="font-semibold text-sm mb-2">Propose a pay hike</h3>
-          <form onSubmit={submit} className="grid md:grid-cols-4 gap-2">
-            <Select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} required>
-              <option value="">Employee</option>
-              {employees.filter((e: any) => e.profile).map((emp: any) => (
-                <option key={emp.id} value={emp.id}>{emp.fullName}{emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}</option>
-              ))}
-            </Select>
-            <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} required />
-            <Input placeholder="Old CTC" type="number" value={form.oldCtcAnnual} onChange={(e) => setForm({ ...form, oldCtcAnnual: e.target.value })} />
-            <Input placeholder="New CTC" type="number" value={form.newCtcAnnual} onChange={(e) => setForm({ ...form, newCtcAnnual: e.target.value })} required />
-            <Input placeholder="Old basic (mo)" type="number" value={form.oldBasicMonthly} onChange={(e) => setForm({ ...form, oldBasicMonthly: e.target.value })} />
-            <Input placeholder="New basic (mo)" type="number" value={form.newBasicMonthly} onChange={(e) => setForm({ ...form, newBasicMonthly: e.target.value })} />
-            <Input placeholder="Old HRA (mo)" type="number" value={form.oldHraMonthly} onChange={(e) => setForm({ ...form, oldHraMonthly: e.target.value })} />
-            <Input placeholder="New HRA (mo)" type="number" value={form.newHraMonthly} onChange={(e) => setForm({ ...form, newHraMonthly: e.target.value })} />
-            <Input placeholder="Rating (5/5)" value={form.performanceRating} onChange={(e) => setForm({ ...form, performanceRating: e.target.value })} />
-            <Input placeholder="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} className="md:col-span-3" />
-            <Button type="submit" className="md:col-span-4">Submit hike</Button>
+          <form onSubmit={submit} className="grid md:grid-cols-4 gap-3">
+            <label className="text-xs font-semibold text-steel-muted md:col-span-2">
+              Employee
+              <Select className="mt-1" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} required>
+                <option value="">Pick employee</option>
+                {employees.filter((e: any) => e.profile).map((emp: any) => (
+                  <option key={emp.id} value={emp.id}>{emp.fullName}{emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}</option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Effective date
+              <Input className="mt-1" type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} required />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Rating
+              <Input className="mt-1" placeholder="5/5" value={form.performanceRating} onChange={(e) => setForm({ ...form, performanceRating: e.target.value })} />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Current CTC (₹ / year)
+              <Input className="mt-1" type="number" value={form.oldCtcAnnual} onChange={(e) => setForm({ ...form, oldCtcAnnual: e.target.value })} />
+              <span className="mt-1 block text-[10px] font-normal">Filled from employee setup.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              New CTC (₹ / year)
+              <Input className="mt-1" type="number" value={form.newCtcAnnual} onChange={(e) => setForm({ ...form, newCtcAnnual: e.target.value })} required />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Current basic (₹ / month)
+              <Input className="mt-1" type="number" value={form.oldBasicMonthly} onChange={(e) => setForm({ ...form, oldBasicMonthly: e.target.value })} />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              New basic (₹ / month)
+              <Input className="mt-1" type="number" value={form.newBasicMonthly} onChange={(e) => setForm({ ...form, newBasicMonthly: e.target.value })} />
+              <span className="mt-1 block text-[10px] font-normal">Filled from the CTC calculator.</span>
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Current HRA (₹ / month)
+              <Input className="mt-1" type="number" value={form.oldHraMonthly} onChange={(e) => setForm({ ...form, oldHraMonthly: e.target.value })} />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              New HRA (₹ / month)
+              <Input className="mt-1" type="number" value={form.newHraMonthly} onChange={(e) => setForm({ ...form, newHraMonthly: e.target.value })} />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted md:col-span-2">
+              Reason
+              <Input className="mt-1" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+            </label>
+            <div className="md:col-span-4">
+              <Button type="submit">Submit hike</Button>
+            </div>
           </form>
-          <p className="text-[10px] text-steel-muted mt-2">Move status to "Applied" to update the employee's profile CTC/basic/HRA (used in future payslip compute).</p>
+          <p className="text-[10px] text-steel-muted mt-2">Approving the hike writes the new CTC, basic, and HRA onto the employee. Later payslips use those figures.</p>
         </Card>
       )}
 

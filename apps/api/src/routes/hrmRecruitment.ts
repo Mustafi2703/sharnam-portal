@@ -1898,21 +1898,41 @@ hrmRecruitmentRouter.get("/pay-hikes", async (req, res) => {
   }, res);
 });
 
+async function hikeLines(userId: string, newCtc: number) {
+  const profile = await prisma.employeeProfile.findUnique({ where: { userId } });
+  const lines = newCtc > 0 ? ctcMonthlyEarnings(newCtc, profile?.designation || "") : null;
+  return { profile, lines };
+}
+
+async function writeHikeOntoEmployee(row: { userId: string; newCtcAnnual: number; newBasicMonthly: number | null; newHraMonthly: number | null }) {
+  const { lines } = await hikeLines(row.userId, row.newCtcAnnual);
+  await prisma.employeeProfile.updateMany({
+    where: { userId: row.userId },
+    data: {
+      ctcAnnual: row.newCtcAnnual,
+      basicMonthly: row.newBasicMonthly || lines?.basic || undefined,
+      hraMonthly: row.newHraMonthly || lines?.hra || undefined,
+    },
+  });
+}
+
 hrmRecruitmentRouter.post("/pay-hikes", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
-  const oldCtc = Number(req.body.oldCtcAnnual || 0);
+  const userId = String(req.body.userId || "");
+  const { profile, lines } = await hikeLines(userId, Number(req.body.newCtcAnnual || 0));
+  const oldCtc = Number(req.body.oldCtcAnnual || profile?.ctcAnnual || 0);
   const newCtc = Number(req.body.newCtcAnnual || 0);
   const hikePercent = oldCtc > 0 ? ((newCtc - oldCtc) / oldCtc) * 100 : 0;
   const row = await prisma.payHike.create({
     data: {
-      userId: String(req.body.userId),
+      userId,
       effectiveDate: new Date(req.body.effectiveDate || Date.now()),
       oldCtcAnnual: oldCtc,
       newCtcAnnual: newCtc,
       hikePercent,
-      oldBasicMonthly: n(req.body.oldBasicMonthly),
-      newBasicMonthly: n(req.body.newBasicMonthly),
-      oldHraMonthly: n(req.body.oldHraMonthly),
-      newHraMonthly: n(req.body.newHraMonthly),
+      oldBasicMonthly: n(req.body.oldBasicMonthly) ?? profile?.basicMonthly ?? null,
+      newBasicMonthly: n(req.body.newBasicMonthly) ?? lines?.basic ?? null,
+      oldHraMonthly: n(req.body.oldHraMonthly) ?? profile?.hraMonthly ?? null,
+      newHraMonthly: n(req.body.newHraMonthly) ?? lines?.hra ?? null,
       reason: s(req.body.reason),
       performanceRating: s(req.body.performanceRating),
       status: "Submitted",
@@ -1937,15 +1957,10 @@ hrmRecruitmentRouter.patch("/pay-hikes/:id", requireRoles("admin", "office", "hr
     },
   });
 
-  if (nextStatus === "Applied" && before.status !== "Applied") {
-    await prisma.employeeProfile.updateMany({
-      where: { userId: row.userId },
-      data: {
-        ctcAnnual: row.newCtcAnnual,
-        basicMonthly: row.newBasicMonthly || undefined,
-        hraMonthly: row.newHraMonthly || undefined,
-      },
-    });
+  const writesPay = nextStatus === "Approved" || nextStatus === "Applied";
+  const alreadyWritten = before.status === "Approved" || before.status === "Applied";
+  if (writesPay && !alreadyWritten) {
+    await writeHikeOntoEmployee(row);
   }
 
   await audit(isApproving ? "hrms.payHike.approve" : `hrms.payHike.${nextStatus.toLowerCase()}`, { userId: req.user!.id, entity: "PayHike", entityId: row.id });
