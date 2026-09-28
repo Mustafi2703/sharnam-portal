@@ -2088,8 +2088,8 @@ html.is-standalone-form #root {
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 .hrms-subnav__tab.is-on {
-  background: var(--color-ink);
-  border-color: var(--color-ink);
+  background: var(--module-accent, #0d9488);
+  border-color: var(--module-accent, #0d9488);
   color: #fff;
 }
 .hrms-payroll-toolbar {

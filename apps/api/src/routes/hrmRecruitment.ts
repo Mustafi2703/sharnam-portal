@@ -249,6 +249,46 @@ hrmRecruitmentRouter.get("/candidates", async (req, res) => {
   );
 });
 
+hrmRecruitmentRouter.post("/registers/clear-ops", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  if (String(req.body?.confirm || "").trim() !== "CLEAR") {
+    return res.status(400).json({ error: "Send confirm: CLEAR to empty this register." });
+  }
+  const which = String(req.body?.which || "");
+  if (which === "payslips") {
+    const year = Number(req.body.year) || undefined;
+    const month = Number(req.body.month) || undefined;
+    const deleted = await prisma.payslip.deleteMany({
+      where: { ...(year ? { year } : {}), ...(month ? { month } : {}) },
+    });
+    await audit("hrms.payslip.clear", { userId: req.user!.id, entity: "Payslip", meta: { year, month, count: deleted.count } });
+    return res.json({ ok: true, deleted: deleted.count });
+  }
+  if (which === "leave") {
+    const deleted = await prisma.leaveRequest.deleteMany({});
+    await audit("hrms.leave.clear", { userId: req.user!.id, entity: "LeaveRequest", meta: { count: deleted.count } });
+    return res.json({ ok: true, deleted: deleted.count });
+  }
+  if (which === "vouchers") {
+    const deleted = await prisma.expenseVoucher.deleteMany({});
+    await audit("hrms.voucher.clear", { userId: req.user!.id, entity: "ExpenseVoucher", meta: { count: deleted.count } });
+    return res.json({ ok: true, deleted: deleted.count });
+  }
+  if (which === "hikes") {
+    const deleted = await prisma.payHike.deleteMany({});
+    await audit("hrms.payHike.clear", { userId: req.user!.id, entity: "PayHike", meta: { count: deleted.count } });
+    return res.json({ ok: true, deleted: deleted.count });
+  }
+  return res.status(400).json({ error: "which must be payslips, leave, vouchers, or hikes" });
+});
+
+hrmRecruitmentRouter.delete("/payslips/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const before = await prisma.payslip.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  await prisma.payslip.delete({ where: { id: before.id } });
+  await audit("hrms.payslip.delete", { userId: req.user!.id, entity: "Payslip", entityId: before.id });
+  res.json({ ok: true });
+});
+
 hrmRecruitmentRouter.post("/registers/clear", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   if (String(req.body?.confirm || "").trim() !== "CLEAR") {
     return res.status(400).json({ error: "Send confirm: CLEAR to empty the HR registers." });

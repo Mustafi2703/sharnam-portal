@@ -140,6 +140,32 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
     }
   }
 
+  async function clearMonth() {
+    if (!window.confirm(`Delete every payslip for this month? Staff records stay.`)) return;
+    try {
+      const out = await api<{ deleted: number }>("/api/hrm/registers/clear-ops", {
+        method: "POST",
+        token,
+        body: JSON.stringify({ confirm: "CLEAR", which: "payslips", year, month }),
+      });
+      setMsg(`Deleted ${out.deleted} payslip${out.deleted === 1 ? "" : "s"} for this month.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete payslips");
+    }
+  }
+
+  async function removeSlip(id: string) {
+    if (!window.confirm("Delete this payslip?")) return;
+    try {
+      await api(`/api/hrm/payslips/${id}`, { method: "DELETE", token });
+      setMsg("Payslip deleted.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete payslip");
+    }
+  }
+
   async function generateAll() {
     try {
       const out = await api<{ created: any[]; skipped: any[] }>("/api/hrm/payslips/generate-month", {
@@ -266,8 +292,20 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           <span className="font-semibold text-sm">
             Payslips · {MONTHS[month - 1]} {year} ({payslips.length})
           </span>
-          <span className="text-xs text-steel-muted">
-            Gross {money(grossTotal)} · Net {money(netTotal)}
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-steel-muted">
+              Gross {money(grossTotal)} · Net {money(netTotal)}
+            </span>
+            {canWrite && (
+              <Button
+                type="button"
+                variant="danger"
+                className="!px-2.5 !py-1.5 !text-xs !rounded-lg"
+                onClick={() => void clearMonth()}
+              >
+                Delete this month
+              </Button>
+            )}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -365,6 +403,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                               Drive
                             </a>
                           ) : null}
+                          <Button type="button" variant="danger" className="!px-2.5 !py-1 !text-xs !rounded-lg" onClick={() => void removeSlip(p.id)}>Delete</Button>
                           <Select value={p.status} onChange={(e) => transition(p.id, e.target.value)} className="!py-1">
                             {["Generated", "Approved", "Released", "Paid"].map((s) => <option key={s}>{s}</option>)}
                           </Select>

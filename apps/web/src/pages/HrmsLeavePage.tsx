@@ -242,7 +242,24 @@ export default function HrmsLeavePage() {
         </Card>
 
         <Card>
-          <h3 className="font-semibold mb-1">{canManage ? "Leave register" : "My requests"}</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <h3 className="font-semibold">{canManage ? "Leave register" : "My requests"}</h3>
+            {canManage && (
+              <Button
+                type="button"
+                variant="danger"
+                className="!px-2.5 !py-1.5 !text-xs !rounded-lg"
+                onClick={() => {
+                  if (!window.confirm("Delete every leave request? Balances and staff stay.")) return;
+                  void api("/api/hrm/registers/clear-ops", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR", which: "leave" }) })
+                    .then(() => { setMsg("Leave requests deleted."); return load(); })
+                    .catch((err) => setMsg(err instanceof Error ? err.message : "Could not delete leave"));
+                }}
+              >
+                Delete all
+              </Button>
+            )}
+          </div>
           {canManage ? (
             <p className="text-xs text-steel-muted mb-2">Status only. Approve or reject in Leave approval below — that step is separate from raising a request.</p>
           ) : null}

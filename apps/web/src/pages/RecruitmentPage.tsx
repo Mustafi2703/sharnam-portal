@@ -23,10 +23,11 @@ import {
  */
 
 const TABS = [
-  { id: "requisitions", label: "1 · Manpower Requisition" },
-  { id: "candidates", label: "2 · Resume DB" },
-  { id: "interviews", label: "3 · Interviews & scorecard" },
-  { id: "offers", label: "4 · Offers" },
+  { id: "requisitions", label: "Requisition" },
+  { id: "candidates", label: "Resumes" },
+  { id: "compare", label: "Compare" },
+  { id: "interviews", label: "Scorecard" },
+  { id: "offers", label: "Offers" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -102,7 +103,7 @@ export default function RecruitmentPage() {
           <div>
         <p className="text-sm text-ink font-semibold">Hiring steps</p>
         <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          Raise a requisition (department and designation) and approve it. Add candidates to that requisition in the resume database. Score them, compare the people on the same requisition, convert the one you select, upload the background documents, then generate letters. Job postings stay off for now.
+          Requisition, then resumes, then the scorecard. Open Compare to rank everyone scored on the same requisition. Convert the person you select, upload documents, then letters.
         </p>
           </div>
           {canManage && (
@@ -134,6 +135,7 @@ export default function RecruitmentPage() {
 
       {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "candidates" && <CandidatesTab reqs={reqs} candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "compare" && <CompareTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OffersTab candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
     </div>
@@ -817,6 +819,104 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
           </table>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function bestScore(c: any) {
+  return Math.max(0, ...(c.interviews || []).map((r: any) => Number(r.scoreOverall) || 0));
+}
+
+function roundScore(c: any, kind: string) {
+  const hit = (c.interviews || []).find((r: any) => String(r.roundType || "").toLowerCase().includes(kind));
+  return hit?.scoreOverall != null ? `${hit.scoreOverall}%` : "—";
+}
+
+function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
+  const groups = useMemo(() => {
+    const by = new Map<string, { title: string; rows: any[] }>();
+    for (const c of candidates || []) {
+      const id = c.requisition?.id || "none";
+      const title = c.requisition
+        ? `${c.requisition.requisitionNo} · ${c.requisition.department} · ${c.requisition.designation}`
+        : "No requisition";
+      if (!by.has(id)) by.set(id, { title, rows: [] });
+      by.get(id)!.rows.push(c);
+    }
+    return [...by.values()]
+      .map((g) => ({ ...g, rows: [...g.rows].sort((a, b) => bestScore(b) - bestScore(a)) }))
+      .sort((a, b) => bestScore(b.rows[0]) - bestScore(a.rows[0]));
+  }, [candidates]);
+
+  async function removeCandidate(c: any) {
+    if (!window.confirm(`Delete ${c.fullName} from this comparison? Their interviews and offers are removed. Staff logins stay.`)) return;
+    try {
+      await api(`/api/hrm/candidates/${c.id}`, { method: "DELETE", token });
+      setMsg(`${c.fullName} removed.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete");
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <Card className="!p-4">
+        <p className="text-sm font-semibold">Compare scored candidates</p>
+        <p className="text-xs text-steel-muted mt-1">People on the same requisition, ranked by their best scorecard. HR, Technical, and Management stay in separate columns.</p>
+      </Card>
+      {groups.map((g) => (
+        <Card key={g.title} padding={false}>
+          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">{g.title}</div>
+          <div className="overflow-x-auto">
+            <table className="min-w-[860px] w-full text-sm">
+              <thead className="text-left text-[11px] uppercase tracking-wide text-steel-muted bg-sand/30">
+                <tr>
+                  <th className="px-3 py-2">Rank</th>
+                  <th className="px-3 py-2">Candidate</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-right">HR</th>
+                  <th className="px-3 py-2 text-right">Technical</th>
+                  <th className="px-3 py-2 text-right">Management</th>
+                  <th className="px-3 py-2 text-right">Best</th>
+                  <th className="px-3 py-2">Decision</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.rows.map((c, i) => {
+                  const employee = (staff || []).find((s: any) => c.email && s.email && String(s.email).toLowerCase() === String(c.email).toLowerCase());
+                  const decision = (c.interviews || []).map((r: any) => r.decision).filter(Boolean).slice(-1)[0];
+                  const best = bestScore(c);
+                  return (
+                    <tr key={c.id} className="border-t border-line">
+                      <td className="px-3 py-2 font-semibold">{i + 1}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{c.fullName}</div>
+                        <div className="text-xs text-steel-muted">{c.phone || c.email || "—"}</div>
+                      </td>
+                      <td className="px-3 py-2"><Badge tone={candidateStageTone(c.status)}>{candidateStageLabel(c.status)}</Badge></td>
+                      <td className="px-3 py-2 text-right">{roundScore(c, "hr")}</td>
+                      <td className="px-3 py-2 text-right">{roundScore(c, "tech")}</td>
+                      <td className="px-3 py-2 text-right">{roundScore(c, "manag")}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{best ? `${best}%` : "—"}</td>
+                      <td className="px-3 py-2">{decision || "—"}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
+                          {employee ? <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link> : null}
+                          {canManage && <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeCandidate(c)}>Delete</Button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ))}
+      {!groups.length && <Card><p className="text-sm text-steel-muted">No candidates yet. Add them on Resumes, score them, then come back here.</p></Card>}
     </div>
   );
 }
