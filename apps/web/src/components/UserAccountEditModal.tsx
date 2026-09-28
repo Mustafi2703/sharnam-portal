@@ -26,12 +26,137 @@ export type UserAccountRow = {
     empCode?: string;
     department?: string | null;
     designation?: string | null;
+    joinDate?: string | null;
+    dateOfBirth?: string | null;
+    grade?: string | null;
+    band?: string | null;
+    workLocation?: string | null;
+    costCenter?: string | null;
+    payrollArea?: string | null;
+    panNumber?: string | null;
+    aadhaarNumber?: string | null;
+    pfNumber?: string | null;
+    uanNumber?: string | null;
+    esicNumber?: string | null;
+    bankName?: string | null;
+    bankAccountNo?: string | null;
+    bankIfsc?: string | null;
     ctcAnnual?: number | null;
     basicMonthly?: number | null;
     hraMonthly?: number | null;
   } | null;
   memberships?: { id: string; project: { id: string; code: string; name: string }; role?: string }[];
 };
+
+export type PayslipSetup = {
+  joinDate: string;
+  dateOfBirth: string;
+  grade: string;
+  band: string;
+  workLocation: string;
+  costCenter: string;
+  payrollArea: string;
+  panNumber: string;
+  aadhaarNumber: string;
+  pfNumber: string;
+  uanNumber: string;
+  esicNumber: string;
+  bankName: string;
+  bankAccountNo: string;
+  bankIfsc: string;
+};
+
+export const EMPTY_PAYSLIP_SETUP: PayslipSetup = {
+  joinDate: "",
+  dateOfBirth: "",
+  grade: "",
+  band: "",
+  workLocation: "",
+  costCenter: "",
+  payrollArea: "",
+  panNumber: "",
+  aadhaarNumber: "",
+  pfNumber: "",
+  uanNumber: "",
+  esicNumber: "",
+  bankName: "",
+  bankAccountNo: "",
+  bankIfsc: "",
+};
+
+function dateInput(value?: string | null) {
+  if (!value) return "";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return String(value).slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(dt);
+}
+
+export function payslipSetupFromProfile(profile?: UserAccountRow["profile"]): PayslipSetup {
+  return {
+    joinDate: dateInput(profile?.joinDate),
+    dateOfBirth: dateInput(profile?.dateOfBirth),
+    grade: profile?.grade || "",
+    band: profile?.band || "",
+    workLocation: profile?.workLocation || "",
+    costCenter: profile?.costCenter || "",
+    payrollArea: profile?.payrollArea || "",
+    panNumber: profile?.panNumber || "",
+    aadhaarNumber: profile?.aadhaarNumber || "",
+    pfNumber: profile?.pfNumber || "",
+    uanNumber: profile?.uanNumber || "",
+    esicNumber: profile?.esicNumber || "",
+    bankName: profile?.bankName || "",
+    bankAccountNo: profile?.bankAccountNo || "",
+    bankIfsc: profile?.bankIfsc || "",
+  };
+}
+
+export function EmployeePayslipFields({
+  value,
+  onChange,
+}: {
+  value: PayslipSetup;
+  onChange: (next: PayslipSetup) => void;
+}) {
+  function set(key: keyof PayslipSetup, next: string) {
+    onChange({ ...value, [key]: next });
+  }
+  function field(key: keyof PayslipSetup, label: string, type: "text" | "date" = "text") {
+    return (
+      <label className="text-xs font-semibold text-steel-muted">
+        {label}
+        <Input className="mt-1" type={type} value={value[key]} onChange={(e) => set(key, e.target.value)} />
+      </label>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payslip identity</p>
+        <p className="text-[11px] text-steel-muted mt-1">
+          These print on the payslip. Fill them here once. Generate reads them automatically.
+        </p>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        {field("joinDate", "Joining date", "date")}
+        {field("dateOfBirth", "Date of birth", "date")}
+        {field("grade", "Grade")}
+        {field("band", "Band")}
+        {field("workLocation", "Location")}
+        {field("costCenter", "Cost center")}
+        {field("payrollArea", "Payroll area")}
+        {field("panNumber", "PAN")}
+        {field("aadhaarNumber", "Aadhaar")}
+        {field("pfNumber", "PF number")}
+        {field("uanNumber", "PF UAN")}
+        {field("esicNumber", "ESI number")}
+        {field("bankName", "Bank name")}
+        {field("bankAccountNo", "Bank account number")}
+        {field("bankIfsc", "IFSC")}
+      </div>
+    </div>
+  );
+}
 
 type Props = {
   open: boolean;
@@ -71,6 +196,7 @@ export function UserAccountEditModal({
 }: Props) {
   const [form, setForm] = useState<PortalAccountForm>(formFromUser(user || ({} as UserAccountRow)));
   const [payroll, setPayroll] = useState({ ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
+  const [payslip, setPayslip] = useState<PayslipSetup>(EMPTY_PAYSLIP_SETUP);
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [kind, setKind] = useState<PortalAccountKind>("staff");
   const [busy, setBusy] = useState(false);
@@ -86,6 +212,7 @@ export function UserAccountEditModal({
       basicMonthly: user.profile?.basicMonthly != null ? String(user.profile.basicMonthly) : "",
       hraMonthly: user.profile?.hraMonthly != null ? String(user.profile.hraMonthly) : "",
     });
+    setPayslip(payslipSetupFromProfile(user.profile));
     setErr("");
   }, [user, forceKind]);
 
@@ -148,6 +275,7 @@ export function UserAccountEditModal({
         body.ctcAnnual = payroll.ctcAnnual;
         body.basicMonthly = payroll.basicMonthly;
         body.hraMonthly = payroll.hraMonthly;
+        Object.assign(body, payslip);
       } else if (kind === "stakeholder") {
         body.department = form.department;
       }
@@ -264,30 +392,43 @@ export function UserAccountEditModal({
                 onChange={(e) => setForm({ ...form, designation: e.target.value })}
               />
             </div>
+            <EmployeePayslipFields value={payslip} onChange={setPayslip} />
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted">Payroll · SPDC CTC split</p>
+              <p className="text-[11px] text-steel-muted">
+                Saving a CTC fills monthly basic and HRA from the same calculator as the offer letter and the payslip.
+              </p>
               <div className="grid sm:grid-cols-3 gap-2">
-                <Input
-                  type="number"
-                  placeholder="CTC annual (₹)"
-                  value={payroll.ctcAnnual}
-                  onChange={(e) => setPayroll({ ...payroll, ctcAnnual: e.target.value })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Basic monthly (₹)"
-                  value={payroll.basicMonthly}
-                  onChange={(e) => setPayroll({ ...payroll, basicMonthly: e.target.value })}
-                />
-                <Input
-                  type="number"
-                  placeholder="HRA monthly (₹)"
-                  value={payroll.hraMonthly}
-                  onChange={(e) => setPayroll({ ...payroll, hraMonthly: e.target.value })}
-                />
+                <label className="text-xs font-semibold text-steel-muted">
+                  CTC annual (₹)
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    value={payroll.ctcAnnual}
+                    onChange={(e) => setPayroll({ ...payroll, ctcAnnual: e.target.value })}
+                  />
+                </label>
+                <label className="text-xs font-semibold text-steel-muted">
+                  Basic monthly (₹)
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    value={payroll.basicMonthly}
+                    onChange={(e) => setPayroll({ ...payroll, basicMonthly: e.target.value })}
+                  />
+                </label>
+                <label className="text-xs font-semibold text-steel-muted">
+                  HRA monthly (₹)
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    value={payroll.hraMonthly}
+                    onChange={(e) => setPayroll({ ...payroll, hraMonthly: e.target.value })}
+                  />
+                </label>
               </div>
               <Button type="button" variant="secondary" disabled={busy || !payroll.ctcAnnual} onClick={() => void splitCtcFromCalculator()}>
-                Split from SPDC CTC calculator
+                Preview split from CTC calculator
               </Button>
             </div>
           </div>

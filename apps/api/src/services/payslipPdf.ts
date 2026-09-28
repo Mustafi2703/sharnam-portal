@@ -4,6 +4,7 @@
  */
 import type { Payslip, User, EmployeeProfile } from "@prisma/client";
 import { sharnamLogoDataUri } from "./brandedExport.js";
+import { ctcMonthlyEarnings } from "./ctcAnnexure.js";
 
 export type PayslipRenderInput = {
   payslip: Payslip;
@@ -24,28 +25,38 @@ function monthLabel(year: number, month: number) {
   return new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 }
 
-/** Derive monthly earnings from employee profile CTC when available. */
+function dash(v?: string | null) {
+  const text = String(v || "").trim();
+  return text || "—";
+}
+
+function istDate(d?: Date | null) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" }).format(dt);
+}
+
+/** Full-month lines from the SPDC CTC calculator. Payslip rows are these lines prorated by paid days. */
 export function earningsFromProfile(profile: EmployeeProfile | null, paidFactor: number) {
-  if (!profile) return null;
-  const grossMonthly = profile.ctcAnnual ? profile.ctcAnnual / 12 : 0;
-  const basic = profile.basicMonthly || grossMonthly * 0.5;
-  const hra = profile.hraMonthly || basic * 0.4;
-  const conveyance = 1600;
-  const medical = 1250;
-  const special = Math.max(0, (grossMonthly || basic + hra + conveyance + medical) - basic - hra - conveyance - medical);
-  const pf = Math.min(basic, 15000) * 0.12;
-  const pt = 200;
-  const esic = grossMonthly <= 21000 ? grossMonthly * 0.0075 : 0;
+  if (!profile?.ctcAnnual) return null;
+  const full = ctcMonthlyEarnings(profile.ctcAnnual, profile.designation || "");
+  const scale = (n: number) => Math.round(n * paidFactor);
+  const basic = scale(full.basic);
+  const hra = scale(full.hra);
+  const conveyance = scale(full.conveyance);
+  const gross = scale(full.gross);
+  const specialAllow = Math.max(0, gross - basic - hra - conveyance);
   return {
-    basic: basic * paidFactor,
-    hra: hra * paidFactor,
-    conveyance: conveyance * paidFactor,
-    medicalAllow: medical * paidFactor,
-    specialAllow: special * paidFactor,
-    gross: (basic + hra + conveyance + medical + special) * paidFactor,
-    pfEmployee: pf * paidFactor,
-    esicEmployee: esic * paidFactor,
-    professionalTax: pt,
+    basic,
+    hra,
+    conveyance,
+    medicalAllow: 0,
+    specialAllow,
+    gross,
+    pfEmployee: scale(full.pfEmployee),
+    esicEmployee: full.esicEmployee > 0 ? scale(full.esicEmployee) : 0,
+    professionalTax: paidFactor > 0 ? full.professionalTax : 0,
   };
 }
 
@@ -74,14 +85,17 @@ export function buildPayslipHtml(input: PayslipRenderInput): string {
   const netPay = p.netPay || gross - totalDeductions;
 
   const empCode = profile?.empCode || user.email.split("@")[0].toUpperCase();
-  const empNo = empCode.replace(/[^0-9A-Z]/gi, "").slice(-10) || "0000000000";
   const designation = profile?.designation || "—";
-  const department = profile?.department || "Operations";
-  const bankAccount = profile?.bankAccountNo || "—";
-  const pan = profile?.panNumber || "—";
-  const uan = profile?.pfNumber || "—";
+  const department = profile?.department || "—";
+  const master = profile?.ctcAnnual ? ctcMonthlyEarnings(profile.ctcAnnual, profile.designation || "") : null;
   const periodTag = `${monthShort(p.year, p.month)}-${p.year}`;
-  const checksum = `KGDPL^PS^${empNo}^${monthShort(p.year, p.month)}^${p.year}`;
+  const checksum = `SPDC^PS^${empCode}^${monthShort(p.year, p.month)}^${p.year}`;
+  const roundedNet = Math.round(netPay);
+  const roundAdj = Math.round((roundedNet - netPay) * 100) / 100;
+  const pair = (leftLabel: string, leftValue: string, rightLabel: string, rightValue: string) =>
+    `<tr><td class="lbl">${leftLabel}</td><td>${leftValue}</td><td class="lbl">${rightLabel}</td><td>${rightValue}</td></tr>`;
+  const earn = (label: string, masterAmt: number, currentAmt: number, dedLabel: string, dedAmt: number) =>
+    `<tr><td>${label}</td><td class="num">${inr(masterAmt)}</td><td class="num">${inr(currentAmt)}</td><td>${dedLabel}</td><td class="num">${dedLabel ? inr(dedAmt) : ""}</td></tr>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -91,7 +105,7 @@ export function buildPayslipHtml(input: PayslipRenderInput): string {
 <style>
   @page { size: A4; margin: 12mm; }
   body { font-family: "Courier New", Courier, monospace; color: #111; font-size: 9.5pt; margin: 0; background: #fff; }
-  .sheet { max-width: 720px; margin: 0 auto; border: 1px solid #333; padding: 14px 16px; }
+  .sheet { max-width: 820px; margin: 0 auto; border: 1px solid #333; padding: 14px 16px; }
   .top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
   .top img { height: 44px; }
   .co { font-weight: 700; font-size: 11pt; line-height: 1.3; }
@@ -118,26 +132,36 @@ export function buildPayslipHtml(input: PayslipRenderInput): string {
     </div>
     ${logo ? `<img src="${logo}" alt="Sharnam"/>` : ""}
   </div>
-  <div class="slip-title">Pay Slip · ${periodTag}</div>
+  <div class="slip-title">Payslip for the month of ${monthLabel(p.year, p.month)}</div>
   <table class="meta">
-    <tr><td class="lbl">Employee</td><td>${user.fullName}</td><td class="lbl">Emp. code</td><td>${empCode}</td></tr>
-    <tr><td class="lbl">Designation</td><td>${designation}</td><td class="lbl">Department</td><td>${department}</td></tr>
-    <tr><td class="lbl">PAN</td><td>${pan}</td><td class="lbl">UAN / PF</td><td>${uan}</td></tr>
-    <tr><td class="lbl">Bank A/C</td><td>${bankAccount}</td><td class="lbl">Pay days</td><td>${p.paidDays} / ${p.workingDays}${p.lopDays ? ` (LOP ${p.lopDays})` : ""}</td></tr>
+    ${pair("Employee no.", empCode, "PAN", dash(profile?.panNumber))}
+    ${pair("Name", user.fullName, "Bank name", dash(profile?.bankName))}
+    ${pair("Joining date", istDate(profile?.joinDate), "Bank A/C no.", dash(profile?.bankAccountNo))}
+    ${pair("Designation", designation, "IFSC", dash(profile?.bankIfsc))}
+    ${pair("Grade", dash(profile?.grade), "ESI no.", dash(profile?.esicNumber))}
+    ${pair("Band", dash(profile?.band), "Aadhaar", dash(profile?.aadhaarNumber))}
+    ${pair("Cost center", dash(profile?.costCenter), "PF no.", dash(profile?.pfNumber))}
+    ${pair("Payroll area", dash(profile?.payrollArea), "PF UAN", dash(profile?.uanNumber))}
+    ${pair("Department", department, "Birth date", istDate(profile?.dateOfBirth))}
+    ${pair("Location", dash(profile?.workLocation), "Pay days", `${p.paidDays} / ${p.workingDays}${p.lopDays ? ` · loss of pay ${p.lopDays}` : ""}`)}
   </table>
   <table class="grid">
     <thead>
-      <tr><th>Earnings</th><th class="num">Amount (₹)</th><th>Deductions</th><th class="num">Amount (₹)</th></tr>
+      <tr>
+        <th>Earnings</th><th class="num">Master (₹)</th><th class="num">This month (₹)</th>
+        <th>Deductions</th><th class="num">This month (₹)</th>
+      </tr>
     </thead>
     <tbody>
-      <tr><td>Basic Salary</td><td class="num">${inr(basic)}</td><td>PF (Employee)</td><td class="num">${inr(pfEmployee)}</td></tr>
-      <tr><td>House Rent Allowance</td><td class="num">${inr(hra)}</td><td>ESIC</td><td class="num">${inr(esicEmployee)}</td></tr>
-      <tr><td>Conveyance Allowance</td><td class="num">${inr(conveyance)}</td><td>Professional Tax</td><td class="num">${inr(professionalTax)}</td></tr>
-      <tr><td>Medical / Children Edu.</td><td class="num">${inr(medicalAllow)}</td><td>Income Tax (TDS)</td><td class="num">${inr(incomeTax)}</td></tr>
-      <tr><td>Special Allowance</td><td class="num">${inr(specialAllow)}</td><td>Other deduction</td><td class="num">${inr(otherDeduction)}</td></tr>
-      ${otherEarnings ? `<tr><td>Other earnings</td><td class="num">${inr(otherEarnings)}</td><td></td><td class="num"></td></tr>` : ""}
-      <tr class="net-row"><td>Gross earnings</td><td class="num">${inr(gross)}</td><td>Total deductions</td><td class="num">${inr(totalDeductions)}</td></tr>
-      <tr class="net-row"><td colspan="2">Net pay (Rupees ${Math.round(netPay).toLocaleString("en-IN")} only)</td><td>Net pay</td><td class="num">${inr(netPay)}</td></tr>
+      ${earn("Basic", master?.basic ?? basic, basic, "Statutory PF", pfEmployee)}
+      ${earn("HRA", master?.hra ?? hra, hra, "Professional tax", professionalTax)}
+      ${earn("Conveyance", master?.conveyance ?? conveyance, conveyance, "ESIC", esicEmployee)}
+      ${earn("Special allowance", master?.specialAllowance ?? specialAllow, specialAllow, "TDS", incomeTax)}
+      ${otherEarnings || otherDeduction ? earn("Other earnings", otherEarnings, otherEarnings, otherDeduction ? "Other deduction" : "", otherDeduction) : ""}
+      <tr class="net-row"><td>Gross earnings</td><td class="num">${inr(master?.gross ?? gross)}</td><td class="num">${inr(gross)}</td><td>Total deductions</td><td class="num">${inr(totalDeductions)}</td></tr>
+      <tr class="net-row"><td colspan="3">Net pay</td><td></td><td class="num">${inr(netPay)}</td></tr>
+      ${roundAdj ? `<tr><td colspan="3">Rounding</td><td></td><td class="num">${inr(roundAdj)}</td></tr>` : ""}
+      <tr class="net-row"><td colspan="3">Rounded net (Rupees ${roundedNet.toLocaleString("en-IN")} only)</td><td></td><td class="num">${inr(roundedNet)}</td></tr>
     </tbody>
   </table>
   <footer>System-generated payslip · Sharnam HRMS · Print → Save as PDF · Confidential</footer>

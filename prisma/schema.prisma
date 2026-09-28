@@ -961,7 +961,14 @@ model EmployeeProfile {
   panNumber             String?
   aadhaarNumber         String?
   pfNumber              String?
+  /// PF Universal Account Number — printed separately from the PF number.
+  uanNumber             String?
   esicNumber            String?
+  grade                 String?
+  band                  String?
+  costCenter            String?
+  payrollArea           String?
+  workLocation          String?
   nomineeName           String?
   nomineeRelation       String?
   reportingManagerId    String?

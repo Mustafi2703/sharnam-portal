@@ -23,6 +23,50 @@ import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIV
 import { ctcMonthlyEarnings } from "../services/ctcAnnexure.js";
 import { isHrDeskOnly } from "../services/hrDesk.js";
 
+const PAYSLIP_TEXT_FIELDS = [
+  "grade",
+  "band",
+  "costCenter",
+  "payrollArea",
+  "workLocation",
+  "uanNumber",
+  "bankName",
+  "bankAccountNo",
+  "bankIfsc",
+  "panNumber",
+  "aadhaarNumber",
+  "pfNumber",
+  "esicNumber",
+] as const;
+
+/** Identity block printed on the payslip. Empty strings clear the stored value. */
+function payslipIdentityPatch(body: Record<string, unknown>) {
+  const patch: Record<string, unknown> = {};
+  for (const key of PAYSLIP_TEXT_FIELDS) {
+    if (body[key] === undefined) continue;
+    patch[key] = String(body[key] ?? "").trim() || null;
+  }
+  for (const key of ["joinDate", "dateOfBirth"] as const) {
+    if (body[key] === undefined) continue;
+    if (!body[key]) {
+      patch[key] = null;
+      continue;
+    }
+    const d = new Date(String(body[key]));
+    if (!Number.isNaN(d.getTime())) patch[key] = d;
+  }
+  return patch;
+}
+
+/** Basic and HRA on the employee record follow the same monthly split as the offer and the payslip. */
+function syncMonthlyFromCtc(patch: Record<string, unknown>, designation?: string | null) {
+  const ctc = Number(patch.ctcAnnual);
+  if (!Number.isFinite(ctc) || ctc <= 0) return;
+  const lines = ctcMonthlyEarnings(ctc, designation || "");
+  patch.basicMonthly = lines.basic;
+  patch.hraMonthly = lines.hra;
+}
+
 async function personFileStamp(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
   const profile = await prisma.employeeProfile.findUnique({ where: { userId }, select: { empCode: true } });
@@ -1811,17 +1855,19 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
       });
     }
   } else {
+    const createdProfile: Record<string, unknown> = {
+      userId: user.id,
+      empCode: empCode || `EMP-${Date.now().toString().slice(-6)}`,
+      department: department || null,
+      designation: designation || null,
+      joinDate: new Date(),
+      ...payslipIdentityPatch(req.body as Record<string, unknown>),
+      ...(req.body.ctcAnnual ? { ctcAnnual: Number(req.body.ctcAnnual) } : {}),
+    };
+    if (!createdProfile.joinDate) createdProfile.joinDate = new Date();
+    syncMonthlyFromCtc(createdProfile, designation || null);
     await prisma.employeeProfile.create({
-      data: {
-        userId: user.id,
-        empCode: empCode || `EMP-${Date.now().toString().slice(-6)}`,
-        department: department || null,
-        designation: designation || null,
-        joinDate: new Date(),
-        ...(req.body.ctcAnnual ? { ctcAnnual: Number(req.body.ctcAnnual) } : {}),
-        ...(req.body.basicMonthly ? { basicMonthly: Number(req.body.basicMonthly) } : {}),
-        ...(req.body.hraMonthly ? { hraMonthly: Number(req.body.hraMonthly) } : {}),
-      },
+      data: createdProfile as Parameters<typeof prisma.employeeProfile.create>[0]["data"],
     });
   }
   await audit("hrm.employee.create", {
@@ -1890,6 +1936,7 @@ hrmRouter.delete("/assign", requireRoles("admin", "office", "hr"), async (req, r
 hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const userId = req.params.id;
   const { email, fullName, role, phone, empCode, department, designation, password, isActive, ctcAnnual, basicMonthly, hraMonthly } = req.body;
+  const identityPatch = payslipIdentityPatch(req.body as Record<string, unknown>);
   const existing = await prisma.user.findUnique({ where: { id: userId } });
   if (!existing) return res.status(404).json({ error: "User not found" });
   const hrOnly = isHrDeskOnly(req.user?.email, req.user?.role) || req.user?.role === "hr";
@@ -1944,7 +1991,8 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
     designation === undefined &&
     ctcAnnual === undefined &&
     basicMonthly === undefined &&
-    hraMonthly === undefined
+    hraMonthly === undefined &&
+    !Object.keys(identityPatch).length
   ) {
     return res.status(400).json({ error: "Nothing to update" });
   }
@@ -1968,6 +2016,13 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (ctcAnnual === "" || ctcAnnual === null) profilePatch.ctcAnnual = null;
   if (basicMonthly === "" || basicMonthly === null) profilePatch.basicMonthly = null;
   if (hraMonthly === "" || hraMonthly === null) profilePatch.hraMonthly = null;
+  Object.assign(profilePatch, identityPatch);
+  if (profilePatch.ctcAnnual != null) {
+    const currentProfile = await prisma.employeeProfile.findUnique({ where: { userId }, select: { designation: true } });
+    const designationForCtc =
+      (profilePatch.designation as string | null | undefined) ?? currentProfile?.designation ?? null;
+    syncMonthlyFromCtc(profilePatch, designationForCtc);
+  }
   if (Object.keys(profilePatch).length) {
     const prefix = effectiveRole === "client" ? "CLT" : effectiveRole === "vendor" ? "VND" : "EMP";
     await prisma.employeeProfile.upsert({
@@ -1977,7 +2032,8 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
         empCode: (profilePatch.empCode as string) || `${prefix}-${Date.now().toString().slice(-6)}`,
         department: (profilePatch.department as string | null) ?? null,
         designation: (profilePatch.designation as string | null) ?? null,
-        joinDate: new Date(),
+        joinDate: (profilePatch.joinDate as Date) || new Date(),
+        ...profilePatch,
       },
       update: profilePatch,
     });

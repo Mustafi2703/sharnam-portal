@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "rea
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { UserAccountEditModal, type UserAccountRow } from "../../components/UserAccountEditModal";
+import { EmployeePayslipFields, EMPTY_PAYSLIP_SETUP, UserAccountEditModal, type PayslipSetup, type UserAccountRow } from "../../components/UserAccountEditModal";
 import { UserManageActions } from "../../components/UserManageActions";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
@@ -66,14 +66,16 @@ function AddUserModal({
   onError: (reason: ActionReason) => void;
 }) {
   const [form, setForm] = useState({ ...EMPTY_USER_FORM, ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
+  const [payslip, setPayslip] = useState<PayslipSetup>(EMPTY_PAYSLIP_SETUP);
   const [busy, setBusy] = useState(false);
 
   async function createUser() {
     setBusy(true);
     try {
-      await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify(form) });
+      await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify({ ...form, ...payslip }) });
       const email = form.email;
       setForm({ ...EMPTY_USER_FORM, ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
+      setPayslip(EMPTY_PAYSLIP_SETUP);
       await onCreated(email);
     } catch (err) {
       onError(actionReasonFromError("Could not create login", err));
@@ -129,9 +131,14 @@ function AddUserModal({
             </option>
           ))}
         </Select>
-        <Input type="number" placeholder="CTC annual (₹)" value={form.ctcAnnual} onChange={(ev) => setForm({ ...form, ctcAnnual: ev.target.value })} />
-        <Input type="number" placeholder="Basic monthly (₹)" value={form.basicMonthly} onChange={(ev) => setForm({ ...form, basicMonthly: ev.target.value })} />
-        <Input type="number" placeholder="HRA monthly (₹)" value={form.hraMonthly} onChange={(ev) => setForm({ ...form, hraMonthly: ev.target.value })} />
+        <label className="text-xs font-semibold text-steel-muted">
+          CTC annual (₹)
+          <Input className="mt-1" type="number" value={form.ctcAnnual} onChange={(ev) => setForm({ ...form, ctcAnnual: ev.target.value })} />
+          <span className="mt-1 block text-[10px] font-normal">Saving fills basic and HRA from the CTC calculator.</span>
+        </label>
+      </div>
+      <div className="mt-4">
+        <EmployeePayslipFields value={payslip} onChange={setPayslip} />
       </div>
     </RegisterEntryModal>
   );
