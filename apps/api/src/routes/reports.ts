@@ -19,7 +19,7 @@ import {
   buildDprPack,
   buildWprPack,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
+import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS } from "@sharnam/shared";
 import { isHrDeskOnly } from "../services/hrDesk.js";
 
 async function personFileStamp(userId: string) {
@@ -2953,6 +2953,32 @@ hrmRouter.get("/hrms-documents/:id/sharepoint", hrmDesk, async (req, res) => {
 hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedRequest, res) => {
   const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
+
+  if (row.kind === "Offer") {
+    const filed = new Set<string>();
+    if (row.employeeUserId) {
+      const empDocs = await prisma.employeeDocument.findMany({
+        where: { userId: row.employeeUserId },
+        select: { category: true },
+      });
+      for (const doc of empDocs) filed.add(doc.category);
+    }
+    const email = (row.candidateEmail || "").trim();
+    if (email) {
+      const candidate = await prisma.candidate.findFirst({
+        where: { email },
+        include: { documents: { select: { category: true } } },
+      });
+      for (const doc of candidate?.documents || []) filed.add(doc.category);
+    }
+    const missing = OFFER_REQUIRED_DOCUMENTS.filter((name) => !filed.has(name));
+    if (missing.length) {
+      return res.status(400).json({
+        error: `Upload these documents before the offer letter: ${missing.join(", ")}.`,
+        missing,
+      });
+    }
+  }
 
   const { generateHrmsLetter } = await import("../services/hrmsLetter.js");
   let gen: Awaited<ReturnType<typeof generateHrmsLetter>>;

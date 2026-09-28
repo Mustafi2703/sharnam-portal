@@ -447,7 +447,7 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
   res.json(row);
 });
 
-const BGV_CATEGORIES = ["PAN", "Aadhaar", "Bank", "Education", "Address proof", "Photo", "Other"] as const;
+const BGV_CATEGORIES = ["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"] as const;
 
 hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "office", "hr"), upload.single("file"), async (req: AuthedRequest, res) => {
   const before = await prisma.candidate.findUnique({ where: { id: req.params.id } });
@@ -491,6 +491,9 @@ hrmRecruitmentRouter.delete("/candidates/:id/documents/:docId", requireRoles("ad
   });
   if (!doc) return res.status(404).json({ error: "not found" });
   await prisma.candidateDocument.delete({ where: { id: doc.id } });
+  if (doc.fileUrl) {
+    await prisma.employeeDocument.deleteMany({ where: { fileUrl: doc.fileUrl } });
+  }
   await audit("hrms.candidate.document.delete", { userId: req.user!.id, entity: "CandidateDocument", entityId: doc.id, meta: { candidateId: req.params.id } });
   res.json({ ok: true });
 });

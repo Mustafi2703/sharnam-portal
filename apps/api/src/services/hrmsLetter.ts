@@ -117,6 +117,14 @@ export async function enrichHrmsLetterDataFromProfile(
   ]);
   if (!user && !profile) return data;
 
+  const email = String(row.candidateEmail || user?.email || "").trim();
+  const candidate = email
+    ? await prisma.candidate.findFirst({
+        where: { email },
+        select: { phone: true, location: true, expectedCtc: true },
+      })
+    : null;
+
   let reportingManager = "";
   if (profile?.reportingManagerId) {
     const mgr = await prisma.user.findUnique({ where: { id: profile.reportingManagerId }, select: { fullName: true } });
@@ -136,8 +144,10 @@ export async function enrichHrmsLetterDataFromProfile(
   pick("candidateName", row.employeeName, user?.fullName);
   pick("candidateEmail", row.candidateEmail, user?.email, profile?.personalEmail);
   pick("personalEmail", profile?.personalEmail, user?.email);
-  pick("phone", user?.phone, profile?.personalPhone);
-  pick("mobile", user?.phone, profile?.personalPhone);
+  pick("phone", user?.phone, profile?.personalPhone, candidate?.phone);
+  pick("mobile", user?.phone, profile?.personalPhone, candidate?.phone);
+  pick("location", candidate?.location);
+  pick("baseLocation", candidate?.location);
   pick("designation", row.designation, profile?.designation);
   pick("department", row.department, profile?.department);
   pick("empCode", profile?.empCode);
@@ -156,8 +166,8 @@ export async function enrichHrmsLetterDataFromProfile(
   pick("projectName", projectName);
   pick("project", projectName);
   pick("clientProject", projectName);
-  pick("ctcAnnual", profile?.ctcAnnual);
-  pick("fixedCtcAnnual", profile?.ctcAnnual);
+  pick("ctcAnnual", profile?.ctcAnnual, candidate?.expectedCtc);
+  pick("fixedCtcAnnual", profile?.ctcAnnual, candidate?.expectedCtc);
   pick("joinDate", profile?.joinDate, row.effectiveDate);
   pick("effectiveDate", row.effectiveDate, profile?.joinDate);
   pick("nomineeName", profile?.nomineeName);

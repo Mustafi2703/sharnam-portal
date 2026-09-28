@@ -728,7 +728,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       void uploadDocument(c);
                     }}
                   >
-                    <p className="md:col-span-4 text-[11px] text-steel-muted">Upload PAN and the other checks after you convert them. The files stay on the person and on the employee file. Then use Generate letters.</p>
+                    <p className="md:col-span-4 text-[11px] text-steel-muted">Offer letter stays locked until these are on SharePoint: PAN, Aadhaar, Education, Experience, Salary slips, Address proof, Photo, and Bank. Delete removes the test file.</p>
                     {(c.documents || []).map((d: any) => (
                       <span key={d.id} className="inline-flex items-center gap-2 text-xs">
                         <a href={mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand font-semibold">{d.category}</a>
@@ -738,7 +738,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       </span>
                     ))}
                     <Select value={docCategory} onChange={(e) => setDocCategory(e.target.value)}>
-                      {["PAN", "Aadhaar", "Bank", "Education", "Address proof", "Photo", "Other"].map((v) => (
+                      {["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank", "Other"].map((v) => (
                         <option key={v}>{v}</option>
                       ))}
                     </Select>

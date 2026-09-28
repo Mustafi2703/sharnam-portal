@@ -46,6 +46,22 @@ function rowFromBreakdown(breakdown: CtcBreakdown | null | undefined, labelInclu
   return hit?.perAnnum ?? 0;
 }
 
+function moneyFromBreakdown(breakdown: CtcBreakdown | null | undefined, labelIncludes: string, monthly: boolean): number {
+  if (!breakdown) return 0;
+  const all = [...breakdown.partA.rows, ...breakdown.partB.rows, ...breakdown.partC.rows];
+  const hit = all.find((r) => r.label.toLowerCase().includes(labelIncludes.toLowerCase()));
+  if (!hit) return 0;
+  if (!monthly) return Math.abs(hit.perAnnum || 0);
+  return typeof hit.perMonth === "number" ? Math.abs(hit.perMonth) : 0;
+}
+
+function deductionMonth(breakdown: CtcBreakdown | null | undefined): number {
+  if (!breakdown) return 0;
+  return breakdown.partC.rows
+    .filter((r) => r.label.toLowerCase().startsWith("less"))
+    .reduce((sum, r) => sum + (typeof r.perMonth === "number" ? Math.abs(r.perMonth) : 0), 0);
+}
+
 function genderTokens(gender: unknown) {
   const g = String(gender || "").trim().toLowerCase();
   if (g.startsWith("f")) {
@@ -87,16 +103,22 @@ export function buildHrmsDocxTokenMap(
   const currentCtc = Number(String(merged.previousCtc ?? merged.oldCtcAnnual ?? merged.currentCtc ?? "").replace(/[^\d.]/g, ""));
   const newCtc = Number(String(merged.newCtc ?? merged.newCtcAnnual ?? fixedCtc ?? "").replace(/[^\d.]/g, ""));
 
-  const basic = rowFromBreakdown(breakdown, "basic");
-  const hra = rowFromBreakdown(breakdown, "house rent");
-  const gross = breakdown?.partA.gross.perAnnum ?? 0;
-  const net = breakdown?.partC.indicativeNet.perAnnum ?? 0;
-  const conveyance = rowFromBreakdown(breakdown, "conveyance");
-  const medical = rowFromBreakdown(breakdown, "mediclaim");
-  const special = rowFromBreakdown(breakdown, "special");
-  const siteAllowance = rowFromBreakdown(breakdown, "site");
-  const deductions = breakdown?.partC.rows.reduce((s, r) => s + (r.perAnnum || 0), 0) ?? 0;
-  const employerContrib = breakdown?.partB.total.perAnnum ?? 0;
+  const offerMonthly = row.kind === "Offer";
+  const basic = moneyFromBreakdown(breakdown, "basic", offerMonthly);
+  const hra = moneyFromBreakdown(breakdown, "house rent", offerMonthly);
+  const conveyance = moneyFromBreakdown(breakdown, "conveyance", offerMonthly);
+  const lta = moneyFromBreakdown(breakdown, "leave travel", offerMonthly);
+  const children = moneyFromBreakdown(breakdown, "children", offerMonthly);
+  const specialParts = moneyFromBreakdown(breakdown, "special", offerMonthly) + lta + children;
+  const special = offerMonthly ? Math.max(0, Math.round(gross - basic - hra - conveyance)) : specialParts;
+  const gross = offerMonthly ? breakdown?.partA.gross.perMonth ?? 0 : breakdown?.partA.gross.perAnnum ?? 0;
+  const net = offerMonthly ? breakdown?.partC.indicativeNet.perMonth ?? 0 : breakdown?.partC.indicativeNet.perAnnum ?? 0;
+  const medical = offerMonthly ? 0 : rowFromBreakdown(breakdown, "mediclaim");
+  const siteAllowance = 0;
+  const deductions = offerMonthly
+    ? deductionMonth(breakdown)
+    : Math.abs(breakdown?.partC.rows.filter((r) => r.label.toLowerCase().startsWith("less")).reduce((s, r) => s + (r.perAnnum || 0), 0) ?? 0);
+  const employerContrib = offerMonthly ? breakdown?.partB.total.perMonth ?? 0 : breakdown?.partB.total.perAnnum ?? 0;
 
   const probation = String(merged.probationMonths || "6").trim();
   const probationNotice = String(merged.probationNotice || "15").trim();
@@ -153,9 +175,9 @@ export function buildHrmsDocxTokenMap(
     GROSS: inrPlain(gross),
     NET: inrPlain(net),
     CONVEYANCE: inrPlain(conveyance),
-    MEDICAL: inrPlain(medical),
+    MEDICAL: inrPlain(medical) || (offerMonthly ? "Nil" : ""),
     SPECIAL: inrPlain(special),
-    SITE_ALLOWANCE: inrPlain(siteAllowance),
+    SITE_ALLOWANCE: inrPlain(siteAllowance) || (offerMonthly ? "Nil" : ""),
     DEDUCTIONS: inrPlain(deductions),
     EMPLOYER_CONTRIB: inrPlain(employerContrib),
     PROBATION_MONTHS: probation,

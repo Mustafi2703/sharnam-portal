@@ -372,6 +372,7 @@ export {
   designationRow,
   designationsForDepartment,
   scorecardRoleForDesignation,
+  OFFER_REQUIRED_DOCUMENTS,
   type CandidateStageId,
   type InterviewerSeatId,
   type SpdcHiringRole,

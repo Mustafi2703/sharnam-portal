@@ -129,6 +129,20 @@ export function scorecardRoleForDesignation(title: string | null | undefined): S
   return SPDC_HIRING_ROLES[0];
 }
 
+/** Annexure C of the offer letter. The offer cannot be generated until each of these is on the person. */
+export const OFFER_REQUIRED_DOCUMENTS = [
+  "PAN",
+  "Aadhaar",
+  "Education",
+  "Experience",
+  "Salary slips",
+  "Address proof",
+  "Photo",
+  "Bank",
+] as const;
+
+export type OfferRequiredDocument = (typeof OFFER_REQUIRED_DOCUMENTS)[number];
+
 /** Seats on an HR interview meeting (interviewer side). Interviewee is always the candidate. */
 export const INTERVIEWER_SEATS = [
   { id: "Technical", label: "Technical interviewer" },
