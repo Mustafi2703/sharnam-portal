@@ -1525,19 +1525,68 @@ hrmRecruitmentRouter.get("/my-joining", async (req: AuthedRequest, res) => {
   });
 });
 
+/** Fill a blank checklist from the staff record so every joinee opens the same way. */
+async function hydratePreJoin(offerId: string) {
+  const offer = await prisma.offer.findUnique({
+    where: { id: offerId },
+    include: { candidate: true, onboard: true },
+  });
+  if (!offer) return null;
+  const email = (offer.candidate.email || "").trim().toLowerCase();
+  const staff = email ? await prisma.user.findUnique({ where: { email } }) : null;
+  const profile = staff ? await prisma.employeeProfile.findUnique({ where: { userId: staff.id } }) : null;
+  const linkedUserId = offer.onboard?.userId || staff?.id || null;
+  if (linkedUserId) {
+    await prisma.onboardingChecklist.upsert({
+      where: { offerId },
+      create: { offerId, userId: linkedUserId },
+      update: { userId: linkedUserId },
+    });
+  }
+  const appointment = await prisma.hrmsDocument.findFirst({
+    where: {
+      kind: "Appointment",
+      OR: [
+        ...(staff ? [{ employeeUserId: staff.id }] : []),
+        { employeeName: offer.candidate.fullName },
+        ...(email ? [{ candidateEmail: email }] : []),
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const existing = await prisma.preJoiningChecklist.upsert({
+    where: { offerId },
+    create: { offerId },
+    update: {},
+  });
+  const data: Record<string, unknown> = {};
+  if (!existing.empCodeGenerated && profile?.empCode) data.empCodeGenerated = profile.empCode;
+  if (!existing.emailAddress && (staff?.email || email)) {
+    data.emailAddress = staff?.email || email;
+    data.emailCreated = true;
+  }
+  const letterUrl = appointment?.sharePointUrl || appointment?.generatedDocxUrl || "";
+  if (!existing.appointmentLetterUrl && letterUrl) data.appointmentLetterUrl = letterUrl;
+  if (!existing.docCollectionDone) {
+    const docs = await prisma.candidateDocument.count({ where: { candidateId: offer.candidateId } });
+    if (docs > 0) {
+      data.docCollectionDone = true;
+      data.docCollectionAt = new Date();
+    }
+  }
+  const row = Object.keys(data).length
+    ? await prisma.preJoiningChecklist.update({ where: { id: existing.id }, data })
+    : existing;
+  return { ...row, linkedUserId };
+}
+
 hrmRecruitmentRouter.get("/pre-joining/:offerId", async (req: AuthedRequest, res) => {
   const { canAccessOffer } = await import("../services/joiningPortal.js");
   if (!(await canAccessOffer(req.user!, req.params.offerId))) {
     return res.status(404).json({ error: "not found" });
   }
-  const offer = await prisma.offer.findUnique({ where: { id: req.params.offerId } });
-  if (!offer) return res.status(404).json({ error: "not found" });
-  const row = await prisma.preJoiningChecklist.upsert({
-    where: { offerId: req.params.offerId },
-    create: { offerId: req.params.offerId },
-    update: {},
-    include: { offer: { include: { candidate: true } } },
-  });
+  const row = await hydratePreJoin(req.params.offerId);
+  if (!row) return res.status(404).json({ error: "not found" });
   res.json(row);
 });
 
@@ -1786,18 +1835,6 @@ hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office
   patch.itemsCompletedAtJson = JSON.stringify(stamps);
   const row = await prisma.onboardingChecklist.update({ where: { id: existing.id }, data: patch });
   await audit("hrms.onboarding.update", { userId: req.user!.id, entity: "OnboardingChecklist", entityId: row.id });
-  if (patch.hrPolicyAcknowledged === true) {
-    const filed = await fileHrPolicyAcknowledgement(req.params.offerId, req.user!.id);
-    if (filed) {
-      return res.json({
-        ...row,
-        hrPolicyAcknowledged: true,
-        itemsCompletedAt: { ...stamps, _hrPolicyUrl: filed.url, _hrPolicyFolder: filed.folder },
-        hrPolicyUrl: filed.url,
-        folder: filed.folder,
-      });
-    }
-  }
   res.json({ ...row, itemsCompletedAt: stamps });
 });
 
@@ -2173,6 +2210,8 @@ hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office", "hr"
  */
 hrmRecruitmentRouter.get("/employees/:userId/timeline", async (req, res) => {
   const userId = req.params.userId;
+  const offerId = String(req.query.offerId || "");
+  const candidateId = String(req.query.candidateId || "");
   try {
     const [own, related] = await Promise.all([
       prisma.auditEvent.findMany({
@@ -2181,7 +2220,13 @@ hrmRecruitmentRouter.get("/employees/:userId/timeline", async (req, res) => {
         take: 200,
       }),
       prisma.auditEvent.findMany({
-        where: { entity: "User", entityId: userId },
+        where: {
+          OR: [
+            { entityId: userId },
+            ...(candidateId ? [{ entityId: candidateId }, { metaJson: { contains: candidateId } }] : []),
+            ...(offerId ? [{ metaJson: { contains: offerId } }] : []),
+          ],
+        },
         orderBy: { createdAt: "desc" },
         take: 200,
       }),

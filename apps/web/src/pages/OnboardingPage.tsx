@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, apiBase, mediaUrl } from "../api";
+import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
@@ -151,47 +151,61 @@ function OfferOnboardingPage() {
   const [onboard, setOnboard] = useState<any | null>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
-  const [letterHtml, setLetterHtml] = useState("");
   const [logOpen, setLogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [staffUserId, setStaffUserId] = useState("");
+  const [form, setForm] = useState<any | null>(null);
+  const [day1, setDay1] = useState<Record<string, boolean> | null>(null);
+  const [notes, setNotes] = useState("");
   const [uploadBusy, setUploadBusy] = useState(false);
   const [vaultDocs, setVaultDocs] = useState<Array<{ id: string; category: string; title: string; fileUrl: string; storagePath?: string | null; createdAt: string }>>([]);
-  const signedUploadRef = useRef<HTMLInputElement | null>(null);
   const docUploadRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
     if (!offerId) return;
     const o = await api<any>(`/api/hrm/offers/${offerId}`, { token });
     setOffer(o);
+    let linked = o?.onboard?.userId || "";
     try {
-      setPreJoin(await api<any>(`/api/hrm/pre-joining/${offerId}`, { token }));
+      const pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, { token });
+      setPreJoin(pre);
+      setForm({
+        docCollectionDone: !!pre.docCollectionDone,
+        bgvStatus: pre.bgvStatus || "Pending",
+        medicalStatus: pre.medicalStatus || "Pending",
+        empCodeGenerated: pre.empCodeGenerated || "",
+        appointmentLetterUrl: pre.appointmentLetterUrl || "",
+        itAssetRequested: !!pre.itAssetRequested,
+        emailCreated: !!pre.emailCreated,
+        emailAddress: pre.emailAddress && pre.emailAddress !== "true" ? pre.emailAddress : o?.candidate?.email || "",
+        idCardRequested: !!pre.idCardRequested,
+        welcomeKitPrepared: !!pre.welcomeKitPrepared,
+      });
+      if (pre.linkedUserId) linked = pre.linkedUserId;
     } catch {
       setPreJoin(null);
+      setForm(null);
     }
     try {
       const onboardRow = await api<any>(`/api/hrm/onboarding/${offerId}`, { token });
       setOnboard(onboardRow);
+      if (onboardRow?.userId) linked = onboardRow.userId;
     } catch {
       setOnboard(null);
     }
-    if (o?.candidate) {
-      const docs = await api<any[]>(`/api/hrm/hrms-documents?kind=Appointment`, { token }).catch(() => []);
-      const person = String(o.candidate.fullName || "").trim().toLowerCase();
-      const mine = docs.find((d) => String(d.employeeName || "").trim().toLowerCase() === person);
-      if (mine?.id) {
-        const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${mine.id}/preview`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        if (res.ok) setLetterHtml(await res.text());
-      }
-    }
-    if (o?.onboard?.userId) {
-      const docs = await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(o.onboard.userId)}`, { token }).catch(() => []);
+    setStaffUserId(linked);
+    if (linked) {
+      const docs = await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(linked)}`, { token }).catch(() => []);
       setVaultDocs(docs);
     } else {
       setVaultDocs([]);
     }
-    if (o?.candidate?.id && canHrWrite) {
-      const events = await api<any[]>(`/api/hrm/employees/${o.candidate.id}/timeline`, { token }).catch(() => []);
+    if (canHrWrite && (linked || o?.candidate?.id)) {
+      const q = new URLSearchParams();
+      if (offerId) q.set("offerId", offerId);
+      if (o?.candidate?.id) q.set("candidateId", o.candidate.id);
+      const who = linked || o.candidate.id;
+      const events = await api<any[]>(`/api/hrm/employees/${who}/timeline?${q.toString()}`, { token }).catch(() => []);
       setTimeline(events);
     } else {
       setTimeline([]);
@@ -201,19 +215,56 @@ function OfferOnboardingPage() {
     void load();
   }, [offerId, token]);
 
-  async function updatePreJoin(patch: any) {
-    if (!offerId) return;
-    const r = await api<any>(`/api/hrm/pre-joining/${offerId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
-    setPreJoin(r);
-    setMsg("Pre-joining updated.");
-    await load();
-  }
-  async function updateOnboard(patch: any) {
-    if (!offerId) return;
-    const r = await api<any>(`/api/hrm/onboarding/${offerId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
-    setOnboard(r);
-    setMsg("Onboarding updated.");
-    await load();
+  useEffect(() => {
+    if (!onboard) {
+      setDay1(null);
+      return;
+    }
+    setDay1({
+      joiningFormalitiesDone: !!onboard.joiningFormalitiesDone,
+      personalInfoDone: !!onboard.personalInfoDone,
+      bankDetailsDone: !!onboard.bankDetailsDone,
+      panAadhaarDone: !!onboard.panAadhaarDone,
+      pfEsicDone: !!onboard.pfEsicDone,
+      nomineeDone: !!onboard.nomineeDone,
+      docVerificationDone: !!onboard.docVerificationDone,
+      departmentAllocated: !!onboard.departmentAllocated,
+      reportingManagerAssigned: !!onboard.reportingManagerAssigned,
+      orientationDone: !!onboard.orientationDone,
+      hrPolicyAcknowledged: !!onboard.hrPolicyAcknowledged,
+    });
+    setNotes(onboard.notes || "");
+  }, [onboard]);
+
+  async function saveChecklist() {
+    if (!offerId || !form) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({
+          ...form,
+          emailCreated: !!(form.emailCreated || form.emailAddress),
+        }),
+      });
+      setPreJoin(pre);
+      if (day1) {
+        const row = await api<any>(`/api/hrm/onboarding/${offerId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({ ...day1, notes }),
+        });
+        setOnboard(row);
+      }
+      setMsg("Checklist saved.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not save the checklist");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function uploadPreJoinDocs(files: FileList | null, category: string) {
@@ -251,7 +302,6 @@ function OfferOnboardingPage() {
   };
 
   const preJoinItems = useMemo((): PreJoinItem[] => {
-    if (!preJoin) return [];
     return [
       { key: "docCollectionDone", label: "1 · Document collection", candidate: true },
       { key: "bgvStatus", label: "2 · Background verification", hrOnly: true, picker: ["Pending", "In-Progress", "Cleared", "Failed"] },
@@ -263,7 +313,7 @@ function OfferOnboardingPage() {
       { key: "idCardRequested", label: "8 · ID card request", candidate: true },
       { key: "welcomeKitPrepared", label: "9 · Welcome kit ready", hrOnly: true, afterLetter: true },
     ];
-  }, [preJoin]);
+  }, []);
 
   function canEditPreJoinItem(item: PreJoinItem) {
     return canHrWrite;
@@ -310,21 +360,21 @@ function OfferOnboardingPage() {
     { key: "hrPolicyAcknowledged", label: "11 · HR policy acknowledged" },
   ];
 
-  const preDone = preJoin
+  const preDone = form
     ? [
-        preJoin.docCollectionDone,
-        preJoin.bgvStatus === "Cleared",
-        preJoin.medicalStatus === "Cleared" || preJoin.medicalStatus === "Not-Applicable",
-        !!preJoin.empCodeGenerated,
-        !!preJoin.appointmentLetterUrl,
-        preJoin.itAssetRequested,
-        preJoin.emailCreated,
-        preJoin.idCardRequested,
-        preJoin.welcomeKitPrepared,
+        form.docCollectionDone,
+        form.bgvStatus === "Cleared",
+        form.medicalStatus === "Cleared" || form.medicalStatus === "Not-Applicable",
+        !!form.empCodeGenerated,
+        !!form.appointmentLetterUrl,
+        form.itAssetRequested,
+        form.emailCreated || !!form.emailAddress,
+        form.idCardRequested,
+        form.welcomeKitPrepared,
       ].filter(Boolean).length
     : 0;
 
-  const onboardDone = onboard ? onboardItems.filter((i) => onboard[i.key]).length : 0;
+  const onboardDone = day1 ? onboardItems.filter((i) => day1[i.key]).length : 0;
   const preTotal = 9;
   const onboardTotal = onboardItems.length;
 
@@ -351,11 +401,7 @@ function OfferOnboardingPage() {
               onClick={async () => {
                 try {
                   const letter = await api<any>(`/api/hrm/offers/${offerId}/appointment-letter`, { method: "POST", token });
-                  setMsg(`Appointment ${letter.refNo} generated and filed under 06.02 Employee Files / ${offer?.candidate?.fullName}.`);
-                  const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/${letter.id}/preview`, {
-                    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                  });
-                  if (res.ok) setLetterHtml(await res.text());
+                  setMsg(`Appointment ${letter.refNo} filed. Open it from the checklist.`);
                   await load();
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Letter generate failed");
@@ -365,8 +411,8 @@ function OfferOnboardingPage() {
               Generate appointment letter
             </Button>
           ) : null}
-          {canHrWrite && offer?.onboard?.userId ? (
-            <Link to={`/hrm/files?userId=${offer.onboard.userId}`}>
+          {canHrWrite && staffUserId ? (
+            <Link to={`/hrm/files?userId=${staffUserId}`}>
               <Button variant="secondary">Employee files · upload PAN / payslip</Button>
             </Link>
           ) : null}
@@ -384,67 +430,7 @@ function OfferOnboardingPage() {
       </div>
       {msg && <p className="text-sm text-brand-dark">{msg}</p>}
 
-      {letterHtml ? (
-        <Card className="!p-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="font-semibold text-sm">Appointment letter · {offer?.candidate?.fullName}</div>
-              <p className="text-[11px] text-steel-muted">
-                Candidate name, designation, CTC and joining date merged into the SPDC letter. Filed under 06.02 Employee Files.
-              </p>
-            </div>
-            {preJoin?.appointmentLetterUrl ? (
-              <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
-                Open filed copy
-              </a>
-            ) : null}
-            {canHrWrite ? (
-              <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!text-xs"
-                  onClick={() => {
-                    signedUploadRef.current?.click();
-                  }}
-                >
-                  Upload signed copy
-                </Button>
-                <input
-                  ref={signedUploadRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,image/*"
-                  hidden
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file || !offerId) return;
-                    try {
-                      const fd = new FormData();
-                      fd.append("file", file);
-                      await api(`/api/hrm/offers/${offerId}/signed-appointment`, { method: "POST", token, body: fd });
-                      setMsg(`Signed appointment saved to employee docs and letters register.`);
-                      await load();
-                    } catch (err) {
-                      setMsg(err instanceof Error ? err.message : "Upload failed");
-                    } finally {
-                      if (signedUploadRef.current) signedUploadRef.current.value = "";
-                    }
-                  }}
-                />
-              </>
-            ) : null}
-          </div>
-          <iframe title="Appointment letter" srcDoc={letterHtml} className="w-full h-[520px] border-0 bg-white" />
-        </Card>
-      ) : (
-        <Card>
-          <p className="text-sm text-steel-muted">
-            {`Generate the appointment letter after steps 1–4 and IT / email / ID are done — preview ${offer?.candidate?.fullName || "the candidate"}'s name, designation, CTC and joining date on the SPDC letterhead.`}
-          </p>
-        </Card>
-      )}
-
-      {canHrWrite && preJoin ? (
+      {canHrWrite && form ? (
         <Card>
           <h3 className="font-semibold text-sm mb-1">Upload pre-joining documents</h3>
           <p className="text-[11px] text-steel-muted mb-3">
@@ -523,82 +509,89 @@ function OfferOnboardingPage() {
           <p className="text-[11px] text-steel-muted mb-3">
             Document collection · BGV · medical · employee code · appointment letter · IT asset · email · ID card · welcome kit
           </p>
-          {!preJoin && <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>}
-          {preJoin && (
+          {!form && <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>}
+          {form && (
             <ul className="space-y-2 text-sm">
               {preJoinItems.map((item) => {
                 const editable = canEditPreJoinItem(item);
-                const lockedAfterLetter = item.afterLetter && !preJoin.appointmentLetterUrl;
-                return (
-                <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
-                  {"text" in item && item.text ? (
-                    <>
-                      <span className="flex-1">
-                        {item.label}
-                      </span>
-                      {canHrWrite ? (
-                        <>
-                          <Input
-                            defaultValue={preJoin[item.key] || ""}
-                            onBlur={(e) => updatePreJoin({ [item.key]: e.target.value })}
-                            placeholder={item.boolTextKey ? "e.g. jane@spdc.in" : item.key === "empCodeGenerated" ? "SPDC-001" : ""}
-                            disabled={!editable || lockedAfterLetter}
-                            className="max-w-xs"
-                          />
-                          {item.key === "appointmentLetterUrl" && preJoin.appointmentLetterUrl ? (
-                            <a href={mediaUrl(preJoin.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs text-brand underline">
-                              Open
-                            </a>
-                          ) : null}
-                        </>
+                const lockedAfterLetter = item.afterLetter && !form.appointmentLetterUrl;
+                if (item.key === "appointmentLetterUrl") {
+                  return (
+                    <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
+                      <span className="flex-1">{item.label}</span>
+                      {form.appointmentLetterUrl ? (
+                        <a href={mediaUrl(form.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Open letter</a>
                       ) : (
-                        <span className="text-xs text-steel-muted tabular-nums">
-                          {item.key === "appointmentLetterUrl"
-                            ? preJoin.appointmentLetterUrl
-                              ? "Ready"
-                              : "Pending"
-                            : preJoin[item.key]
-                              ? String(preJoin[item.key])
-                              : preJoin[item.boolTextKey || ""] || "Pending"}
-                        </span>
+                        <span className="text-xs text-steel-muted">Not filed yet</span>
                       )}
-                    </>
-                  ) : "picker" in item && item.picker ? (
-                    <>
-                      <span className="flex-1">
-                        {item.label}
-                      </span>
-                      {canHrWrite ? (
-                        <select
-                          defaultValue={preJoin[item.key] || "Pending"}
-                          onChange={(e) => updatePreJoin({ [item.key]: e.target.value })}
-                          disabled={!editable}
-                          className="border border-line rounded px-2 py-1 text-xs"
-                        >
-                          {item.picker.map((p) => <option key={p}>{p}</option>)}
-                        </select>
-                      ) : (
-                        <Badge tone={preJoin[item.key] === "Cleared" ? "ok" : "neutral"}>{preJoin[item.key] || "Pending"}</Badge>
-                      )}
-                    </>
-                  ) : (
-                    <>
+                    </li>
+                  );
+                }
+                if (item.key === "emailCreated") {
+                  return (
+                    <li key={item.key} className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
                       <input
                         type="checkbox"
-                        checked={!!preJoin[item.key]}
-                        onChange={(e) => updatePreJoin({ [item.key]: e.target.checked })}
-                        disabled={!editable || lockedAfterLetter}
+                        checked={!!form.emailCreated}
+                        onChange={(e) => setForm({ ...form, emailCreated: e.target.checked })}
+                        disabled={!editable}
                       />
-                      <span className="flex-1">
-                        {item.label}
-                        {item.afterLetter && !preJoin.appointmentLetterUrl ? (
-                          <span className="block text-[10px] text-steel-muted">After appointment letter</span>
-                        ) : null}
-                      </span>
-                    </>
-                  )}
-                </li>
-              );
+                      <span className="flex-1">{item.label}</span>
+                      <Input
+                        value={form.emailAddress || ""}
+                        onChange={(e) => setForm({ ...form, emailAddress: e.target.value, emailCreated: !!e.target.value || form.emailCreated })}
+                        placeholder="name@spdc.in"
+                        disabled={!editable}
+                        className="max-w-xs"
+                      />
+                    </li>
+                  );
+                }
+                if (item.text) {
+                  return (
+                    <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
+                      <span className="flex-1">{item.label}</span>
+                      <Input
+                        value={form[item.key] || ""}
+                        onChange={(e) => setForm({ ...form, [item.key]: e.target.value })}
+                        placeholder="EMP-000"
+                        disabled={!editable}
+                        className="max-w-[10rem]"
+                      />
+                    </li>
+                  );
+                }
+                if (item.picker) {
+                  return (
+                    <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
+                      <span className="flex-1">{item.label}</span>
+                      <select
+                        value={form[item.key] || "Pending"}
+                        onChange={(e) => setForm({ ...form, [item.key]: e.target.value })}
+                        disabled={!editable}
+                        className="border border-line rounded px-2 py-1 text-xs"
+                      >
+                        {item.picker.map((p) => <option key={p}>{p}</option>)}
+                      </select>
+                    </li>
+                  );
+                }
+                return (
+                  <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
+                    <input
+                      type="checkbox"
+                      checked={!!form[item.key]}
+                      onChange={(e) => setForm({ ...form, [item.key]: e.target.checked })}
+                      disabled={!editable || lockedAfterLetter}
+                    />
+                    <span className="flex-1">
+                      {item.label}
+                      {item.afterLetter && !form.appointmentLetterUrl ? (
+                        <span className="block text-[10px] text-steel-muted">After the appointment letter is filed</span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
               })}
             </ul>
           )}
@@ -612,22 +605,20 @@ function OfferOnboardingPage() {
           reporting manager · orientation · HR policy
         </p>
         {!onboard && preJoinComplete && <p className="text-sm text-steel-muted">Loading onboarding checklist…</p>}
-        {onboard && (preJoinComplete || canHrWrite) && (
+        {day1 && (preJoinComplete || canHrWrite) && (
           <ul className="grid md:grid-cols-2 gap-2 text-sm">
             {onboardItems.map((item) => (
               <li key={item.key} className="flex items-start gap-2 border border-line rounded-lg px-3 py-2">
                 <input
                   type="checkbox"
-                  checked={!!onboard[item.key]}
-                  onChange={(e) => {
-                    void updateOnboard({ [item.key]: e.target.checked });
-                  }}
+                  checked={!!day1[item.key]}
+                  onChange={(e) => setDay1({ ...day1, [item.key]: e.target.checked })}
                   disabled={!canHrWrite}
                   className="mt-1"
                 />
                 <div className="flex-1">
                   <div>{item.label}</div>
-                  {onboard.itemsCompletedAt?.[item.key] && (
+                  {onboard?.itemsCompletedAt?.[item.key] && (
                     <div className="text-[10px] text-steel-muted mt-0.5">
                       Completed {new Date(onboard.itemsCompletedAt[item.key]).toLocaleString("en-IN")}
                     </div>
@@ -637,16 +628,23 @@ function OfferOnboardingPage() {
             ))}
           </ul>
         )}
-        {onboard && (preJoinComplete || canHrWrite) && (
+        {day1 && (preJoinComplete || canHrWrite) && (
           <TextArea
             rows={2}
             placeholder="Onboarding notes"
-            defaultValue={onboard.notes || ""}
-            onBlur={(e) => updateOnboard({ notes: e.target.value })}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             className="mt-3"
             disabled={!canHrWrite}
           />
         )}
+        {canHrWrite && form ? (
+          <div className="mt-4">
+            <Button type="button" disabled={saving} onClick={() => void saveChecklist()}>
+              {saving ? "Saving…" : "Save checklist"}
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       {canHrWrite ? (
