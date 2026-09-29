@@ -187,57 +187,74 @@ function OfferOnboardingPage() {
 
   const load = async () => {
     if (!offerId) return;
-    const o = await api<any>(`/api/hrm/offers/${offerId}`, { token });
-    setOffer(o);
-    let linked = o?.onboard?.userId || "";
-    let pre: any = null;
+    setMsg("");
     try {
-      pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, { token });
-      setPreJoin(pre);
-      setForm({
-        docCollectionDone: !!pre.docCollectionDone,
-        bgvStatus: pre.bgvStatus || "Pending",
-        medicalStatus: pre.medicalStatus || "Pending",
-        empCodeGenerated: pre.empCodeGenerated || "",
-        appointmentLetterUrl: pre.appointmentLetterUrl || "",
-        itAssetRequested: !!pre.itAssetRequested,
-        emailCreated: !!pre.emailCreated,
-        emailAddress: pre.emailAddress && pre.emailAddress !== "true" ? pre.emailAddress : o?.candidate?.email || "",
-        idCardRequested: !!pre.idCardRequested,
-        welcomeKitPrepared: !!pre.welcomeKitPrepared,
-      });
-      if (pre.linkedUserId) linked = pre.linkedUserId;
-    } catch {
-      setPreJoin(null);
-      setForm(null);
-    }
-    try {
-      const onboardRow = await api<any>(`/api/hrm/onboarding/${offerId}`, { token });
-      setOnboard(onboardRow);
-      if (onboardRow?.userId) linked = onboardRow.userId;
-    } catch {
-      setOnboard(null);
-    }
-    setStaffUserId(linked);
-    const fromCandidate = Array.isArray(pre?.candidateDocuments) ? pre.candidateDocuments : [];
-    const fromVault = linked
-      ? await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(linked)}`, { token }).catch(() => [])
-      : [];
-    const seen = new Set(fromVault.map((d) => d.fileUrl));
-    const merged = [...fromVault];
-    for (const d of fromCandidate) {
-      if (d?.fileUrl && !seen.has(d.fileUrl)) merged.push(d);
-    }
-    setVaultDocs(merged);
-    if (canHrWrite && (linked || o?.candidate?.id)) {
-      const q = new URLSearchParams();
-      if (offerId) q.set("offerId", offerId);
-      if (o?.candidate?.id) q.set("candidateId", o.candidate.id);
-      const who = linked || o.candidate.id;
-      const events = await api<any[]>(`/api/hrm/employees/${who}/timeline?${q.toString()}`, { token }).catch(() => []);
-      setTimeline(events);
-    } else {
-      setTimeline([]);
+      const o = await api<any>(`/api/hrm/offers/${offerId}`, { token });
+      setOffer(o);
+      let linked = o?.onboard?.userId || "";
+      let pre: any = null;
+      try {
+        pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, { token, timeoutMs: 30_000 });
+        setPreJoin(pre);
+        setForm({
+          docCollectionDone: !!pre.docCollectionDone,
+          bgvStatus: pre.bgvStatus || "Pending",
+          medicalStatus: pre.medicalStatus || "Pending",
+          empCodeGenerated: pre.empCodeGenerated || "",
+          appointmentLetterUrl: pre.appointmentLetterUrl || "",
+          itAssetRequested: !!pre.itAssetRequested,
+          emailCreated: !!pre.emailCreated,
+          emailAddress: pre.emailAddress && pre.emailAddress !== "true" ? pre.emailAddress : o?.candidate?.email || "",
+          idCardRequested: !!pre.idCardRequested,
+          welcomeKitPrepared: !!pre.welcomeKitPrepared,
+        });
+        if (pre.linkedUserId) linked = pre.linkedUserId;
+      } catch (err) {
+        setPreJoin(null);
+        setForm({
+          docCollectionDone: false,
+          bgvStatus: "Pending",
+          medicalStatus: "Pending",
+          empCodeGenerated: "",
+          appointmentLetterUrl: "",
+          itAssetRequested: false,
+          emailCreated: false,
+          emailAddress: o?.candidate?.email || "",
+          idCardRequested: false,
+          welcomeKitPrepared: false,
+        });
+        setMsg(err instanceof Error ? err.message : "Could not load the pre-joining checklist. Try again.");
+      }
+      try {
+        const onboardRow = await api<any>(`/api/hrm/onboarding/${offerId}`, { token });
+        setOnboard(onboardRow);
+        if (onboardRow?.userId) linked = onboardRow.userId;
+      } catch {
+        setOnboard(null);
+      }
+      setStaffUserId(linked);
+      const fromCandidate = Array.isArray(pre?.candidateDocuments) ? pre.candidateDocuments : [];
+      const fromVault = linked
+        ? await api<any[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(linked)}`, { token }).catch(() => [])
+        : [];
+      const seen = new Set(fromVault.map((d) => d.fileUrl));
+      const merged = [...fromVault];
+      for (const d of fromCandidate) {
+        if (d?.fileUrl && !seen.has(d.fileUrl)) merged.push(d);
+      }
+      setVaultDocs(merged);
+      if (canHrWrite && (linked || o?.candidate?.id)) {
+        const q = new URLSearchParams();
+        if (offerId) q.set("offerId", offerId);
+        if (o?.candidate?.id) q.set("candidateId", o.candidate.id);
+        const who = linked || o.candidate.id;
+        const events = await api<any[]>(`/api/hrm/employees/${who}/timeline?${q.toString()}`, { token }).catch(() => []);
+        setTimeline(events);
+      } else {
+        setTimeline([]);
+      }
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open this onboarding page");
     }
   };
   useEffect(() => {
@@ -581,7 +598,14 @@ function OfferOnboardingPage() {
           <p className="text-[11px] text-steel-muted mb-3">
             Document collection · BGV · medical · employee code · appointment letter · IT asset · email · ID card · welcome kit
           </p>
-          {!form && <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>}
+          {!form && (
+            <div className="space-y-2">
+              <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>
+              <Button type="button" variant="secondary" onClick={() => void load()}>
+                Retry
+              </Button>
+            </div>
+          )}
           {form && (
             <ul className="space-y-2 text-sm">
               {preJoinItems.map((item) => {

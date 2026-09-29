@@ -2006,16 +2006,15 @@ async function hydratePreJoin(offerId: string) {
     ? await prisma.preJoiningChecklist.update({ where: { id: existing.id }, data })
     : existing;
   if (linkedUserId) await mirrorCandidateDocsToStaff(offer.candidateId, linkedUserId);
-  try {
-    await ensurePersonRecords(offer.candidateId);
-  } catch (err) {
+  // SharePoint copies must not block opening the checklist (that was hanging the Onboarding page).
+  void ensurePersonRecords(offer.candidateId).catch((err) => {
     pushRuntimeLog({
       level: "error",
       source: "hrm.files",
       message: "Could not file this person's documents into the requisition and employee folders",
       detail: errorDetail(err),
     });
-  }
+  });
   const candidateDocuments = await prisma.candidateDocument.findMany({
     where: { candidateId: offer.candidateId },
     orderBy: { createdAt: "desc" },
