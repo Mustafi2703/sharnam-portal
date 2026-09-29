@@ -2077,10 +2077,12 @@ drawingsRouter.post(
 /** Upload Approval & GFC Drawing Log.xlsx → upsert GFC drawings + revision dates. */
 drawingsRouter.post(
   "/project/:projectId/gfc-log/import",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
-    if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload an .xlsx file (Approval & GFC Drawing Log)" });
+    if (!req.file?.buffer?.length) {
+      return res.status(400).json({ error: "Upload an .xlsx file (Approval & GFC Drawing Log)" });
+    }
     try {
       const { importGfcLogFromBuffer } = await import("../services/drawingRegisterSheets.js");
       const out = await importGfcLogFromBuffer(
@@ -2089,6 +2091,12 @@ drawingsRouter.post(
         req.user!.id,
         req.file.originalname || "Approval-GFC-upload.xlsx",
       );
+      if (!out.drawings) {
+        return res.status(400).json({
+          error: "No GFC rows imported — check the sheet has DISCIPLINE / DWG. NO. / TITLE / R0 columns.",
+          ...out,
+        });
+      }
       await audit("drawing.gfc_log.import", {
         userId: req.user!.id,
         entity: "Project",
@@ -2102,6 +2110,64 @@ drawingsRouter.post(
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
+  },
+);
+
+/** One-click UAT: load bundled Approval & GFC Drawing Log.xlsx from server module_prompts. */
+drawingsRouter.post(
+  "/project/:projectId/gfc-log/import-bundled",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { importGfcLogFromBundledWorkbook } = await import("../services/drawingRegisterSheets.js");
+      const out = await importGfcLogFromBundledWorkbook(req.params.projectId, req.user!.id);
+      await audit("drawing.gfc_log.import_bundled", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: req.params.projectId,
+        meta: out,
+      });
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(req.params.projectId))
+        .catch(() => undefined);
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+);
+
+/** Office edit of GFC register row metadata — PDF/DWG still via Upload rev / Update files. */
+drawingsRouter.patch(
+  "/drawing/:id",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const drawing = await prisma.drawing.findUnique({ where: { id: req.params.id } });
+    if (!drawing) return res.status(404).json({ error: "Drawing not found" });
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    for (const key of ["title", "discipline", "buildingArea", "tlNo", "currentRev", "status"] as const) {
+      if (body[key] !== undefined) data[key] = body[key] == null ? null : String(body[key]);
+    }
+    if (body.isPublished !== undefined) data.isPublished = Boolean(body.isPublished);
+    const updated = await prisma.drawing.update({ where: { id: drawing.id }, data });
+    await prisma.drawingRegisterLine
+      .updateMany({
+        where: { drawingId: drawing.id },
+        data: {
+          ...(body.title != null ? { drawingTitle: String(body.title) } : {}),
+          ...(body.discipline != null ? { discipline: String(body.discipline) } : {}),
+          ...(body.buildingArea != null ? { building: String(body.buildingArea) } : {}),
+        },
+      })
+      .catch(() => undefined);
+    await audit("drawing.update", {
+      userId: req.user!.id,
+      entity: "Drawing",
+      entityId: drawing.id,
+      meta: data,
+    });
+    res.json(updated);
   },
 );
 

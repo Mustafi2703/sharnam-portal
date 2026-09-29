@@ -397,47 +397,103 @@ export async function importMasterRegisterFromBuffer(
 }
 
 /**
- * Import Approval & GFC Drawing Log.xlsx — creates/updates Drawing rows (no fake PDF).
- * Revision date slots R0–Rn become DrawingRevision rows when a date is present.
+ * Import Approval & GFC Drawing Log.xlsx — creates/updates Drawing rows.
+ * R0–Rn date columns become DrawingRevision rows (dates only). PDF/DWG still go through Upload rev / Update files.
  */
 export async function importGfcLogFromBuffer(
   projectId: string,
   buffer: Buffer,
   uploadedById: string,
   sourceName = "gfc-upload.xlsx",
-): Promise<{ drawings: number; revisions: number; source: string }> {
+): Promise<{ drawings: number; revisions: number; source: string; skipped: number }> {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const sheetName = wb.SheetNames.find((n) => /^gfc$/i.test(n)) || wb.SheetNames[0];
-  if (!sheetName || !wb.Sheets[sheetName]) return { drawings: 0, revisions: 0, source: sourceName };
+  const sheetName =
+    wb.SheetNames.find((n) => /^gfc$/i.test(n)) ||
+    wb.SheetNames.find((n) => /approval|drawing.?log/i.test(n)) ||
+    wb.SheetNames[0];
+  if (!sheetName || !wb.Sheets[sheetName]) {
+    return { drawings: 0, revisions: 0, source: sourceName, skipped: 0 };
+  }
 
-  const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheetName], {
+  const rows = XLSX.utils.sheet_to_json<(string | number | Date)[]>(wb.Sheets[sheetName], {
     header: 1,
     defval: "",
+    raw: true,
   }) as unknown[][];
-  const headerIdx = rows.findIndex((r) => /discipline/i.test(String(r[0] ?? "")) && /dwg/i.test(String(r[3] ?? "")));
-  if (headerIdx < 0) return { drawings: 0, revisions: 0, source: sourceName };
+
+  const headerIdx = rows.findIndex((r) => {
+    const joined = r.map((c) => String(c ?? "").toLowerCase()).join("|");
+    return /discipline/.test(joined) && (/dwg/.test(joined) || /drawing\s*no/.test(joined));
+  });
+  if (headerIdx < 0) {
+    throw new Error(
+      "Could not find the GFC header row (DISCIPLINE / DWG. NO. / TITLE / R0…). Use Approval & GFC Drawing Log.xlsx.",
+    );
+  }
+
+  const header = rows[headerIdx] as unknown[];
+  const col = (re: RegExp, fallback: number) => {
+    const i = header.findIndex((c) => re.test(String(c ?? "")));
+    return i >= 0 ? i : fallback;
+  };
+  const iDisc = col(/discipline/i, 0);
+  const iBldg = col(/building|area/i, 1);
+  const iTl = col(/tl/i, 2);
+  const iDwg = col(/dwg|drawing\s*no/i, 3);
+  const iTitle = col(/^title$/i, 4);
+  const revSlots: number[] = [];
+  const seenRev = new Set<string>();
+  header.forEach((c, idx) => {
+    const m = String(c ?? "")
+      .trim()
+      .match(/^(R\d+)$/i);
+    if (!m) return;
+    const label = m[1].toUpperCase();
+    if (seenRev.has(label)) return; // workbook has a second R0–Rn block (counts) — keep first dates only
+    seenRev.add(label);
+    revSlots.push(idx);
+  });
+  // Fallback R0–R5 in columns 6–11 if header labels missing
+  if (!revSlots.length) {
+    for (let i = 6; i <= 11; i++) revSlots.push(i);
+  }
 
   let drawings = 0;
   let revisions = 0;
+  let skipped = 0;
+
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i] as unknown[];
-    const drawingNumber = String(r[3] ?? "").trim();
-    const title = String(r[4] ?? "").trim();
-    if (!drawingNumber || !title) continue;
-    if (/dwg\.?\s*no/i.test(drawingNumber)) continue;
+    const drawingNumber = String(r[iDwg] ?? "").trim();
+    const title = String(r[iTitle] ?? "").trim();
+    if (!drawingNumber || !title) {
+      skipped++;
+      continue;
+    }
+    if (/dwg\.?\s*no|drawing\s*no/i.test(drawingNumber) || /^title$/i.test(title)) {
+      skipped++;
+      continue;
+    }
 
-    const discipline = String(r[0] ?? "Architecture").trim() || "Architecture";
-    const buildingArea = String(r[1] ?? "").trim() || null;
-    const tlNo = String(r[2] ?? "").trim() || null;
+    let discipline = String(r[iDisc] ?? "Architecture").trim() || "Architecture";
+    if (/^architect/i.test(discipline)) discipline = "Architecture";
+    else if (/^struct/i.test(discipline)) discipline = "Structural";
+    else if (/mep|electrical|plumbing|hvac/i.test(discipline)) discipline = "MEPF";
+
+    const buildingArea = String(r[iBldg] ?? "").trim() || null;
+    const tlNo = String(r[iTl] ?? "").trim() || null;
 
     let currentRev = "R0";
-    const revDates: { slot: number; date: Date }[] = [];
-    for (let slot = 0; slot < 8; slot++) {
-      const d = cellDate(r[6 + slot]);
-      if (d) {
-        revDates.push({ slot, date: d });
-        currentRev = `R${slot}`;
-      }
+    const revDates: { revisionNumber: string; date: Date }[] = [];
+    for (const colIdx of revSlots) {
+      const label = String(header[colIdx] ?? "").trim().toUpperCase() || `R${revDates.length}`;
+      const revNum = /^R\d+$/i.test(label) ? label.toUpperCase() : `R${revDates.length}`;
+      const d = cellDate(r[colIdx]);
+      if (!d) continue;
+      // Ignore TOTAL / count columns mistaken as dates
+      if (d.getFullYear() < 1990) continue;
+      revDates.push({ revisionNumber: revNum, date: d });
+      currentRev = revNum;
     }
 
     const drawing = await prisma.drawing.upsert({
@@ -464,23 +520,33 @@ export async function importGfcLogFromBuffer(
     });
     drawings += 1;
 
-    for (const { slot, date } of revDates) {
-      const revisionNumber = `R${slot}`;
+    for (const { revisionNumber, date } of revDates) {
       const existing = await prisma.drawingRevision.findFirst({
         where: { drawingId: drawing.id, revisionNumber },
       });
       if (existing) {
         await prisma.drawingRevision.update({
           where: { id: existing.id },
-          data: { actualDate: date, plannedDate: existing.plannedDate || date },
+          data: {
+            actualDate: date,
+            plannedDate: existing.plannedDate || date,
+            // Keep real files if already uploaded; only fill placeholder when empty
+            ...(existing.fileUrl
+              ? {}
+              : {
+                  fileUrl: `/uploads/onedrive/pending/${drawingNumber}-${revisionNumber}.pdf`,
+                  fileName: `${drawingNumber}-${revisionNumber}.pdf`,
+                }),
+          },
         });
       } else {
         await prisma.drawingRevision.create({
           data: {
             drawingId: drawing.id,
             revisionNumber,
-            revisionLabel: `${revisionNumber} — imported`,
-            fileUrl: "",
+            revisionLabel: `${revisionNumber} — GFC log import`,
+            fileUrl: `/uploads/onedrive/pending/${drawingNumber}-${revisionNumber}.pdf`,
+            fileName: `${drawingNumber}-${revisionNumber}.pdf`,
             published: false,
             uploadedById,
             actualDate: date,
@@ -515,5 +581,25 @@ export async function importGfcLogFromBuffer(
       },
     });
   }
-  return { drawings, revisions, source: sourceName };
+  return { drawings, revisions, source: sourceName, skipped };
+}
+
+/** One-click UAT: import the bundled Approval & GFC Drawing Log.xlsx from module_prompts. */
+export async function importGfcLogFromBundledWorkbook(
+  projectId: string,
+  uploadedById: string,
+): Promise<{ drawings: number; revisions: number; source: string; skipped: number }> {
+  const file = findWorkbook([
+    "Approval  &  GFC Drawing Log.xlsx",
+    "Approval & GFC Drawing Log.xlsx",
+    "Approval-GFC-Drawing-Log.xlsx",
+  ]);
+  if (!file) {
+    throw new Error(
+      "Approval & GFC Drawing Log.xlsx not found on server. Upload the file with Import GFC log instead.",
+    );
+  }
+  const fs = await import("fs");
+  const buffer = fs.readFileSync(file);
+  return importGfcLogFromBuffer(projectId, buffer, uploadedById, path.basename(file));
 }

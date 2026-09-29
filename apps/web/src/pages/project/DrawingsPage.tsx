@@ -597,6 +597,60 @@ export default function DrawingsPage() {
               >
                 Master register →
               </Link>
+              <label className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-2 text-xs font-semibold text-ink hover:bg-sand/60 cursor-pointer">
+                {dumpBusy ? "Importing…" : "Import GFC log"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="sr-only"
+                  disabled={dumpBusy || clearBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f || !id) return;
+                    setDumpBusy(true);
+                    setMsg("Importing Approval & GFC Drawing Log… revision dates load; upload PDF/DWG with Upload rev after.");
+                    const fd = new FormData();
+                    fd.append("file", f);
+                    void api<{ drawings: number; revisions: number; source: string }>(
+                      `/api/drawings/project/${id}/gfc-log/import`,
+                      { method: "POST", token, body: fd, timeoutMs: 180_000 },
+                    )
+                      .then(async (out) => {
+                        setMsg(
+                          `GFC log imported — ${out.drawings} drawings, ${out.revisions} revision dates from ${out.source}. Use Upload rev / Update files for PDF/DWG.`,
+                        );
+                        await load();
+                      })
+                      .catch((err) => setMsg(err instanceof Error ? err.message : "GFC import failed"))
+                      .finally(() => setDumpBusy(false));
+                  }}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={dumpBusy || clearBusy}
+                onClick={() => {
+                  if (!id) return;
+                  setDumpBusy(true);
+                  setMsg("Loading bundled Approval & GFC Drawing Log for UAT…");
+                  void api<{ drawings: number; revisions: number; source: string }>(
+                    `/api/drawings/project/${id}/gfc-log/import-bundled`,
+                    { method: "POST", token, timeoutMs: 180_000 },
+                  )
+                    .then(async (out) => {
+                      setMsg(
+                        `UAT GFC loaded — ${out.drawings} drawings, ${out.revisions} revisions (${out.source}). Delete all rows when finished.`,
+                      );
+                      await load();
+                    })
+                    .catch((err) => setMsg(err instanceof Error ? err.message : "Bundled GFC import failed"))
+                    .finally(() => setDumpBusy(false));
+                }}
+              >
+                Load UAT GFC workbook
+              </Button>
               <Button type="button" variant="secondary" onClick={() => {
                 setAddRowForm((f) => ({
                   ...f,
@@ -1013,6 +1067,34 @@ export default function DrawingsPage() {
                           {canUpload && (
                             <Button type="button" variant="secondary" className="!px-2 !py-1 !text-xs" onClick={() => openUploadRev(d)}>
                               Upload rev
+                            </Button>
+                          )}
+                          {canUpload && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!px-2 !py-1 !text-xs"
+                              onClick={() => {
+                                const title = window.prompt("Drawing title", d.title || "");
+                                if (title == null) return;
+                                const buildingArea = window.prompt("Building / area", d.buildingArea || "") ?? d.buildingArea;
+                                const tlNo = window.prompt("TL No", d.tlNo || "") ?? d.tlNo;
+                                void (async () => {
+                                  try {
+                                    await api(`/api/drawings/drawing/${d.id}`, {
+                                      method: "PATCH",
+                                      token,
+                                      body: JSON.stringify({ title: title.trim() || d.title, buildingArea, tlNo }),
+                                    });
+                                    setMsg(`Updated ${d.drawingNumber}`);
+                                    await load();
+                                  } catch (err) {
+                                    setMsg(err instanceof Error ? err.message : "Could not edit drawing");
+                                  }
+                                })();
+                              }}
+                            >
+                              Edit
                             </Button>
                           )}
                           {canUpload && (
