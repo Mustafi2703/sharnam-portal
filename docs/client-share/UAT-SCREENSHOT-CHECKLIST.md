@@ -42,8 +42,13 @@ Replace `{PID}` with project id from URL after opening SPDC-DEMO-01.
 | 05c | `05c-vendor-fill-boq.png` | `/crm/vendor-bids` (vendor login) | Vendor fill BOQ online | Vendor |
 | 06 | `06-crm-convert-modal.png` | `/crm` | Convert to project modal open | Office |
 | 07 | `07-project-home.png` | `/projects/{PID}` | Project home + Load SPDC sheets | Office |
-| 08 | `08-drawings-gfc.png` | `/projects/{PID}/drawings/register` | GFC register | Office |
-| 09 | `09-drawings-upload.png` | `/projects/{PID}/drawings/upload-revision` | Drawing check + upload | Office |
+| 08 | `08-drawings-gfc.png` | `/projects/{PID}/drawings` | Approval & GFC log (after import) | Office |
+| 08a | `08a-drawings-dashboard.png` | `/projects/{PID}/drawings/register` | Register dashboard + **all charts** | Office |
+| 08b | `08b-drawings-master.png` | `/projects/{PID}/drawings/register?sheet=master` | Master Drawing Register sheet | Office |
+| 08c | `08c-drawings-publish-sp.png` | Register / GFC → Publish | SharePoint files listed | Office |
+| 09 | `09-drawings-upload.png` | `/projects/{PID}/drawings` Upload GFC | Drawing check + **A_10_101 R0 DWG** | Office |
+| 09a | `09a-drawings-r1.png` | Upload rev R1 | **A_10_101 R1 DWG** on same drawing | Office |
+| 09b | `09b-checklist-fill-log.png` | `/projects/{PID}/drawings/checklist-logs` | Drawing check Pre-upload fills | Office |
 | 10 | `10-dms-browse.png` | `/projects/{PID}/dms` | ISO folder tree + preview | Office |
 | 11 | `11-quality-dashboard.png` | `/projects/{PID}/inspections` | Quality dashboard | Office |
 | 12 | `12-qap.png` | `/projects/{PID}/qap` | QAP Week 50 grid | Office |
@@ -120,6 +125,7 @@ Capture DPR Maker once per discipline (can be thumbnails in one doc):
 |--------|:----------:|:-----------:|------|
 | CRM register + convert | 05–06 | ☐ | |
 | Drawings | 08–09 | ☐ | |
+| Drawings register + GFC + fill log (full pack) | See [DRAWING-REGISTER-UAT.md](./DRAWING-REGISTER-UAT.md) | ☐ | |
 | DPR (7 disciplines) | 22–23 + dpr-* | ☐ | |
 | Site mobile | 30–33 | ☐ | |
 | … | … | ☐ | |
