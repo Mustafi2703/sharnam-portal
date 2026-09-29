@@ -32,11 +32,10 @@ import {
   normalizeRevNumber,
 } from "../../lib/gfcRegister";
 import { MASTER_REGISTER_DISCIPLINES } from "../../lib/masterDrawingRegister";
+import { downloadAuthFile } from "../../lib/downloadReport";
 
 const GFC_DISCIPLINE_TABS = ["Architecture", "Structural", "MEPF"] as const;
 const GFC_REVISION_CHOICES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"] as const;
-
-const API_BASE = import.meta.env.VITE_API_URL || "";
 
 function fmtDate(d?: string | Date | null) {
   if (!d) return "—";
@@ -270,33 +269,30 @@ export default function DrawingsPage() {
   }, [uploadTarget, replaceRevisionId]);
   const revModalOpen = !!uploadForId && !!uploadTarget;
 
-  async function exportCsv() {
-    const res = await fetch(`${API_BASE}/api/drawings/project/${id}/export.csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (!res.ok) return setMsg("Export failed");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "gfc-drawing-log.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  async function exportGfcExcel() {
+    if (!id) return;
+    setMsg("");
+    try {
+      await downloadAuthFile(`/api/drawings/project/${id}/gfc-log/export.xlsx`, token, "Approval-GFC-Drawing-Log.xlsx");
+      setMsg("Approval & GFC log Excel downloaded.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Export failed");
+    }
   }
 
   async function syncRegistersToDrive() {
     if (!id) return;
     setDumpBusy(true);
-    setMsg("");
+    setMsg("Publishing Approval & GFC log and drawing register to SharePoint…");
     try {
-      const r = await api<{ ok: boolean; registers?: { name: string; rows: number }[] }>(
-        `/api/dms/${id}/dump-logs`,
-        { method: "POST", token }
-      );
-      const names = (r.registers || []).map((x) => x.name).slice(0, 4).join(", ");
-      setMsg(`Registers synced to SharePoint — ${r.registers?.length || 0} CSVs (e.g. ${names}…).`);
+      await api<{ ok: boolean; files?: string[] }>(`/api/drawings/project/${id}/publish-registers`, {
+        method: "POST",
+        token,
+        timeoutMs: 180_000,
+      });
+      setMsg("SharePoint updated — DRAWING-REGISTER-01.xlsx, Dashboard PDF, Approval-GFC-Drawing-Log.xlsx.");
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "SharePoint sync failed");
+      setMsg(err instanceof Error ? err.message : "SharePoint publish failed");
     } finally {
       setDumpBusy(false);
     }
@@ -585,12 +581,12 @@ export default function DrawingsPage() {
     <div className="space-y-4 min-w-0">
       <PageHeader
         dense
-        eyebrow="Drawings module · GFC"
-        title="GFC register"
+        eyebrow="Drawings module · Approval & GFC"
+        title="Approval & GFC drawing log"
         subtitle={
           clientOnly
-            ? "View published sheets and revision dates."
-            : "Upload PDF/DWG, revisions, and site receive/issue signatures. DCI master lines live under Master register."
+            ? "View published sheets and revision dates (Approval & GFC Drawing Log.xlsx layout)."
+            : "Upload PDF/DWG, revisions, and site receive/issue signatures — same columns as Approval & GFC Drawing Log.xlsx."
         }
         actions={
           canUpload ? (
@@ -678,32 +674,65 @@ export default function DrawingsPage() {
               Export & sync ▾
             </span>
           </summary>
-          <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-lg border border-line bg-paper shadow-lg p-2 space-y-1">
+          <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-line bg-paper shadow-lg p-2 space-y-1">
             <ReportExportButtons projectId={id} kind="drawings" label="Register" menu />
             <Button
               type="button"
               variant="ghost"
               className="w-full !justify-start !text-sm !py-2"
               onClick={(e) => {
-                void exportCsv();
+                void exportGfcExcel();
                 (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
               }}
             >
-              Export GFC CSV
+              Download GFC Excel
             </Button>
             {canUpload && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full !justify-start !text-sm !py-2"
-                disabled={dumpBusy}
-                onClick={(e) => {
-                  void syncRegistersToDrive();
-                  (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-                }}
-              >
-                {dumpBusy ? "Syncing…" : "Sync logs → SharePoint"}
-              </Button>
+              <>
+                <label className="flex w-full cursor-pointer items-center rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-sand/60">
+                  {dumpBusy ? "Working…" : "Upload GFC Excel"}
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="sr-only"
+                    disabled={dumpBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                      if (!f || !id) return;
+                      setDumpBusy(true);
+                      setMsg("Importing Approval & GFC log…");
+                      const fd = new FormData();
+                      fd.append("file", f);
+                      void api<{ drawings: number; revisions: number }>(`/api/drawings/project/${id}/gfc-log/import`, {
+                        method: "POST",
+                        token,
+                        body: fd,
+                        timeoutMs: 180_000,
+                      })
+                        .then(async (out) => {
+                          setMsg(`Imported ${out.drawings} drawings, ${out.revisions} new revision dates.`);
+                          await load();
+                        })
+                        .catch((err) => setMsg(err instanceof Error ? err.message : "GFC import failed"))
+                        .finally(() => setDumpBusy(false));
+                    }}
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full !justify-start !text-sm !py-2"
+                  disabled={dumpBusy}
+                  onClick={(e) => {
+                    void syncRegistersToDrive();
+                    (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                  }}
+                >
+                  {dumpBusy ? "Publishing…" : "Publish registers → SharePoint"}
+                </Button>
+              </>
             )}
           </div>
         </details>

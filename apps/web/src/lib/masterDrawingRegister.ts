@@ -123,6 +123,62 @@ export function masterRegisterPayload(form: MasterRegisterForm) {
   };
 }
 
+export function lineToMasterRegisterForm(row: {
+  srNo?: number | null;
+  projectPackage?: string | null;
+  building?: string | null;
+  discipline?: string | null;
+  drawingNumber?: string;
+  drawingTitle?: string;
+  drawingType?: string | null;
+  consultantName?: string | null;
+  revisionNumber?: string | null;
+  revisionDate?: string | Date | null;
+  revisionDescription?: string | null;
+  latestRevision?: string | null;
+  plannedSubmissionDate?: string | Date | null;
+  actualSubmissionDate?: string | Date | null;
+  submissionDelayDays?: number | null;
+  delayResponsibility?: string | null;
+  issuedTo?: string | null;
+  issueDate?: string | Date | null;
+  copiesCount?: number | null;
+  criticalDrawing?: string | null;
+  remarks?: string | null;
+}): MasterRegisterForm {
+  const day = (v?: string | Date | null) => {
+    if (!v) return "";
+    try {
+      return new Date(v).toISOString().slice(0, 10);
+    } catch {
+      return "";
+    }
+  };
+  return {
+    srNo: row.srNo != null ? String(row.srNo) : "",
+    projectPackage: row.projectPackage || "",
+    building: row.building || "",
+    discipline: row.discipline || "Architecture",
+    drawingNumber: row.drawingNumber || "",
+    drawingTitle: row.drawingTitle || "",
+    drawingType: row.drawingType || "Good For Construction (GFC)",
+    consultantName: row.consultantName || "",
+    revisionNumber: row.revisionNumber || "R0",
+    revisionDate: day(row.revisionDate),
+    revisionDescription: row.revisionDescription || "",
+    latestRevision: row.latestRevision || "Yes",
+    plannedSubmissionDate: day(row.plannedSubmissionDate),
+    actualSubmissionDate: day(row.actualSubmissionDate),
+    submissionDelayDays: row.submissionDelayDays != null ? String(row.submissionDelayDays) : "",
+    delayResponsibility: row.delayResponsibility || "",
+    issuedTo: row.issuedTo || "",
+    issueDate: day(row.issueDate),
+    copiesCount: row.copiesCount != null ? String(row.copiesCount) : "",
+    criticalDrawing: row.criticalDrawing || "No",
+    remarks: row.remarks || "",
+  };
+}
+
 export function uniqSorted(values: (string | null | undefined)[]) {
   return Array.from(new Set(values.map((v) => (v || "").trim()).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b)

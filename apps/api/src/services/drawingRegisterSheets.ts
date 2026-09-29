@@ -287,3 +287,233 @@ export async function syncDciArvindDrawings(
   }
   return { drawings, lines, source: path.basename(file) };
 }
+
+function cellDate(v: unknown): Date | null {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+  const serial = excelSerial(v);
+  if (serial) return serial;
+  const s = String(v).trim();
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Import Master Drawing Register rows from an uploaded DRAWING REGISTER - 01.xlsx buffer.
+ * Upserts register lines only — does not invent SharePoint PDF stubs.
+ */
+export async function importMasterRegisterFromBuffer(
+  projectId: string,
+  buffer: Buffer,
+  sourceName = "upload.xlsx",
+): Promise<{ lines: number; source: string }> {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const master =
+    wb.SheetNames.find((n) => /Master Drawing Register/i.test(n)) ||
+    wb.SheetNames.find((n) => /master/i.test(n)) ||
+    wb.SheetNames[0];
+  if (!master || !wb.Sheets[master]) return { lines: 0, source: sourceName };
+
+  const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[master], {
+    header: 1,
+    defval: "",
+  }) as unknown[][];
+  const headerIdx = rows.findIndex((r) => {
+    const a = String(r[0] ?? "").trim();
+    const e = String(r[4] ?? "").trim();
+    return a === "Sr #" || (/^sr/i.test(a) && /drawing/i.test(e));
+  });
+
+  let lines = 0;
+  for (let i = (headerIdx >= 0 ? headerIdx : 5) + 1; i < rows.length; i++) {
+    const r = rows[i] as unknown[];
+    const drawingNumber = String(r[4] ?? "").trim();
+    const title = String(r[5] ?? "").trim();
+    if (!drawingNumber || !title) continue;
+    if (/drawing number|title/i.test(drawingNumber)) continue;
+
+    const planned = cellDate(r[12]);
+    const actual = cellDate(r[13]);
+    let delayDays = n(r[14]);
+    if (!delayDays && planned && actual) {
+      delayDays = Math.ceil((actual.getTime() - planned.getTime()) / 86400000);
+    }
+
+    await prisma.drawingRegisterLine.upsert({
+      where: { projectId_drawingNumber: { projectId, drawingNumber } },
+      create: {
+        projectId,
+        srNo: n(r[0]) || lines + 1,
+        projectPackage: String(r[1] ?? "").trim() || null,
+        building: String(r[2] ?? "").trim() || null,
+        discipline: String(r[3] ?? "").trim() || null,
+        drawingNumber,
+        drawingTitle: title,
+        drawingType: String(r[6] ?? "").trim() || null,
+        consultantName: String(r[7] ?? "").trim() || null,
+        revisionNumber: String(r[8] ?? "").trim() || null,
+        revisionDate: cellDate(r[9]),
+        revisionDescription: String(r[10] ?? "").trim() || null,
+        latestRevision: String(r[11] ?? "").trim() || null,
+        plannedSubmissionDate: planned,
+        actualSubmissionDate: actual,
+        submissionDelayDays: delayDays || null,
+        delayResponsibility: String(r[15] ?? "").trim() || null,
+        issuedTo: String(r[16] ?? "").trim() || null,
+        issueDate: cellDate(r[17]),
+        copiesCount: n(r[18]) || null,
+        criticalDrawing: String(r[19] ?? "").trim() || null,
+        remarks: String(r[20] ?? "").trim() || null,
+        source: sourceName,
+      },
+      update: {
+        srNo: n(r[0]) || undefined,
+        projectPackage: String(r[1] ?? "").trim() || null,
+        building: String(r[2] ?? "").trim() || null,
+        discipline: String(r[3] ?? "").trim() || null,
+        drawingTitle: title,
+        drawingType: String(r[6] ?? "").trim() || null,
+        consultantName: String(r[7] ?? "").trim() || null,
+        revisionNumber: String(r[8] ?? "").trim() || null,
+        revisionDate: cellDate(r[9]),
+        revisionDescription: String(r[10] ?? "").trim() || null,
+        latestRevision: String(r[11] ?? "").trim() || null,
+        plannedSubmissionDate: planned,
+        actualSubmissionDate: actual,
+        submissionDelayDays: delayDays || null,
+        delayResponsibility: String(r[15] ?? "").trim() || null,
+        issuedTo: String(r[16] ?? "").trim() || null,
+        issueDate: cellDate(r[17]),
+        copiesCount: n(r[18]) || null,
+        criticalDrawing: String(r[19] ?? "").trim() || null,
+        remarks: String(r[20] ?? "").trim() || null,
+        source: sourceName,
+      },
+    });
+    lines += 1;
+  }
+  return { lines, source: sourceName };
+}
+
+/**
+ * Import Approval & GFC Drawing Log.xlsx — creates/updates Drawing rows (no fake PDF).
+ * Revision date slots R0–Rn become DrawingRevision rows when a date is present.
+ */
+export async function importGfcLogFromBuffer(
+  projectId: string,
+  buffer: Buffer,
+  uploadedById: string,
+  sourceName = "gfc-upload.xlsx",
+): Promise<{ drawings: number; revisions: number; source: string }> {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const sheetName = wb.SheetNames.find((n) => /^gfc$/i.test(n)) || wb.SheetNames[0];
+  if (!sheetName || !wb.Sheets[sheetName]) return { drawings: 0, revisions: 0, source: sourceName };
+
+  const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheetName], {
+    header: 1,
+    defval: "",
+  }) as unknown[][];
+  const headerIdx = rows.findIndex((r) => /discipline/i.test(String(r[0] ?? "")) && /dwg/i.test(String(r[3] ?? "")));
+  if (headerIdx < 0) return { drawings: 0, revisions: 0, source: sourceName };
+
+  let drawings = 0;
+  let revisions = 0;
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const r = rows[i] as unknown[];
+    const drawingNumber = String(r[3] ?? "").trim();
+    const title = String(r[4] ?? "").trim();
+    if (!drawingNumber || !title) continue;
+    if (/dwg\.?\s*no/i.test(drawingNumber)) continue;
+
+    const discipline = String(r[0] ?? "Architecture").trim() || "Architecture";
+    const buildingArea = String(r[1] ?? "").trim() || null;
+    const tlNo = String(r[2] ?? "").trim() || null;
+
+    let currentRev = "R0";
+    const revDates: { slot: number; date: Date }[] = [];
+    for (let slot = 0; slot < 8; slot++) {
+      const d = cellDate(r[6 + slot]);
+      if (d) {
+        revDates.push({ slot, date: d });
+        currentRev = `R${slot}`;
+      }
+    }
+
+    const drawing = await prisma.drawing.upsert({
+      where: { projectId_drawingNumber: { projectId, drawingNumber } },
+      create: {
+        projectId,
+        drawingNumber,
+        title,
+        discipline,
+        buildingArea,
+        tlNo,
+        currentRev,
+        status: "Draft",
+        isPublished: false,
+        folderPath: `Drawings/${discipline}`,
+      },
+      update: {
+        title,
+        discipline,
+        buildingArea,
+        tlNo,
+        currentRev,
+      },
+    });
+    drawings += 1;
+
+    for (const { slot, date } of revDates) {
+      const revisionNumber = `R${slot}`;
+      const existing = await prisma.drawingRevision.findFirst({
+        where: { drawingId: drawing.id, revisionNumber },
+      });
+      if (existing) {
+        await prisma.drawingRevision.update({
+          where: { id: existing.id },
+          data: { actualDate: date, plannedDate: existing.plannedDate || date },
+        });
+      } else {
+        await prisma.drawingRevision.create({
+          data: {
+            drawingId: drawing.id,
+            revisionNumber,
+            revisionLabel: `${revisionNumber} — imported`,
+            fileUrl: "",
+            published: false,
+            uploadedById,
+            actualDate: date,
+            plannedDate: date,
+          },
+        });
+        revisions += 1;
+      }
+    }
+
+    await prisma.drawingRegisterLine.upsert({
+      where: { projectId_drawingNumber: { projectId, drawingNumber } },
+      create: {
+        projectId,
+        drawingId: drawing.id,
+        building: buildingArea,
+        discipline,
+        drawingNumber,
+        drawingTitle: title,
+        drawingType: "Good For Construction (GFC)",
+        revisionNumber: currentRev,
+        latestRevision: "Yes",
+        source: sourceName,
+      },
+      update: {
+        drawingId: drawing.id,
+        drawingTitle: title,
+        building: buildingArea,
+        discipline,
+        revisionNumber: currentRev,
+        source: sourceName,
+      },
+    });
+  }
+  return { drawings, revisions, source: sourceName };
+}

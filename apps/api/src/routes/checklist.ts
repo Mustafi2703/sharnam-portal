@@ -175,6 +175,29 @@ checklistRouter.get("/templates", async (req, res) => {
   res.json(templates);
 });
 
+/** Re-import DrawingCheck templates from Drwing check master checklist.xlt.xls (editable afterward in master UI). */
+checklistRouter.post(
+  "/templates/reimport-drawing-check",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const { importDrawingCheckTemplatesFromWorkbook } = await import("../services/drawingCheckMasterImport.js");
+      const out = await importDrawingCheckTemplatesFromWorkbook();
+      if (!out.file) {
+        return res.status(404).json({ error: "Drwing check master checklist workbook not found on server." });
+      }
+      await audit("checklist.drawing_check.reimport", {
+        userId: req.user!.id,
+        entity: "ChecklistTemplate",
+        meta: out,
+      });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+);
+
 /**
  * Seed / re-seed the three SPDC HSE templates from
  * module_prompts/Sharnam_modules_docs 2/SPDC_Safety_Inspection_Request_and_Checklists.xlsx.

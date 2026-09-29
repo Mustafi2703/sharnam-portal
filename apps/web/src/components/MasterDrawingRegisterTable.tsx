@@ -39,6 +39,7 @@ export function MasterDrawingRegisterTable({
   canEdit,
   token,
   onLinePatched,
+  onEditLine,
   filterPackage,
   filterBuilding,
   filterDiscipline,
@@ -55,6 +56,7 @@ export function MasterDrawingRegisterTable({
   canEdit?: boolean;
   token?: string | null;
   onLinePatched?: () => void | Promise<void>;
+  onEditLine?: (row: any) => void;
   filterPackage: string;
   filterBuilding: string;
   filterDiscipline: string;
@@ -271,30 +273,40 @@ export function MasterDrawingRegisterTable({
                 </td>
                 <td>
                   {canEdit ? (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      className="!text-[10px] !px-2 !py-1"
-                      onClick={() => {
-                        if (!window.confirm(`Delete master line ${cleanDrawingNumber(r.drawingNumber)}?`)) return;
-                        const withDrawing =
-                          Boolean(r.drawing?.id) &&
-                          window.confirm("Also delete the linked GFC drawing and its revisions?");
-                        void (async () => {
-                          try {
-                            await api(
-                              `/api/drawings/register-lines/${r.id}${withDrawing ? "?drawing=1" : ""}`,
-                              { method: "DELETE", token },
-                            );
-                            await onLinePatched?.();
-                          } catch (err) {
-                            window.alert(err instanceof Error ? err.message : "Could not delete line");
-                          }
-                        })();
-                      }}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!text-[10px] !px-2 !py-1"
+                        onClick={() => onEditLine?.(r)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        className="!text-[10px] !px-2 !py-1"
+                        onClick={() => {
+                          if (!window.confirm(`Delete master line ${cleanDrawingNumber(r.drawingNumber)}?`)) return;
+                          const withDrawing =
+                            Boolean(r.drawing?.id) &&
+                            window.confirm("Also delete the linked GFC drawing and its revisions?");
+                          void (async () => {
+                            try {
+                              await api(
+                                `/api/drawings/register-lines/${r.id}${withDrawing ? "?drawing=1" : ""}`,
+                                { method: "DELETE", token },
+                              );
+                              await onLinePatched?.();
+                            } catch (err) {
+                              window.alert(err instanceof Error ? err.message : "Could not delete line");
+                            }
+                          })();
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   ) : (
                     "—"
                   )}

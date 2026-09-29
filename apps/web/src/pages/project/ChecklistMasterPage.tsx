@@ -271,6 +271,42 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         </div>
       )}
 
+      {effectiveLock === "DrawingCheck" && id && canEdit && (
+        <Card className="!p-4 border-brand/20 bg-brand-soft/30">
+          <p className="text-sm">
+            Line items come from <span className="font-semibold">Drwing check master checklist.xlt.xls</span>. You can edit or add lines here; use reload to refresh from the reference workbook without losing template names you added manually.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-2">
+            <button
+              type="button"
+              className="text-sm font-semibold text-brand underline"
+              disabled={syncPackBusy}
+              onClick={async () => {
+                setSyncPackBusy(true);
+                setMsg("");
+                try {
+                  const out = await api<{ file: string; templates: number; items: number }>(
+                    "/api/checklist/templates/reimport-drawing-check",
+                    { method: "POST", token },
+                  );
+                  setMsg(`Reloaded ${out.templates} checklist(s), ${out.items} lines from ${out.file}.`);
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Reload failed");
+                } finally {
+                  setSyncPackBusy(false);
+                }
+              }}
+            >
+              {syncPackBusy ? "Reloading…" : "Reload from drawing check master XLS"}
+            </button>
+            <Link to={`/projects/${id}/rfis?kind=DrawingChecklist&compose=1`} className="text-sm font-semibold text-brand">
+              Request checklist fill (RFI) →
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {family === "QualityInspection" && catalog.length > 0 && (
         <Card className="!p-4 border-brand/20 bg-brand-soft/30">
           <p className="text-sm">

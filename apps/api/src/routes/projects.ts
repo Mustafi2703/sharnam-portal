@@ -1975,77 +1975,135 @@ drawingsRouter.post(
 
 drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const lines = await prisma.drawingRegisterLine.findMany({
-    where: { projectId },
-    orderBy: { srNo: "asc" },
-    include: { drawing: { select: { id: true, isPublished: true, currentRev: true, drawingNumber: true } } },
-  });
-  const groupCount = (pick: (l: (typeof lines)[number]) => string) =>
-    Object.entries(
-      lines.reduce((acc: Record<string, number>, line) => {
-        const label = pick(line) || "Other";
-        acc[label] = (acc[label] || 0) + 1;
-        return acc;
-      }, {})
-    ).map(([label, value]) => ({ label, value }));
-
-  const byBuildingDiscipline: { building: string; discipline: string; count: number }[] = [];
-  const buildingMap = new Map<string, Map<string, number>>();
-  for (const line of lines) {
-    const building = (line.building || "—").trim() || "—";
-    const discipline = (line.discipline || "Other").trim() || "Other";
-    const row = buildingMap.get(building) || new Map<string, number>();
-    row.set(discipline, (row.get(discipline) || 0) + 1);
-    buildingMap.set(building, row);
-  }
-  for (const [building, discs] of buildingMap) {
-    for (const [discipline, count] of discs) byBuildingDiscipline.push({ building, discipline, count });
-  }
-
-  const delayByResponsibility = Object.entries(
-    lines.reduce((acc: Record<string, number>, line) => {
-      const label = (line.delayResponsibility || "").trim();
-      if (!label) return acc;
-      acc[label] = (acc[label] || 0) + (line.submissionDelayDays ?? 0);
-      return acc;
-    }, {})
-  ).map(([label, days]) => ({ label, days }));
-
-  const now = new Date();
-  const utc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const day = utc.getUTCDay() || 7;
-  utc.setUTCDate(utc.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-
+  const { loadRegisterPivotBundle } = await import("../services/drawingRegisterExport.js");
+  const bundle = await loadRegisterPivotBundle(projectId);
   res.json({
     dashboard: {
-      weekLabel: `Week ${week}`,
-      totalDrawings: lines.length,
+      weekLabel: bundle.weekLabel,
+      totalDrawings: bundle.totals.lines,
       source: "project-register",
     },
-    pivots: {
-      byBuildingDiscipline,
-      byDiscipline: groupCount((l) => l.discipline || "Other"),
-      byCritical: groupCount((l) => (/yes/i.test(l.criticalDrawing || "") ? "Yes" : "No")),
-      delayByResponsibility,
-      byConsultant: groupCount((l) => (l.consultantName || "").trim() || "—").filter((r) => r.label !== "—"),
-    },
-    totals: {
-      lines: lines.length,
-      gfc: lines.filter((l) => /gfc|good for construction/i.test(l.drawingType || "")).length,
-      critical: lines.filter((l) => /yes/i.test(l.criticalDrawing || "")).length,
-      linkedGfc: lines.filter((l) => l.drawingId).length,
-      delayed: lines.filter((l) => (l.submissionDelayDays ?? 0) > 0).length,
-    },
+    pivots: bundle.pivots,
+    totals: bundle.totals,
     charts: {
-      byDiscipline: groupCount((l) => l.discipline || "Other"),
-      byDrawingType: groupCount((l) => l.drawingType || "Other"),
-      byCritical: groupCount((l) => (l.criticalDrawing || "No").trim()),
+      byDiscipline: bundle.pivots.byDiscipline,
+      byDrawingType: Object.entries(
+        bundle.lines.reduce((acc: Record<string, number>, line) => {
+          const label = line.drawingType || "Other";
+          acc[label] = (acc[label] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([label, value]) => ({ label, value })),
+      byCritical: bundle.pivots.byCritical,
     },
-    lines,
+    lines: bundle.lines,
   });
 });
+
+drawingsRouter.get("/project/:projectId/register/export.xlsx", async (req, res) => {
+  const { buildDrawingRegisterWorkbookXlsx } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildDrawingRegisterWorkbookXlsx(req.params.projectId);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="DRAWING-REGISTER-01-${req.params.projectId}.xlsx"`);
+  res.send(buf);
+});
+
+drawingsRouter.get("/project/:projectId/register/dashboard.pdf", async (req, res) => {
+  const { buildDrawingRegisterDashboardPdf } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildDrawingRegisterDashboardPdf(req.params.projectId);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="DRAWING-REGISTER-Dashboard-${req.params.projectId}.pdf"`);
+  res.send(buf);
+});
+
+drawingsRouter.get("/project/:projectId/gfc-log/export.xlsx", async (req, res) => {
+  const { buildApprovalGfcLogXlsx } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildApprovalGfcLogXlsx(req.params.projectId);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="Approval-GFC-Drawing-Log-${req.params.projectId}.xlsx"`,
+  );
+  res.send(buf);
+});
+
+/** Publish DRAWING REGISTER-01.xlsx, Dashboard PDF, and Approval-GFC log to SharePoint (non-blocking after DB writes). */
+drawingsRouter.post(
+  "/project/:projectId/publish-registers",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    try {
+      const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
+      await publishDrawingRegistersToDrive(projectId);
+      res.json({ ok: true, files: ["DRAWING-REGISTER-01.xlsx", "DRAWING-REGISTER-Dashboard.pdf", "Approval-GFC-Drawing-Log.xlsx"] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message || "SharePoint publish failed" });
+    }
+  },
+);
+
+/** Upload DRAWING REGISTER - 01.xlsx → upsert Master Drawing Register lines. */
+drawingsRouter.post(
+  "/project/:projectId/register/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload an .xlsx file (DRAWING REGISTER - 01)" });
+    try {
+      const { importMasterRegisterFromBuffer } = await import("../services/drawingRegisterSheets.js");
+      const out = await importMasterRegisterFromBuffer(
+        req.params.projectId,
+        req.file.buffer,
+        req.file.originalname || "DRAWING-REGISTER-upload.xlsx",
+      );
+      await audit("drawing.register.import", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: req.params.projectId,
+        meta: out,
+      });
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(req.params.projectId))
+        .catch(() => undefined);
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+);
+
+/** Upload Approval & GFC Drawing Log.xlsx → upsert GFC drawings + revision dates. */
+drawingsRouter.post(
+  "/project/:projectId/gfc-log/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload an .xlsx file (Approval & GFC Drawing Log)" });
+    try {
+      const { importGfcLogFromBuffer } = await import("../services/drawingRegisterSheets.js");
+      const out = await importGfcLogFromBuffer(
+        req.params.projectId,
+        req.file.buffer,
+        req.user!.id,
+        req.file.originalname || "Approval-GFC-upload.xlsx",
+      );
+      await audit("drawing.gfc_log.import", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: req.params.projectId,
+        meta: out,
+      });
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(req.params.projectId))
+        .catch(() => undefined);
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+);
 
 async function unlinkAndDeleteDrawings(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],

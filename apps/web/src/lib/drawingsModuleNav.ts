@@ -11,7 +11,7 @@ export type DrawingsNavItem = {
 
 export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
   { key: "hub", label: "Module hub", to: "hub/drawings" },
-  { key: "gfc", label: "GFC register", to: "drawings" },
+  { key: "gfc", label: "Approval & GFC log", to: "drawings" },
   { key: "markup", label: "Markup", to: "drawings/coordination" },
   { key: "register", label: "Register dashboard", to: "drawings/register" },
   { key: "register-master", label: "Master register", to: "drawings/register", query: "sheet=master" },

@@ -49,11 +49,15 @@ export function MasterDrawingRegisterForm({
   form,
   onChange,
   onSubmit,
+  editingId = null,
+  onCancelEdit,
 }: {
   projectId: string;
   form: MasterRegisterForm;
   onChange: (next: MasterRegisterForm) => void;
   onSubmit: (e: FormEvent) => void;
+  editingId?: string | null;
+  onCancelEdit?: () => void;
 }) {
   const set = (patch: Partial<MasterRegisterForm>) => onChange({ ...form, ...patch });
 
@@ -76,12 +80,14 @@ export function MasterDrawingRegisterForm({
     <div className="sheet-register overflow-hidden">
       <div className="sheet-register__head flex-col sm:flex-row sm:items-start gap-2">
         <div>
-          <div className="font-display text-sm text-ink">Add master register line</div>
+          <div className="font-display text-sm text-ink">
+            {editingId ? `Edit master line · ${form.drawingNumber || "…"}` : "Add master register line"}
+          </div>
           <p className="text-xs font-normal text-steel-muted mt-1 max-w-2xl">
             Full DCI row from <strong>Master Drawing Register</strong> sheet — separate from GFC file upload. After
             saving, upload PDF/DWG on{" "}
             <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">
-              GFC register
+              Approval & GFC log
             </Link>{" "}
             with the same drawing number to link files.
           </p>
@@ -242,7 +248,12 @@ export function MasterDrawingRegisterForm({
         </Section>
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button type="submit">Save master line</Button>
+          <Button type="submit">{editingId ? "Save changes" : "Save master line"}</Button>
+          {editingId && onCancelEdit && (
+            <Button type="button" variant="secondary" onClick={onCancelEdit}>
+              Cancel edit
+            </Button>
+          )}
           <Button
             type="button"
             variant="secondary"

@@ -1,6 +1,11 @@
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
+import {
+  buildApprovalGfcLogXlsx,
+  buildDrawingRegisterDashboardPdf,
+  buildDrawingRegisterWorkbookXlsx,
+} from "./drawingRegisterExport.js";
 
 function csvCell(value: unknown) {
   const text = value == null ? "" : String(value);
@@ -19,16 +24,37 @@ function day(value: Date | null | undefined) {
   return d.toISOString().slice(0, 10);
 }
 
-/** Live drawing register, GFC log, and drawing-check fills — filed on the project SharePoint drawings folder. */
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PDF_MIME = "application/pdf";
+
+/** Live drawing registers — Excel + PDF on project SharePoint (DRAWING REGISTER - 01 + Approval & GFC log). */
 export async function publishDrawingRegistersToDrive(projectId: string) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
   if (!project) return;
   const folder = MODULE_TO_ISO_FOLDER.drawings;
+
+  const [registerXlsx, gfcXlsx, dashboardPdf] = await Promise.all([
+    buildDrawingRegisterWorkbookXlsx(projectId),
+    buildApprovalGfcLogXlsx(projectId),
+    buildDrawingRegisterDashboardPdf(projectId),
+  ]);
+
+  await mockOneDrive.upload(project.code, folder, "DRAWING-REGISTER-01.xlsx", registerXlsx, XLSX_MIME, {
+    replace: true,
+  });
+  await mockOneDrive.upload(project.code, folder, "DRAWING-REGISTER-Dashboard.pdf", dashboardPdf, PDF_MIME, {
+    replace: true,
+  });
+  await mockOneDrive.upload(project.code, folder, "Approval-GFC-Drawing-Log.xlsx", gfcXlsx, XLSX_MIME, {
+    replace: true,
+  });
+
+  // Lightweight CSV log for drawing-check fills (audit trail)
   const lines = await prisma.drawingRegisterLine.findMany({
     where: { projectId },
     orderBy: [{ srNo: "asc" }, { drawingNumber: "asc" }],
   });
-  const register = csv([
+  const registerCsv = csv([
     [
       "Sr",
       "Package",
@@ -39,17 +65,10 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
       "Type",
       "Consultant",
       "Revision",
-      "Revision date",
-      "Latest",
       "Planned",
       "Actual",
       "Delay days",
-      "Delay responsibility",
-      "Issued to",
-      "Issue date",
-      "Copies",
       "Critical",
-      "Remarks",
     ],
     ...lines.map((line) => [
       line.srNo ?? "",
@@ -61,35 +80,10 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
       line.drawingType ?? "",
       line.consultantName ?? "",
       line.revisionNumber ?? "",
-      day(line.revisionDate),
-      line.latestRevision ?? "",
       day(line.plannedSubmissionDate),
       day(line.actualSubmissionDate),
       line.submissionDelayDays ?? "",
-      line.delayResponsibility ?? "",
-      line.issuedTo ?? "",
-      day(line.issueDate),
-      line.copiesCount ?? "",
       line.criticalDrawing ?? "",
-      line.remarks ?? "",
-    ]),
-  ]);
-
-  const drawings = await prisma.drawing.findMany({
-    where: { projectId },
-    include: { revisions: { orderBy: { createdAt: "asc" } } },
-    orderBy: { drawingNumber: "asc" },
-  });
-  const gfc = csv([
-    ["Discipline", "Building", "Drawing No", "Title", "Current rev", "Published", "Revisions"],
-    ...drawings.map((d) => [
-      d.discipline || "",
-      d.buildingArea || "",
-      d.drawingNumber,
-      d.title,
-      d.currentRev || "",
-      d.isPublished ? "Yes" : "No",
-      d.revisions.map((r) => r.revisionNumber).join(" "),
     ]),
   ]);
 
@@ -110,8 +104,15 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
     ]),
   ]);
 
-  const mime = "text/csv";
-  await mockOneDrive.upload(project.code, folder, "DRAWING-REGISTER.csv", Buffer.from(register, "utf8"), mime, { replace: true });
-  await mockOneDrive.upload(project.code, folder, "Approval-GFC-Drawing-Log.csv", Buffer.from(gfc, "utf8"), mime, { replace: true });
-  await mockOneDrive.upload(project.code, folder, "Drawing-Check-Master-Log.csv", Buffer.from(checkCsv, "utf8"), mime, { replace: true });
+  await mockOneDrive.upload(project.code, folder, "DRAWING-REGISTER.csv", Buffer.from(registerCsv, "utf8"), "text/csv", {
+    replace: true,
+  });
+  await mockOneDrive.upload(
+    project.code,
+    folder,
+    "Drawing-Check-Master-Log.csv",
+    Buffer.from(checkCsv, "utf8"),
+    "text/csv",
+    { replace: true },
+  );
 }

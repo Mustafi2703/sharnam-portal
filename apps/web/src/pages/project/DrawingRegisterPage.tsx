@@ -2,17 +2,18 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { DrawingRegisterCharts } from "../../components/DrawingRegisterCharts";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
-import { Badge, Card, PageHeader } from "../../components/ui";
+import { Badge, Button, Card, PageHeader } from "../../components/ui";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { drawingRegisterSheetFromParams } from "../../lib/drawingRegisterViews";
 import {
   emptyMasterRegisterForm,
+  lineToMasterRegisterForm,
   masterRegisterPayload,
   type MasterRegisterForm,
 } from "../../lib/masterDrawingRegister";
-
-const API_BASE = import.meta.env.VITE_API_URL || "";
 
 function PivotTable({
   title,
@@ -85,8 +86,18 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
           </Card>
         ))}
       </div>
+      <DrawingRegisterCharts
+        byDiscipline={data.pivots?.byDiscipline || []}
+        byCritical={data.pivots?.byCritical || []}
+        delayByResponsibility={data.pivots?.delayByResponsibility || []}
+        byConsultant={data.pivots?.byConsultant || []}
+        byPackage={data.pivots?.byPackage || []}
+        byBuilding={data.pivots?.byBuilding || []}
+        byDrawingType={data.pivots?.byDrawingType || data.charts?.byDrawingType || []}
+        byBuildingDiscipline={data.pivots?.byBuildingDiscipline || []}
+      />
       <p className="text-xs text-steel-muted">
-        Same pivots as DRAWING REGISTER - 01.xlsx Dashboard: building × discipline, discipline totals, critical drawings, delay responsibility, and consultant. Numbers are this project's register only.
+        Same pivots as DRAWING REGISTER - 01.xlsx Dashboard. Excel and PDF exports match the workbook layout and file to SharePoint when you publish.
       </p>
       <div className="grid lg:grid-cols-2 gap-4">
         <PivotTable title="Building × discipline" headers={["Building", "Discipline", "Count"]} rows={buildingRows} />
@@ -113,6 +124,9 @@ export default function DrawingRegisterPage() {
   const [filterBuilding, setFilterBuilding] = useState("All");
   const [filterDiscipline, setFilterDiscipline] = useState("All");
   const [filterCritical, setFilterCritical] = useState("All");
+  const [publishBusy, setPublishBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
 
   const load = async () => {
@@ -132,24 +146,56 @@ export default function DrawingRegisterPage() {
   }, [id, token, sheetKey]);
 
   useEffect(() => {
-    if (filterDiscipline !== "All") {
+    if (filterDiscipline !== "All" && !editingId) {
       setForm((f) => ({ ...f, discipline: filterDiscipline, drawingType: "Good For Construction (GFC)" }));
     }
-  }, [filterDiscipline]);
+  }, [filterDiscipline, editingId]);
 
-  async function addLine(e: FormEvent) {
+  async function saveLine(e: FormEvent) {
     e.preventDefault();
     try {
-      await api(`/api/drawings/project/${id}/register-lines`, {
-        method: "POST",
-        token,
-        body: JSON.stringify(masterRegisterPayload(form)),
-      });
-      setMsg(`Master line ${form.drawingNumber} saved`);
+      if (editingId) {
+        await api(`/api/drawings/register-lines/${editingId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify(masterRegisterPayload(form)),
+        });
+        setMsg(`Updated ${form.drawingNumber}`);
+        setEditingId(null);
+      } else {
+        await api(`/api/drawings/project/${id}/register-lines`, {
+          method: "POST",
+          token,
+          body: JSON.stringify(masterRegisterPayload(form)),
+        });
+        setMsg(`Master line ${form.drawingNumber} saved`);
+      }
       setForm({ ...emptyMasterRegisterForm(), projectPackage: form.projectPackage, building: form.building });
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function importRegisterFile(file: File | null) {
+    if (!file || !id) return;
+    setImportBusy(true);
+    setMsg("Importing master register from Excel…");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const out = await api<{ lines: number; source: string }>(`/api/drawings/project/${id}/register/import`, {
+        method: "POST",
+        token,
+        body: fd,
+        timeoutMs: 180_000,
+      });
+      setMsg(`Imported ${out.lines} master lines from ${out.source}. Charts refresh below.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -180,15 +226,81 @@ export default function DrawingRegisterPage() {
         title={sheetView.label}
         subtitle={
           sheetKey === "master"
-            ? "Master Drawing Register — full DCI schedule from DRAWING REGISTER - 01.xlsx. Add/edit lines here; upload PDF/DWG on GFC register only."
-            : "Drawing Register Dashboard — counts from this project's master register, in the workbook pivot layout."
+            ? "Master Drawing Register — DCI schedule from DRAWING REGISTER - 01.xlsx. Upload PDF/DWG on Approval & GFC log only."
+            : "Drawing Register Dashboard — DRAWING REGISTER - 01.xlsx layout. Site register tab is not used."
         }
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="brand">{data?.totals?.lines ?? 0} lines</Badge>
             <Badge tone="ok">{data?.totals?.gfc ?? 0} GFC</Badge>
+            {sheetKey === "" && id && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={() =>
+                    void downloadAuthFile(
+                      `/api/drawings/project/${id}/register/export.xlsx`,
+                      token,
+                      "DRAWING-REGISTER-01.xlsx",
+                    )
+                  }
+                >
+                  Excel (01)
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={() =>
+                    void downloadAuthFile(
+                      `/api/drawings/project/${id}/register/dashboard.pdf`,
+                      token,
+                      "DRAWING-REGISTER-Dashboard.pdf",
+                    )
+                  }
+                >
+                  Dashboard PDF
+                </Button>
+              </>
+            )}
+            {canEdit && id && (
+              <>
+                <label className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60 cursor-pointer">
+                  {importBusy ? "Importing…" : "Upload Excel"}
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="sr-only"
+                    disabled={importBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      e.target.value = "";
+                      void importRegisterFile(f);
+                    }}
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  disabled={publishBusy}
+                  onClick={() => {
+                    setPublishBusy(true);
+                    setMsg("Publishing registers to SharePoint…");
+                    void api(`/api/drawings/project/${id}/publish-registers`, { method: "POST", token, timeoutMs: 180_000 })
+                      .then(() => setMsg("SharePoint updated — DRAWING-REGISTER-01.xlsx, Dashboard PDF, Approval-GFC log."))
+                      .catch((err) => setMsg(err instanceof Error ? err.message : "Publish failed"))
+                      .finally(() => setPublishBusy(false));
+                  }}
+                >
+                  {publishBusy ? "Publishing…" : "Publish → SharePoint"}
+                </Button>
+              </>
+            )}
             <Link to={`/projects/${id}/drawings`} className="text-sm font-semibold text-brand">
-              GFC register (upload) →
+              Approval & GFC log →
             </Link>
             <Link to={`/projects/${id}/hub/drawings`} className="text-sm font-semibold text-brand">
               Drawings hub →
@@ -206,7 +318,17 @@ export default function DrawingRegisterPage() {
 
       {sheetKey === "master" && canEdit && (
         <div className="shrink-0">
-        <MasterDrawingRegisterForm projectId={id!} form={form} onChange={setForm} onSubmit={addLine} />
+        <MasterDrawingRegisterForm
+          projectId={id!}
+          form={form}
+          onChange={setForm}
+          onSubmit={saveLine}
+          editingId={editingId}
+          onCancelEdit={() => {
+            setEditingId(null);
+            setForm(emptyMasterRegisterForm());
+          }}
+        />
         </div>
       )}
 
@@ -219,6 +341,11 @@ export default function DrawingRegisterPage() {
           canEdit={canEdit}
           token={token}
           onLinePatched={load}
+          onEditLine={(row) => {
+            setEditingId(row.id);
+            setForm(lineToMasterRegisterForm(row));
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
           filterPackage={filterPackage}
           filterBuilding={filterBuilding}
           filterDiscipline={filterDiscipline}
@@ -240,32 +367,12 @@ export default function DrawingRegisterPage() {
       {sheetKey === "" && (
         <Card className="text-sm text-steel-muted">
           <p>
-            Counts above come from lines saved on this project. The Excel file's Package A / Tower 1 rows are a sample and are not loaded here. Use <strong>Master register</strong> for the DCI columns, then upload PDF/DWG via{" "}
+            Counts and charts above come from master register lines on this project. Use <strong>Master register</strong> for DCI columns, then upload on{" "}
             <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
-              GFC register
+              Approval & GFC log
             </Link>{" "}
-            after Drawing Check Master unlocks.
+            after Drawing Check Master unlocks. Publish writes the formatted Excel and PDF to the project drawings folder on SharePoint.
           </p>
-          <a
-            href={`${API_BASE}/api/drawings/project/${id}/export.csv`}
-            className="inline-block mt-3 text-brand font-semibold text-sm"
-            onClick={(e) => {
-              e.preventDefault();
-              void fetch(`${API_BASE}/api/drawings/project/${id}/export.csv`, {
-                headers: { Authorization: `Bearer ${token}` },
-              })
-                .then((r) => r.blob())
-                .then((b) => {
-                  const u = URL.createObjectURL(b);
-                  const a = document.createElement("a");
-                  a.href = u;
-                  a.download = "gfc-register.csv";
-                  a.click();
-                });
-            }}
-          >
-            Export GFC CSV →
-          </a>
         </Card>
       )}
     </div>
