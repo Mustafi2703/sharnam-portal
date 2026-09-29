@@ -14,6 +14,8 @@ export default function HrmsMastersPage() {
   const [holidays, setHolidays] = useState<any[]>([]);
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [typeForm, setTypeForm] = useState({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });
+  const [editingTypeId, setEditingTypeId] = useState("");
+  const [typeMsg, setTypeMsg] = useState("");
   const [holForm, setHolForm] = useState({ date: "", name: "", region: "India" });
   const [deptForm, setDeptForm] = useState({ code: "", name: "", headName: "" });
 
@@ -34,11 +36,37 @@ export default function HrmsMastersPage() {
 
   const holSorted = useMemo(() => holidays.slice().sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [holidays]);
 
+  function blankType() {
+    setEditingTypeId("");
+    setTypeForm({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });
+  }
+
   async function addType(e: FormEvent) {
     e.preventDefault();
-    await api("/api/hrm/leave-types", { method: "POST", token, body: JSON.stringify(typeForm) });
-    setTypeForm({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });
-    await load();
+    setTypeMsg("");
+    try {
+      if (editingTypeId) {
+        await api(`/api/hrm/leave-types/${editingTypeId}`, { method: "PATCH", token, body: JSON.stringify(typeForm) });
+      } else {
+        await api("/api/hrm/leave-types", { method: "POST", token, body: JSON.stringify(typeForm) });
+      }
+      blankType();
+      await load();
+    } catch (err) {
+      setTypeMsg(err instanceof Error ? err.message : "Could not save the leave type");
+    }
+  }
+
+  async function removeType(id: string, name: string) {
+    if (!window.confirm(`Delete ${name}?`)) return;
+    setTypeMsg("");
+    try {
+      await api(`/api/hrm/leave-types/${id}`, { method: "DELETE", token });
+      if (editingTypeId === id) blankType();
+      await load();
+    } catch (err) {
+      setTypeMsg(err instanceof Error ? err.message : "Could not delete the leave type");
+    }
   }
   async function addHol(e: FormEvent) {
     e.preventDefault();
@@ -103,16 +131,45 @@ export default function HrmsMastersPage() {
                   Carry-fwd
                 </label>
               </div>
-              <Button type="submit">Add leave type</Button>
+              <div className="flex gap-2">
+                <Button type="submit">{editingTypeId ? "Save leave type" : "Add leave type"}</Button>
+                {editingTypeId ? (
+                  <Button type="button" variant="secondary" onClick={blankType}>Cancel</Button>
+                ) : null}
+              </div>
             </form>
           )}
+          {typeMsg ? <p className="text-xs text-danger mb-2">{typeMsg}</p> : null}
           <ul className="text-sm divide-y max-h-64 overflow-y-auto">
             {types.map((t) => (
-              <li key={t.id} className="py-1.5 flex justify-between">
+              <li key={t.id} className="py-1.5 flex justify-between gap-2 items-start">
                 <span>
                   <span className="font-medium">{t.name}</span>{" "}
                   <span className="text-xs text-steel-muted">· {t.code} · {t.daysPerYear}/yr {t.isPaid ? "· paid" : "· unpaid"}</span>
                 </span>
+                {canManage ? (
+                  <span className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      className="text-brand text-xs font-semibold"
+                      onClick={() => {
+                        setEditingTypeId(t.id);
+                        setTypeForm({
+                          code: t.code || "",
+                          name: t.name || "",
+                          daysPerYear: String(t.daysPerYear ?? ""),
+                          isPaid: t.isPaid !== false,
+                          carryForward: !!t.carryForward,
+                        });
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button type="button" className="text-danger text-xs font-semibold" onClick={() => void removeType(t.id, t.name)}>
+                      Delete
+                    </button>
+                  </span>
+                ) : null}
               </li>
             ))}
             {!types.length && <li className="text-steel-muted py-2 text-sm">No leave types yet.</li>}

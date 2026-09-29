@@ -10,7 +10,7 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { canManageHrms } from "../lib/portalAccounts";
 import { formatPunchLine, mapsUrl } from "../lib/attendanceDisplay";
-import { Badge, Button, Card, Select } from "./ui";
+import { Badge, Button, Card, Input, Select } from "./ui";
 
 type AttendanceRow = {
   id: string;
@@ -36,7 +36,7 @@ type AttendanceRow = {
   project?: { code?: string; name?: string; location?: string | null } | null;
 };
 
-type StaffOpt = { id: string; fullName: string };
+type StaffOpt = { id: string; fullName: string; role?: string };
 
 function ymdLocal(d: Date) {
   const y = d.getFullYear();
@@ -139,6 +139,7 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
   });
   const [userId, setUserId] = useState("");
   const [staff, setStaff] = useState<StaffOpt[]>([]);
+  const [staffQuery, setStaffQuery] = useState("");
   const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(todayKey);
   const [loadErr, setLoadErr] = useState("");
@@ -170,7 +171,7 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     if (!canViewTeam || !token) return;
     void api<StaffOpt[]>("/api/hrm/employees", { token })
-      .then((list) => setStaff(list.map((e) => ({ id: e.id, fullName: e.fullName }))))
+      .then((list) => setStaff(list.map((e) => ({ id: e.id, fullName: e.fullName, role: e.role }))))
       .catch(() => setStaff([]));
   }, [token, canViewTeam]);
 
@@ -256,17 +257,24 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
       </div>
 
       {canViewTeam ? (
-        <label className="block text-xs font-semibold text-steel-muted mb-3 max-w-xs">
-          Employee
-          <Select className="mt-1" value={userId} onChange={(e) => setUserId(e.target.value)}>
-            <option value="">All staff (this month)</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.fullName}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <div className="flex flex-wrap gap-2 mb-3 max-w-xl">
+          <Input value={staffQuery} onChange={(e) => setStaffQuery(e.target.value)} placeholder="Search employee" className="max-w-xs" />
+          <label className="block text-xs font-semibold text-steel-muted min-w-[12rem] flex-1">
+            Employee
+            <Select className="mt-1" value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <option value="">All staff (this month)</option>
+              {staff.filter((s) => {
+                const q = staffQuery.trim().toLowerCase();
+                if (!q) return true;
+                return `${s.fullName} ${s.role || ""}`.toLowerCase().includes(q);
+              }).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.fullName}{s.role === "site_employee" ? " · Site" : ""}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
       ) : null}
 
       {loadErr ? <p className="text-sm text-danger mb-3">{loadErr}</p> : null}

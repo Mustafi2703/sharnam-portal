@@ -2549,6 +2549,37 @@ hrmRouter.get("/leave-types", hrmStaff, async (_req, res) => {
   res.json(rows);
 });
 
+hrmRouter.patch("/leave-types/:id", hrmDesk, async (req, res) => {
+  const data: { name?: string; code?: string; daysPerYear?: number; isPaid?: boolean; carryForward?: boolean } = {};
+  if (req.body.name != null) data.name = String(req.body.name).trim();
+  if (req.body.code != null) data.code = String(req.body.code).trim().toUpperCase();
+  if (req.body.daysPerYear != null && req.body.daysPerYear !== "") data.daysPerYear = Number(req.body.daysPerYear) || 0;
+  if (req.body.isPaid != null) data.isPaid = req.body.isPaid !== false;
+  if (req.body.carryForward != null) data.carryForward = !!req.body.carryForward;
+  try {
+    const row = await prisma.leaveType.update({ where: { id: req.params.id }, data });
+    res.json(row);
+  } catch {
+    res.status(404).json({ error: "Leave type not found" });
+  }
+});
+
+hrmRouter.delete("/leave-types/:id", hrmDesk, async (req, res) => {
+  const id = req.params.id;
+  const [requests, used] = await Promise.all([
+    prisma.leaveRequest.count({ where: { leaveTypeId: id } }),
+    prisma.leaveBalance.count({ where: { leaveTypeId: id, used: { gt: 0 } } }),
+  ]);
+  if (requests || used) {
+    return res.status(400).json({
+      error: "This leave type is already used on a request or a balance. Edit the days instead of deleting it.",
+    });
+  }
+  await prisma.leaveBalance.deleteMany({ where: { leaveTypeId: id } });
+  await prisma.leaveType.delete({ where: { id } });
+  res.json({ ok: true });
+});
+
 hrmRouter.post("/leave-types", hrmDesk, async (req, res) => {
   const row = await prisma.leaveType.upsert({
     where: { code: String(req.body.code || req.body.name || "").toUpperCase() },

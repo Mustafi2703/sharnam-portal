@@ -26,7 +26,8 @@ export default function HrmsLeavePage() {
   const [leave, setLeave] = useState<LeaveRow[]>([]);
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
-  const [staff, setStaff] = useState<{ id: string; fullName: string }[]>([]);
+  const [staff, setStaff] = useState<{ id: string; fullName: string; role?: string }[]>([]);
+  const [staffQuery, setStaffQuery] = useState("");
   const [hrUserId, setHrUserId] = useState("");
   const [balanceDraft, setBalanceDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ fromDate: "", toDate: "", reason: "", leaveTypeId: "", halfDay: false });
@@ -60,8 +61,8 @@ export default function HrmsLeavePage() {
 
   useEffect(() => {
     if (!canManage || !token) return;
-    void api<{ id: string; fullName: string }[]>("/api/hrm/employees", { token })
-      .then((rows) => setStaff(rows.map((e) => ({ id: e.id, fullName: e.fullName }))))
+    void api<{ id: string; fullName: string; role?: string }[]>("/api/hrm/employees", { token })
+      .then((rows) => setStaff(rows.map((e) => ({ id: e.id, fullName: e.fullName, role: e.role }))))
       .catch(() => setStaff([]));
   }, [token, canManage]);
 
@@ -133,11 +134,16 @@ export default function HrmsLeavePage() {
       {canManage ? (
         <Card className="space-y-3">
           <h3 className="font-semibold">HR — manage employee leave</h3>
+          <Input value={staffQuery} onChange={(e) => setStaffQuery(e.target.value)} placeholder="Search employee" className="max-w-md" />
           <Select value={hrUserId} onChange={(e) => setHrUserId(e.target.value)} className="max-w-md">
             <option value="">Select employee…</option>
-            {staff.map((s) => (
+            {staff.filter((s) => {
+              const q = staffQuery.trim().toLowerCase();
+              if (!q) return true;
+              return `${s.fullName} ${s.role || ""}`.toLowerCase().includes(q);
+            }).map((s) => (
               <option key={s.id} value={s.id}>
-                {s.fullName}
+                {s.fullName}{s.role === "site_employee" ? " · Site" : ""}
               </option>
             ))}
           </Select>
