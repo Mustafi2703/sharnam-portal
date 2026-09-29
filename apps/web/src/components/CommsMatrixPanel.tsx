@@ -270,7 +270,7 @@ export function CommsMatrixPanel({
             try {
               const r = await api<{ sharePointUrl?: string | null; message?: string }>(
                 `/api/comms/contacts/${projectId}/sharepoint-link`,
-                { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind: matrixKind, file: "xlsx" }) },
+                { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind: matrixKind, file: "xlsx", refresh: true }) },
               );
               if (!r.sharePointUrl) throw new Error(r.message || "SharePoint link is not ready");
               window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");

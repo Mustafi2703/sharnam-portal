@@ -206,7 +206,7 @@ export function ProjectSetupMatrixDesk({
     try {
       const r = await api<{ sharePointUrl?: string | null; message?: string }>(
         `/api/comms/contacts/${projectId}/sharepoint-link`,
-        { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind, file }) },
+        { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind, file, refresh: file === "xlsx" }) },
       );
       if (!r.sharePointUrl) throw new Error(r.message || "SharePoint link is not ready");
       window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
@@ -279,7 +279,7 @@ export function ProjectSetupMatrixDesk({
           <div>
             <h4 className="font-semibold text-sm">Export communication matrix</h4>
             <p className="text-xs text-steel-muted mt-1 max-w-2xl leading-relaxed">
-              Excel and print/PDF use the SPDC logo and the client logo. Columns match the BPCL sheet: SR.NO, NAME, DESIGNATION, NAME OF COMPANY, SINGLE POINT OF CONTACT, MOBILE, E-MAIL, GENERAL MAIL COMMUNICATION, OFFICE ADD.
+              Excel and PDF use the Sharnam logo and the client logo, landscape layout, BPCL columns. Open Excel in SharePoint replaces the filed copy with the current sheet.
             </p>
           </div>
           {(["TECHNICAL", "COMMERCIAL"] as const).map((kind) => (

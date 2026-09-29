@@ -21,9 +21,12 @@ type MatrixRow = {
   officeAddress?: string | null;
 };
 
+/** BPCL Communication Matrix_BPCL (2).xlsx header slate. */
 const HEADER_FILL = "FF445469";
+const SECTION_FILL = "FFE8EEF8";
 const THIN = { style: "thin" as const, color: { argb: "FF445469" } };
 const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+const COL_WIDTHS = [11, 27, 28, 24, 25, 16, 32, 18, 34];
 
 function esc(s: unknown) {
   return String(s ?? "")
@@ -100,10 +103,16 @@ export async function loadMatrixBundle(projectId: string, matrixKind: string) {
   return { project, rows: rows as MatrixRow[], matrixKind };
 }
 
+/** Landscape BPCL-style sheet: both logos large, banner, slate header, full grid. */
 export async function buildMatrixXlsx(projectId: string, matrixKind: string): Promise<Buffer> {
   const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
   const wb = new ExcelJS.Workbook();
-  const sheet = wb.addWorksheet(`${kind} Matrix`.slice(0, 31));
+  wb.creator = "Sharnam Portal";
+  wb.created = new Date();
+  const sheet = wb.addWorksheet(kind.slice(0, 31), {
+    views: [{ state: "normal", showGridLines: false, zoomScale: 80 }],
+    properties: { defaultRowHeight: 18 },
+  });
   const spdcLogo = sharnamLogoPath();
   const clientUri = await imageDataUriFromUrl(project.clientLogoUrl);
   const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo") : null;
@@ -117,6 +126,20 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
   })
     .format(new Date())
     .replace(/\//g, "-");
+
+  COL_WIDTHS.forEach((width, i) => {
+    sheet.getColumn(i + 1).width = width;
+  });
+  sheet.pageSetup = {
+    orientation: "landscape",
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    margins: { left: 0.2, right: 0.2, top: 0.35, bottom: 0.4, header: 0.2, footer: 0.2 },
+  };
+
   const banner = [
     `PROJECT : ${project.name}`,
     `CLIENT: ${project.clientName || "—"}`,
@@ -125,54 +148,84 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
     `SUBJECT : ${kind} COMMUNICATION MATRIX`,
     `DATE : ${matrixDate}`,
   ];
-  [11, 27, 28, 23, 24, 25, 38, 31, 30].forEach((width, i) => {
-    sheet.getColumn(i + 1).width = width;
-  });
-  sheet.pageSetup = {
-    orientation: "landscape",
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 1,
-    paperSize: 9,
-    horizontalCentered: true,
-  };
-  sheet.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 };
   banner.forEach((line, i) => {
     const rowNo = i + 1;
     sheet.mergeCells(rowNo, 1, rowNo, 7);
     const cell = sheet.getCell(rowNo, 1);
     cell.value = line;
-    cell.font = { bold: true, size: 12, name: "Calibri", color: { argb: "FF000000" } };
+    cell.font = {
+      bold: true,
+      size: rowNo === 5 ? 14 : 12,
+      name: "Calibri",
+      color: { argb: "FF1E3A5F" },
+    };
     cell.alignment = { vertical: "middle", horizontal: "left", wrapText: false };
-    sheet.getRow(rowNo).height = 17.25;
+    sheet.getRow(rowNo).height = rowNo === 5 ? 24 : 20;
+    for (let c = 1; c <= 9; c++) {
+      sheet.getCell(rowNo, c).border = {
+        bottom: rowNo === 6 ? { style: "medium", color: { argb: "FF1E3A5F" } } : undefined,
+      };
+    }
   });
 
+  // Large logos in the top-right, spanning the banner rows (BPCL layout).
   if (spdcLogo) {
     const imgId = wb.addImage({ filename: spdcLogo, extension: "png" });
-    sheet.addImage(imgId, { tl: { col: 7, row: 0.1 }, ext: { width: 88, height: 48 }, editAs: "oneCell" });
+    sheet.addImage(imgId, {
+      tl: { col: 7.05, row: 0.2 },
+      ext: { width: 150, height: 100 },
+      editAs: "oneCell",
+    });
   }
   if (clientFile) {
     const imgId = wb.addImage({ filename: clientFile.file, extension: clientFile.ext });
-    sheet.addImage(imgId, { tl: { col: 8, row: 0.1 }, ext: { width: 88, height: 48 }, editAs: "oneCell" });
+    sheet.addImage(imgId, {
+      tl: { col: 8.05, row: 0.2 },
+      ext: { width: 150, height: 100 },
+      editAs: "oneCell",
+    });
+  } else {
+    const placeholder = sheet.getCell(2, 9);
+    placeholder.value = project.clientName || "Client logo";
+    placeholder.font = { italic: true, size: 9, color: { argb: "FF888888" }, name: "Calibri" };
+    placeholder.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   }
 
-  const header = ["SR.NO", "NAME", "DESIGNATION", "NAME OF COMPANY", "SINGLE POINT OF CONTACT", "MOBILE", "E-MAIL", "GENERAL MAIL COMMUNICATION", "OFFICE ADD."];
+  const header = [
+    "SR.NO",
+    "NAME",
+    "DESIGNATION",
+    "NAME OF COMPANY",
+    "SINGLE POINT OF CONTACT",
+    "MOBILE",
+    "E-MAIL",
+    "GENERAL MAIL COMMUNICATION",
+    "OFFICE ADD.",
+  ];
   const hr = sheet.getRow(7);
-  hr.height = 31;
+  hr.height = 36;
   header.forEach((label, i) => {
     const cell = hr.getCell(i + 1);
     cell.value = label;
-    cell.font = { bold: true, size: 12, name: "Calibri", color: { argb: "FFFFFFFF" } };
+    cell.font = { bold: true, size: 11, name: "Calibri", color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
     cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
     cell.border = BOX;
   });
 
-  const paint = (row: ExcelJS.Row, bold: boolean, height: number) => {
-    row.height = height;
+  const paint = (row: ExcelJS.Row, opts: { bold?: boolean; section?: boolean; height?: number }) => {
+    row.height = opts.height ?? (opts.section ? 26 : 32);
     for (let c = 1; c <= 9; c++) {
       const cell = row.getCell(c);
-      cell.font = { bold, size: 12, name: "Calibri", color: { argb: "FF000000" } };
+      cell.font = {
+        bold: !!opts.bold || !!opts.section,
+        size: 11,
+        name: "Calibri",
+        color: { argb: "FF111111" },
+      };
+      if (opts.section) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: SECTION_FILL } };
+      }
       cell.alignment = {
         vertical: "middle",
         wrapText: true,
@@ -184,16 +237,19 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
 
   let sectionIdx = -1;
   let personInSection = 0;
+  let lastDataRow = 7;
   for (const r of rows) {
     if (r.isSectionHeader) {
       sectionIdx += 1;
       personInSection = 0;
-      const row = sheet.addRow([String.fromCharCode(65 + sectionIdx), r.orgName || "", "", "", "", "", "", "", ""]);
+      const row = sheet.addRow([String.fromCharCode(65 + sectionIdx), (r.orgName || "").trim(), "", "", "", "", "", "", ""]);
       sheet.mergeCells(row.number, 2, row.number, 9);
-      paint(row, true, 25.4);
+      paint(row, { bold: true, section: true, height: 26 });
+      lastDataRow = row.number;
       continue;
     }
     personInSection += 1;
+    const email = (r.email || "").trim();
     const row = sheet.addRow([
       personInSection,
       r.personName || "",
@@ -201,16 +257,31 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
       r.company || r.orgName || "",
       r.spoc || "",
       r.mobile || "",
-      r.email || "",
+      email,
       r.mailRole || "",
       r.officeAddress || "",
     ]);
-    const lines = String(r.officeAddress || r.spoc || "").split("\n").length;
-    paint(row, false, Math.max(28, 16 * lines));
+    if (email && email.includes("@")) {
+      row.getCell(7).value = { text: email, hyperlink: `mailto:${email}` };
+      row.getCell(7).font = { size: 11, name: "Calibri", color: { argb: "FF0563C1" }, underline: true };
+    }
+    const lines = Math.max(
+      String(r.officeAddress || "").split(/\n/).length,
+      String(r.spoc || "").split(/\n/).length,
+      1,
+    );
+    paint(row, { height: Math.max(32, 14 * lines + 10) });
+    lastDataRow = row.number;
   }
 
+  sheet.addRow([]);
   const foot = sheet.addRow([SPDC_OFFICE_FOOTER]);
+  sheet.mergeCells(foot.number, 1, foot.number, 9);
   foot.font = { size: 9, name: "Calibri", italic: true, color: { argb: "FF445469" } };
+  foot.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.pageSetup.printArea = `A1:I${Math.max(lastDataRow, 7)}`;
+  sheet.autoFilter = undefined;
+
   try {
     const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
     return Buffer.from(ab);
@@ -229,6 +300,14 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
   const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
   const logo = sharnamLogoDataUri();
   const clientLogo = await imageDataUriFromUrl(project.clientLogoUrl);
+  const matrixDate = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+    .format(new Date())
+    .replace(/\//g, "-");
   let sectionIdx = -1;
   let personInSection = 0;
   const bodyRows = rows
@@ -244,7 +323,7 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
         <td>${esc(r.personName)}</td>
         <td>${esc(r.designation)}</td>
         <td>${esc(r.company || r.orgName)}</td>
-        <td>${esc(r.spoc)}</td>
+        <td class="spoc">${esc(r.spoc)}</td>
         <td class="mono">${esc(r.mobile)}</td>
         <td>${esc(r.email)}</td>
         <td class="to">${esc(r.mailRole)}</td>
@@ -259,44 +338,55 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
   <meta charset="utf-8" />
   <title>${esc(kind)} Communication Matrix · ${esc(project.name)}</title>
   <style>
-    @page { size: A3 landscape; margin: 12mm; }
-    body { font-family: "Segoe UI", Calibri, system-ui, sans-serif; margin: 16px; color: #1a1a1a; }
-    .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 4px solid #1e3a5f; padding-bottom: 10px; margin-bottom: 12px; }
-    .brand { display: flex; align-items: center; gap: 12px; min-width: 180px; }
-    .brand img, .client img { height: 56px; max-width: 160px; object-fit: contain; }
-    .client { min-width: 180px; display: flex; justify-content: flex-end; }
-    .center { text-align: center; flex: 1; }
-    .title { font-size: 22px; font-weight: 800; letter-spacing: 0.04em; color: #1e3a5f; text-transform: uppercase; }
-    .sub { font-size: 12px; color: #444; margin-top: 4px; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th { background: #1e3a5f; color: #fff; text-align: left; padding: 8px 6px; border: 1px solid #1e3a5f; }
-    td { border: 1px solid #d6dbe3; padding: 6px; vertical-align: top; }
+    @page { size: A3 landscape; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Calibri, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 16px 20px; color: #111; background: #fff; }
+    .sheet { max-width: 1400px; margin: 0 auto; }
+    .head { display: grid; grid-template-columns: 180px 1fr 180px; gap: 16px; align-items: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 14px; }
+    .brand, .client { display: flex; align-items: center; justify-content: center; min-height: 88px; }
+    .brand img, .client img { height: 84px; max-width: 170px; width: auto; object-fit: contain; }
+    .banner { font-size: 13px; line-height: 1.45; color: #1e3a5f; font-weight: 700; }
+    .banner .subject { font-size: 16px; letter-spacing: 0.03em; margin-top: 4px; text-transform: uppercase; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+    th { background: #445469; color: #fff; text-align: center; padding: 10px 6px; border: 1px solid #445469; font-weight: 700; }
+    td { border: 1px solid #445469; padding: 8px 6px; vertical-align: middle; word-wrap: break-word; }
     tr.section td { background: #e8eef8; font-weight: 700; }
-    .mono { font-family: ui-monospace, monospace; font-size: 10px; }
-    .addr { max-width: 220px; white-space: pre-line; }
+    .mono { font-family: ui-monospace, "Courier New", monospace; font-size: 11px; text-align: center; }
+    .spoc, .addr { white-space: pre-line; }
     .to { font-weight: 700; text-align: center; }
-    footer { margin-top: 16px; font-size: 10px; color: #555; border-top: 2px solid #c9a227; padding-top: 8px; }
+    footer { margin-top: 14px; font-size: 10px; color: #445469; border-top: 2px solid #c9a227; padding-top: 8px; }
   </style>
 </head>
 <body>
-  <div class="head">
-    <div class="brand">${logo ? `<img src="${logo}" alt="SPDC" />` : `<strong>SPDC</strong>`}</div>
-    <div class="center">
-      <div class="title">Subject : ${esc(kind)} Communication Matrix</div>
-      <div class="sub">Project : ${esc(project.name)}</div>
-      <div class="sub">Client: ${esc(project.clientName || "—")}</div>
-      <div class="sub">Design consultant : ${esc(project.designConsultant || "—")}</div>
-      <div class="sub">Project management consultants : ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
+  <div class="sheet">
+    <div class="head">
+      <div class="brand">${logo ? `<img src="${logo}" alt="Sharnam" />` : `<strong>SPDC</strong>`}</div>
+      <div class="banner">
+        <div>PROJECT : ${esc(project.name)}</div>
+        <div>CLIENT: ${esc(project.clientName || "—")}</div>
+        <div>DESIGN CONSULTANT : ${esc(project.designConsultant || "—")}</div>
+        <div>PROJECT MANAGEMENT CONSULTANTS : ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
+        <div class="subject">SUBJECT : ${esc(kind)} COMMUNICATION MATRIX</div>
+        <div>DATE : ${esc(matrixDate)}</div>
+      </div>
+      <div class="client">${clientLogo ? `<img src="${clientLogo}" alt="Client" />` : `<span style="font-size:12px;color:#888;text-align:center">${esc(project.clientName || "Client logo")}</span>`}</div>
     </div>
-    <div class="client">${clientLogo ? `<img src="${clientLogo}" alt="Client" />` : `<span style="font-size:11px;color:#888">${esc(project.clientName || "Client logo")}</span>`}</div>
+    <table>
+      <thead><tr>
+        <th style="width:5%">SR.NO</th>
+        <th style="width:12%">NAME</th>
+        <th style="width:12%">DESIGNATION</th>
+        <th style="width:12%">NAME OF COMPANY</th>
+        <th style="width:12%">SINGLE POINT OF CONTACT</th>
+        <th style="width:9%">MOBILE</th>
+        <th style="width:14%">E-MAIL</th>
+        <th style="width:8%">GENERAL MAIL COMMUNICATION</th>
+        <th style="width:16%">OFFICE ADD.</th>
+      </tr></thead>
+      <tbody>${bodyRows || `<tr><td colspan="9" style="text-align:center;padding:24px;color:#888">No rows</td></tr>`}</tbody>
+    </table>
+    <footer>${esc(SPDC_OFFICE_FOOTER)}</footer>
   </div>
-  <table>
-    <thead><tr>
-      <th>SR.NO</th><th>NAME</th><th>DESIGNATION</th><th>NAME OF COMPANY</th><th>SINGLE POINT OF CONTACT</th><th>MOBILE</th><th>E-MAIL</th><th>GENERAL MAIL COMMUNICATION</th><th>OFFICE ADD.</th>
-    </tr></thead>
-    <tbody>${bodyRows || `<tr><td colspan="9" style="text-align:center;padding:24px;color:#888">No rows</td></tr>`}</tbody>
-  </table>
-  <footer>${esc(SPDC_OFFICE_FOOTER)}</footer>
 </body>
 </html>`;
 }
