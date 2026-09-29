@@ -2517,16 +2517,16 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
   if (!user) return full;
   const profile = await prisma.employeeProfile.findFirst({ where: { userId: row.userId } });
-  const { buildPayslipHtml } = await import("../services/payslipPdf.js");
-  const html = buildPayslipHtml({ payslip: full, user, profile });
+  const { buildPayslipPdf } = await import("../services/payslipPdf.js");
+  const pdf = await buildPayslipPdf({ payslip: full, user, profile });
   const emp = (profile?.empCode || user.fullName).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
   const ym = `${row.year}-${String(row.month).padStart(2, "0")}`;
   const saved = await mockOneDrive.upload(
     HR_DRIVE,
     payslipRecordFolder(new Date(row.year, row.month - 1, 1)),
-    `${emp}-${ym}.html`,
-    Buffer.from(html, "utf8"),
-    "text/html; charset=utf-8"
+    `${emp}-${ym}.pdf`,
+    pdf,
+    "application/pdf"
   );
   return prisma.payslip.update({
     where: { id: row.id },
@@ -2627,7 +2627,7 @@ hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "off
   res.status(201).json({ created, skipped });
 });
 
-hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "office", "hr", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+async function sendPayslipPdf(req: AuthedRequest, res: import("express").Response) {
   const row = await prisma.payslip.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
   if (req.user!.role !== "admin" && req.user!.role !== "office" && req.user!.role !== "hr" && req.user!.id !== row.userId) {
@@ -2636,10 +2636,31 @@ hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "offic
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
   if (!user) return res.status(404).json({ error: "user not found" });
   const profile = await prisma.employeeProfile.findFirst({ where: { userId: row.userId } });
-  const { buildPayslipHtml } = await import("../services/payslipPdf.js");
-  const html = buildPayslipHtml({ payslip: row, user, profile });
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(html);
+  const { buildPayslipPdf } = await import("../services/payslipPdf.js");
+  const pdf = await buildPayslipPdf({ payslip: row, user, profile });
+  const ym = `${row.year}-${String(row.month).padStart(2, "0")}`;
+  const emp = (profile?.empCode || user.fullName).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
+  if (!row.fileUrl || /\.html(\?|$)/i.test(row.fileUrl)) {
+    void filePayslipToDrive(row).catch((err) => {
+      pushRuntimeLog({
+        level: "warn",
+        source: "hrm.payslip",
+        message: "Payslip PDF was opened but the SharePoint copy was not updated",
+        detail: errorDetail(err),
+      });
+    });
+  }
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${emp}-${ym}.pdf"`);
+  res.send(pdf);
+}
+
+hrmRecruitmentRouter.get("/payslips/:id/file.pdf", requireRoles("admin", "office", "hr", "employee", "site_employee"), (req: AuthedRequest, res) => {
+  void sendPayslipPdf(req, res);
+});
+
+hrmRecruitmentRouter.get("/payslips/:id/file.html", requireRoles("admin", "office", "hr", "employee", "site_employee"), (req: AuthedRequest, res) => {
+  void sendPayslipPdf(req, res);
 });
 
 hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {

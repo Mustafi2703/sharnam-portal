@@ -140,7 +140,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
         if (form[key] !== "") body[key] = Number(form[key]);
       }
       await api("/api/hrm/payslips/generate", { method: "POST", token, body: JSON.stringify(body) });
-      setMsg("Payslip generated and filed under 06.03 Payslips.");
+      setMsg("Payslip generated and filed as a PDF.");
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
@@ -255,7 +255,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           <Link to="/hrm/users" className="text-brand font-semibold underline">
             set CTC in HRMS → Users
           </Link>{" "}
-          before Generate all. Payslip layout matches KGDPL reference (Courier, earnings/deductions grid).
+          before Generate all. Each payslip is stored as a PDF.
         </p>
       </Card>
 
@@ -264,7 +264,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           <div>
             <h3 className="font-semibold text-sm">Generate · {MONTHS[month - 1]} {year}</h3>
             <p className="text-[11px] text-steel-muted mt-1">
-              Blank overrides use the SPDC CTC calculator (same monthly basic, HRA, conveyance, special, PF and professional tax as the offer letter). The payslip is filed on SharePoint.
+              Blank overrides use the SPDC CTC calculator (same monthly basic, HRA, conveyance, special, PF and professional tax as the offer letter). The payslip is filed on SharePoint as a PDF.
             </p>
           </div>
           <form onSubmit={generate} className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -406,7 +406,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                         onClick={() => {
                           const base = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "") || window.location.origin;
                           const q = token ? `?token=${encodeURIComponent(token)}` : "";
-                          window.open(`${base}/api/hrm/payslips/${p.id}/file.html${q}`, "_blank");
+                          window.open(`${base}/api/hrm/payslips/${p.id}/file.pdf${q}`, "_blank");
                         }}
                       >
                         View slip

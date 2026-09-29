@@ -1,10 +1,15 @@
 /**
- * KGDPL-style payslip HTML — reference:
+ * KGDPL-style payslip — reference:
  * module_prompts/Sharnam_modules_docs 2/KGDPL_JUN_2026_9210100157_Payslip.pdf
+ * The filed copy is a PDF. HTML is not stored, so the slip cannot be edited in a browser.
  */
+import { createRequire } from "node:module";
 import type { Payslip, User, EmployeeProfile } from "@prisma/client";
-import { sharnamLogoDataUri } from "./brandedExport.js";
+import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
 import { ctcMonthlyEarnings } from "./ctcAnnexure.js";
+
+const require = createRequire(import.meta.url);
+const PDFDocument = require("pdfkit") as typeof import("pdfkit");
 
 export type PayslipRenderInput = {
   payslip: Payslip;
@@ -164,9 +169,144 @@ export function buildPayslipHtml(input: PayslipRenderInput): string {
       <tr class="net-row"><td colspan="3">Rounded net (Rupees ${roundedNet.toLocaleString("en-IN")} only)</td><td></td><td class="num">${inr(roundedNet)}</td></tr>
     </tbody>
   </table>
-  <footer>System-generated payslip · Sharnam HRMS · Print → Save as PDF · Confidential</footer>
+  <footer>System-generated payslip · Sharnam HRMS · Confidential</footer>
   <div class="checksum">${checksum}</div>
 </div>
 </body>
 </html>`;
+}
+
+/** Locked payslip PDF. This is the file stored on SharePoint and opened from Payroll. */
+export function buildPayslipPdf(input: PayslipRenderInput): Promise<Buffer> {
+  const { payslip: p, user, profile } = input;
+  const company = input.companyName || "Sharnam Project Development Consultants & Co.";
+  const stored = (p.basic || 0) + (p.hra || 0) + (p.grossEarnings || 0) + (p.netPay || 0);
+  const factor = p.workingDays > 0 ? p.paidDays / p.workingDays : 1;
+  const fromProfile = stored > 0 ? null : earningsFromProfile(profile, factor);
+  const basic = p.basic || fromProfile?.basic || 0;
+  const hra = p.hra || fromProfile?.hra || 0;
+  const conveyance = p.conveyance || fromProfile?.conveyance || 0;
+  const medicalAllow = p.medicalAllow || fromProfile?.medicalAllow || 0;
+  const specialAllow = p.specialAllow || fromProfile?.specialAllow || 0;
+  const otherEarnings = p.otherEarnings || 0;
+  const gross = p.grossEarnings || fromProfile?.gross || basic + hra + conveyance + medicalAllow + specialAllow + otherEarnings;
+  const pfEmployee = p.pfEmployee || fromProfile?.pfEmployee || 0;
+  const esicEmployee = p.esicEmployee || fromProfile?.esicEmployee || 0;
+  const professionalTax = p.professionalTax || fromProfile?.professionalTax || 0;
+  const incomeTax = p.incomeTax || 0;
+  const otherDeduction = p.otherDeduction || 0;
+  const totalDeductions = p.totalDeductions || pfEmployee + esicEmployee + professionalTax + incomeTax + otherDeduction;
+  const netPay = p.netPay || gross - totalDeductions;
+  const empCode = profile?.empCode || user.email.split("@")[0].toUpperCase();
+  const master = profile?.ctcAnnual ? ctcMonthlyEarnings(profile.ctcAnnual, profile.designation || "") : null;
+  const period = monthLabel(p.year, p.month);
+  const roundedNet = Math.round(netPay);
+  const roundAdj = Math.round((roundedNet - netPay) * 100) / 100;
+  const checksum = `SPDC^PS^${empCode}^${monthShort(p.year, p.month)}^${p.year}`;
+
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 36,
+      info: { Title: `Payslip ${period} — ${user.fullName}`, Author: "Sharnam HRMS", Subject: "Payslip" },
+    });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const left = 36;
+    const right = 559;
+    const logo = sharnamLogoPath();
+    if (logo) {
+      try {
+        doc.image(logo, right - 110, 32, { fit: [100, 36] });
+      } catch {
+        /* logo is optional */
+      }
+    }
+    doc.font("Helvetica-Bold").fontSize(11).text(company, left, 36, { width: 380 });
+    doc.font("Helvetica").fontSize(8).fillColor("#333").text(`Salary slip · ${period}`, left, 52);
+    doc.fillColor("#000").font("Helvetica-Bold").fontSize(11).text(`PAYSLIP FOR THE MONTH OF ${period.toUpperCase()}`, left, 78, {
+      width: right - left,
+      align: "center",
+    });
+
+    const pairs: [string, string, string, string][] = [
+      ["Employee no.", empCode, "PAN", dash(profile?.panNumber)],
+      ["Name", user.fullName, "Bank name", dash(profile?.bankName)],
+      ["Joining date", istDate(profile?.joinDate), "Bank A/C no.", dash(profile?.bankAccountNo)],
+      ["Designation", profile?.designation || "—", "IFSC", dash(profile?.bankIfsc)],
+      ["Grade", dash(profile?.grade), "ESI no.", dash(profile?.esicNumber)],
+      ["Band", dash(profile?.band), "Aadhaar", dash(profile?.aadhaarNumber)],
+      ["Cost center", dash(profile?.costCenter), "PF no.", dash(profile?.pfNumber)],
+      ["Payroll area", dash(profile?.payrollArea), "PF UAN", dash(profile?.uanNumber)],
+      ["Department", profile?.department || "—", "Birth date", istDate(profile?.dateOfBirth)],
+      ["Location", dash(profile?.workLocation), "Pay days", `${p.paidDays} / ${p.workingDays}${p.lopDays ? ` · loss of pay ${p.lopDays}` : ""}`],
+    ];
+    let y = 102;
+    doc.fontSize(8);
+    for (const [a, b, c, d] of pairs) {
+      doc.font("Helvetica-Bold").text(a, left, y, { width: 78, lineBreak: false });
+      doc.font("Helvetica").text(b, left + 80, y, { width: 160, lineBreak: false });
+      doc.font("Helvetica-Bold").text(c, left + 250, y, { width: 78, lineBreak: false });
+      doc.font("Helvetica").text(d, left + 330, y, { width: 190, lineBreak: false });
+      y += 14;
+    }
+
+    y += 8;
+    const cols = [left, left + 150, left + 230, left + 320, left + 440, right];
+    const headers = ["Earnings", "Master (₹)", "This month (₹)", "Deductions", "This month (₹)"];
+    doc.rect(left, y, right - left, 16).fill("#eeeeee");
+    doc.fillColor("#000").font("Helvetica-Bold").fontSize(8);
+    headers.forEach((h, i) => {
+      const align = i === 1 || i === 2 || i === 4 ? "right" : "left";
+      const x = align === "right" ? cols[i] : cols[i] + 4;
+      const w = cols[i + 1] - cols[i] - 6;
+      doc.text(h, x, y + 4, { width: w, align, lineBreak: false });
+    });
+    y += 16;
+
+    const earnRows: [string, number, number, string, number][] = [
+      ["Basic", master?.basic ?? basic, basic, "Statutory PF", pfEmployee],
+      ["HRA", master?.hra ?? hra, hra, "Professional tax", professionalTax],
+      ["Conveyance", master?.conveyance ?? conveyance, conveyance, "ESIC", esicEmployee],
+      ["Special allowance", master?.specialAllowance ?? specialAllow, specialAllow, "TDS", incomeTax],
+    ];
+    if (otherEarnings || otherDeduction) {
+      earnRows.push(["Other earnings", otherEarnings, otherEarnings, otherDeduction ? "Other deduction" : "", otherDeduction]);
+    }
+    if (medicalAllow) {
+      earnRows.push(["Medical", medicalAllow, medicalAllow, "", 0]);
+    }
+
+    const drawRow = (cells: string[], bold = false) => {
+      doc.rect(left, y, right - left, 16).stroke("#333333");
+      for (let i = 1; i < cols.length - 1; i++) doc.moveTo(cols[i], y).lineTo(cols[i], y + 16).stroke("#333333");
+      doc.font(bold ? "Helvetica-Bold" : "Helvetica").fillColor("#000").fontSize(8);
+      cells.forEach((cell, i) => {
+        const align = i === 1 || i === 2 || i === 4 ? "right" : "left";
+        const x = align === "right" ? cols[i] : cols[i] + 4;
+        doc.text(cell, x, y + 4, { width: cols[i + 1] - cols[i] - 6, align, lineBreak: false });
+      });
+      y += 16;
+    };
+
+    doc.rect(left, y - 16, right - left, 16).stroke("#333333");
+    for (const row of earnRows) {
+      drawRow([row[0], inr(row[1]), inr(row[2]), row[3], row[3] ? inr(row[4]) : ""]);
+    }
+    drawRow(["Gross earnings", inr(master?.gross ?? gross), inr(gross), "Total deductions", inr(totalDeductions)], true);
+    drawRow(["Net pay", "", inr(netPay), "", ""], true);
+    if (roundAdj) drawRow(["Rounding", "", inr(roundAdj), "", ""]);
+    drawRow([`Rounded net (Rupees ${roundedNet.toLocaleString("en-IN")} only)`, "", inr(roundedNet), "", ""], true);
+
+    y += 16;
+    doc.font("Helvetica").fontSize(8).fillColor("#444444").text("System-generated payslip · Sharnam HRMS · Confidential", left, y, {
+      width: right - left,
+      align: "center",
+    });
+    doc.fontSize(7).fillColor("#666666").text(checksum, left, y + 14, { width: right - left, align: "right" });
+    doc.end();
+  });
 }
