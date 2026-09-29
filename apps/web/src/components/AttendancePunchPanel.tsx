@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { formatIstPunchTime } from "@sharnam/shared";
 import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
@@ -78,6 +79,7 @@ type Props = {
  */
 export function AttendancePunchPanel({ variant = "compact", showRoster = true }: Props) {
   const { token, user } = useAuth();
+  const [, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<any[]>([]);
   const [projectId, setProjectId] = useState("");
   const [selfie, setSelfie] = useState<File[]>([]);
@@ -86,6 +88,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
   const [msg, setMsg] = useState("");
   const [geoHint, setGeoHint] = useState("");
   const [attendance, setAttendance] = useState<any[]>([]);
+  const [earlyLeaveOffer, setEarlyLeaveOffer] = useState(false);
   const isSite = user?.role === "site_employee" || user?.role === "employee" || user?.role === "vendor";
   const isField = isSite;
 
@@ -163,6 +166,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
           (row.inGeofenceOk || row.outGeofenceOk ? " · site verified" : "") +
           (row.provider === "sharepoint" ? " · SharePoint" : row.sharePointWarning ? ` · ${row.sharePointWarning}` : "")
       );
+      setEarlyLeaveOffer(kind === "out" && Boolean(row.earlyLeaveSuggested));
       setSelfie([]);
       setCaptureKey((k) => k + 1);
       await load();
@@ -219,6 +223,26 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
           <p className={`text-sm mt-3 rounded-lg px-3 py-2 ${msg.includes("fail") || msg.includes("first") ? "bg-warn-soft text-warn" : "bg-brand-soft text-brand-dark"}`}>
             {msg}
           </p>
+        )}
+        {earlyLeaveOffer && (
+          <div className="mt-3 rounded-lg px-3 py-2 bg-warn-soft text-warn text-sm space-y-2">
+            <p>You checked out early from site GPS. Apply a half-day leave (CL) so HR can approve.</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs"
+              onClick={() => {
+                const next = new URLSearchParams();
+                next.set("desk", "leave");
+                next.set("halfDay", "1");
+                next.set("early", "1");
+                setSearchParams(next);
+                setEarlyLeaveOffer(false);
+              }}
+            >
+              Apply half-day leave
+            </Button>
+          </div>
         )}
 
         <div className={`flex gap-3 mt-4 ${variant === "full" ? "attendance-punch__actions sticky bottom-3 z-10" : ""}`}>

@@ -19,7 +19,7 @@ import {
   buildDprPack,
   buildWprPack,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS } from "@sharnam/shared";
+import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS, attendanceSiteMinutes } from "@sharnam/shared";
 import { ctcMonthlyEarnings } from "../services/ctcAnnexure.js";
 import { isHrDeskOnly } from "../services/hrDesk.js";
 
@@ -2403,6 +2403,15 @@ hrmRouter.post(
       },
     });
 
+    const siteMins =
+      kind === "out" ? attendanceSiteMinutes(row.checkIn, row.checkOut) : null;
+    /** Under 4h on site (or checkout before 13:00 IST) → suggest half-day CL from Leave desk. */
+    const earlyLeaveSuggested =
+      kind === "out" &&
+      (req.user!.role === "site_employee" || req.user!.role === "employee") &&
+      ((siteMins != null && siteMins < 240) ||
+        (typeof timeStr === "string" && timeStr < "13:00"));
+
     res.json({
       ...row,
       inPhotoUrl: kind === "in" ? publicPhotoUrl(row.id, "in") : row.inPhotoUrl,
@@ -2415,6 +2424,8 @@ hrmRouter.post(
         process.env.MOCK_ONEDRIVE === "false" && saved.provider !== "sharepoint"
           ? "Photo saved on server only — SharePoint upload failed. Ask IT to verify Render env vars and Graph permissions."
           : undefined,
+      earlyLeaveSuggested: earlyLeaveSuggested || undefined,
+      siteMinutes: siteMins ?? undefined,
     });
   }
 );

@@ -2047,43 +2047,101 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
   });
 });
 
+async function unlinkAndDeleteDrawings(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  projectId: string,
+  drawingIds: string[],
+) {
+  if (!drawingIds.length) return;
+  const revIds = (
+    await tx.drawingRevision.findMany({ where: { drawingId: { in: drawingIds } }, select: { id: true } })
+  ).map((r) => r.id);
+  if (revIds.length) {
+    await tx.checklistSubmission.updateMany({
+      where: { revisionId: { in: revIds } },
+      data: { revisionId: null, drawingId: null },
+    });
+    await tx.drawingRevisionMarkupPage.deleteMany({ where: { revisionId: { in: revIds } } });
+    await tx.drawingRevision.deleteMany({ where: { id: { in: revIds } } });
+  }
+  await tx.checklistSubmission.updateMany({
+    where: { drawingId: { in: drawingIds } },
+    data: { drawingId: null, revisionId: null },
+  });
+  await tx.rfi.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
+  await tx.qualityInspection.updateMany({
+    where: { linkedDrawingId: { in: drawingIds } },
+    data: { linkedDrawingId: null },
+  });
+  await tx.designCoordinationIssue.updateMany({
+    where: { linkedDrawingId: { in: drawingIds } },
+    data: { linkedDrawingId: null },
+  });
+  await tx.drawingRegisterLine.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null } });
+  await tx.drawing.deleteMany({ where: { id: { in: drawingIds }, projectId } });
+}
+
 /** Drop every GFC drawing and master-register line on this project so the register can start fresh. SharePoint files are not deleted. */
 drawingsRouter.post(
   "/project/:projectId/clear-gfc-register",
-  requireRoles("admin", "office"),
+  requireRoles("admin", "office", "employee"),
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
-    const drawings = await prisma.drawing.findMany({ where: { projectId }, select: { id: true } });
-    const drawingIds = drawings.map((d) => d.id);
-    const revIds = drawingIds.length
-      ? (await prisma.drawingRevision.findMany({ where: { drawingId: { in: drawingIds } }, select: { id: true } })).map((r) => r.id)
-      : [];
-    const lineCount = await prisma.drawingRegisterLine.count({ where: { projectId } });
-    await prisma.$transaction(async (tx) => {
-      if (revIds.length) {
-        await tx.checklistSubmission.updateMany({ where: { revisionId: { in: revIds } }, data: { revisionId: null, drawingId: null } });
-        await tx.drawingRevisionMarkupPage.deleteMany({ where: { revisionId: { in: revIds } } });
-        await tx.drawingRevision.deleteMany({ where: { id: { in: revIds } } });
-      }
-      if (drawingIds.length) {
-        await tx.checklistSubmission.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null, revisionId: null } });
-        await tx.rfi.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
-        await tx.qualityInspection.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
-        await tx.designCoordinationIssue.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
-        await tx.drawingRegisterLine.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null } });
-        await tx.drawing.deleteMany({ where: { id: { in: drawingIds }, projectId } });
-      }
-      await tx.drawingRegisterLine.deleteMany({ where: { projectId } });
-    });
-    await audit("drawing.register.clear_all", {
-      userId: req.user!.id,
-      entity: "Project",
-      entityId: projectId,
-      meta: { removedDrawings: drawingIds.length, removedLines: lineCount },
-    });
-    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
-    await publishDrawingRegistersToDrive(projectId).catch(() => undefined);
-    res.json({ removedDrawings: drawingIds.length, removedLines: lineCount, ok: true });
+    try {
+      const drawings = await prisma.drawing.findMany({ where: { projectId }, select: { id: true } });
+      const drawingIds = drawings.map((d) => d.id);
+      const lineCount = await prisma.drawingRegisterLine.count({ where: { projectId } });
+      await prisma.$transaction(
+        async (tx) => {
+          await unlinkAndDeleteDrawings(tx, projectId, drawingIds);
+          await tx.drawingRegisterLine.deleteMany({ where: { projectId } });
+        },
+        { timeout: 120_000 },
+      );
+      await audit("drawing.register.clear_all", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: projectId,
+        meta: { removedDrawings: drawingIds.length, removedLines: lineCount },
+      });
+      // Do not block the UI on SharePoint CSV rewrite — clear already finished in DB.
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(projectId))
+        .catch(() => undefined);
+      res.json({ removedDrawings: drawingIds.length, removedLines: lineCount, ok: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[drawings] clear-gfc-register failed project=${projectId}`, message);
+      res.status(500).json({ error: message || "Could not clear the GFC register" });
+    }
+  },
+);
+
+/** Delete one GFC drawing (and its revisions). Linked master-register line is unlinked, not removed. */
+drawingsRouter.delete(
+  "/drawing/:id",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const drawing = await prisma.drawing.findUnique({ where: { id: req.params.id } });
+    if (!drawing) return res.status(404).json({ error: "Drawing not found" });
+    try {
+      await prisma.$transaction(async (tx) => {
+        await unlinkAndDeleteDrawings(tx, drawing.projectId, [drawing.id]);
+      });
+      await audit("drawing.delete", {
+        userId: req.user!.id,
+        entity: "Drawing",
+        entityId: drawing.id,
+        meta: { projectId: drawing.projectId, drawingNumber: drawing.drawingNumber },
+      });
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(drawing.projectId))
+        .catch(() => undefined);
+      res.json({ ok: true, id: drawing.id });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message || "Could not delete drawing" });
+    }
   },
 );
 
@@ -2208,6 +2266,38 @@ drawingsRouter.patch(
     await publishDrawingRegistersToDrive(row.projectId).catch(() => undefined);
     res.json(row);
   }
+);
+
+/** Delete one master-register line. Pass ?drawing=1 to also remove the linked GFC drawing. */
+drawingsRouter.delete(
+  "/register-lines/:id",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const line = await prisma.drawingRegisterLine.findUnique({ where: { id: req.params.id } });
+    if (!line) return res.status(404).json({ error: "Register line not found" });
+    const alsoDrawing = String(req.query.drawing || "") === "1";
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (alsoDrawing && line.drawingId) {
+          await unlinkAndDeleteDrawings(tx, line.projectId, [line.drawingId]);
+        }
+        await tx.drawingRegisterLine.delete({ where: { id: line.id } });
+      });
+      await audit("drawing.register_line.delete", {
+        userId: req.user!.id,
+        entity: "DrawingRegisterLine",
+        entityId: line.id,
+        meta: { projectId: line.projectId, drawingNumber: line.drawingNumber, alsoDrawing },
+      });
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(line.projectId))
+        .catch(() => undefined);
+      res.json({ ok: true, id: line.id });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message || "Could not delete register line" });
+    }
+  },
 );
 
 drawingsRouter.get("/revision/:revId/sharepoint", requireRoles("admin", "office", "employee", "site_employee", "client"), async (req, res) => {

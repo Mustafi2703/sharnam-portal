@@ -141,6 +141,8 @@ app.get("/api/health", async (_req, res) => {
       graphConfigured &&
       Boolean((process.env.GRAPH_MAIL_FROM || process.env.GRAPH_SHARED_MAILBOX || "").trim()) &&
       process.env.GRAPH_MAIL_ENABLED !== "false",
+    /** Live Graph mail to clients/vendors — keep false until all modules are production-ready. */
+    portalMailLive: process.env.PORTAL_MAIL_LIVE === "true",
     timezone: "Asia/Kolkata",
     time: new Date().toISOString(),
     commit: deployCommit || "local",

@@ -4,14 +4,16 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { AttendanceCalendar } from "./AttendanceCalendar";
 import { AttendancePunchPanel } from "./AttendancePunchPanel";
-import { Button, Card, Input, PageHeader } from "./ui";
+import { Button, Card, Input, PageHeader, Select } from "./ui";
+
+type LeaveType = { id: string; code: string; name: string };
 
 type Balance = {
   id: string;
   entitled: number;
   used: number;
   balance: number;
-  leaveType?: { name?: string; code?: string } | null;
+  leaveType?: { id?: string; name?: string; code?: string } | null;
 };
 
 type LeaveRow = {
@@ -21,7 +23,8 @@ type LeaveRow = {
   fromDate: string;
   toDate: string;
   days: number;
-  leaveType?: { name?: string } | null;
+  halfDay?: boolean;
+  leaveType?: { name?: string; code?: string } | null;
 };
 
 type DocRow = {
@@ -43,6 +46,9 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   const [leaveFrom, setLeaveFrom] = useState("");
   const [leaveTo, setLeaveTo] = useState("");
   const [leaveReason, setLeaveReason] = useState("");
+  const [leaveTypeId, setLeaveTypeId] = useState("");
+  const [halfDay, setHalfDay] = useState(false);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [sepDay, setSepDay] = useState("");
   const [sepReason, setSepReason] = useState("");
   const [docKind, setDocKind] = useState("Aadhaar");
@@ -52,6 +58,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   const site = variant === "site";
   const [searchParams, setSearchParams] = useSearchParams();
   const desk = searchParams.get("desk") || "attendance";
+  const earlyFromGeo = searchParams.get("early") === "1";
   const sections = [
     { id: "attendance", label: "Attendance" },
     { id: "leave", label: "Leave" },
@@ -62,19 +69,36 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
 
   async function load() {
     if (!user?.id) return;
-    const [b, l, d] = await Promise.all([
+    const [b, l, d, t] = await Promise.all([
       api<Balance[]>("/api/hrm/leave-balances", { token }).catch(() => []),
       api<LeaveRow[]>("/api/hrm/leave", { token }).catch(() => []),
       api<DocRow[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(user.id)}`, { token }).catch(() => []),
+      api<LeaveType[]>("/api/hrm/leave-types", { token }).catch(() => []),
     ]);
     setBalances(b);
     setLeaves(l);
     setDocs(d);
+    setLeaveTypes(t);
+    if (!leaveTypeId && t.length) {
+      const cl = t.find((x) => /^cl$/i.test(x.code) || /casual/i.test(x.name));
+      setLeaveTypeId((cl || t[0]).id);
+    }
   }
 
   useEffect(() => {
     void load();
   }, [token, user?.id]);
+
+  useEffect(() => {
+    if (searchParams.get("halfDay") === "1") setHalfDay(true);
+    if (earlyFromGeo || searchParams.get("halfDay") === "1") {
+      const today = new Date();
+      const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      if (!leaveFrom) setLeaveFrom(iso);
+      if (!leaveTo) setLeaveTo(iso);
+      if (!leaveReason && earlyFromGeo) setLeaveReason("Early checkout from site (GPS)");
+    }
+  }, [searchParams, earlyFromGeo]);
 
   const separations = leaves.filter((row) => (row.reason || "").startsWith("SEPARATION:"));
   const leaveRows = leaves.filter((row) => !(row.reason || "").startsWith("SEPARATION:"));
@@ -87,10 +111,22 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
       await api("/api/hrm/leave", {
         method: "POST",
         token,
-        body: JSON.stringify({ fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason }),
+        body: JSON.stringify({
+          fromDate: leaveFrom,
+          toDate: leaveTo,
+          reason: leaveReason,
+          leaveTypeId: leaveTypeId || undefined,
+          halfDay,
+          days: halfDay ? 0.5 : undefined,
+        }),
       });
       setLeaveReason("");
-      setMsg("Leave request sent to HR.");
+      setHalfDay(false);
+      setMsg(halfDay ? "Half-day leave request sent to HR." : "Leave request sent to HR.");
+      const next = new URLSearchParams(searchParams);
+      next.delete("early");
+      next.delete("halfDay");
+      setSearchParams(next, { replace: true });
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not send leave request");
@@ -196,17 +232,55 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
         </div>
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Request leave</h3>
-          <p className="text-xs text-steel-muted">This sends a request. Approval is a separate HR step — you cannot approve your own leave here.</p>
+          <p className="text-xs text-steel-muted">
+            Pick type (CL / PL / SL), full or half day, then send. Approval is a separate HR step — you cannot approve your own leave here.
+          </p>
+          {earlyFromGeo && (
+            <p className="text-xs rounded-lg px-3 py-2 bg-warn-soft text-warn">
+              Early checkout recorded with GPS. Submit a half-day (usually CL) for today so HR can approve.
+            </p>
+          )}
           <form className="grid sm:grid-cols-2 gap-2" onSubmit={applyLeave}>
+            <Select
+              className="sm:col-span-2"
+              required
+              value={leaveTypeId}
+              onChange={(e) => setLeaveTypeId(e.target.value)}
+            >
+              <option value="">Leave type…</option>
+              {leaveTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.code} — {t.name}
+                </option>
+              ))}
+            </Select>
             <Input type="date" required value={leaveFrom} onChange={(e) => setLeaveFrom(e.target.value)} />
-            <Input type="date" required value={leaveTo} onChange={(e) => setLeaveTo(e.target.value)} />
+            <Input
+              type="date"
+              required
+              value={leaveTo}
+              onChange={(e) => setLeaveTo(e.target.value)}
+              disabled={halfDay}
+            />
+            <label className="sm:col-span-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={halfDay}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setHalfDay(on);
+                  if (on && leaveFrom) setLeaveTo(leaveFrom);
+                }}
+              />
+              Half day (0.5 day)
+            </label>
             <Input
               className="sm:col-span-2"
               placeholder="Reason"
               value={leaveReason}
               onChange={(e) => setLeaveReason(e.target.value)}
             />
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || !leaveTypeId}>
               Send to HR
             </Button>
           </form>
@@ -217,8 +291,9 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
                   <span>
                     {new Date(row.fromDate).toLocaleDateString("en-IN")} – {new Date(row.toDate).toLocaleDateString("en-IN")}
                     {row.leaveType?.name ? ` · ${row.leaveType.name}` : ""}
+                    {row.halfDay ? " · Half" : ""}
                   </span>
-                  <span className="text-steel-muted">{row.status}</span>
+                  <span className="text-steel-muted shrink-0">{row.status}</span>
                 </li>
               ))}
             </ul>

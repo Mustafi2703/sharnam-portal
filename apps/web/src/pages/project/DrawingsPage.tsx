@@ -89,6 +89,7 @@ export default function DrawingsPage() {
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [dumpBusy, setDumpBusy] = useState(false);
+  const [clearBusy, setClearBusy] = useState(false);
   const [addRowOpen, setAddRowOpen] = useState(false);
   const [addRowForm, setAddRowForm] = useState({
     drawingNumber: "",
@@ -612,6 +613,7 @@ export default function DrawingsPage() {
               <Button
                 type="button"
                 variant="danger"
+                disabled={clearBusy}
                 onClick={() => {
                   if (
                     !window.confirm(
@@ -621,20 +623,24 @@ export default function DrawingsPage() {
                     return;
                   }
                   void (async () => {
+                    setClearBusy(true);
+                    setMsg("Clearing register… this can take up to a minute on large projects. Please wait.");
                     try {
                       const r = await api<{ removedDrawings: number; removedLines: number }>(
                         `/api/drawings/project/${id}/clear-gfc-register`,
-                        { method: "POST", token },
+                        { method: "POST", token, timeoutMs: 180_000 },
                       );
                       setMsg(`GFC register cleared — ${r.removedLines} lines, ${r.removedDrawings} drawings removed.`);
                       await load();
                     } catch (err) {
                       setMsg(err instanceof Error ? err.message : "Could not clear the GFC register");
+                    } finally {
+                      setClearBusy(false);
                     }
                   })();
                 }}
               >
-                Delete all rows
+                {clearBusy ? "Clearing…" : "Delete all rows"}
               </Button>
               <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
                 Upload GFC
@@ -978,6 +984,30 @@ export default function DrawingsPage() {
                           {canUpload && (
                             <Button type="button" variant="secondary" className="!px-2 !py-1 !text-xs" onClick={() => openUploadRev(d)}>
                               Upload rev
+                            </Button>
+                          )}
+                          {canUpload && (
+                            <Button
+                              type="button"
+                              variant="danger"
+                              className="!px-2 !py-1 !text-xs"
+                              disabled={clearBusy}
+                              onClick={() => {
+                                if (!window.confirm(`Delete drawing ${d.drawingNumber}? Revisions on this row are removed. SharePoint files stay.`)) {
+                                  return;
+                                }
+                                void (async () => {
+                                  try {
+                                    await api(`/api/drawings/drawing/${d.id}`, { method: "DELETE", token });
+                                    setMsg(`Deleted ${d.drawingNumber}`);
+                                    await load();
+                                  } catch (err) {
+                                    setMsg(err instanceof Error ? err.message : "Could not delete drawing");
+                                  }
+                                })();
+                              }}
+                            >
+                              Delete
                             </Button>
                           )}
                           <Link

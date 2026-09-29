@@ -167,6 +167,7 @@ export function MasterDrawingRegisterTable({
               <th>Critical</th>
               <th>Remarks</th>
               <th>GFC</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -268,11 +269,41 @@ export function MasterDrawingRegisterTable({
                     </Link>
                   )}
                 </td>
+                <td>
+                  {canEdit ? (
+                    <Button
+                      type="button"
+                      variant="danger"
+                      className="!text-[10px] !px-2 !py-1"
+                      onClick={() => {
+                        if (!window.confirm(`Delete master line ${cleanDrawingNumber(r.drawingNumber)}?`)) return;
+                        const withDrawing =
+                          Boolean(r.drawing?.id) &&
+                          window.confirm("Also delete the linked GFC drawing and its revisions?");
+                        void (async () => {
+                          try {
+                            await api(
+                              `/api/drawings/register-lines/${r.id}${withDrawing ? "?drawing=1" : ""}`,
+                              { method: "DELETE", token },
+                            );
+                            await onLinePatched?.();
+                          } catch (err) {
+                            window.alert(err instanceof Error ? err.message : "Could not delete line");
+                          }
+                        })();
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  ) : (
+                    "—"
+                  )}
+                </td>
               </tr>
             ))}
             {!filteredLines.length && (
               <tr>
-                <td colSpan={22} className="empty">
+                <td colSpan={23} className="empty">
                   {lines.length ? "No lines match filters." : "No lines — add above or run seed."}
                 </td>
               </tr>
