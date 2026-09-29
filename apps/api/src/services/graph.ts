@@ -533,13 +533,23 @@ export async function ensureDriveFolder(driveId: string, folderPath: string): Pr
 
 /** Web URL for an existing sandbox file. Returns null when SharePoint is off or the file is missing. */
 export async function driveItemWebUrl(itemPath: string): Promise<string | null> {
+  const ref = await driveItemRef(itemPath);
+  return ref?.webUrl || null;
+}
+
+export async function driveItemRef(
+  itemPath: string,
+): Promise<{ driveId: string; itemId: string; webUrl: string | null } | null> {
   const cfg = graphConfig();
   if (!cfg.configured || cfg.mock) return null;
   try {
     const drive = await resolveDefaultDrive();
     assertPortalSafePath(itemPath);
-    const existing = await graphFetch<{ webUrl?: string }>(`/drives/${drive.driveId}/root:/${encodeDrivePath(itemPath)}`);
-    return existing.webUrl || null;
+    const existing = await graphFetch<{ id?: string; webUrl?: string }>(
+      `/drives/${drive.driveId}/root:/${encodeDrivePath(itemPath)}`,
+    );
+    if (!existing.id) return null;
+    return { driveId: drive.driveId, itemId: existing.id, webUrl: existing.webUrl || null };
   } catch {
     return null;
   }

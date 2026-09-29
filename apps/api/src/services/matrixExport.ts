@@ -21,8 +21,9 @@ type MatrixRow = {
   officeAddress?: string | null;
 };
 
-const NAVY = "FF1E3A5F";
-const GOLD = "FFC9A227";
+const HEADER_FILL = "FF445469";
+const THIN = { style: "thin" as const, color: { argb: "FF445469" } };
+const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
 
 function esc(s: unknown) {
   return String(s ?? "")
@@ -53,7 +54,7 @@ async function imageDataUriFromUrl(raw: string | null | undefined): Promise<stri
   if (/^https?:\/\//i.test(url)) {
     try {
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const timer = setTimeout(() => ctrl.abort(), 2500);
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
       if (!res.ok) return "";
@@ -124,31 +125,62 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
     `SUBJECT : ${kind} COMMUNICATION MATRIX`,
     `DATE : ${matrixDate}`,
   ];
+  [11, 27, 28, 23, 24, 25, 38, 31, 30].forEach((width, i) => {
+    sheet.getColumn(i + 1).width = width;
+  });
+  sheet.pageSetup = {
+    orientation: "landscape",
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1,
+    paperSize: 9,
+    horizontalCentered: true,
+  };
+  sheet.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 };
   banner.forEach((line, i) => {
     const rowNo = i + 1;
-    sheet.mergeCells(`A${rowNo}:G${rowNo}`);
-    const cell = sheet.getCell(`A${rowNo}`);
+    sheet.mergeCells(rowNo, 1, rowNo, 7);
+    const cell = sheet.getCell(rowNo, 1);
     cell.value = line;
-    cell.font = { bold: true, size: rowNo === 5 ? 14 : 11, color: { argb: NAVY }, name: "Calibri" };
-    cell.alignment = { vertical: "middle", horizontal: "left" };
-    sheet.getRow(rowNo).height = 18;
+    cell.font = { bold: true, size: 12, name: "Calibri", color: { argb: "FF000000" } };
+    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: false };
+    sheet.getRow(rowNo).height = 17.25;
   });
 
   if (spdcLogo) {
     const imgId = wb.addImage({ filename: spdcLogo, extension: "png" });
-    sheet.addImage(imgId, { tl: { col: 7.1, row: 0.15 }, ext: { width: 90, height: 36 }, editAs: "oneCell" });
+    sheet.addImage(imgId, { tl: { col: 7, row: 0.1 }, ext: { width: 88, height: 48 }, editAs: "oneCell" });
   }
   if (clientFile) {
     const imgId = wb.addImage({ filename: clientFile.file, extension: clientFile.ext });
-    sheet.addImage(imgId, { tl: { col: 8.1, row: 0.15 }, ext: { width: 90, height: 36 }, editAs: "oneCell" });
+    sheet.addImage(imgId, { tl: { col: 8, row: 0.1 }, ext: { width: 88, height: 48 }, editAs: "oneCell" });
   }
 
   const header = ["SR.NO", "NAME", "DESIGNATION", "NAME OF COMPANY", "SINGLE POINT OF CONTACT", "MOBILE", "E-MAIL", "GENERAL MAIL COMMUNICATION", "OFFICE ADD."];
-  sheet.addRow(header);
-  const hr = sheet.lastRow!;
-  hr.font = { bold: true, color: { argb: "FFFFFFFF" } };
-  hr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
-  hr.alignment = { vertical: "middle", wrapText: true };
+  const hr = sheet.getRow(7);
+  hr.height = 31;
+  header.forEach((label, i) => {
+    const cell = hr.getCell(i + 1);
+    cell.value = label;
+    cell.font = { bold: true, size: 12, name: "Calibri", color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = BOX;
+  });
+
+  const paint = (row: ExcelJS.Row, bold: boolean, height: number) => {
+    row.height = height;
+    for (let c = 1; c <= 9; c++) {
+      const cell = row.getCell(c);
+      cell.font = { bold, size: 12, name: "Calibri", color: { argb: "FF000000" } };
+      cell.alignment = {
+        vertical: "middle",
+        wrapText: true,
+        horizontal: c === 1 || c === 8 ? "center" : "left",
+      };
+      cell.border = BOX;
+    }
+  };
 
   let sectionIdx = -1;
   let personInSection = 0;
@@ -157,13 +189,12 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
       sectionIdx += 1;
       personInSection = 0;
       const row = sheet.addRow([String.fromCharCode(65 + sectionIdx), r.orgName || "", "", "", "", "", "", "", ""]);
-      sheet.mergeCells(`B${row.number}:I${row.number}`);
-      row.font = { bold: true, name: "Calibri" };
-      row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E3F0" } };
+      sheet.mergeCells(row.number, 2, row.number, 9);
+      paint(row, true, 25.4);
       continue;
     }
     personInSection += 1;
-    sheet.addRow([
+    const row = sheet.addRow([
       personInSection,
       r.personName || "",
       r.designation || "",
@@ -174,13 +205,12 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
       r.mailRole || "",
       r.officeAddress || "",
     ]);
+    const lines = String(r.officeAddress || r.spoc || "").split("\n").length;
+    paint(row, false, Math.max(28, 16 * lines));
   }
 
-  sheet.columns.forEach((col, i) => {
-    col.width = i === 8 ? 36 : i === 6 ? 28 : 16;
-  });
-  sheet.addRow([]);
-  sheet.addRow([SPDC_OFFICE_FOOTER]);
+  const foot = sheet.addRow([SPDC_OFFICE_FOOTER]);
+  foot.font = { size: 9, name: "Calibri", italic: true, color: { argb: "FF445469" } };
   try {
     const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
     return Buffer.from(ab);

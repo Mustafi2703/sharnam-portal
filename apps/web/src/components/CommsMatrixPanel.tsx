@@ -264,38 +264,17 @@ export function CommsMatrixPanel({
         </Button>
         <Button
           type="button"
-          variant="secondary"
-          disabled={busy}
-          onClick={async () => {
-            try {
-              const res = await fetch(
-                `${import.meta.env.VITE_API_URL || ""}/api/comms/contacts/${projectId}/export.html?kind=${matrixKind}`,
-                { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
-              );
-              if (!res.ok) throw new Error("Export failed");
-              const html = await res.text();
-              const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
-              window.open(url, "_blank", "noopener,noreferrer");
-            } catch (err) {
-              onMsg(err instanceof Error ? err.message : "Export failed");
-            }
-          }}
-        >
-          Export PDF (print)
-        </Button>
-        <Button
-          type="button"
           disabled={busy}
           onClick={async () => {
             setBusy(true);
             try {
-              const r = await api<{ sharePointUrl?: string | null }>(
+              const r = await api<{ sharePointUrl?: string | null; message?: string }>(
                 `/api/comms/contacts/${projectId}/sharepoint-link`,
-                { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind: matrixKind }) },
+                { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind: matrixKind, file: "xlsx" }) },
               );
-              if (!r.sharePointUrl) throw new Error("SharePoint link is not ready");
+              if (!r.sharePointUrl) throw new Error(r.message || "SharePoint link is not ready");
               window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
-              onMsg("Opened the SPDC Excel matrix in SharePoint.");
+              onMsg("Opened the matrix Excel in SharePoint. The PDF is filed in the same folder.");
             } catch (err) {
               onMsg(err instanceof Error ? err.message : "Could not open SharePoint");
             } finally {
@@ -304,6 +283,29 @@ export function CommsMatrixPanel({
           }}
         >
           Open Excel in SharePoint
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const r = await api<{ sharePointUrl?: string | null; message?: string }>(
+                `/api/comms/contacts/${projectId}/sharepoint-link`,
+                { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind: matrixKind, file: "pdf" }) },
+              );
+              if (!r.sharePointUrl) throw new Error(r.message || "SharePoint link is not ready");
+              window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+              onMsg("Opened the matrix PDF in SharePoint.");
+            } catch (err) {
+              onMsg(err instanceof Error ? err.message : "Could not open SharePoint");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Open PDF in SharePoint
         </Button>
       </div>
 

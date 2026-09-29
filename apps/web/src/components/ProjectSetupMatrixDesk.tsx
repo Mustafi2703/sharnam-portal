@@ -201,16 +201,16 @@ export function ProjectSetupMatrixDesk({
 
   const peopleRows = useMemo(() => contacts.filter((c) => !c.isSectionHeader), [contacts]);
 
-  async function openSharePoint(kind: "TECHNICAL" | "COMMERCIAL") {
+  async function openSharePoint(kind: "TECHNICAL" | "COMMERCIAL", file: "xlsx" | "pdf" = "xlsx") {
     setBusy(true);
     try {
-      const r = await api<{ sharePointUrl?: string | null }>(
+      const r = await api<{ sharePointUrl?: string | null; message?: string }>(
         `/api/comms/contacts/${projectId}/sharepoint-link`,
-        { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind }) },
+        { method: "POST", token, timeoutMs: 120_000, body: JSON.stringify({ kind, file }) },
       );
-      if (!r.sharePointUrl) throw new Error("SharePoint link is not ready");
+      if (!r.sharePointUrl) throw new Error(r.message || "SharePoint link is not ready");
       window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
-      onMsg("Opened the SPDC Excel matrix in SharePoint.");
+      onMsg(file === "pdf" ? "Opened the matrix PDF in SharePoint." : "Opened the matrix Excel in SharePoint. The PDF is filed in the same folder.");
     } catch (err) {
       onMsg(err instanceof Error ? err.message : "Could not open SharePoint");
     } finally {
@@ -294,11 +294,11 @@ export function ProjectSetupMatrixDesk({
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => void exportMatrix(kind, "xlsx")}>
                   Download Excel
                 </Button>
-                <Button type="button" variant="secondary" disabled={busy} onClick={() => void exportMatrix(kind, "html")}>
-                  Open for print / PDF
-                </Button>
-                <Button type="button" disabled={busy} onClick={() => void openSharePoint(kind)}>
+                <Button type="button" disabled={busy} onClick={() => void openSharePoint(kind, "xlsx")}>
                   Open Excel in SharePoint
+                </Button>
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => void openSharePoint(kind, "pdf")}>
+                  Open PDF in SharePoint
                 </Button>
               </div>
             </div>

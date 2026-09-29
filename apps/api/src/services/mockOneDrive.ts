@@ -185,6 +185,8 @@ export class MockOneDriveService {
     sharePointPath?: string | null;
     sharePointUrl?: string | null;
     sharePointError?: string;
+    driveId?: string;
+    itemId?: string;
   }> {
     const dir = path.join(this.projectRoot(projectCode), relFolder);
     ensureDir(dir);
@@ -220,6 +222,8 @@ export class MockOneDriveService {
           provider: "sharepoint",
           sharePointPath: sp.sharePointPath,
           sharePointUrl: sp.url || null,
+          driveId: sp.driveId,
+          itemId: sp.itemId,
         };
       } catch (err) {
         const sharePointError = err instanceof Error ? err.message : String(err);
