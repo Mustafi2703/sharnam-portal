@@ -61,6 +61,39 @@ export function gfcCurrentRevision(d: {
   return revs[revs.length - 1];
 }
 
+/** Portal placeholder from a date-only GFC import — not a real PDF/DWG. */
+export function isRealDrawingFile(url?: string | null): boolean {
+  if (!url) return false;
+  return !/\/pending\//i.test(url);
+}
+
+export function revisionUploadStatus(rev?: {
+  pdfFileUrl?: string | null;
+  dwgFileUrl?: string | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  pdfFileName?: string | null;
+  dwgFileName?: string | null;
+} | null): { pdf: boolean; dwg: boolean; pdfUrl: string | null; dwgUrl: string | null } {
+  if (!rev) return { pdf: false, dwg: false, pdfUrl: null, dwgUrl: null };
+  const pdfUrl = isRealDrawingFile(rev.pdfFileUrl) ? rev.pdfFileUrl! : null;
+  const dwgUrl = isRealDrawingFile(rev.dwgFileUrl) ? rev.dwgFileUrl! : null;
+  const fileUrl = isRealDrawingFile(rev.fileUrl) ? rev.fileUrl! : null;
+  const name = `${rev.fileName || ""} ${rev.pdfFileName || ""} ${rev.dwgFileName || ""}`;
+  const pdf = !!pdfUrl || (!!fileUrl && /\.pdf/i.test(name || fileUrl));
+  const dwg = !!dwgUrl || (!!fileUrl && /\.dwg/i.test(name || fileUrl));
+  return {
+    pdf,
+    dwg,
+    pdfUrl: pdfUrl || (pdf ? fileUrl : null),
+    dwgUrl: dwgUrl || (dwg ? fileUrl : null),
+  };
+}
+
+export function drawingCheckFilled(drawing?: { revisions?: { preCheckSubmissionId?: string | null }[] } | null): boolean {
+  return !!(drawing?.revisions || []).some((r) => r.preCheckSubmissionId);
+}
+
 export function gfcDateLabel(r?: {
   plannedDate?: string | Date | null;
   actualDate?: string | Date | null;

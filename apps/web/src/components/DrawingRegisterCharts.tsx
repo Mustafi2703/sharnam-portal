@@ -8,6 +8,7 @@ export function DrawingRegisterCharts({
   byBuilding = [],
   byDrawingType = [],
   byBuildingDiscipline = [],
+  byFileLink = [],
 }: {
   byDiscipline: { label: string; value: number }[];
   byCritical: { label: string; value: number }[];
@@ -17,6 +18,7 @@ export function DrawingRegisterCharts({
   byBuilding?: { label: string; value: number }[];
   byDrawingType?: { label: string; value: number }[];
   byBuildingDiscipline?: { building: string; discipline: string; count: number }[];
+  byFileLink?: { label: string; value: number }[];
 }) {
   const buildingDiscPoints = byBuildingDiscipline.map((r) => ({
     label: `${r.building} · ${r.discipline}`,
@@ -27,6 +29,11 @@ export function DrawingRegisterCharts({
     <div className="grid lg:grid-cols-2 gap-4">
       <BarChartCard title="By discipline" points={byDiscipline.map((p) => ({ label: p.label, value: p.value }))} />
       <BarChartCard title="By drawing type" points={byDrawingType.map((p) => ({ label: p.label, value: p.value }))} />
+      <BarChartCard
+        title="Files linked (PDF / DWG)"
+        points={byFileLink.map((p) => ({ label: p.label, value: p.value }))}
+        emptyLabel="No GFC files linked yet"
+      />
       <BarChartCard title="Critical drawing" points={byCritical.map((p) => ({ label: p.label, value: p.value }))} />
       <BarChartCard title="By package" points={byPackage.map((p) => ({ label: p.label, value: p.value }))} emptyLabel="No packages tagged yet" />
       <BarChartCard title="By building" points={byBuilding.map((p) => ({ label: p.label, value: p.value }))} emptyLabel="No buildings tagged yet" />

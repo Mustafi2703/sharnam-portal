@@ -23,19 +23,53 @@ import {
   type DrawingRevisionPreview,
 } from "../../lib/drawingPreview";
 import {
+  drawingCheckFilled,
   gfcCurrentRevision,
-  gfcDateLabel,
   gfcNextRevisionNumber,
   gfcRevisionForSlot,
   gfcRevSlots,
   gfcRevisionsByNumber,
   normalizeRevNumber,
+  revisionUploadStatus,
 } from "../../lib/gfcRegister";
 import { MASTER_REGISTER_DISCIPLINES } from "../../lib/masterDrawingRegister";
 import { downloadAuthFile } from "../../lib/downloadReport";
 
 const GFC_DISCIPLINE_TABS = ["Architecture", "Structural", "MEPF"] as const;
 const GFC_REVISION_CHOICES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"] as const;
+
+function RevisionShareLinks({
+  rev,
+  label,
+  compact,
+  onOpen,
+}: {
+  rev: any;
+  label?: string;
+  compact?: boolean;
+  onOpen: (fileUrl?: string) => void;
+}) {
+  const status = revisionUploadStatus(rev);
+  return (
+    <div className={`flex flex-col ${compact ? "items-center" : "items-start"} gap-0.5`}>
+      {label && <span className="text-[10px] font-mono text-steel-muted">{label}</span>}
+      {status.pdfUrl ? (
+        <button type="button" className="text-[10px] font-semibold text-brand hover:underline" onClick={() => onOpen(status.pdfUrl || undefined)}>
+          Open PDF
+        </button>
+      ) : (
+        <span className="text-[10px] text-steel-muted">PDF not uploaded</span>
+      )}
+      {status.dwgUrl ? (
+        <button type="button" className="text-[10px] font-semibold text-brand hover:underline" onClick={() => onOpen(status.dwgUrl || undefined)}>
+          Open DWG
+        </button>
+      ) : (
+        <span className="text-[10px] text-steel-muted">DWG not uploaded</span>
+      )}
+    </div>
+  );
+}
 
 function fmtDate(d?: string | Date | null) {
   if (!d) return "—";
@@ -309,7 +343,8 @@ export default function DrawingsPage() {
   }
 
   function revisionHasFiles(rev: any) {
-    return !!(rev?.pdfFileUrl || rev?.dwgFileUrl || rev?.fileUrl || extraFileList(rev).length);
+    const status = revisionUploadStatus(rev);
+    return status.pdf || status.dwg || extraFileList(rev).some((f) => !/\/pending\//i.test(f.fileUrl || ""));
   }
 
   function openLatestViewer(d: any) {
@@ -424,8 +459,8 @@ export default function DrawingsPage() {
         setFormError("Choose PDF/DWG or optional receive/issue details.");
         return;
       }
-    } else if (revUploadMode === "new" && !revUnlockToken) {
-      setFormError("Complete Drawing Check Master before a new revision upload.");
+    } else if (revUploadMode === "new" && !revUnlockToken && !drawingCheckFilled(uploadTarget)) {
+      setFormError("Complete Drawing Check once for this drawing before the first file upload.");
       return;
     } else if (!revPdf && !revDwg && !extraPdfs.length) {
       setFormError("Choose at least one of PDF or DWG.");
@@ -460,8 +495,8 @@ export default function DrawingsPage() {
         setExpandedId(uploadForId);
         setMsg(`${revForm.revisionNumber} receive/issue saved.`);
       } else {
-        if (revUploadMode === "new" && !revUnlockToken) {
-          setFormError("Complete Drawing Check Master before a new revision upload.");
+        if (revUploadMode === "new" && !revUnlockToken && !drawingCheckFilled(uploadTarget)) {
+          setFormError("Complete Drawing Check once for this drawing before the first file upload.");
           return;
         }
         const fd = new FormData();
@@ -505,7 +540,7 @@ export default function DrawingsPage() {
     setRevDwg(null);
     setFormError("");
     setPrecheckOpen(false);
-    setPlannedDate("");
+    setPlannedDate(new Date().toISOString().slice(0, 10));
     setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
     if (latest) {
@@ -592,7 +627,7 @@ export default function DrawingsPage() {
           canUpload ? (
             <>
               <Link
-                to={`/projects/${id}/drawings/register?sheet=master`}
+                to={`/projects/${id}/drawings/register/master`}
                 className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-2 text-xs font-semibold text-brand hover:bg-sand/60"
               >
                 Master register →
@@ -1000,26 +1035,17 @@ export default function DrawingsPage() {
                       <td className="px-2 py-2 font-mono text-xs text-brand font-semibold">{d.drawingNumber}</td>
                       <td className="px-2 py-2 font-medium max-w-[180px]">{d.title}</td>
                       <td className="px-2 py-2">
-                        {latest && revisionHasFiles(latest) ? (
-                          <div className="flex flex-col gap-0.5">
-                            <button
-                              type="button"
-                              className="text-xs font-semibold text-brand hover:underline text-left"
-                              onClick={() => openLatestViewer(d)}
-                            >
-                              Latest · Open
-                            </button>
-                            <span className="text-[10px] font-mono text-steel-muted">{latest.revisionNumber || d.currentRev}</span>
-                            <button
-                              type="button"
-                              className="text-[10px] font-semibold text-brand hover:underline text-left"
-                              onClick={() => void openRevisionSharePoint(latest.id)}
-                            >
-                              SharePoint
-                            </button>
-                          </div>
+                        {latest ? (
+                          <RevisionShareLinks
+                            rev={latest}
+                            label={latest.revisionNumber || d.currentRev}
+                            onOpen={(fileUrl) => void openRevisionSharePoint(latest.id, fileUrl)}
+                          />
                         ) : (
                           <span className="text-xs text-steel-muted">—</span>
+                        )}
+                        {drawingCheckFilled(d) && (
+                          <div className="text-[10px] text-steel-muted mt-0.5">Check filled once</div>
                         )}
                       </td>
                       {revSlots.map((slot) => {
@@ -1027,34 +1053,38 @@ export default function DrawingsPage() {
                         const plannedDay = r?.plannedDate
                           ? new Date(r.plannedDate).toISOString().slice(0, 10)
                           : "";
+                        const actualLabel = r?.actualDate
+                          ? new Date(r.actualDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })
+                          : "—";
                         return (
                           <td
                             key={slot}
                             className="px-1 py-1 text-[10px] text-center font-mono text-steel-muted whitespace-nowrap align-top"
                             title={r?.revisionLabel || ""}
                           >
-                            {canUpload && r?.id ? (
+                            {r?.id ? (
                               <div className="space-y-0.5">
-                                <input
-                                  type="date"
-                                  className="w-full max-w-[6.5rem] text-[10px] border border-line rounded px-0.5 py-0.5 bg-white"
-                                  value={plannedDay}
-                                  onChange={(e) => void patchRevisionPlanned(r.id, e.target.value)}
+                                {canUpload ? (
+                                  <input
+                                    type="date"
+                                    title="Planned — also editable on the master register"
+                                    className="w-full max-w-[6.5rem] text-[10px] border border-line rounded px-0.5 py-0.5 bg-white"
+                                    value={plannedDay}
+                                    onChange={(e) => void patchRevisionPlanned(r.id, e.target.value)}
+                                  />
+                                ) : (
+                                  <div>{plannedDay || "Plan —"}</div>
+                                )}
+                                <div className="text-[9px] text-steel-muted">Actual {actualLabel}</div>
+                                <RevisionShareLinks
+                                  rev={r}
+                                  compact
+                                  onOpen={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
                                 />
-                                <div className="text-[9px] text-steel-muted">{gfcDateLabel(r).replace(/^P:/, "A:")}</div>
                               </div>
                             ) : (
-                              gfcDateLabel(r)
+                              "—"
                             )}
-                            {r?.id && revisionHasFiles(r) ? (
-                              <button
-                                type="button"
-                                className="block mx-auto text-[9px] font-semibold text-brand hover:underline"
-                                onClick={() => void openRevisionSharePoint(r.id)}
-                              >
-                                SharePoint
-                              </button>
-                            ) : null}
                           </td>
                         );
                       })}
@@ -1175,8 +1205,10 @@ export default function DrawingsPage() {
                                     {fmtDate(r.createdAt)} · {r.revisionLabel || "—"}
                                     {r.uploadedBy?.fullName ? ` · ${r.uploadedBy.fullName}` : ""}
                                   </div>
-                                  {r.pdfFileName && <div className="text-[11px] font-mono mt-0.5">PDF · {r.pdfFileName}</div>}
-                                  {r.dwgFileName && <div className="text-[11px] font-mono">DWG · {r.dwgFileName}</div>}
+                                  <RevisionShareLinks
+                                    rev={r}
+                                    onOpen={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
+                                  />
                                   {extraFileList(r).map((f) => (
                                     <div key={f.fileUrl} className="text-[11px] font-mono flex flex-wrap gap-2 mt-0.5">
                                       <span>PDF · {f.fileName}</span>
@@ -1198,9 +1230,12 @@ export default function DrawingsPage() {
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                   <Badge tone={r.published ? "ok" : "neutral"}>{r.published ? "Live" : "Draft"}</Badge>
-                                  {r.pdfFileUrl && <Badge tone="neutral">PDF</Badge>}
-                                  {r.dwgFileUrl && <Badge tone="neutral">DWG</Badge>}
-                                  {revisionHasFiles(r) && (
+                                  {revisionUploadStatus(r).pdf && <Badge tone="ok">PDF</Badge>}
+                                  {revisionUploadStatus(r).dwg && <Badge tone="ok">DWG</Badge>}
+                                  {!revisionUploadStatus(r).pdf && !revisionUploadStatus(r).dwg && (
+                                    <Badge tone="neutral">No file</Badge>
+                                  )}
+                                  {revisionHasFiles(r) && revisionUploadStatus(r).pdf && (
                                     <Button
                                       type="button"
                                       variant="ghost"
@@ -1210,17 +1245,7 @@ export default function DrawingsPage() {
                                         setViewer(previewFromRev(d, r));
                                       }}
                                     >
-                                      View PDF
-                                    </Button>
-                                  )}
-                                  {revisionHasFiles(r) && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="!text-xs !px-2 !py-1"
-                                      onClick={() => void openRevisionSharePoint(r.id)}
-                                    >
-                                      SharePoint
+                                      Preview PDF
                                     </Button>
                                   )}
                                   {canUpload && (
@@ -1291,7 +1316,9 @@ export default function DrawingsPage() {
               ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only`
               : revUploadMode === "update"
                 ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · add/replace PDF or DWG on same row (no checklist)`
-                : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist complete`
+                : drawingCheckFilled(uploadTarget)
+                  ? `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist already filled once`
+                  : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist once`
           }
           file={revPdf || revDwg}
           onFile={() => undefined}
@@ -1300,7 +1327,8 @@ export default function DrawingsPage() {
               ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) || extraPdfs.length > 0 || issueDraftHasData(revIssue)
               : revUploadMode === "update"
                 ? !!revPdf || !!revDwg || extraPdfs.length > 0 || issueDraftHasData(revIssue)
-                : (!!revPdf || !!revDwg || extraPdfs.length > 0) && !!revUnlockToken
+                : (!!revPdf || !!revDwg || extraPdfs.length > 0) &&
+                  (!!revUnlockToken || drawingCheckFilled(uploadTarget))
           }
           filePicker={
             revUploadMode === "replace" && revReplaceRole === "dwg" ? (
@@ -1466,15 +1494,20 @@ export default function DrawingsPage() {
               kind: "custom" as const,
               node: (
                 <div className="space-y-3">
-                  {revUploadMode === "new" && !revUnlockToken && (
+                  {revUploadMode === "new" && !revUnlockToken && !drawingCheckFilled(uploadTarget) && (
                     <div className="rounded-lg border border-brand/30 bg-brand-soft/40 px-3 py-2">
                       <p className="text-sm text-ink">
-                        {revForm.revisionNumber} is a new column. Complete Drawing Check, then the files upload onto that revision.
+                        Drawing Check is filled once for this drawing. Complete it before the first file upload. Later revisions reuse that fill.
                       </p>
                       <Button type="button" className="mt-2" onClick={() => launchDrawingCheck("revision", uploadTarget)}>
                         Open Drawing Check
                       </Button>
                     </div>
+                  )}
+                  {revUploadMode === "new" && drawingCheckFilled(uploadTarget) && (
+                    <p className="text-sm text-steel-muted">
+                      Drawing Check is already filled for {uploadTarget.drawingNumber}. This revision does not ask again.
+                    </p>
                   )}
                   <DrawingIssueFields
                     projectId={id!}
@@ -1500,7 +1533,9 @@ export default function DrawingsPage() {
             setViewer(null);
             setViewerRevId(null);
           }}
-          onOpenSharePoint={viewerRevId ? () => void openRevisionSharePoint(viewerRevId) : undefined}
+          onOpenSharePoint={
+            viewerRevId ? (fileUrl) => void openRevisionSharePoint(viewerRevId, fileUrl) : undefined
+          }
         />
       )}
     </div>

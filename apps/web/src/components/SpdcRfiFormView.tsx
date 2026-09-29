@@ -59,6 +59,7 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
   const [markupOpen, setMarkupOpen] = useState(false);
   const [markupFile, setMarkupFile] = useState<File | null>(null);
   const [markupRevisionId, setMarkupRevisionId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const progress = rfiProgress(rfi);
   const row = buildSpdcRegisterRow(rfi);
   const form = parseFormDataJson(rfi.formDataJson);
@@ -198,8 +199,41 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
                 Linked drawing: {linkedDrawing.drawingNumber} · {linkedDrawing.title}
               </span>
               <Button type="button" variant="secondary" className="!text-xs" disabled={!!busy} onClick={() => void openLinkedDrawingMarkup()}>
-                {busy === "markup" ? "Opening…" : "Markup drawing"}
+                {busy === "markup" ? "Opening…" : "New markup"}
               </Button>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setHistoryOpen((v) => !v)}>
+                Existing markups ({(linkedRev?.markupPages || []).length})
+              </Button>
+              {historyOpen && (
+                <ul className="w-full mt-2 space-y-1 text-xs">
+                  {(linkedRev?.markupPages || []).length === 0 && (
+                    <li className="text-steel-muted">No saved markups yet. New markup stores a dated copy in SharePoint.</li>
+                  )}
+                  {(linkedRev?.markupPages || []).map((p: any) => (
+                    <li key={p.id} className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono">
+                        {new Date(p.createdAt).toLocaleString("en-GB")} · page {p.pageNumber}
+                        {p.uploadedBy?.fullName ? ` · ${p.uploadedBy.fullName}` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        className="font-semibold text-brand"
+                        onClick={() =>
+                          void api<{ sharePointUrl?: string | null }>(
+                            `/api/drawings/revision/${linkedRev.id}/sharepoint?fileUrl=${encodeURIComponent(p.fileUrl)}`,
+                            { token },
+                          ).then((r) => {
+                            if (r.sharePointUrl) window.open(r.sharePointUrl, "_blank", "noopener,noreferrer");
+                            else setMsg("Markup is saved. The SharePoint link appears once the file is in the project library.");
+                          })
+                        }
+                      >
+                        Open in SharePoint
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ) : null}
           <div className="sm:col-span-2">
@@ -400,7 +434,9 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
               <div className="markup-modal__backdrop" onClick={() => setMarkupOpen(false)} />
               <div className="markup-modal__panel max-w-4xl">
                 <div className="markup-modal__head">
-                  <span>RFI drawing markup — {linkedDrawing?.drawingNumber || "drawing"}</span>
+                  <span>
+                    New markup — {linkedDrawing?.drawingNumber || "drawing"} · pen, line, box, arrow, colours · saved with date in SharePoint
+                  </span>
                   <button type="button" className="markup-modal__close" onClick={() => setMarkupOpen(false)}>
                     Close
                   </button>

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { DrawingRegisterCharts } from "../../components/DrawingRegisterCharts";
@@ -95,6 +95,7 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
         byBuilding={data.pivots?.byBuilding || []}
         byDrawingType={data.pivots?.byDrawingType || data.charts?.byDrawingType || []}
         byBuildingDiscipline={data.pivots?.byBuildingDiscipline || []}
+        byFileLink={data.pivots?.byFileLink || []}
       />
       <p className="text-xs text-steel-muted">
         Same pivots as DRAWING REGISTER - 01.xlsx Dashboard. Excel and PDF exports match the workbook layout and file to SharePoint when you publish.
@@ -113,8 +114,12 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
 export default function DrawingRegisterPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const sheetView = drawingRegisterSheetFromParams(searchParams);
+  const masterPath = location.pathname.endsWith("/drawings/register/master");
+  const sheetView = masterPath
+    ? { key: "master" as const, label: "Master register" }
+    : drawingRegisterSheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
@@ -136,10 +141,10 @@ export default function DrawingRegisterPage() {
 
   useEffect(() => {
     const sheet = searchParams.get("sheet");
-    if ((sheet === "client" || sheet === "site") && id) {
-      navigate(`/projects/${id}/drawings/register?sheet=master`, { replace: true });
+    if ((sheet === "client" || sheet === "site" || sheet === "master") && id && !masterPath) {
+      navigate(`/projects/${id}/drawings/register/master`, { replace: true });
     }
-  }, [id, searchParams, navigate]);
+  }, [id, searchParams, navigate, masterPath]);
 
   useEffect(() => {
     void load();
@@ -226,8 +231,8 @@ export default function DrawingRegisterPage() {
         title={sheetView.label}
         subtitle={
           sheetKey === "master"
-            ? "Master Drawing Register — DCI schedule from DRAWING REGISTER - 01.xlsx. Upload PDF/DWG on Approval & GFC log only."
-            : "Drawing Register Dashboard — DRAWING REGISTER - 01.xlsx layout. Site register tab is not used."
+            ? "Master Drawing Register — drawing types, planned dates, and delete live here. Actual dates come from the GFC log. Upload PDF/DWG on Approval & GFC."
+            : "DRAWING REGISTER - 01.xlsx Dashboard sheet — week, charts, and pivots. The master register is a separate tool."
         }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
@@ -298,6 +303,16 @@ export default function DrawingRegisterPage() {
                   {publishBusy ? "Publishing…" : "Publish → SharePoint"}
                 </Button>
               </>
+            )}
+            {sheetKey === "" && (
+              <Link to={`/projects/${id}/drawings/register/master`} className="text-sm font-semibold text-brand">
+                Master register →
+              </Link>
+            )}
+            {sheetKey === "master" && (
+              <Link to={`/projects/${id}/drawings/register`} className="text-sm font-semibold text-brand">
+                Dashboard →
+              </Link>
             )}
             <Link to={`/projects/${id}/drawings`} className="text-sm font-semibold text-brand">
               Approval & GFC log →

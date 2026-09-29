@@ -17,7 +17,9 @@ export function isToolActive(
   const currentSheet = params.get("sheet");
   const currentKind = params.get("kind");
 
-  if (t.to.includes("/")) {
+  if (t.to === "drawings/register") {
+    if (tail !== "drawings/register") return false;
+  } else if (t.to.includes("/")) {
     if (tail !== t.to && !tail.startsWith(`${t.to}/`)) return false;
   } else if (t.end) {
     if (tail !== t.to) return false;

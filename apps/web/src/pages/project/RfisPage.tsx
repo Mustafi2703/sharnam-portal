@@ -526,7 +526,7 @@ export default function RfisPage() {
             {!isClient && moduleScope === "drawings" && (form.rfiKind === "RequestForInformation" || form.rfiKind === "DrawingChecklist") && (
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 rounded-lg border border-line bg-sand/30 p-3">
                 <p className="sm:col-span-2 lg:col-span-4 text-[10px] font-mono uppercase tracking-wider text-steel-muted">
-                  SPDC register fields (04_RFI_REGISTER)
+                  SPDC/QMS/F-RFI-01 — same fields as SPDC_RFI_Form_and_Register.xlsx
                 </p>
                 <Select value={form.package} onChange={(e) => setForm({ ...form, package: e.target.value })}>
                   {["P1-CIVIL", "P2-PEB", "Package A", "Package B"].map((p) => (

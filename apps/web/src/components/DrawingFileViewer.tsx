@@ -3,7 +3,7 @@ import { Button } from "./ui";
 import { useAuth } from "../auth";
 import type { DrawingPreview, DrawingRevisionPreview } from "../lib/drawingPreview";
 import { latestMarkupByPage } from "../lib/drawingPreview";
-import { canDownloadPortalFiles, canBrowseSharePoint, isSpdcEmployee, portalFileSrc } from "../lib/driveAccess";
+import { canDownloadPortalFiles, isSpdcEmployee, portalFileSrc } from "../lib/driveAccess";
 
 type Props = (
   | { preview: DrawingPreview; variant?: "inline" | "modal"; onClose?: () => void; className?: string }
@@ -13,7 +13,7 @@ type Props = (
       onClose?: () => void;
       className?: string;
     }
-) & { onOpenSharePoint?: () => void };
+) & { onOpenSharePoint?: (fileUrl?: string) => void };
 
 function fmtWhen(d?: string) {
   if (!d) return "";
@@ -28,12 +28,11 @@ function RevisionViewer({
 }: {
   revision: DrawingRevisionPreview;
   onClose?: () => void;
-  onOpenSharePoint?: () => void;
+  onOpenSharePoint?: (fileUrl?: string) => void;
   className?: string;
 }) {
   const { user } = useAuth();
   const allowToolbar = canDownloadPortalFiles(user?.role);
-  const showDrive = canBrowseSharePoint(user?.role);
   const canView = isSpdcEmployee(user?.role) || user?.role === "client" || user?.role === "vendor";
   const markupGroups = useMemo(() => latestMarkupByPage(revision.markupPages), [revision.markupPages]);
   const tabs = useMemo(() => {
@@ -64,7 +63,7 @@ function RevisionViewer({
         </div>
         <div className="flex gap-2 shrink-0">
           {onOpenSharePoint && (
-            <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={onOpenSharePoint}>
+            <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => onOpenSharePoint()}>
               Open in SharePoint
             </Button>
           )}
@@ -104,19 +103,13 @@ function RevisionViewer({
         {tab === "dwg" && revision.dwg && (
           <div className="p-8 text-center space-y-4">
             <p className="text-sm text-steel-muted max-w-md mx-auto">
-              DWG is stored in SharePoint — open in AutoCAD or download from the link below.
+              DWG opens in the SharePoint viewer. It is not downloaded from the portal.
             </p>
             <div className="text-xs font-mono text-steel-muted">{revision.dwg.fileName}</div>
-            {showDrive && (
-              <a
-                href={revision.dwg.fileUrl}
-                download
-                className="inline-flex items-center gap-2 rounded-lg bg-brand text-white px-4 py-2 text-sm font-semibold"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Download DWG →
-              </a>
+            {onOpenSharePoint && (
+              <Button type="button" onClick={() => onOpenSharePoint(revision.dwg?.fileUrl)}>
+                Open DWG in SharePoint
+              </Button>
             )}
           </div>
         )}
@@ -193,10 +186,19 @@ function RevisionViewer({
   );
 }
 
-function SimpleViewer({ preview, onClose, className = "" }: { preview: DrawingPreview; onClose?: () => void; className?: string }) {
+function SimpleViewer({
+  preview,
+  onClose,
+  onOpenSharePoint,
+  className = "",
+}: {
+  preview: DrawingPreview;
+  onClose?: () => void;
+  onOpenSharePoint?: (fileUrl?: string) => void;
+  className?: string;
+}) {
   const { user } = useAuth();
   const allowToolbar = canDownloadPortalFiles(user?.role);
-  const showDrive = canBrowseSharePoint(user?.role);
   const canView = isSpdcEmployee(user?.role) || user?.role === "client" || user?.role === "vendor";
   return (
     <div className={`flex flex-col min-h-0 ${className}`}>
@@ -231,18 +233,12 @@ function SimpleViewer({ preview, onClose, className = "" }: { preview: DrawingPr
         {preview.kind === "dwg" && (
           <div className="p-8 text-center space-y-4">
             <p className="text-sm text-steel-muted max-w-md mx-auto">
-              DWG is stored in SharePoint — open in AutoCAD or download from the link below.
+              DWG opens in the SharePoint viewer. It is not downloaded from the portal.
             </p>
-            {showDrive && (
-              <a
-                href={preview.fileUrl}
-                download
-                className="inline-flex items-center gap-2 rounded-lg bg-brand text-white px-4 py-2 text-sm font-semibold"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Download DWG →
-              </a>
+            {onOpenSharePoint && (
+              <Button type="button" onClick={() => onOpenSharePoint(preview.fileUrl)}>
+                Open DWG in SharePoint
+              </Button>
             )}
           </div>
         )}
@@ -272,7 +268,12 @@ export function DrawingFileViewer(props: Props) {
       className={props.className}
     />
   ) : (
-    <SimpleViewer preview={props.preview} onClose={props.onClose} className={props.className} />
+    <SimpleViewer
+      preview={props.preview}
+      onClose={props.onClose}
+      onOpenSharePoint={props.onOpenSharePoint}
+      className={props.className}
+    />
   );
 
   if (variant === "modal") {

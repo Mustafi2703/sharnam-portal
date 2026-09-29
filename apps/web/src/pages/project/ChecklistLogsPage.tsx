@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../../lib/brandedChecklistPrint";
+import { downloadAuthFile } from "../../lib/downloadReport";
 import { ensureFamilyAssignment, openChecklistFillWindow } from "../../lib/checklistFillWindow";
 import { isEmbedView } from "../../lib/inPageOverlay";
 import { projectRouteTail } from "../../lib/projectWorkspace";
@@ -366,7 +367,7 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                     {s.status !== "Draft" && (
                       <div className="flex flex-wrap gap-1 justify-end">
                         <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>
-                          Branded PDF
+                          {s.assignment?.template?.checklistType === "DrawingCheck" ? "Checklist PDF" : "Branded PDF"}
                         </Button>
                         <Button
                           type="button"
@@ -375,14 +376,50 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                           onClick={async () => {
                             try {
                               await downloadBrandedChecklistXlsx(s.id, token);
-                              setMsg("Branded Excel downloaded.");
+                              setMsg(
+                                s.assignment?.template?.checklistType === "DrawingCheck"
+                                  ? "Drawing check Excel downloaded — each Yes / No / N.A. line is filled."
+                                  : "Branded Excel downloaded."
+                              );
                             } catch (err) {
                               setMsg(err instanceof Error ? err.message : "Excel download failed");
                             }
                           }}
                         >
-                          Branded Excel
+                          {s.assignment?.template?.checklistType === "DrawingCheck" ? "Checklist Excel" : "Branded Excel"}
                         </Button>
+                        {s.rfiId && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!text-xs !py-1.5"
+                              onClick={() =>
+                                void downloadAuthFile(
+                                  `/api/rfis/${s.rfiId}/download.xlsx`,
+                                  token,
+                                  `${s.rfiNumber || "RFI"}-Form.xlsx`,
+                                ).catch((err) => setMsg(err instanceof Error ? err.message : "RFI Excel failed"))
+                              }
+                            >
+                              RFI form Excel
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!text-xs !py-1.5"
+                              onClick={() =>
+                                void downloadAuthFile(
+                                  `/api/rfis/${s.rfiId}/download.html`,
+                                  token,
+                                  `${s.rfiNumber || "RFI"}-Form.html`,
+                                ).catch((err) => setMsg(err instanceof Error ? err.message : "RFI form failed"))
+                              }
+                            >
+                              RFI form PDF
+                            </Button>
+                          </>
+                        )}
                         {canReview && (s.status === "Submitted" || s.status === "Reviewed") && (
                           <>
                             <Button

@@ -40,6 +40,7 @@ export type RegisterPivotBundle = {
     byPackage: { label: string; value: number }[];
     byBuilding: { label: string; value: number }[];
     byDrawingType: { label: string; value: number }[];
+    byFileLink: { label: string; value: number }[];
   };
   totals: {
     lines: number;
@@ -49,6 +50,39 @@ export type RegisterPivotBundle = {
     delayed: number;
   };
 };
+
+function realFile(url?: string | null) {
+  return !!url && !/\/pending\//i.test(url);
+}
+
+async function fileLinkCounts(projectId: string) {
+  const drawings = await prisma.drawing.findMany({
+    where: { projectId },
+    include: { revisions: { select: { pdfFileUrl: true, dwgFileUrl: true, fileUrl: true, fileName: true } } },
+  });
+  let pdf = 0;
+  let dwg = 0;
+  let both = 0;
+  let datesOnly = 0;
+  for (const d of drawings) {
+    const hasPdf = d.revisions.some(
+      (r) => realFile(r.pdfFileUrl) || (realFile(r.fileUrl) && /\.pdf/i.test(r.fileName || r.fileUrl || "")),
+    );
+    const hasDwg = d.revisions.some(
+      (r) => realFile(r.dwgFileUrl) || (realFile(r.fileUrl) && /\.dwg/i.test(r.fileName || r.fileUrl || "")),
+    );
+    if (hasPdf && hasDwg) both += 1;
+    else if (hasPdf) pdf += 1;
+    else if (hasDwg) dwg += 1;
+    else datesOnly += 1;
+  }
+  return [
+    { label: "PDF + DWG", value: both },
+    { label: "PDF only", value: pdf },
+    { label: "DWG only", value: dwg },
+    { label: "Dates only", value: datesOnly },
+  ].filter((r) => r.value > 0);
+}
 
 async function loadRegisterLines(projectId: string) {
   return prisma.drawingRegisterLine.findMany({
@@ -110,6 +144,7 @@ export async function loadRegisterPivotBundle(projectId: string): Promise<Regist
       byPackage: groupCount((l) => (l.projectPackage || "").trim() || "—").filter((r) => r.label !== "—"),
       byBuilding: groupCount((l) => (l.building || "").trim() || "—").filter((r) => r.label !== "—"),
       byDrawingType: groupCount((l) => l.drawingType || "Other"),
+      byFileLink: await fileLinkCounts(projectId),
     },
     totals: {
       lines: lines.length,

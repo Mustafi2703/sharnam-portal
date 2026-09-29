@@ -202,11 +202,8 @@ function parseFillMetaFromResponses(responsesJson?: string) {
   };
 }
 
-function getAnswer(
-  responses: Record<string, ResponseCell | string>,
-  item: Item
-): { answer: string; remark: string } {
-  const ans = responses[item.id] || responses[item.itemCode || ""] || {};
+function cellAnswer(ans: ResponseCell | string | undefined): { answer: string; remark: string } {
+  if (!ans) return { answer: "", remark: "" };
   if (typeof ans === "string") return { answer: ans, remark: "" };
   return {
     answer: String(ans.answer || ans.value || ""),
@@ -214,14 +211,30 @@ function getAnswer(
   };
 }
 
-function familyOf(type?: string | null): "activity" | "safety" | "rfi" | "ir" {
+function orderedAnswers(responses: Record<string, ResponseCell | string>) {
+  return Object.entries(responses)
+    .filter(([key]) => key !== "_meta")
+    .map(([, value]) => value);
+}
+
+function getAnswer(
+  responses: Record<string, ResponseCell | string>,
+  item: Item,
+  fallback?: ResponseCell | string
+): { answer: string; remark: string } {
+  const direct = responses[item.id] || (item.itemCode ? responses[item.itemCode] : undefined);
+  const picked = cellAnswer(direct);
+  if (picked.answer || picked.remark) return picked;
+  return cellAnswer(fallback);
+}
+
+function familyOf(type?: string | null): "activity" | "safety" | "rfi" | "ir" | "drawing" {
   const t = String(type || "").toLowerCase();
   if (t === "safety" || t.includes("safety")) return "safety";
   if (t === "qualityinspection" || t.includes("qualityir")) return "ir";
-  if (t === "activityinspection") return "activity";
-  if (t === "siteexecution") return "activity";
-  if (t === "drawingcheck" || t.includes("drawing")) return "rfi";
+  if (t === "drawingcheck" || (t.includes("drawing") && !t.includes("rfi"))) return "drawing";
   if (t.includes("rfi") || t.includes("information")) return "rfi";
+  if (t === "activityinspection" || t === "siteexecution") return "activity";
   return "activity";
 }
 
@@ -395,6 +408,7 @@ async function fillActivityChecklist(
   const template = submission.assignment?.template;
   const items = [...(template?.items || [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const responses = parseResponses(submission.responsesJson);
+  const byOrder = orderedAnswers(responses);
   const fillMeta = parseFillMetaFromResponses(submission.responsesJson);
   const checklistNo = fillMeta.reportNo || (submission.id || "").slice(0, 10).toUpperCase() || "CL-PORTAL";
 
@@ -429,7 +443,7 @@ async function fillActivityChecklist(
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const { answer, remark } = getAnswer(responses, it);
+    const { answer, remark } = getAnswer(responses, it, byOrder[i]);
     const kind = classifyAnswer(answer);
     if (kind === "ok") ok += 1;
     else if (kind === "fail") fail += 1;
@@ -842,6 +856,10 @@ export async function buildBrandedChecklistXlsxBuffer(
     wb = await fillSafetyChecklist(submission, project, dirSigns);
   } else if (family === "rfi") {
     wb = await fillRfiForm(submission, project, dirSigns);
+  } else if (family === "drawing") {
+    wb = await fillActivityChecklist(submission, project, dirSigns);
+    const sheet = wb.worksheets[0];
+    if (sheet) sheet.name = "Drawing Check";
   } else if (family === "ir") {
     wb = await fillInspectionRequest(submission, project, dirSigns);
   } else {

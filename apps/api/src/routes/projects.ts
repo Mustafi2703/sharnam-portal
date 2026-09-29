@@ -2386,6 +2386,22 @@ drawingsRouter.patch(
       where: { id: req.params.id },
       data,
     });
+    if (body.plannedSubmissionDate !== undefined && row.drawingId) {
+      const linked = await prisma.drawing.findUnique({
+        where: { id: row.drawingId },
+        include: { revisions: true },
+      });
+      const current =
+        linked?.revisions.find(
+          (r) => r.revisionNumber.trim().toUpperCase() === (linked.currentRev || "").trim().toUpperCase(),
+        ) || linked?.revisions[linked.revisions.length - 1];
+      if (current) {
+        await prisma.drawingRevision.update({
+          where: { id: current.id },
+          data: { plannedDate: row.plannedSubmissionDate },
+        });
+      }
+    }
     const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
     await publishDrawingRegistersToDrive(row.projectId).catch(() => undefined);
     res.json(row);
@@ -2438,7 +2454,8 @@ drawingsRouter.get("/revision/:revId/sharepoint", requireRoles("admin", "office"
     ...parseExtraFiles(rev.extraFilesJson).map((f) => f.fileUrl),
   ].filter(Boolean) as string[];
   const requested = String(req.query.fileUrl || "");
-  const portalUrl = (requested && known.includes(requested) ? requested : null) || rev.pdfFileUrl || rev.fileUrl || "";
+  const portalUrl =
+    (requested && known.includes(requested) ? requested : null) || rev.pdfFileUrl || rev.dwgFileUrl || rev.fileUrl || "";
   const prefix = `/uploads/onedrive/${code}/`;
   const rel = portalUrl.startsWith(prefix) ? portalUrl.slice(prefix.length) : "";
   if (!rel) return res.json({ sharePointUrl: null, portalUrl: portalUrl || null });
@@ -2752,13 +2769,27 @@ drawingsRouter.post(
 
     let unlockSubmissionId = existingRev?.preCheckSubmissionId || null;
     if (!existingRev) {
-      const unlock = await consumeDrawingUnlockToken({
-        projectId: drawing.projectId,
-        unlockToken: req.body.unlockToken || req.body.preCheckToken,
-        userId: req.user!.id,
-      });
-      if (!unlock.ok) return res.status(400).json({ error: unlock.error });
-      unlockSubmissionId = unlock.submissionId;
+      const priorCheck =
+        drawing.revisions.find((r) => r.preCheckSubmissionId)?.preCheckSubmissionId ||
+        (
+          await prisma.checklistSubmission.findFirst({
+            where: { drawingId: drawing.id, purpose: "PreUploadDrawing", status: "Submitted" },
+            orderBy: { createdAt: "desc" },
+            select: { id: true },
+          })
+        )?.id ||
+        null;
+      if (priorCheck) {
+        unlockSubmissionId = priorCheck;
+      } else {
+        const unlock = await consumeDrawingUnlockToken({
+          projectId: drawing.projectId,
+          unlockToken: req.body.unlockToken || req.body.preCheckToken,
+          userId: req.user!.id,
+        });
+        if (!unlock.ok) return res.status(400).json({ error: unlock.error });
+        unlockSubmissionId = unlock.submissionId;
+      }
     }
 
     let primaryPdf = pdf;

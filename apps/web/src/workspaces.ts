@@ -40,8 +40,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish.", sheet: "Drawing & GFC Drawing Log" },
     {
       to: "drawings/register",
-      label: "Master drawing register",
-      blurb: "DCI master register from DRAWING REGISTER - 01.xlsx — includes week KPI dashboard.",
+      label: "Register dashboard",
+      blurb: "DRAWING REGISTER - 01.xlsx Dashboard — week, discipline, type, critical, and file-link charts.",
+      sheet: "Dashboard",
+    },
+    {
+      to: "drawings/register/master",
+      label: "Master register",
+      blurb: "Master Drawing Register — planned dates, drawing types, edit and delete. Separate from the dashboard.",
       sheet: "Master Drawing Register",
     },
     {
@@ -49,11 +55,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Drawing files",
       blurb: "PDF/DWG in SharePoint design folders — not the general document manager.",
       sheet: "Drawing & GFC Drawing Log",
-    },
-    {
-      to: "drawings/coordination",
-      label: "Markup",
-      blurb: "Open a GFC sheet on a coordination issue, then Markup the PDF with clouds and notes.",
     },
     {
       to: "drawings/checklist-master",
@@ -70,7 +71,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     {
       to: "drawings/coordination",
       label: "Design coordination",
-      blurb: "Clash / design issues — discipline, linked drawing, ball-in-court. Escalate open items to Ask RFI.",
+      blurb: "Clash / design issues — discipline, linked drawing, ball-in-court. Markup the attached drawing on the RFI, not here.",
       sheet: "Design coordination register",
     },
     {

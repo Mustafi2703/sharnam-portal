@@ -1340,9 +1340,14 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
       responses = {};
     }
     const photoPaths = s.photos.map((p) => p.fileUrl).join(" | ");
-    for (const item of template.items) {
+    const ordered = Object.entries(responses)
+      .filter(([key]) => key !== "_meta")
+      .map(([, value]) => value);
+    for (let i = 0; i < template.items.length; i++) {
+      const item = template.items[i];
       const key = item.id ?? item.itemCode ?? "";
-      const ans = (key && responses[key]) || (item.itemCode ? responses[item.itemCode] : undefined) || {};
+      const direct = (key && responses[key]) || (item.itemCode ? responses[item.itemCode] : undefined);
+      const ans = direct && (typeof direct === "string" || direct.answer || direct.value || direct.remarks) ? direct : ordered[i] || {};
       const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "";
       const remarks = typeof ans === "object" ? ans.remarks || ans.remark || "" : "";
       rows.push({

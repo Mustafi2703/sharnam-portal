@@ -524,14 +524,18 @@ export async function importGfcLogFromBuffer(
       const existing = await prisma.drawingRevision.findFirst({
         where: { drawingId: drawing.id, revisionNumber },
       });
+      const sameStamp =
+        existing?.plannedDate &&
+        existing.actualDate &&
+        existing.plannedDate.getTime() === existing.actualDate.getTime();
       if (existing) {
         await prisma.drawingRevision.update({
           where: { id: existing.id },
           data: {
             actualDate: date,
-            plannedDate: existing.plannedDate || date,
+            plannedDate: sameStamp ? null : existing.plannedDate,
             // Keep real files if already uploaded; only fill placeholder when empty
-            ...(existing.fileUrl
+            ...(existing.fileUrl && !/\/pending\//i.test(existing.fileUrl)
               ? {}
               : {
                   fileUrl: `/uploads/onedrive/pending/${drawingNumber}-${revisionNumber}.pdf`,
@@ -550,14 +554,23 @@ export async function importGfcLogFromBuffer(
             published: false,
             uploadedById,
             actualDate: date,
-            plannedDate: date,
+            plannedDate: null,
           },
         });
         revisions += 1;
       }
     }
 
-    await prisma.drawingRegisterLine.upsert({
+    const latestActual = revDates.length ? revDates[revDates.length - 1].date : null;
+    const existingLine = await prisma.drawingRegisterLine.findUnique({
+      where: { projectId_drawingNumber: { projectId, drawingNumber } },
+    });
+    const plannedCopiedFromActual =
+      !!existingLine?.plannedSubmissionDate &&
+      !!latestActual &&
+      existingLine.plannedSubmissionDate.getTime() === latestActual.getTime();
+
+    const line = await prisma.drawingRegisterLine.upsert({
       where: { projectId_drawingNumber: { projectId, drawingNumber } },
       create: {
         projectId,
@@ -569,6 +582,8 @@ export async function importGfcLogFromBuffer(
         drawingType: "Good For Construction (GFC)",
         revisionNumber: currentRev,
         latestRevision: "Yes",
+        actualSubmissionDate: latestActual,
+        revisionDate: latestActual,
         source: sourceName,
       },
       update: {
@@ -577,9 +592,19 @@ export async function importGfcLogFromBuffer(
         building: buildingArea,
         discipline,
         revisionNumber: currentRev,
+        actualSubmissionDate: latestActual,
+        revisionDate: latestActual,
+        ...(plannedCopiedFromActual ? { plannedSubmissionDate: null } : {}),
         source: sourceName,
       },
     });
+
+    if (line.plannedSubmissionDate) {
+      await prisma.drawingRevision.updateMany({
+        where: { drawingId: drawing.id, revisionNumber: currentRev, plannedDate: null },
+        data: { plannedDate: line.plannedSubmissionDate },
+      });
+    }
   }
   return { drawings, revisions, source: sourceName, skipped };
 }

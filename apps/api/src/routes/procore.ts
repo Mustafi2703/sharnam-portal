@@ -620,6 +620,17 @@ const rfiDetailInclude = {
           fileUrl: true,
           fileName: true,
           published: true,
+          markupPages: {
+            orderBy: { createdAt: "desc" as const },
+            select: {
+              id: true,
+              pageNumber: true,
+              fileUrl: true,
+              fileName: true,
+              createdAt: true,
+              uploadedBy: { select: { fullName: true } },
+            },
+          },
         },
       },
     },

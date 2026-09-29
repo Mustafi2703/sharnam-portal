@@ -238,6 +238,7 @@ export default function App() {
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />
+                  <Route path="drawings/register/master" element={<DrawingRegisterPage />} />
                   <Route path="drawings/register" element={<DrawingRegisterPage />} />
                   <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />
                   <Route path="drawings/upload-revision/:drawingId" element={<RevisionUploadPage />} />
