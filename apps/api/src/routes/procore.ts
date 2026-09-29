@@ -603,7 +603,27 @@ rfiRouter.use(requireAuth);
 const rfiDetailInclude = {
   assignedTo: { select: { id: true, fullName: true } },
   createdBy: { select: { id: true, fullName: true } },
-  drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
+  drawing: {
+    select: {
+      id: true,
+      drawingNumber: true,
+      title: true,
+      currentRev: true,
+      revisions: {
+        orderBy: { createdAt: "desc" as const },
+        take: 5,
+        select: {
+          id: true,
+          revisionNumber: true,
+          pdfFileUrl: true,
+          pdfFileName: true,
+          fileUrl: true,
+          fileName: true,
+          published: true,
+        },
+      },
+    },
+  },
   vendor: { select: { id: true, name: true } },
   responses: { include: { respondedBy: { select: { fullName: true } } }, orderBy: { createdAt: "asc" as const } },
 };

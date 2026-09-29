@@ -68,72 +68,70 @@ commsRouter.get("/contacts/:projectId/export.xlsx", requireRoles("admin", "offic
 
 const MATRIX_FOLDER = "01_CONTEXT_AND_GOVERNANCE/01.02_Stakeholders_and_Communication";
 
-async function fileMatrixPdf(driveId: string, itemId: string, projectCode: string, pdfName: string) {
-  const { convertDriveItemToPdf } = await import("../services/graph.js");
-  const { mockOneDrive } = await import("../services/mockOneDrive.js");
-  const pdf = await convertDriveItemToPdf(driveId, itemId);
-  const saved = await mockOneDrive.upload(projectCode, MATRIX_FOLDER, pdfName, pdf, "application/pdf", { replace: true });
-  const direct = (saved.sharePointUrl || "").trim();
-  return /sharepoint\.com/i.test(direct) ? direct : null;
-}
-
 commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "office", "employee"), async (req, res) => {
   const kind = String(req.body?.kind || req.query.kind || "TECHNICAL").toUpperCase();
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true, code: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
-  const { buildMatrixXlsx } = await import("../services/matrixExport.js");
+  const { buildMatrixXlsx, buildMatrixPdf } = await import("../services/matrixExport.js");
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
   const { driveItemRef, sanitizeProjectCode, SHAREPOINT_SANDBOX_ROOT } = await import("../services/graph.js");
   const fileName = `Communication-Matrix-${kind}.xlsx`;
   const pdfName = `Communication-Matrix-${kind}.pdf`;
   const folderPath = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}/${MATRIX_FOLDER}`;
   try {
-    if (req.body?.file === "pdf") {
-      const pdf = await driveItemRef(`${folderPath}/${pdfName}`);
-      if (pdf?.webUrl) {
-        return res.json({ sharePointUrl: pdf.webUrl, pdfSharePointUrl: pdf.webUrl, fileName: pdfName });
+    const wantPdf = req.body?.file === "pdf";
+    if (wantPdf && !req.body?.refresh) {
+      const existingPdf = await driveItemRef(`${folderPath}/${pdfName}`);
+      if (existingPdf?.webUrl) {
+        return res.json({ sharePointUrl: existingPdf.webUrl, pdfSharePointUrl: existingPdf.webUrl, fileName: pdfName });
       }
-      const xlsx = await driveItemRef(`${folderPath}/${fileName}`);
-      if (xlsx?.itemId) {
-        void fileMatrixPdf(xlsx.driveId, xlsx.itemId, project.code, pdfName).catch((err) => {
-          console.warn("[matrix] PDF file failed", err instanceof Error ? err.message : err);
-        });
-      }
-      return res.json({
-        sharePointUrl: null,
-        pdfSharePointUrl: null,
-        pending: true,
-        message: "The PDF is being filed next to the Excel in SharePoint. Open it again in a moment.",
-      });
     }
-    const buf = await buildMatrixXlsx(project.id, kind);
-    const saved = await mockOneDrive.upload(
+
+    const xlsxBuf = await buildMatrixXlsx(project.id, kind);
+    const savedXlsx = await mockOneDrive.upload(
       project.code,
       MATRIX_FOLDER,
       fileName,
-      buf,
+      xlsxBuf,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       { replace: true },
     );
-    const direct = (saved.sharePointUrl || "").trim();
-    let sharePointUrl = /sharepoint\.com/i.test(direct) ? direct : null;
-    if (!sharePointUrl && saved.sharePointPath) {
-      const ref = await driveItemRef(saved.sharePointPath);
+    const xlsxDirect = (savedXlsx.sharePointUrl || "").trim();
+    let sharePointUrl = /sharepoint\.com/i.test(xlsxDirect) ? xlsxDirect : null;
+    if (!sharePointUrl && savedXlsx.sharePointPath) {
+      const ref = await driveItemRef(savedXlsx.sharePointPath);
       sharePointUrl = ref?.webUrl || null;
     }
+
+    let pdfSharePointUrl: string | null = null;
+    try {
+      const pdfBuf = await buildMatrixPdf(project.id, kind);
+      const savedPdf = await mockOneDrive.upload(project.code, MATRIX_FOLDER, pdfName, pdfBuf, "application/pdf", { replace: true });
+      const pdfDirect = (savedPdf.sharePointUrl || "").trim();
+      pdfSharePointUrl = /sharepoint\.com/i.test(pdfDirect) ? pdfDirect : null;
+      if (!pdfSharePointUrl && savedPdf.sharePointPath) {
+        const ref = await driveItemRef(savedPdf.sharePointPath);
+        pdfSharePointUrl = ref?.webUrl || null;
+      }
+    } catch (err) {
+      console.warn("[matrix] PDF file failed", err instanceof Error ? err.message : err);
+    }
+
+    if (wantPdf) {
+      if (!pdfSharePointUrl) {
+        return res.status(502).json({ error: "Could not file the matrix PDF in SharePoint." });
+      }
+      return res.json({ sharePointUrl: pdfSharePointUrl, pdfSharePointUrl, fileName: pdfName });
+    }
+
     if (!sharePointUrl) {
       return res.status(502).json({
-        error: saved.sharePointError || "Could not open the matrix Excel in SharePoint.",
-      });
-    }
-    if (saved.driveId && saved.itemId) {
-      void fileMatrixPdf(saved.driveId, saved.itemId, project.code, pdfName).catch((err) => {
-        console.warn("[matrix] PDF file failed", err instanceof Error ? err.message : err);
+        error: savedXlsx.sharePointError || "Could not open the matrix Excel in SharePoint.",
       });
     }
     res.json({
       sharePointUrl,
-      pdfSharePointUrl: null,
+      pdfSharePointUrl,
       fileName,
       pdfName,
     });

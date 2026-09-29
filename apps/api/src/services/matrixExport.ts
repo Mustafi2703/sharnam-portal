@@ -390,3 +390,142 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
 </body>
 </html>`;
 }
+
+/** Landscape PDF of the matrix — filed next to the Excel on SharePoint (no Graph Office convert). */
+export async function buildMatrixPdf(projectId: string, matrixKind: string): Promise<Buffer> {
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const PDFDocument = require("pdfkit") as typeof import("pdfkit");
+  const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
+  const matrixDate = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+    .format(new Date())
+    .replace(/\//g, "-");
+  const clientUri = await imageDataUriFromUrl(project.clientLogoUrl);
+  const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo-pdf") : null;
+  const spdcLogo = sharnamLogoPath();
+  const temps = clientFile ? [clientFile.file] : [];
+
+  try {
+    return await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({
+        size: "A3",
+        layout: "landscape",
+        margin: 28,
+        info: { Title: `${kind} Communication Matrix — ${project.name}`, Author: "Sharnam Portal" },
+      });
+      const chunks: Buffer[] = [];
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+
+      const pageW = doc.page.width;
+      const left = 28;
+      const right = pageW - 28;
+      if (spdcLogo) {
+        try {
+          doc.image(spdcLogo, left, 24, { fit: [110, 72] });
+        } catch {
+          /* optional */
+        }
+      }
+      if (clientFile) {
+        try {
+          doc.image(clientFile.file, right - 110, 24, { fit: [110, 72] });
+        } catch {
+          /* optional */
+        }
+      }
+
+      const bannerX = left + 120;
+      const bannerW = right - left - 240;
+      doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(10);
+      const banner = [
+        `PROJECT : ${project.name}`,
+        `CLIENT: ${project.clientName || "—"}`,
+        `DESIGN CONSULTANT : ${project.designConsultant || "—"}`,
+        `PROJECT MANAGEMENT CONSULTANTS : ${project.pmcName || SPDC_PMC_NAME}`,
+        `SUBJECT : ${kind} COMMUNICATION MATRIX`,
+        `DATE : ${matrixDate}`,
+      ];
+      let y = 28;
+      for (const line of banner) {
+        doc.text(line, bannerX, y, { width: bannerW, lineBreak: false });
+        y += line.startsWith("SUBJECT") ? 16 : 13;
+      }
+
+      y = Math.max(y, 108) + 8;
+      const cols = [left, left + 36, left + 130, left + 230, left + 340, left + 460, left + 530, left + 680, left + 760, right];
+      const headers = ["SR", "NAME", "DESIGNATION", "COMPANY", "SPOC", "MOBILE", "E-MAIL", "MAIL", "OFFICE ADD."];
+      doc.rect(left, y, right - left, 22).fill("#445469");
+      doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
+      headers.forEach((h, i) => {
+        doc.text(h, cols[i] + 2, y + 6, { width: cols[i + 1] - cols[i] - 4, align: i === 0 || i === 7 ? "center" : "left", lineBreak: false });
+      });
+      y += 22;
+
+      let sectionIdx = -1;
+      let personInSection = 0;
+      const drawRow = (cells: string[], section: boolean, height: number) => {
+        if (y + height > doc.page.height - 40) {
+          doc.addPage();
+          y = 28;
+        }
+        if (section) doc.rect(left, y, right - left, height).fill("#e8eef8");
+        doc.rect(left, y, right - left, height).stroke("#445469");
+        for (let i = 1; i < cols.length - 1; i++) doc.moveTo(cols[i], y).lineTo(cols[i], y + height).stroke("#445469");
+        doc.fillColor("#111111").font(section ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+        cells.forEach((cell, i) => {
+          doc.text(cell || "", cols[i] + 2, y + 4, {
+            width: cols[i + 1] - cols[i] - 4,
+            height: height - 6,
+            align: i === 0 || i === 7 ? "center" : "left",
+          });
+        });
+        y += height;
+      };
+
+      for (const r of rows) {
+        if (r.isSectionHeader) {
+          sectionIdx += 1;
+          personInSection = 0;
+          drawRow([String.fromCharCode(65 + sectionIdx), r.orgName || "", "", "", "", "", "", "", ""], true, 20);
+          continue;
+        }
+        personInSection += 1;
+        const lines = Math.max(1, String(r.officeAddress || r.spoc || "").split(/\n/).length);
+        drawRow(
+          [
+            String(personInSection),
+            r.personName || "",
+            r.designation || "",
+            r.company || r.orgName || "",
+            r.spoc || "",
+            r.mobile || "",
+            r.email || "",
+            r.mailRole || "",
+            r.officeAddress || "",
+          ],
+          false,
+          Math.max(22, 12 * lines + 8),
+        );
+      }
+
+      y += 10;
+      doc.fillColor("#445469").font("Helvetica-Oblique").fontSize(8).text(SPDC_OFFICE_FOOTER, left, y, { width: right - left });
+      doc.end();
+    });
+  } finally {
+    for (const f of temps) {
+      try {
+        fs.unlinkSync(f);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}

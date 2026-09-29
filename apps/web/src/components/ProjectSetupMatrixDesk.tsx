@@ -52,6 +52,8 @@ export function ProjectSetupMatrixDesk({
 }: Props) {
   const [matrixKind, setMatrixKind] = useState<"TECHNICAL" | "COMMERCIAL">("TECHNICAL");
   const [deskTab, setDeskTab] = useState<"edit" | "export">("edit");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState("");
   const [contacts, setContacts] = useState<MatrixContact[]>([]);
   const [counts, setCounts] = useState({ technical: 0, commercial: 0 });
   const [form, setForm] = useState<MatrixFormState>(EMPTY_MATRIX_FORM);
@@ -218,6 +220,25 @@ export function ProjectSetupMatrixDesk({
     }
   }
 
+  async function previewMatrix(kind: "TECHNICAL" | "COMMERCIAL") {
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || ""}/api/comms/contacts/${projectId}/export.html?kind=${kind}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+      );
+      if (!res.ok) throw new Error("Preview failed");
+      const html = await res.text();
+      setPreviewTitle(kind === "TECHNICAL" ? "Technical matrix" : "Commercial matrix");
+      setPreviewHtml(html);
+      onMsg(`${kind === "TECHNICAL" ? "Technical" : "Commercial"} matrix preview opened.`);
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function exportMatrix(kind: "TECHNICAL" | "COMMERCIAL", format: "xlsx" | "html") {
     setBusy(true);
     try {
@@ -266,6 +287,9 @@ export function ProjectSetupMatrixDesk({
           <Button type="button" disabled={busy} onClick={() => void openSharePoint(matrixKind)}>
             Open Excel in SharePoint
           </Button>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void previewMatrix(matrixKind)}>
+            Preview
+          </Button>
           {deskTab === "edit" ? (
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void importDirectory()}>
               Import assigned directory
@@ -291,6 +315,9 @@ export function ProjectSetupMatrixDesk({
                 <Badge tone="neutral">{kind === "TECHNICAL" ? counts.technical : counts.commercial} people</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" disabled={busy} onClick={() => void previewMatrix(kind)}>
+                  Preview
+                </Button>
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => void exportMatrix(kind, "xlsx")}>
                   Download Excel
                 </Button>
@@ -483,6 +510,28 @@ export function ProjectSetupMatrixDesk({
       </Card>
         </>
       )}
+
+      {previewHtml ? (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-ink/50 backdrop-blur-sm p-3 sm:p-6" role="dialog" aria-modal="true">
+          <div className="mx-auto flex h-full w-full max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-line bg-paper shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+              <div>
+                <div className="font-semibold text-sm">{previewTitle} · Preview</div>
+                <p className="text-[11px] text-steel-muted">Landscape BPCL layout with Sharnam and client logos</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" onClick={() => window.print()}>
+                  Print / Save PDF
+                </Button>
+                <Button type="button" onClick={() => setPreviewHtml(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+            <iframe title={previewTitle} srcDoc={previewHtml} className="flex-1 w-full border-0 bg-white min-h-0" />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

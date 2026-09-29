@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
 import { Badge, Button, TextArea } from "./ui";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "./RfiProgressBar";
@@ -8,6 +9,9 @@ import { buildSpdcRegisterRow, TEST_RFI_NOTIFY_EMAILS } from "../lib/rfiRegister
 import { parseFormDataJson } from "../lib/inspectionRequestForms";
 import { openChecklistFillWindow } from "../lib/checklistFillWindow";
 import { checklistFamilyForRfiKind } from "../lib/rfiModuleScope";
+import PdfMarkup from "./PdfMarkup";
+import { drawingFileKind, resolveDrawingFileUrl } from "../lib/drawingPreview";
+import { uploadDrawingMarkupPages, type MarkupPageDraft } from "../lib/drawingMarkup";
 
 type ProjectLite = {
   name?: string;
@@ -52,10 +56,15 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
+  const [markupOpen, setMarkupOpen] = useState(false);
+  const [markupFile, setMarkupFile] = useState<File | null>(null);
+  const [markupRevisionId, setMarkupRevisionId] = useState<string | null>(null);
   const progress = rfiProgress(rfi);
   const row = buildSpdcRegisterRow(rfi);
   const form = parseFormDataJson(rfi.formDataJson);
   const fileBase = String(rfi.number || "RFI").replace(/[^\w.-]+/g, "_");
+  const linkedDrawing = rfi.drawing;
+  const linkedRev = Array.isArray(linkedDrawing?.revisions) ? linkedDrawing.revisions[0] : null;
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -68,6 +77,36 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
       setBusy("");
     }
   };
+
+  async function openLinkedDrawingMarkup() {
+    if (!linkedRev?.id) {
+      setMsg("Link a GFC drawing with a PDF revision before markup.");
+      return;
+    }
+    const pdfRef =
+      linkedRev.pdfFileUrl ||
+      (drawingFileKind(linkedRev.fileName || linkedRev.fileUrl) === "pdf" ? linkedRev.fileUrl : null);
+    if (!pdfRef) {
+      setMsg("No PDF on the linked drawing — upload a GFC PDF first.");
+      return;
+    }
+    setBusy("markup");
+    setMsg("");
+    try {
+      const res = await fetch(resolveDrawingFileUrl(pdfRef), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Could not load the drawing PDF");
+      const blob = await res.blob();
+      setMarkupFile(new File([blob], linkedRev.pdfFileName || "drawing.pdf", { type: blob.type || "application/pdf" }));
+      setMarkupRevisionId(linkedRev.id);
+      setMarkupOpen(true);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open markup");
+    } finally {
+      setBusy("");
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -153,6 +192,16 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
           </div>
           <Field label="Drawing ref" value={row["DWG REF"]} />
           <Field label="Drawing rev" value={row["DWG REV"]} />
+          {linkedDrawing?.id ? (
+            <div className="sm:col-span-2 p-3 border-t border-line bg-sand/20 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-steel-muted">
+                Linked drawing: {linkedDrawing.drawingNumber} · {linkedDrawing.title}
+              </span>
+              <Button type="button" variant="secondary" className="!text-xs" disabled={!!busy} onClick={() => void openLinkedDrawingMarkup()}>
+                {busy === "markup" ? "Opening…" : "Markup drawing"}
+              </Button>
+            </div>
+          ) : null}
           <div className="sm:col-span-2">
             <Field label="Specification clause" value={row["SPEC CLAUSE"]} />
           </div>
@@ -344,6 +393,37 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
       )}
 
       {msg && <p className="text-sm text-brand">{msg}</p>}
+
+      {markupOpen && markupFile && markupRevisionId
+        ? createPortal(
+            <div className="markup-modal" role="dialog" aria-modal="true">
+              <div className="markup-modal__backdrop" onClick={() => setMarkupOpen(false)} />
+              <div className="markup-modal__panel max-w-4xl">
+                <div className="markup-modal__head">
+                  <span>RFI drawing markup — {linkedDrawing?.drawingNumber || "drawing"}</span>
+                  <button type="button" className="markup-modal__close" onClick={() => setMarkupOpen(false)}>
+                    Close
+                  </button>
+                </div>
+                <div className="markup-modal__body">
+                  <PdfMarkup
+                    src={markupFile}
+                    saveLabel="Save markup on this drawing"
+                    onCancel={() => setMarkupOpen(false)}
+                    onSave={async (pages: MarkupPageDraft[]) => {
+                      if (!markupRevisionId) return;
+                      await uploadDrawingMarkupPages(markupRevisionId, pages, token, `RFI ${rfi.number} markup`);
+                      setMsg(`${pages.length} markup page(s) saved on ${linkedDrawing?.drawingNumber || "drawing"}`);
+                      setMarkupOpen(false);
+                      await onReload();
+                    }}
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

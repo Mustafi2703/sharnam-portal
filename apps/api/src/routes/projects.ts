@@ -2047,6 +2047,46 @@ drawingsRouter.get("/project/:projectId/register-dashboard", async (req, res) =>
   });
 });
 
+/** Drop every GFC drawing and master-register line on this project so the register can start fresh. SharePoint files are not deleted. */
+drawingsRouter.post(
+  "/project/:projectId/clear-gfc-register",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const drawings = await prisma.drawing.findMany({ where: { projectId }, select: { id: true } });
+    const drawingIds = drawings.map((d) => d.id);
+    const revIds = drawingIds.length
+      ? (await prisma.drawingRevision.findMany({ where: { drawingId: { in: drawingIds } }, select: { id: true } })).map((r) => r.id)
+      : [];
+    const lineCount = await prisma.drawingRegisterLine.count({ where: { projectId } });
+    await prisma.$transaction(async (tx) => {
+      if (revIds.length) {
+        await tx.checklistSubmission.updateMany({ where: { revisionId: { in: revIds } }, data: { revisionId: null, drawingId: null } });
+        await tx.drawingRevisionMarkupPage.deleteMany({ where: { revisionId: { in: revIds } } });
+        await tx.drawingRevision.deleteMany({ where: { id: { in: revIds } } });
+      }
+      if (drawingIds.length) {
+        await tx.checklistSubmission.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null, revisionId: null } });
+        await tx.rfi.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
+        await tx.qualityInspection.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
+        await tx.designCoordinationIssue.updateMany({ where: { linkedDrawingId: { in: drawingIds } }, data: { linkedDrawingId: null } });
+        await tx.drawingRegisterLine.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null } });
+        await tx.drawing.deleteMany({ where: { id: { in: drawingIds }, projectId } });
+      }
+      await tx.drawingRegisterLine.deleteMany({ where: { projectId } });
+    });
+    await audit("drawing.register.clear_all", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: projectId,
+      meta: { removedDrawings: drawingIds.length, removedLines: lineCount },
+    });
+    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
+    await publishDrawingRegistersToDrive(projectId).catch(() => undefined);
+    res.json({ removedDrawings: drawingIds.length, removedLines: lineCount, ok: true });
+  },
+);
+
 /** Drop workbook sample rows (DRAWING REGISTER - 01.xlsx) and the drawings they created. */
 drawingsRouter.post(
   "/project/:projectId/clear-template-register",

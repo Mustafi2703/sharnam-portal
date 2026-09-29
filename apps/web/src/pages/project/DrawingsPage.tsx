@@ -609,6 +609,33 @@ export default function DrawingsPage() {
               }}>
                 + Add row
               </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Delete all GFC register rows and drawings on this project? You can start the register fresh. SharePoint files are not deleted.",
+                    )
+                  ) {
+                    return;
+                  }
+                  void (async () => {
+                    try {
+                      const r = await api<{ removedDrawings: number; removedLines: number }>(
+                        `/api/drawings/project/${id}/clear-gfc-register`,
+                        { method: "POST", token },
+                      );
+                      setMsg(`GFC register cleared — ${r.removedLines} lines, ${r.removedDrawings} drawings removed.`);
+                      await load();
+                    } catch (err) {
+                      setMsg(err instanceof Error ? err.message : "Could not clear the GFC register");
+                    }
+                  })();
+                }}
+              >
+                Delete all rows
+              </Button>
               <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
                 Upload GFC
               </Button>
