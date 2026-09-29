@@ -28,6 +28,7 @@ import {
   letterFormFingerprint,
   letterFormUsesAssetExtras,
   letterFormUsesCtc,
+  missingLetterFields,
   letterFormUsesPromotionExtras,
   letterFormUsesSeparationReason,
   letterFormUsesWarningExtras,
@@ -51,6 +52,8 @@ export default function HrmsDocumentsPage() {
   const [offers, setOffers] = useState<OfferRow[]>([]);
   const [previewDocxBlob, setPreviewDocxBlob] = useState<Blob | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [filedSharePoint, setFiledSharePoint] = useState("");
   const [generateBusy, setGenerateBusy] = useState(false);
   const [previewFingerprint, setPreviewFingerprint] = useState("");
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -198,9 +201,37 @@ export default function HrmsDocumentsPage() {
     return created.id;
   }
 
-  async function generateKind(kind: DocKind, _opts?: { skipPreviewCheck?: boolean }) {
-    if (!form.employeeName.trim()) {
-      setMsg("Select a person first.");
+  async function sharePointFor(id: string) {
+    const r = await api<{ sharePointUrl: string }>(`/api/hrm/hrms-documents/${id}/sharepoint?file=docx`, { token });
+    return r.sharePointUrl;
+  }
+
+  async function previewFullScreen() {
+    const missing = missingLetterFields(form);
+    if (missing.length) {
+      setMsg(`Fill these before the full screen preview: ${missing.join(", ")}.`);
+      return;
+    }
+    setMsg("");
+    setPreviewBusy(true);
+    try {
+      const body = { ...createBodyFromForm(form), kind: form.kind };
+      const blob = await fetchPreviewDocx(`${apiBase()}/api/hrm/hrms-documents/preview.docx`, body);
+      setPreviewDocxBlob(blob);
+      setPreviewTitle(`${KIND_OPTIONS.find((k) => k.key === form.kind)?.label || form.kind} · ${form.employeeName}`);
+      setPreviewFingerprint(letterFormFingerprint(form));
+      setPreviewExpanded(true);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  async function generateKind(kind: DocKind) {
+    const missing = missingLetterFields(form);
+    if (missing.length) {
+      setMsg(`Fill these before filing the letter: ${missing.join(", ")}.`);
       return;
     }
     setMsg("");
@@ -208,13 +239,18 @@ export default function HrmsDocumentsPage() {
     try {
       const id = await upsertLetterRow(kind);
       const updated = await api<DocRow>(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
-      const sp = letterSharePointLink(updated);
-      setMsg(
-        sp
-          ? `${kind} filed — Word + print copy on SharePoint. Use Print PDF in the register if you need PDF.`
-          : `${kind} generated — download .docx from the register.`,
-      );
+      let sp = letterSharePointLink(updated);
+      if (!sp) {
+        try {
+          sp = await sharePointFor(id);
+        } catch {
+          sp = null;
+        }
+      }
+      setFiledSharePoint(sp || "");
+      setMsg(sp ? `${kind} is filed on SharePoint. Open it from the full screen preview or the register.` : `${kind} was generated. The SharePoint link is not ready yet — use Open in SharePoint on the register.`);
       await load();
+      await openPreview(id, `${KIND_OPTIONS.find((k) => k.key === kind)?.label || kind} · ${form.employeeName}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Generate failed");
     } finally {
@@ -252,6 +288,11 @@ export default function HrmsDocumentsPage() {
       setPreviewDocxBlob(blob);
       setPreviewTitle(title);
       setPreviewExpanded(true);
+      try {
+        setFiledSharePoint(await sharePointFor(id));
+      } catch {
+        setFiledSharePoint("");
+      }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Preview failed");
     }
@@ -334,7 +375,7 @@ export default function HrmsDocumentsPage() {
       <HrmsPageHero
         eyebrow="Documents · Letters"
         title="HR letter desk"
-        subtitle="Pick one person, fill the fields, then Generate & file. The Word file and the print copy land in that person’s employee folder on SharePoint."
+        subtitle="Fill the letter, open the full screen preview, then Generate & file. Open in SharePoint uses the filed Word file."
         workflow={
           <>
             <span>
@@ -450,9 +491,18 @@ export default function HrmsDocumentsPage() {
                     <div className="flex flex-wrap gap-1 items-center">
                       <Button
                         type="button"
+                        variant="secondary"
                         className="!py-1 !text-xs"
-                        disabled={generateBusy}
-                        onClick={() => void generateKind(form.kind, { skipPreviewCheck: true })}
+                        disabled={previewBusy || generateBusy}
+                        onClick={() => void previewFullScreen()}
+                      >
+                        {previewBusy ? "Opening preview…" : "Full screen preview"}
+                      </Button>
+                      <Button
+                        type="button"
+                        className="!py-1 !text-xs"
+                        disabled={generateBusy || previewBusy}
+                        onClick={() => void generateKind(form.kind)}
                       >
                         {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>
@@ -621,7 +671,10 @@ export default function HrmsDocumentsPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2 pt-1">
-                      <Button type="submit" disabled={generateBusy}>
+                      <Button type="button" variant="secondary" disabled={previewBusy || generateBusy} onClick={() => void previewFullScreen()}>
+                        {previewBusy ? "Opening preview…" : "Full screen preview"}
+                      </Button>
+                      <Button type="submit" disabled={generateBusy || previewBusy}>
                         {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>
                     </div>
@@ -772,10 +825,20 @@ export default function HrmsDocumentsPage() {
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
               <div className="bg-paper rounded-xl shadow-xl w-full max-w-5xl h-[92vh] flex flex-col min-h-0">
                 <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
-                  <div className="font-semibold text-sm">{previewTitle || "Letter preview (Word)"}</div>
-                  <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewExpanded(false)}>
-                    Close
-                  </Button>
+                  <div className="font-semibold text-sm">{previewTitle || "Letter preview"}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {filedSharePoint ? (
+                      <a href={filedSharePoint} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-line bg-paper px-2.5 py-1 text-xs font-semibold text-brand">
+                        Open in SharePoint
+                      </a>
+                    ) : null}
+                    <Button type="button" className="!py-1 !text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
+                      {generateBusy ? "Filing…" : "Generate & file"}
+                    </Button>
+                    <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewExpanded(false)}>
+                      Close
+                    </Button>
+                  </div>
                 </div>
                 <HrmsDocxPreview blob={previewDocxBlob} layout="modal" />
               </div>

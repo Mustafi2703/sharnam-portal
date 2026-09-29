@@ -439,6 +439,26 @@ export function letterFormUsesPromotionExtras(kind: DocKind): boolean {
   return kind === "Promotion";
 }
 
+/** Fields that must be typed before the full-screen letter preview. Defaults on the template do not count as missing. */
+export function missingLetterFields(form: LetterFormState): string[] {
+  const missing: string[] = [];
+  if (!form.employeeName.trim()) missing.push("Employee name");
+  if (!form.designation.trim()) missing.push("Designation");
+  if (!form.department.trim()) missing.push("Department");
+  if (!form.effectiveDate.trim()) missing.push("Effective date");
+  for (const field of LETTER_VARIABLES[form.kind] || []) {
+    if (field.default) continue;
+    const value = (form.sheet[field.key] || "").trim();
+    if (!value) missing.push(field.label);
+  }
+  if (letterFormUsesWarningExtras(form.kind)) {
+    if (!form.issueInBrief.trim()) missing.push("Issue in brief");
+    if (!form.impact.trim()) missing.push("Impact");
+    if (!form.correctiveAction.trim()) missing.push("Corrective action required");
+  }
+  return missing;
+}
+
 export function letterFormUsesWarningExtras(kind: DocKind): boolean {
   return kind === "Warning";
 }
