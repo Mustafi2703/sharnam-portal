@@ -21,54 +21,6 @@ import {
   type MasterRegisterForm,
 } from "../../lib/masterDrawingRegister";
 
-function PivotTable({
-  title,
-  headers,
-  rows,
-}: {
-  title: string;
-  headers: string[];
-  rows: (string | number)[][];
-}) {
-  return (
-    <Card className="!p-0 overflow-hidden">
-      <div className="px-3 py-2 border-b border-line bg-sand/40 text-[10px] font-mono uppercase tracking-wider text-steel-muted">
-        {title}
-      </div>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-[10px] uppercase text-steel-muted">
-            {headers.map((h) => (
-              <th key={h} className="px-3 py-2 font-semibold">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={headers.length} className="px-3 py-3 text-steel-muted">
-                No lines yet
-              </td>
-            </tr>
-          ) : (
-            rows.map((row, i) => (
-              <tr key={i} className="border-t border-line">
-                {row.map((cell, j) => (
-                  <td key={j} className="px-3 py-1.5">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </Card>
-  );
-}
-
 function DrawingRegisterDashboard({ data }: { data: any }) {
   const now = isoWeekNumber();
   const [week, setWeek] = useState<string>("all");
@@ -94,27 +46,6 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
   const submitted = shown.filter((l) => l.actualSubmissionDate).length;
   const critical = shown.filter((l) => /yes/i.test(l.criticalDrawing || "")).length;
   const delayed = shown.filter((l) => (l.submissionDelayDays ?? 0) > 0).length;
-  const buildingRows = (() => {
-    const acc = new Map<string, number>();
-    for (const line of shown) {
-      const key = `${line.building || "—"}|${line.discipline || "Other"}`;
-      acc.set(key, (acc.get(key) || 0) + 1);
-    }
-    return [...acc.entries()].map(([key, count]) => {
-      const [building, discipline] = key.split("|");
-      return [building, discipline, count];
-    });
-  })();
-  const disciplineRows = countRows(shown, (l) => l.discipline || "Other");
-  const criticalRows = countRows(shown, (l) => (/yes/i.test(l.criticalDrawing || "") ? "Yes" : "No"));
-  const delayMap = new Map<string, number>();
-  for (const line of shown) {
-    if (!line.submissionDelayDays) continue;
-    const label = (line.delayResponsibility || "").trim() || "Unassigned";
-    delayMap.set(label, (delayMap.get(label) || 0) + (line.submissionDelayDays || 0));
-  }
-  const delayRows = [...delayMap.entries()].map(([label, days]) => [label, days]);
-  const consultantRows = countRows(shown, (l) => (l.consultantName || "").trim() || "Unassigned");
 
   return (
     <div className="space-y-4">
@@ -175,27 +106,8 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
         ))}
       </div>
       <DrawingRegisterCharts lines={shown} />
-      <p className="text-xs text-steel-muted">
-        Same charts as DRAWING REGISTER - 01.xlsx Dashboard: location, total drawings, critical, submission delay, and submitted by org. Drawing type and the submitted percentage sit with them. Planned date and criticality are maintained on the master register.
-      </p>
-      <div className="grid lg:grid-cols-2 gap-4">
-        <PivotTable title="Location · building × discipline" headers={["Building", "Discipline", "Count"]} rows={buildingRows} />
-        <PivotTable title="Total drawings · discipline" headers={["Discipline", "Count"]} rows={disciplineRows} />
-        <PivotTable title="Critical drawing" headers={["Critical", "Count"]} rows={criticalRows} />
-        <PivotTable title="Submission delay" headers={["Responsibility", "Sum of delay (days)"]} rows={delayRows} />
-        <PivotTable title="Submitted by org" headers={["Organisation", "Count"]} rows={consultantRows} />
-      </div>
     </div>
   );
-}
-
-function countRows(lines: RegisterDashLine[], pick: (line: RegisterDashLine) => string) {
-  const acc = new Map<string, number>();
-  for (const line of lines) {
-    const label = pick(line);
-    acc.set(label, (acc.get(label) || 0) + 1);
-  }
-  return [...acc.entries()].map(([label, value]) => [label, value]);
 }
 
 export default function DrawingRegisterPage() {
