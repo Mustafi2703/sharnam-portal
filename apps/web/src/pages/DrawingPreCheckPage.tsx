@@ -27,6 +27,7 @@ export default function DrawingPreCheckPage() {
   const revisionMode = searchParams.get("mode") === "revision";
   const lockedDrawingId = searchParams.get("drawing") || "";
   const lockedRevisionId = searchParams.get("revision") || "";
+  const lockedRevNumber = searchParams.get("rev") || "";
   const { token, user } = useAuth();
   useStandaloneFormPage();
 
@@ -70,7 +71,7 @@ export default function DrawingPreCheckPage() {
       .then(([t, dwg]) => {
         setTemplate(t);
         setAssignmentId(t.assignmentId || null);
-        setDrawings((dwg || []).filter((d) => d.isPublished));
+        setDrawings((dwg || []).filter((d) => d.isPublished || d.id === lockedDrawingId));
         const init: Record<string, ChecklistFillLine> = {};
         (t.items || []).forEach((i) => {
           init[i.id] = emptyChecklistLine();
@@ -135,6 +136,7 @@ export default function DrawingPreCheckPage() {
   }, [photos, responses]);
 
   function selectedRevisionNumber() {
+    if (lockedRevNumber) return lockedRevNumber;
     const d = drawings.find((x) => x.id === drawingId);
     return d?.revisions?.find((r) => r.id === revisionId)?.revisionNumber || "";
   }

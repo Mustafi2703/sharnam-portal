@@ -197,62 +197,62 @@ export function BarChart({
     ...rows.map((r) => Math.max(Number(r[valueKey]) || 0, compareKey ? Number(r[compareKey]) || 0 : 0))
   );
 
+  function barWidth(n: number) {
+    if (n <= 0) return "0%";
+    return `${Math.max((n / max) * 100, 4)}%`;
+  }
+
   return (
-    <div className="pie-card h-full flex flex-col min-h-[180px]">
+    <div className="pie-card flex flex-col">
       <div className="pie-card__accent" />
       <h3 className="text-sm font-semibold text-ink mb-3 relative z-[1]">{title}</h3>
       {!rows.length ? (
         <p className="text-sm text-steel-muted relative z-[1]">No chart data yet.</p>
       ) : (
-        <div className="space-y-3 flex-1 relative z-[1]">
+        <div className="space-y-3.5 relative z-[1]">
           {rows.map((r, idx) => {
             const a = Number(r[valueKey]) || 0;
             const b = compareKey ? Number(r[compareKey]) || 0 : 0;
             const label = String(r.label ?? `Row ${idx + 1}`);
+            const color = r.color || palette[idx % palette.length] || primary;
+            const shown = Number.isInteger(a) ? String(a) : a.toFixed(1);
             return (
-              <div
-                key={`${label}-${idx}`}
-                className="grid grid-cols-[minmax(72px,110px)_1fr_auto] gap-2 items-center text-xs"
-              >
-                <div className="truncate text-steel-muted font-medium" title={label}>
-                  {label}
+              <div key={`${label}-${idx}`} className="min-w-0">
+                <div className="flex items-center justify-between gap-3 mb-1.5 text-xs">
+                  <span className="inline-flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm shrink-0 ring-1 ring-black/10"
+                      style={{ background: compareKey != null ? primary : color }}
+                    />
+                    <span className="truncate font-medium text-ink" title={label}>
+                      {label}
+                    </span>
+                  </span>
+                  <span className="font-mono tabular-nums shrink-0 text-ink font-semibold">
+                    {compareKey != null ? `${Math.round(a)} / ${Math.round(b)}` : shown}
+                  </span>
                 </div>
-                <div className="space-y-1.5 min-w-0">
-                  <div className="h-2.5 rounded-sm overflow-hidden" style={{ background: track }}>
+                <div className="pl-4">
+                  <div className="h-3 rounded-full overflow-hidden" style={{ background: track }}>
                     <div
-                      className="h-full rounded-sm transition-[width]"
-                      style={{
-                        width: `${Math.max((a / max) * 100, a > 0 ? 3 : 0)}%`,
-                        minWidth: a > 0 ? 2 : 0,
-                        background: primary,
-                      }}
+                      className="h-full rounded-full transition-[width]"
+                      style={{ width: barWidth(a), background: compareKey != null ? primary : color }}
                     />
                   </div>
                   {compareKey != null && (
-                    <div className="h-2.5 rounded-sm overflow-hidden" style={{ background: track }}>
+                    <div className="h-3 rounded-full overflow-hidden mt-1" style={{ background: track }}>
                       <div
-                        className="h-full rounded-sm transition-[width]"
-                        style={{
-                          width: `${Math.max((b / max) * 100, b > 0 ? 3 : 0)}%`,
-                          minWidth: b > 0 ? 2 : 0,
-                          background: secondary,
-                        }}
+                        className="h-full rounded-full transition-[width]"
+                        style={{ width: barWidth(b), background: secondary }}
                       />
                     </div>
                   )}
-                </div>
-                <div className="font-mono text-[11px] text-ink text-right whitespace-nowrap tabular-nums">
-                  {compareKey != null
-                    ? `${Math.round(a)} / ${Math.round(b)}`
-                    : Number.isInteger(a)
-                      ? a
-                      : a.toFixed(1)}
                 </div>
               </div>
             );
           })}
           {compareKey != null && (
-            <div className="flex gap-3 text-[10px] uppercase tracking-wide text-steel-muted pt-1">
+            <div className="flex gap-3 text-[10px] uppercase tracking-wide text-steel-muted pt-1 pl-4">
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 inline-block rounded-sm" style={{ background: primary }} />
                 {primaryLabel}

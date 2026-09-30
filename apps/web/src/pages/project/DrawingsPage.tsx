@@ -125,6 +125,15 @@ export default function DrawingsPage() {
   const [dumpBusy, setDumpBusy] = useState(false);
   const [clearBusy, setClearBusy] = useState(false);
   const [addRowOpen, setAddRowOpen] = useState(false);
+  const [editRow, setEditRow] = useState<{
+    id: string;
+    drawingNumber: string;
+    title: string;
+    discipline: string;
+    buildingArea: string;
+    tlNo: string;
+  } | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
   const [addRowForm, setAddRowForm] = useState({
     drawingNumber: "",
     title: "",
@@ -163,7 +172,11 @@ export default function DrawingsPage() {
     }
   }
 
-  function launchDrawingCheck(mode: "register" | "revision", drawing?: { id: string; revisions?: { id: string; published?: boolean }[] }) {
+  function launchDrawingCheck(
+    mode: "register" | "revision",
+    drawing?: { id: string; revisions?: { id: string; published?: boolean }[] },
+    revisionNumber?: string,
+  ) {
     if (!id) return false;
     setPrecheckMode(mode);
     precheckModeRef.current = mode;
@@ -171,7 +184,9 @@ export default function DrawingsPage() {
     openDrawingCheckWindow(
       id,
       mode,
-      mode === "revision" && drawing ? { drawingId: drawing.id, revisionId: latest?.id } : undefined
+      mode === "revision" && drawing
+        ? { drawingId: drawing.id, revisionId: latest?.id, revisionNumber }
+        : undefined,
     );
     setPrecheckOpen(true);
     return true;
@@ -451,7 +466,7 @@ export default function DrawingsPage() {
     e.preventDefault();
     if (!uploadForId) return;
     if (uploadStep === "confirm") {
-      const needsCheck = revUploadMode === "new" && !revUnlockToken;
+      const needsCheck = revUploadMode !== "replace" && !revUnlockToken;
       if (!needsCheck) {
         setUploadStep("files");
         setMsg(`${uploadTarget?.drawingNumber || "Drawing"} · ${revForm.revisionNumber} confirmed. Add signatures and the PDF or DWG.`);
@@ -460,10 +475,14 @@ export default function DrawingsPage() {
       const match = (uploadTarget?.revisions || []).find(
         (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
       );
-      launchDrawingCheck("revision", {
-        id: uploadForId,
-        revisions: match ? [{ id: match.id, published: match.published }] : uploadTarget?.revisions,
-      });
+      launchDrawingCheck(
+        "revision",
+        {
+          id: uploadForId,
+          revisions: match ? [{ id: match.id, published: match.published }] : uploadTarget?.revisions,
+        },
+        revForm.revisionNumber,
+      );
       setMsg(
         `${uploadTarget?.drawingNumber || "Drawing"} · ${revForm.revisionNumber} confirmed. Fill the checklist. Save a draft if it is not complete — it is logged in the checklist fill log. After submit and sign, upload the files here.`
       );
@@ -565,29 +584,17 @@ export default function DrawingsPage() {
     setPlannedDate(new Date().toISOString().slice(0, 10));
     setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
-    setUploadStep("confirm");
-    if (latest) {
-      setRevUploadMode("update");
-      setReplaceRevisionId(latest.id);
-      setRevIssue(issueFromRevision(latest));
-      setRevForm({
-        revisionNumber: latest.revisionNumber,
-        revisionLabel: latest.revisionLabel || latest.revisionNumber,
-        publish: !!latest.published,
-      });
-      setMsg("Choose the revision, then upload. Several drawings can share the same revision.");
-      return;
-    }
+    const next = gfcNextRevisionNumber(d.revisions || []);
     setRevUploadMode("new");
     setUploadStep("confirm");
     setReplaceRevisionId(null);
-    setRevIssue(emptyDrawingIssueDraft());
+    setRevIssue(latest ? issueFromRevision(latest) : emptyDrawingIssueDraft());
     setRevForm({
-      revisionNumber: "R0",
-      revisionLabel: `R0 — ${new Date().toLocaleDateString()}`,
+      revisionNumber: next,
+      revisionLabel: `${next} — ${new Date().toLocaleDateString()}`,
       publish: true,
     });
-    setMsg("Choose a revision. A brand-new revision needs Drawing Check before the files are saved.");
+    setMsg("Check the revision details, then confirm. The checklist opens next. A saved draft can be continued from the same button.");
   }
 
   function openReplaceRevision(d: any, rev: any, role: "pdf" | "dwg" = "pdf") {
@@ -604,6 +611,7 @@ export default function DrawingsPage() {
     setPlannedDate("");
     setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
+    setUploadStep("files");
     setRevForm({
       revisionNumber: rev.revisionNumber,
       revisionLabel: `${rev.revisionNumber} — ${role.toUpperCase()} update`,
@@ -628,6 +636,7 @@ export default function DrawingsPage() {
       rev.actualDate ? String(rev.actualDate).slice(0, 10) : new Date().toISOString().slice(0, 10)
     );
     setExpandedId(d.id);
+    setUploadStep("files");
     setRevForm({
       revisionNumber: rev.revisionNumber,
       revisionLabel: rev.revisionLabel || rev.revisionNumber,
@@ -1131,25 +1140,16 @@ export default function DrawingsPage() {
                               type="button"
                               variant="secondary"
                               className="!px-2 !py-1 !text-xs"
-                              onClick={() => {
-                                const title = window.prompt("Drawing title", d.title || "");
-                                if (title == null) return;
-                                const buildingArea = window.prompt("Building / area", d.buildingArea || "") ?? d.buildingArea;
-                                const tlNo = window.prompt("TL No", d.tlNo || "") ?? d.tlNo;
-                                void (async () => {
-                                  try {
-                                    await api(`/api/drawings/drawing/${d.id}`, {
-                                      method: "PATCH",
-                                      token,
-                                      body: JSON.stringify({ title: title.trim() || d.title, buildingArea, tlNo }),
-                                    });
-                                    setMsg(`Updated ${d.drawingNumber}`);
-                                    await load();
-                                  } catch (err) {
-                                    setMsg(err instanceof Error ? err.message : "Could not edit drawing");
-                                  }
-                                })();
-                              }}
+                              onClick={() =>
+                                setEditRow({
+                                  id: d.id,
+                                  drawingNumber: d.drawingNumber || "",
+                                  title: d.title || "",
+                                  discipline: d.discipline || "Architecture",
+                                  buildingArea: d.buildingArea || "",
+                                  tlNo: d.tlNo || "",
+                                })
+                              }
                             >
                               Edit
                             </Button>
@@ -1178,12 +1178,6 @@ export default function DrawingsPage() {
                               Delete
                             </Button>
                           )}
-                          <Link
-                            to={`/projects/${id}/drawings/coordination?drawingId=${d.id}`}
-                            className="inline-flex items-center rounded-lg border border-line bg-paper px-2 py-1 text-xs font-semibold text-brand hover:bg-sand/60"
-                          >
-                            Coord
-                          </Link>
                           {canUpload && !d.isPublished && (
                             <Button
                               type="button"
@@ -1370,7 +1364,7 @@ export default function DrawingsPage() {
                 <p><span className="text-steel-muted">Planned date</span> {plannedDate || "—"}</p>
                 <p><span className="text-steel-muted">Revision date</span> {actualDate || "—"}</p>
                 <p className="text-xs text-steel-muted pt-1">
-                  An incomplete checklist can be saved as a draft in the checklist fill log. When every line is filled, upload the stakeholder signature, then this popup returns for the PDF and DWG.
+                  Confirm opens the checklist on this page. Save a draft if it is not finished — confirm again to continue that draft, then sign and upload the PDF and DWG.
                 </p>
               </div>
             ) : revUploadMode === "replace" && revReplaceRole === "dwg" ? (
@@ -1547,7 +1541,7 @@ export default function DrawingsPage() {
                       <p className="text-sm text-ink">
                         This revision still needs the Drawing Check. Save a draft if it is not complete. After submit, add the signature here and upload the files.
                       </p>
-                      <Button type="button" className="mt-2 !bg-amber-500 !font-medium" onClick={() => launchDrawingCheck("revision", uploadTarget)}>
+                      <Button type="button" className="mt-2 !bg-amber-500 !font-medium" onClick={() => launchDrawingCheck("revision", uploadTarget, revForm.revisionNumber)}>
                         Open Drawing Check
                       </Button>
                     </div>
@@ -1572,6 +1566,71 @@ export default function DrawingsPage() {
               ]),
           ]}
         />
+      )}
+
+      {editRow && (
+        <div className="fixed inset-0 z-[80] bg-ink/45 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">
+          <form
+            className="w-full max-w-lg rounded-xl border border-line bg-paper shadow-2xl p-5 space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setEditBusy(true);
+              setMsg("");
+              try {
+                await api(`/api/drawings/drawing/${editRow.id}`, {
+                  method: "PATCH",
+                  token,
+                  body: JSON.stringify({
+                    title: editRow.title.trim(),
+                    discipline: editRow.discipline,
+                    buildingArea: editRow.buildingArea,
+                    tlNo: editRow.tlNo,
+                  }),
+                });
+                setMsg(`Updated ${editRow.drawingNumber}`);
+                setEditRow(null);
+                await load();
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Could not edit drawing");
+              } finally {
+                setEditBusy(false);
+              }
+            }}
+          >
+            <div>
+              <h2 className="font-display text-xl text-ink">Edit {editRow.drawingNumber}</h2>
+              <p className="text-sm text-steel-muted">Drawing number stays as logged. Title, type, building, and TL update the GFC row and the master register.</p>
+            </div>
+            <label className="block text-xs text-steel-muted">
+              Title
+              <Input className="mt-1" value={editRow.title} onChange={(e) => setEditRow({ ...editRow, title: e.target.value })} required />
+            </label>
+            <label className="block text-xs text-steel-muted">
+              Drawing type
+              <Select className="mt-1" value={editRow.discipline} onChange={(e) => setEditRow({ ...editRow, discipline: e.target.value })}>
+                {MASTER_REGISTER_DISCIPLINES.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </Select>
+            </label>
+            <label className="block text-xs text-steel-muted">
+              Building / area
+              <Input className="mt-1" value={editRow.buildingArea} onChange={(e) => setEditRow({ ...editRow, buildingArea: e.target.value })} />
+            </label>
+            <label className="block text-xs text-steel-muted">
+              TL No
+              <Input className="mt-1" value={editRow.tlNo} onChange={(e) => setEditRow({ ...editRow, tlNo: e.target.value })} />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="secondary" onClick={() => setEditRow(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editBusy}>
+                {editBusy ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </form>
+        </div>
       )}
 
       {viewer && (

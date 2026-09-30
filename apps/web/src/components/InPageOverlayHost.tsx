@@ -40,7 +40,11 @@ function overlaySrc(o: InPageOverlay) {
     const tail = FAMILY_LOG[family] || "quality/checklist-logs";
     return `/projects/${o.projectId}/${tail}?embed=1`;
   }
-  const base = drawingCheckUrl(o.projectId, o.mode, { drawingId: o.drawingId, revisionId: o.revisionId });
+  const base = drawingCheckUrl(o.projectId, o.mode, {
+    drawingId: o.drawingId,
+    revisionId: o.revisionId,
+    revisionNumber: o.revisionNumber,
+  });
   return `${base}${base.includes("?") ? "&" : "?"}embed=1`;
 }
 

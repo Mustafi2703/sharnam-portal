@@ -1,6 +1,5 @@
 /** Drawing register dashboard — same chart cards as the quality dashboard. */
 
-import { Card } from "./ui";
 import { BarChart, PieChart } from "./PieChart";
 
 export type RegisterDashLine = {
@@ -106,34 +105,20 @@ export function DrawingRegisterCharts({ lines }: { lines: RegisterDashLine[] }) 
   })();
 
   return (
-    <div className="grid lg:grid-cols-2 gap-4">
-      <Card>
-        <BarChart title="Location wise drawings submitted" items={location} maxBars={12} />
-      </Card>
-      <Card>
-        <PieChart title="Total drawings submitted" items={byDiscipline} />
-      </Card>
-      <Card>
-        <PieChart title="Total critical drawings" items={critical} />
-      </Card>
-      <Card>
-        <BarChart title="Submission delay in days" items={delay} maxBars={12} />
-      </Card>
-      <Card>
-        <BarChart title="Drawings submitted by org" items={byOrg} maxBars={12} />
-      </Card>
-      <Card>
-        <PieChart title="Drawing type" items={byType} />
-      </Card>
-      <Card className="lg:col-span-2">
-        <PieChart
-          title="Submitted at this point"
-          items={[
-            { label: "Submitted", value: submitted },
-            { label: "Not yet submitted", value: pending },
-          ]}
-        />
-      </Card>
+    <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+      <BarChart title="Location wise drawings submitted" items={location} maxBars={8} />
+      <PieChart title="Total drawings submitted" items={byDiscipline} />
+      <PieChart title="Total critical drawings" items={critical} />
+      <BarChart title="Submission delay in days" items={delay} maxBars={8} />
+      <BarChart title="Drawings submitted by org" items={byOrg} maxBars={8} />
+      <PieChart title="Drawing type" items={byType} />
+      <PieChart
+        title="Submitted at this point"
+        items={[
+          { label: "Submitted", value: submitted },
+          { label: "Not yet submitted", value: pending },
+        ]}
+      />
     </div>
   );
 }

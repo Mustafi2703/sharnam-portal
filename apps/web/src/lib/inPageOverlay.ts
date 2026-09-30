@@ -27,6 +27,7 @@ export type InPageOverlay =
       mode?: "register" | "revision";
       drawingId?: string;
       revisionId?: string;
+      revisionNumber?: string;
     };
 
 function postToParent(payload: Record<string, unknown>) {

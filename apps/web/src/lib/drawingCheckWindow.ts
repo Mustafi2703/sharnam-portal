@@ -11,12 +11,13 @@ export function drawingUnlockStorageKey(projectId: string) {
 export function drawingCheckUrl(
   projectId: string,
   mode?: "register" | "revision",
-  opts?: { drawingId?: string; revisionId?: string }
+  opts?: { drawingId?: string; revisionId?: string; revisionNumber?: string }
 ) {
   const q = new URLSearchParams();
   if (mode === "revision") q.set("mode", "revision");
   if (opts?.drawingId) q.set("drawing", opts.drawingId);
   if (opts?.revisionId) q.set("revision", opts.revisionId);
+  if (opts?.revisionNumber) q.set("rev", opts.revisionNumber);
   const qs = q.toString();
   return `/projects/${projectId}/drawings/precheck${qs ? `?${qs}` : ""}`;
 }
@@ -24,9 +25,16 @@ export function drawingCheckUrl(
 export function openDrawingCheckWindow(
   projectId: string,
   mode?: "register" | "revision",
-  opts?: { drawingId?: string; revisionId?: string }
+  opts?: { drawingId?: string; revisionId?: string; revisionNumber?: string }
 ) {
-  openInPageOverlay({ kind: "drawing-check", projectId, mode, drawingId: opts?.drawingId, revisionId: opts?.revisionId });
+  openInPageOverlay({
+    kind: "drawing-check",
+    projectId,
+    mode,
+    drawingId: opts?.drawingId,
+    revisionId: opts?.revisionId,
+    revisionNumber: opts?.revisionNumber,
+  });
   return window;
 }
 
