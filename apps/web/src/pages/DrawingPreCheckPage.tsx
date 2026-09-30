@@ -183,7 +183,7 @@ export default function DrawingPreCheckPage() {
         body: buildFormData(),
       });
       setDraftId(saved.id);
-      setNotice(`Draft saved — ${answered}/${items.length} answered. You can close this window and continue later.`);
+      setNotice(`Draft saved — ${answered}/${items.length} answered. It is in the checklist fill log. Close this window and continue later.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Draft save failed");
     } finally {
@@ -194,6 +194,10 @@ export default function DrawingPreCheckPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!template || !projectId) return;
+    if (!signatureFile) {
+      setError("Upload the stakeholder signature before submitting. Save a draft if the checklist is not complete.");
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -231,7 +235,7 @@ export default function DrawingPreCheckPage() {
             <Badge tone="ok">Unlocked</Badge>
             <h1 className="font-display text-2xl text-ink">Checklist complete</h1>
             <p className="text-steel-muted text-sm max-w-md mx-auto">
-              “{done.name}” is done. Return to the Drawings register — the upload dialog should open.
+              “{done.name}” is signed and stored. Return to the upload dialog and add the PDF and DWG.
             </p>
             <div className="flex flex-wrap gap-2 justify-center pt-2">
               <Button type="button" onClick={() => closeEmbedOrWindow()}>
@@ -278,8 +282,8 @@ export default function DrawingPreCheckPage() {
       title={template?.name || "Drawing Check Master"}
       subtitle={
         revisionMode
-          ? "Items only — this sheet and revision are already selected. Unlock revision upload."
-          : "Items only — complete before a new GFC is added to the register."
+          ? "This drawing and revision are already selected. Save a draft if it is not complete. When every line is filled, upload the stakeholder signature and submit."
+          : "Complete every line before the GFC file is uploaded. Save a draft if it is not ready — it stays in the fill log."
       }
       category="Drawing Check Master"
       items={items}
@@ -319,7 +323,7 @@ export default function DrawingPreCheckPage() {
       msg={error || notice}
       onSaveDraft={assignmentId ? () => void saveDraft() : undefined}
       onSubmit={submit}
-      submitLabel="Submit & unlock upload"
+      submitLabel="Sign & submit"
     />
   );
 }

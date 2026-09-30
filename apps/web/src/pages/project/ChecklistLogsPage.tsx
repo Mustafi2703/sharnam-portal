@@ -181,6 +181,27 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
     }
   }
 
+  async function exportFilledPdf() {
+    if (!id) return;
+    try {
+      const q = family ? `?type=${encodeURIComponent(family)}` : "";
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/checklist/project/${id}/export-filled.pdf${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `filled-schedules-${family || "all"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMsg("Full filled schedule PDF downloaded.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "PDF export failed");
+    }
+  }
+
   const fillActions = (
     <div className="flex flex-wrap gap-2">
       {canFill && id && (
@@ -228,6 +249,9 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
             </Button>
             <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void exportFilledXlsx()}>
               Full schedule XLSX
+            </Button>
+            <Button type="button" className="!bg-teal-600" onClick={() => void exportFilledPdf()}>
+              Full schedule PDF
             </Button>
             <Button
               type="button"

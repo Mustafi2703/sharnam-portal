@@ -1,146 +1,145 @@
-# Drawings module UAT — Nirav (live project)
+# Drawings module UAT — full simulation
 
 **Portal:** https://portal.spdc.in  
-**Login:** Nirav office account · `Demo@1234` (or your live office user)  
-**Project:** pick one **live** pilot / Arvind project you will wipe after UAT (do **not** use Voltamp production data you must keep).  
-**Files on disk (upload from your laptop):**
+**Do not use** Voltamp or any live project you must keep.  
+**Password for every test login:** `Demo@1234`  
+**Mail:** project email can be on so the outbox records To and Cc. Portal mail stays off. Nothing is sent to real inboxes. The queued subject and body are the format we will send later.
 
-| File | Use as |
-|------|--------|
+Screenshot folder: `Sharnam Drawings UAT`. Browser about 1440×900.
+
+## Files on the laptop
+
+| File | Use |
+|------|-----|
 | `module_prompts/Sharnam_modules_docs 2/DRAWING REGISTER - 01.xlsx` | Master register + dashboard |
-| `module_prompts/Sharnam_modules_docs 2/Approval  &  GFC Drawing Log.xlsx` | GFC log (or use **Load UAT GFC workbook**) |
-| `module_prompts/Sharnam_modules_docs 2/Drwing check master checklist.xlt.xls` | Drawing check master (reload in UI) |
-| `module_prompts/Sharnam_modules_docs 2/A_10_101_R0_ GROUND FLOOR PLAN.dwg` | First GFC upload · **R0** |
-| `module_prompts/Sharnam_modules_docs 2/A_10_101_R1_ GROUND FLOOR PLAN.dwg` | Next revision · **R1** |
+| `module_prompts/Sharnam_modules_docs 2/Approval  &  GFC Drawing Log.xlsx` | GFC dates, or type 5–6 rows by hand |
+| `module_prompts/Sharnam_modules_docs 2/A_10_101_R0_ GROUND FLOOR PLAN.dwg` | Revision R0 |
+| `module_prompts/Sharnam_modules_docs 2/A_10_101_R1_ GROUND FLOOR PLAN.dwg` | Revision R1 |
+| One-page PDFs you export (Print → Save as PDF), named like the drawing number | Markup check on at least two sheets |
 
-**Cleanup after UAT:** Approval & GFC → **Delete all rows** · Master register delete lines · SharePoint CSVs/XLSX can stay or be overwritten on next Publish.
+Drawing used for checklist, coordination, markup, and the converted RFI: **A_10_101 · GROUND FLOOR PLAN · Architecture**.
 
-**Screenshot folder:** `Sharnam Drawings UAT — Nirav` · name files as below · browser ~1440×900.
+## Test logins
 
----
+Create these in **Access → Users** before the run. Add each person to the UAT project. Put the same email on the communication matrix (Technical), under the org shown, so Design coordination can assign them.
 
-## Part 1 — Registers & all sheets (examine properly)
+| Who | Email | Portal | Role on the matrix |
+|-----|--------|--------|--------------------|
+| Office (runner) | `nirav@spdc.in` | Office | SPDC / PMC |
+| Architect | `uat.architect@spdc.test` | Vendor | Consultant |
+| Contractor | `uat.contractor@spdc.test` | Vendor | Vendor / contractor |
+| SPDC engineer | `uat.engineer@spdc.test` | Office | SPDC / PMC |
 
-### 1A · Dashboard (DRAWING REGISTER - 01 · Dashboard sheet)
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| D1 | `D1-register-dashboard-empty-or-before.png` | Drawings → **Register dashboard** (no `sheet=` in URL) | ☐ |
-| D2 | `D2-upload-register-01.png` | **Upload Excel** → pick `DRAWING REGISTER - 01.xlsx` · toast with line count | ☐ |
-| D3 | `D3-dashboard-kpis.png` | Week · Total · GFC · Critical · Linked | ☐ |
-| D4 | `D4-dashboard-charts-all.png` | All charts: discipline, type, critical, package, building, consultant, building×discipline, delay | ☐ |
-| D5 | `D5-dashboard-pivot-tables.png` | Pivot tables under charts | ☐ |
-| D6 | `D6-export-excel-01.png` | **Excel (01)** download · open · sheets **Dashboard** + **Master Drawing Register** | ☐ |
-| D7 | `D7-export-dashboard-pdf.png` | **Dashboard PDF** download · open | ☐ |
-| D8 | `D8-publish-sharepoint-register.png` | **Publish → SharePoint** · success toast | ☐ |
-| D9 | `D9-sharepoint-drawings-folder.png` | SharePoint project drawings folder shows `DRAWING-REGISTER-01.xlsx` + `DRAWING-REGISTER-Dashboard.pdf` | ☐ |
-
-### 1B · Master register sheet
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| M1 | `M1-master-register-table.png` | `…/drawings/register?sheet=master` · full DCI columns | ☐ |
-| M2 | `M2-master-edit-row.png` | **Edit** one line → change title/planned → **Save changes** | ☐ |
-| M3 | `M3-master-add-row.png` | Add one manual line via form | ☐ |
-| M4 | `M4-master-delete-row.png` | **Delete** one test line (confirm) | ☐ |
-
-### 1C · Approval & GFC log sheet
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| G1 | `G1-gfc-log-page.png` | Drawings → **Approval & GFC log** | ☐ |
-| G2 | `G2-import-gfc-log.png` | **Load UAT GFC workbook** *or* **Import GFC log** + Excel · toast with drawing/revision counts | ☐ |
-| G3 | `G3-gfc-table-r0-rn.png` | Table shows Discipline · Building · TL · DWG · R0–Rn dates | ☐ |
-| G4 | `G4-gfc-download-excel.png` | Export & sync → **Download GFC Excel** · open **GFC** sheet | ☐ |
-| G5 | `G5-publish-gfc-sharepoint.png` | **Publish registers → SharePoint** · `Approval-GFC-Drawing-Log.xlsx` in folder | ☐ |
+Also add one **RFI** row on the communication matrix: from `office` to `vendor`, channel RFI. Without that row, the vendor login cannot reply.
 
 ---
 
-## Part 2 — Drawing check + DWG upload (A_10_101 R0 / R1) + fill log
+## 0 · Project card
 
-Drawing number for this UAT: **`A_10_101`**  
-Title: **GROUND FLOOR PLAN**  
-Discipline: **Architecture**
-
-### 2A · Checklist master
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| C1 | `C1-checklist-master.png` | Drawings → **Checklist manager** | ☐ |
-| C2 | `C2-reload-drawing-check-xls.png` | **Reload from drawing check master XLS** · templates/lines present | ☐ |
-
-### 2B · Upload R0 DWG (fills Drawing Check → unlock → file)
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| U1 | `U1-upload-gfc-start.png` | Approval & GFC → **Upload GFC** · Drawing Check popup opens | ☐ |
-| U2 | `U2-drawing-check-fill.png` | Complete **all** Yes/No/N.A. lines · submit unlock | ☐ |
-| U3 | `U3-upload-r0-dwg-form.png` | Drawing no `A_10_101` · title GROUND FLOOR PLAN · rev **R0** · attach `A_10_101_R0_ GROUND FLOOR PLAN.dwg` · save | ☐ |
-| U4 | `U4-gfc-row-r0-in-log.png` | GFC table / Log accordion shows R0 · **DWG** badge · file name | ☐ |
-
-### 2C · Upload R1 DWG (next revision)
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| U5 | `U5-upload-rev-r1-check.png` | On `A_10_101` → **Upload rev** · Drawing Check again if required for new rev | ☐ |
-| U6 | `U6-upload-r1-dwg.png` | Rev **R1** · attach `A_10_101_R1_ GROUND FLOOR PLAN.dwg` · save | ☐ |
-| U7 | `U7-gfc-r0-and-r1.png` | Log shows **R0** + **R1** · current rev R1 | ☐ |
-
-### 2D · Checklist fill log (must show fills)
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| L1 | `L1-checklist-fill-log.png` | Drawings → **Checklist fill log** · family Drawing check | ☐ |
-| L2 | `L2-fill-log-preupload-rows.png` | Rows for Pre-upload / Drawing Check on `A_10_101` (R0 and/or R1) · status Submitted | ☐ |
-| L3 | `L3-fill-log-open-detail.png` | Open one fill · answers / template name visible | ☐ |
-
-### 2E · Optional RFI checklist fill
-
-| # | Shot file | Steps | Pass |
-|---|-----------|-------|:----:|
-| R1 | `R1-rfi-request-checklist.png` | RFIs → Request checklist fill (DrawingChecklist) · assign party | ☐ |
-| R2 | `R2-rfi-fill-log-link.png` | After fill · appears in fill log and/or RFI thread | ☐ |
+| # | Step | Pass |
+|---|------|:----:|
+| 0.1 | Office login. Create project **SPDC-UAT-DWG**. Client, location, and status filled on the card. | ☐ |
+| 0.2 | Add the four people above to the project team. | ☐ |
+| 0.3 | Communication matrix: architect, contractor, and engineer, each with the email in the table. Upload is optional if you type the rows. | ☐ |
+| 0.4 | Project → **Email**. Email enabled. Confirm the banner that live send is off. | ☐ |
 
 ---
 
-## Part 3 — SharePoint confirmation (all filed)
+## 1 · GFC — five or six rows, two real drawings, PDFs for markup
 
-After **Publish** from dashboard and/or GFC page, in the project **drawings** ISO folder confirm:
-
-| File on SharePoint | Shot | Pass |
-|--------------------|------|:----:|
-| `DRAWING-REGISTER-01.xlsx` | `S1-sp-register-xlsx.png` | ☐ |
-| `DRAWING-REGISTER-Dashboard.pdf` | `S2-sp-dashboard-pdf.png` | ☐ |
-| `Approval-GFC-Drawing-Log.xlsx` | `S3-sp-gfc-xlsx.png` | ☐ |
-| `DRAWING-REGISTER.csv` (audit) | optional | ☐ |
-| `Drawing-Check-Master-Log.csv` | optional | ☐ |
-| DWG under drawing revision path (R0/R1) | `S4-sp-dwg-files.png` | ☐ |
+| # | Step | Pass |
+|---|------|:----:|
+| 1.1 | Drawings → **Approval & GFC**. Import the GFC workbook **or** add **5 or 6** rows. One row must be `A_10_101`. | ☐ |
+| 1.2 | **Upload revision** on `A_10_101`. Confirm screen shows number, title, type, revision **R0**. | ☐ |
+| 1.3 | **Confirm and open checklist**. Fill every line. **Save draft** once — it appears on **Checklist fill log** as Draft. | ☐ |
+| 1.4 | Complete the checklist. Upload the stakeholder signature. Submit. | ☐ |
+| 1.5 | Back on the upload popup, attach `A_10_101_R0_ GROUND FLOOR PLAN.dwg`. Save. Row shows DWG. **Open DWG** opens SharePoint, not a download. | ☐ |
+| 1.6 | **Upload revision** again → **R1** → checklist if this revision still needs it → attach the R1 DWG. Log shows R0 and R1. | ☐ |
+| 1.7 | On **two other rows**, upload a one-page PDF (Print → Save as PDF). **Open PDF** opens in the portal viewer. | ☐ |
+| 1.8 | Checklist fill log: submitted row for `A_10_101`. **Checklist PDF** and **Checklist Excel** both download. PDF lists the lines, the answers, and the signature. | ☐ |
 
 ---
 
-## Part 4 — Sign-off (Nirav)
+## 2 · Master register and dashboard
 
-| Area | Shots | Nirav Pass | Date |
-|------|-------|:----------:|------|
-| Register dashboard + all charts + Excel/PDF | D1–D9 | ☐ | |
-| Master register edit/add/delete | M1–M4 | ☐ | |
-| GFC import + SharePoint GFC xlsx | G1–G5 | ☐ | |
-| Drawing check + A_10_101 R0/R1 DWG | U1–U7 | ☐ | |
-| Checklist fill log | L1–L3 | ☐ | |
-| SharePoint all registers filed | S1–S4 | ☐ | |
+| # | Step | Pass |
+|---|------|:----:|
+| 2.1 | **Master register**. Revision date on `A_10_101` matches the GFC upload. | ☐ |
+| 2.2 | PMC sets **Planned (PMC)** on that row. **Critical** = Yes. Delay days update. | ☐ |
+| 2.3 | **Register dashboard**. Charts: location, total drawings (pie), critical, submission delay, submitted by org, drawing type, submitted percentage. | ☐ |
+| 2.4 | Pick this week, then a from/to date. Counts change with the dates. | ☐ |
+| 2.5 | **Sync now** on the dashboard or GFC page. Same rewrite runs by itself at 7:00 pm IST. | ☐ |
 
-**Notes / blockers:**
+---
+
+## 3 · Design coordination → five follow-ups → RFI
+
+Do this on **A_10_101** only.
+
+| # | Step | Pass |
+|---|------|:----:|
+| 3.1 | **Design coordination**. Issue, drawing type Architecture, drawing `A_10_101`, assignee **uat.architect@spdc.test**. Log issue. | ☐ |
+| 3.2 | Project → **Email** outbox. One queued message. To = architect. Cc = matrix To and Cc. Status is queued, not sent. | ☐ |
+| 3.3 | **Send follow-up** five times. Counter goes 1/5 … 5/5. Each send adds an outbox row to the assignee. | ☐ |
+| 3.4 | After 5/5, **Update to Ask PMC RFI**. Number is `SPDC-RFI-###`. Issue status Escalated. | ☐ |
+| 3.5 | Drawings → **RFI register**. That number is listed, linked to `A_10_101`, assigned to the architect. | ☐ |
+
+## 4 · Raise an RFI directly, then both portals reply
+
+| # | Step | Pass |
+|---|------|:----:|
+| 4.1 | Still as office: **Ask PMC RFI**. New RFI (not the converted one). Link a PDF drawing. Assign **uat.contractor@spdc.test**. Submit. It is on the register. | ☐ |
+| 4.2 | On that RFI, **New markup**. Pen, line, box, arrow, two colours. Save. **Existing markups** lists the page with date and your name. **Open in SharePoint** opens the page. | ☐ |
+| 4.3 | Sign out. **Vendor** login `uat.architect@spdc.test`. Open the **converted** RFI. Reply with a written answer. Save. | ☐ |
+| 4.4 | Sign out. **Vendor** login `uat.contractor@spdc.test`. Open the **direct** RFI. Reply. | ☐ |
+| 4.5 | Sign out. Office `nirav@spdc.in`. Open both RFIs. Office reply on each. Ball in court moves. Register still shows both. | ☐ |
+
+---
+
+## 5 · SharePoint — right ISO folder
+
+Project library for **SPDC-UAT-DWG**. After publish, GFC upload, checklist submit, markup save, and both RFIs:
+
+### Drawings — `04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications`
+
+| What | Where | Pass |
+|------|--------|:----:|
+| `DRAWING-REGISTER-01.xlsx` | folder root | ☐ |
+| `DRAWING-REGISTER-Dashboard.pdf` | folder root | ☐ |
+| `Approval-GFC-Drawing-Log.xlsx` | folder root | ☐ |
+| Same three files | `Weekly/<year>-W<week>/` (this week’s pack for WPR and DPR) | ☐ |
+| R0 DWG | `…/Architecture/A_10_101/R0/DWG/` | ☐ |
+| R1 DWG | `…/Architecture/A_10_101/R1/DWG/` | ☐ |
+| Uploaded PDFs | `…/<discipline>/<drawing no>/<rev>/PDF/` | ☐ |
+| Markup page | `…/<drawing no>/<rev>/Markup/page-01/` | ☐ |
+
+### RFI register — `03_SUPPORT_AND_RESOURCES/03.06_Correspondence_Control`
+
+| What | Where | Pass |
+|------|--------|:----:|
+| `SPDC_RFI_Form_and_Register.xlsx` (both RFIs) | `_Registers/` and `_Registers/Weekly/<year>-W<week>/` | ☐ |
+| Each RFI workbook + HTML (print to PDF) | `Open/` while open; `Closed/` after close | ☐ |
+
+WPR / DPR: take the week folder under **04.02**, not an older week and not a file sitting outside the ISO tree.
+
+---
+
+## 6 · Sign-off
+
+| Area | Pass | Date |
+|------|:----:|------|
+| Project card, four logins, matrix | ☐ | |
+| 5–6 GFC rows, R0/R1 DWG, PDF open | ☐ | |
+| Checklist draft + signed submit + branded PDF and Excel | ☐ | |
+| Master planned date, criticality, delay, dashboard week/dates | ☐ | |
+| Coordination, 5 follow-ups in the outbox, convert to RFI | ☐ | |
+| Direct RFI + markup on the PDF | ☐ | |
+| Architect, contractor, and office each reply | ☐ | |
+| 04.02 registers, weekly pack, DWG/PDF/markup | ☐ | |
+| 03.06 RFI register and open RFI files | ☐ | |
+
+**Notes**
 
 _________________________________________________________________
 
-**Wipe after UAT:** GFC **Delete all rows** · remove master test lines · leave CRM/HRMS/other projects untouched.
-
----
-
-## Quick path (if short on time)
-
-1. Register dashboard → Upload `DRAWING REGISTER - 01.xlsx` → Publish → SharePoint  
-2. Approval & GFC → **Load UAT GFC workbook** → Publish  
-3. Upload GFC → fill Drawing Check → `A_10_101` R0 DWG → Upload rev R1 DWG  
-4. Checklist fill log → screenshot Pre-upload rows  
-5. Delete all GFC rows when done  
+**After UAT:** delete GFC rows and master lines on **SPDC-UAT-DWG** only. Leave every other project as it is.

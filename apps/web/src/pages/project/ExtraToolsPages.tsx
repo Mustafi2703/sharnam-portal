@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { createPortal } from "react-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
-import PdfMarkup from "../../components/PdfMarkup";
 import {
   currentDrawingRevision,
-  drawingFileKind,
   drawingHasPreviewFile,
   drawingPreviewFromRecord,
-  resolveDrawingFileUrl,
   revisionPreviewFromRecord,
 } from "../../lib/drawingPreview";
-import { uploadDrawingMarkupPages, type MarkupPageDraft } from "../../lib/drawingMarkup";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 
 export function CoordinationPage() {
@@ -24,6 +19,7 @@ export function CoordinationPage() {
   const { token, user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
+  const [matrixPeople, setMatrixPeople] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [form, setForm] = useState({
@@ -42,10 +38,6 @@ export function CoordinationPage() {
   const [msg, setMsg] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const docRef = useRef<HTMLInputElement>(null);
-  const [markupFile, setMarkupFile] = useState<File | null>(null);
-  const [markupOpen, setMarkupOpen] = useState(false);
-  const [markupRevisionId, setMarkupRevisionId] = useState<string | null>(null);
-  const [markupLabel, setMarkupLabel] = useState("");
   const canEdit =
     user?.role === "admin" ||
     user?.role === "office" ||
@@ -53,12 +45,24 @@ export function CoordinationPage() {
     user?.role === "site_employee";
 
   const load = async () => {
-    const [o, d] = await Promise.all([
+    const [o, d, tech, commercial] = await Promise.all([
       api<any>(`/api/directory/project/${id}/overview`, { token }),
       api<any[]>(`/api/drawings/project/${id}`, { token }).catch(() => []),
+      api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() => []),
+      api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }).catch(() => []),
     ]);
     setRows(o.coordination || []);
     setDrawings(d);
+    const people = [...tech, ...commercial].filter((c) => !c.isSectionHeader && (c.personName || c.email));
+    const seen = new Set<string>();
+    setMatrixPeople(
+      people.filter((c) => {
+        const key = `${c.email || ""}|${c.personName || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+    );
   };
 
   useEffect(() => {
@@ -134,9 +138,9 @@ export function CoordinationPage() {
         { method: "POST", token }
       );
       setMsg(
-        r.autoEscalated
-          ? `Follow-up ${r.issue.followUpCount}/5 sent — auto-escalated to RFI ${r.rfi?.number || ""}`
-          : `Follow-up ${r.issue.followUpCount}/5 emailed to assignee`
+        (r as { needsRfi?: boolean }).needsRfi || (r.issue.followUpCount ?? 0) >= 5
+          ? `Follow-up ${r.issue.followUpCount}/5 sent to the assignee. No close yet — you can update this to Ask PMC RFI.`
+          : `Follow-up ${r.issue.followUpCount}/5 emailed to the assignee`
       );
       await load();
     } catch (err) {
@@ -154,57 +158,13 @@ export function CoordinationPage() {
         method: "POST",
         token,
       });
-      setMsg(`Escalated to ${r.rfi.number} — linked in coordination log`);
+      setMsg(`Updated to Ask PMC RFI ${r.rfi.number} — it is on the RFI log`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Escalation failed");
     } finally {
       setFollowBusy(false);
     }
-  }
-
-  function revisionHasPdf(rev: { pdfFileUrl?: string | null; fileUrl?: string | null; fileName?: string | null } | null) {
-    if (!rev) return false;
-    return !!(
-      rev.pdfFileUrl ||
-      (drawingFileKind(rev.fileName || rev.fileUrl) === "pdf" && rev.fileUrl)
-    );
-  }
-
-  async function openMarkupForDrawing(drawing: any) {
-    const rev = currentDrawingRevision(drawing);
-    if (!rev?.id) {
-      setMsg("Upload a GFC PDF on this sheet first.");
-      return;
-    }
-    const pdfRef =
-      rev.pdfFileUrl ||
-      (drawingFileKind(rev.fileName || rev.fileUrl) === "pdf" ? rev.fileUrl : null);
-    if (!pdfRef) {
-      setMsg("No PDF on this drawing revision — markup is for the coordination PDF.");
-      return;
-    }
-    try {
-      const res = await fetch(resolveDrawingFileUrl(pdfRef), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error("Could not load PDF");
-      const blob = await res.blob();
-      setMarkupFile(new File([blob], rev.pdfFileName || "drawing.pdf", { type: blob.type || "application/pdf" }));
-      setMarkupRevisionId(rev.id);
-      setMarkupLabel(drawing.drawingNumber || "drawing");
-      setMarkupOpen(true);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not open markup");
-    }
-  }
-
-  async function openCoordinationMarkup() {
-    if (!linkedDrawing) {
-      setMsg("Open a coordination issue that is linked to a GFC drawing first.");
-      return;
-    }
-    await openMarkupForDrawing(linkedDrawing);
   }
 
   async function uploadCoordDocument(issueId: string, file: File) {
@@ -220,7 +180,7 @@ export function CoordinationPage() {
       <PageHeader
         eyebrow="Drawings module"
         title="Design coordination"
-        subtitle="Every GFC sheet has its own coordination workspace — open the drawing on an issue, mark up the PDF, follow up, then escalate to RFI."
+        subtitle="Log the issue, pick the drawing type and drawing, assign someone from the communication matrix, then follow up. After five follow-ups with no action, update it to Ask PMC RFI."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="warn">{openCount} open</Badge>
@@ -251,11 +211,6 @@ export function CoordinationPage() {
               Working on {focusDrawing.drawingNumber} · {focusDrawing.title}
               {sheetRows.length ? ` — ${sheetRows.length} issue(s)` : " — no issues yet, log the first below"}
             </p>
-            {canEdit && revisionHasPdf(currentDrawingRevision(focusDrawing)) && (
-              <Button type="button" onClick={() => void openMarkupForDrawing(focusDrawing)}>
-                Markup this PDF
-              </Button>
-            )}
           </div>
         )}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
@@ -279,27 +234,6 @@ export function CoordinationPage() {
                     ? `${open} open · ${issues.length} logged`
                     : "Needs coordination — log first issue"}
                 </div>
-                {canEdit && revisionHasPdf(currentDrawingRevision(d)) && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="mt-2 inline-flex rounded border border-brand/40 bg-paper px-2 py-0.5 text-[11px] font-semibold text-brand"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSearchParams({ drawingId: d.id });
-                      void openMarkupForDrawing(d);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setSearchParams({ drawingId: d.id });
-                      void openMarkupForDrawing(d);
-                    }}
-                  >
-                    Markup
-                  </span>
-                )}
               </button>
             );
           })}
@@ -325,14 +259,11 @@ export function CoordinationPage() {
             </Link>{" "}
             ({drawingsWithFiles.length} of {drawings.length} drawings have a PDF/DWG).
           </li>
-          <li>Log an issue and pick <strong>Linked GFC drawing</strong> — that opens the PDF on the right for this clash.</li>
+          <li>Select the issue, the drawing type, then the drawing, and assign a vendor, consultant, or SPDC person from the communication matrix.</li>
+          <li>Logging the issue emails the assignee and the matrix To and Cc.</li>
+          <li>Use <strong>Send follow-up</strong> on the logged issue. It goes to the assignee.</li>
           <li>
-            With the drawing open on the issue, tap <strong>Markup</strong> to cloud and note on that PDF. Markup is only here —
-            not on GFC upload.
-          </li>
-          <li>Select an issue in the register → use <strong>Link / change drawing</strong> if you forgot to link when logging.</li>
-          <li>
-            <strong>Close</strong> when resolved on site, or <strong>Escalate to Ask RFI</strong> for formal consultant response.
+            <strong>Close</strong> when resolved. After five follow-ups with no action, use <strong>Update to Ask PMC RFI</strong>.
           </li>
         </ol>
       </Card>
@@ -344,6 +275,10 @@ export function CoordinationPage() {
             className="grid sm:grid-cols-2 gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (!form.assignedToEmail) {
+                setMsg("Select an assignee from the communication matrix.");
+                return;
+              }
               const created = await api<any>(`/api/directory/project/${id}/coordination`, {
                 method: "POST",
                 token,
@@ -365,8 +300,13 @@ export function CoordinationPage() {
               if (created?.id) setSelectedId(created.id);
             }}
           >
-            <Input className="sm:col-span-2" required placeholder="Issue title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Issue</span>
+              <Input required placeholder="What needs coordinating" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Drawing type</span>
+            <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value, linkedDrawingId: "" })}>
               <optgroup label="Civil / Architecture">
                 <option>Architectural</option>
                 <option>Structural</option>
@@ -389,36 +329,78 @@ export function CoordinationPage() {
                 <option>Other</option>
               </optgroup>
             </Select>
+            </label>
             <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
               {["Low", "Medium", "High"].map((p) => (
                 <option key={p}>{p}</option>
               ))}
             </Select>
             <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <Input placeholder="Assignee name" value={form.assignedToName} onChange={(e) => setForm({ ...form, assignedToName: e.target.value })} />
-            <Input
-              type="email"
-              placeholder="Assignee email (for follow-ups)"
-              value={form.assignedToEmail}
-              onChange={(e) => setForm({ ...form, assignedToEmail: e.target.value })}
-            />
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
+                Assign from communication matrix
+              </span>
+              <Select
+                value={form.assignedToEmail}
+                onChange={(e) => {
+                  const person = matrixPeople.find((c) => (c.email || "") === e.target.value);
+                  setForm({
+                    ...form,
+                    assignedToEmail: e.target.value,
+                    assignedToName: person?.personName || form.assignedToName,
+                  });
+                }}
+              >
+                <option value="">— Vendor, consultant, or SPDC staff —</option>
+                {["PMC", "Consultant", "Contractor", "Client", "Other"].map((section) => {
+                  const group = matrixPeople.filter((c) => (c.orgSection || "Other") === section && c.email);
+                  if (!group.length) return null;
+                  const label =
+                    section === "PMC" ? "SPDC / PMC" : section === "Contractor" ? "Vendors / contractors" : `${section}s`;
+                  return (
+                    <optgroup key={section} label={label}>
+                      {group.map((c) => (
+                        <option key={c.id} value={c.email}>
+                          {c.personName || c.email} · {c.orgName || c.company || section}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </Select>
+              {!matrixPeople.length && (
+                <p className="text-xs text-amber-800 mt-1">Upload the communication matrix so vendors, consultants, and SPDC staff can be selected.</p>
+              )}
+            </label>
             <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             <label className="block sm:col-span-2">
               <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
-                Linked GFC drawing (for PDF preview)
+                Drawing
               </span>
               <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-                <option value="">— Link a GFC drawing —</option>
-                {drawings.length > 0 && (
-                  <optgroup label="All GFC sheets">
-                    {drawings.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
-                        {drawingHasPreviewFile(d) ? "" : " (no PDF yet)"}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
+                <option value="">— Select a {form.discipline || "GFC"} drawing —</option>
+                {(() => {
+                  const want = form.discipline.toLowerCase();
+                  const matched = drawings.filter((d) => {
+                    const disc = String(d.discipline || "").toLowerCase();
+                    if (!want) return true;
+                    if (disc === want) return true;
+                    if (want.startsWith("arch") && disc.startsWith("arch")) return true;
+                    return disc.includes(want) || want.includes(disc);
+                  });
+                  const options = matched.length ? matched : drawings;
+                  if (!options.length) return null;
+                  return (
+                    <optgroup label={matched.length ? `${form.discipline} drawings` : "All GFC sheets"}>
+                      {options.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
+                          {drawingHasPreviewFile(d) ? "" : " (no PDF yet)"}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })()}
               </Select>
             </label>
             <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
@@ -433,9 +415,14 @@ export function CoordinationPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
-            <Button type="submit" className="sm:col-span-2">
-              Log issue
-            </Button>
+            <div className="sm:col-span-2 space-y-2">
+              <p className="text-xs text-steel-muted">
+                Logging sends email to the assignee and copies the communication-matrix To and Cc.
+              </p>
+              <Button type="submit" className="!bg-sky-600 !font-medium">
+                Log issue
+              </Button>
+            </div>
           </form>
         </Card>
       )}
@@ -515,34 +502,32 @@ export function CoordinationPage() {
                       Full-screen PDF
                     </Button>
                   )}
-                  {canEdit && revisionHasPdf(linkedRevision) && (
-                    <Button type="button" onClick={() => void openCoordinationMarkup()}>
-                      Markup
-                    </Button>
-                  )}
                   {canEdit && selected.status === "Open" && (
                     <>
                       <Button
                         type="button"
-                        variant="secondary"
-                        className="!text-xs"
+                        className="!text-xs !bg-amber-400 !text-ink !font-medium"
                         disabled={followBusy || (selected.followUpCount ?? 0) >= 5}
                         onClick={() => void sendFollowUp(selected.id)}
                       >
                         Send follow-up ({selected.followUpCount ?? 0}/5)
                       </Button>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        className="!text-xs"
-                        disabled={followBusy}
-                        onClick={() => void escalateToRfiApi(selected.id)}
-                      >
-                        Escalate to RFI
-                      </Button>
-                      <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
-                        Open RFI compose
-                      </Button>
+                      {(selected.followUpCount ?? 0) >= 5 && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            className="!text-xs !bg-amber-600 !font-medium"
+                            disabled={followBusy}
+                            onClick={() => void escalateToRfiApi(selected.id)}
+                          >
+                            Update to Ask PMC RFI
+                          </Button>
+                          <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
+                            Open RFI form
+                          </Button>
+                        </>
+                      )}
                       <Button type="button" variant="secondary" className="!text-xs" onClick={() => docRef.current?.click()}>
                         Attach DMS file
                       </Button>
@@ -634,16 +619,6 @@ export function CoordinationPage() {
 
           {revisionPreview?.pdf || revisionPreview?.dwg || drawingPreview ? (
             <div className="flex flex-col gap-2 flex-1 min-h-[360px]">
-              {canEdit && revisionHasPdf(linkedRevision) && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand/30 bg-brand-soft/40 px-3 py-2">
-                  <p className="text-xs text-steel-muted">
-                    Mark clouds and notes on this issue's GFC PDF. Saved pages stay on the revision.
-                  </p>
-                  <Button type="button" onClick={() => void openCoordinationMarkup()}>
-                    Markup PDF
-                  </Button>
-                </div>
-              )}
               <DrawingFileViewer
                 {...(revisionPreview?.pdf || revisionPreview?.dwg
                   ? { revision: revisionPreview }
@@ -684,37 +659,6 @@ export function CoordinationPage() {
         <DrawingFileViewer revision={revisionPreview} variant="modal" onClose={() => setViewerOpen(false)} />
       )}
 
-      {markupOpen &&
-        markupFile &&
-        markupRevisionId &&
-        createPortal(
-          <div className="markup-modal" role="dialog" aria-modal="true">
-            <div className="markup-modal__backdrop" onClick={() => setMarkupOpen(false)} />
-            <div className="markup-modal__panel max-w-4xl">
-              <div className="markup-modal__head">
-                <span>Design coordination markup — {markupLabel}</span>
-                <button type="button" className="markup-modal__close" onClick={() => setMarkupOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <div className="markup-modal__body">
-                <PdfMarkup
-                  src={markupFile}
-                  saveLabel="Save markup to this drawing"
-                  onCancel={() => setMarkupOpen(false)}
-                  onSave={async (pages: MarkupPageDraft[]) => {
-                    if (!markupRevisionId) return;
-                    await uploadDrawingMarkupPages(markupRevisionId, pages, token, "Design coordination markup");
-                    setMarkupOpen(false);
-                    setMsg(`${pages.length} markup page(s) saved on ${markupLabel}`);
-                    await load();
-                  }}
-                />
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 }

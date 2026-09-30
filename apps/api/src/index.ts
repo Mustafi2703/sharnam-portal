@@ -264,6 +264,8 @@ async function start() {
   void Promise.all([ensureHrCompanyTree(), ensureCrmLibraryTree()])
     .then(() => console.log("SharePoint global directories ready: SPDC_HRMS, SPDC_CRM"))
     .catch((err) => console.warn("SPDC library folders:", err instanceof Error ? err.message : err));
+  const { startSharePointDayClose } = await import("./services/sharePointReconcile.js");
+  startSharePointDayClose();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

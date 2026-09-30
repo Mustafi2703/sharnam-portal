@@ -41,7 +41,7 @@ export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
   },
   {
     key: "rfi-ask",
-    label: "Ask RFI",
+    label: "Ask PMC RFI",
     to: "rfis",
     query: "kind=RequestForInformation&compose=1",
   },

@@ -119,6 +119,7 @@ export default function DrawingsPage() {
   const [revIssue, setRevIssue] = useState(emptyDrawingIssueDraft);
   const [revForm, setRevForm] = useState({ revisionNumber: "", revisionLabel: "", publish: true });
   const [revUploadMode, setRevUploadMode] = useState<"new" | "replace" | "update">("new");
+  const [uploadStep, setUploadStep] = useState<"confirm" | "files">("files");
   const [revReplaceRole, setRevReplaceRole] = useState<"pdf" | "dwg">("pdf");
   const [replaceRevisionId, setReplaceRevisionId] = useState<string | null>(null);
   const [dumpBusy, setDumpBusy] = useState(false);
@@ -153,7 +154,8 @@ export default function DrawingsPage() {
     setFormError("");
     if (precheckModeRef.current === "revision") {
       setRevUnlockToken(tok);
-      setMsg("Checklist unlocked — finish the revision upload.");
+      setUploadStep("files");
+      setMsg("Checklist complete. Add stakeholder signatures, then upload the PDF and DWG.");
     } else {
       setUnlockToken(tok);
       setShowRegister(true);
@@ -317,14 +319,14 @@ export default function DrawingsPage() {
   async function syncRegistersToDrive() {
     if (!id) return;
     setDumpBusy(true);
-    setMsg("Publishing Approval & GFC log and drawing register to SharePoint…");
+    setMsg("Syncing the database into the SharePoint sheets…");
     try {
-      await api<{ ok: boolean; files?: string[] }>(`/api/drawings/project/${id}/publish-registers`, {
+      await api<{ ok: boolean; week?: string }>(`/api/drawings/project/${id}/publish-registers`, {
         method: "POST",
         token,
         timeoutMs: 180_000,
       });
-      setMsg("SharePoint updated — DRAWING-REGISTER-01.xlsx, Dashboard PDF, Approval-GFC-Drawing-Log.xlsx.");
+      setMsg("SharePoint synced — GFC log, drawing register, dashboard, drawing issues, and this week’s RFI register.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "SharePoint publish failed");
     } finally {
@@ -440,6 +442,7 @@ export default function DrawingsPage() {
     setRevUnlockToken(null);
     setReplaceRevisionId(null);
     setRevUploadMode("new");
+    setUploadStep("files");
     setRevReplaceRole("pdf");
     setFormError("");
   }
@@ -447,6 +450,25 @@ export default function DrawingsPage() {
   async function uploadRevision(e: FormEvent) {
     e.preventDefault();
     if (!uploadForId) return;
+    if (uploadStep === "confirm") {
+      const needsCheck = revUploadMode === "new" && !revUnlockToken;
+      if (!needsCheck) {
+        setUploadStep("files");
+        setMsg(`${uploadTarget?.drawingNumber || "Drawing"} · ${revForm.revisionNumber} confirmed. Add signatures and the PDF or DWG.`);
+        return;
+      }
+      const match = (uploadTarget?.revisions || []).find(
+        (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
+      );
+      launchDrawingCheck("revision", {
+        id: uploadForId,
+        revisions: match ? [{ id: match.id, published: match.published }] : uploadTarget?.revisions,
+      });
+      setMsg(
+        `${uploadTarget?.drawingNumber || "Drawing"} · ${revForm.revisionNumber} confirmed. Fill the checklist. Save a draft if it is not complete — it is logged in the checklist fill log. After submit and sign, upload the files here.`
+      );
+      return;
+    }
     if (revUploadMode === "replace") {
       const replaceFile = revReplaceRole === "dwg" ? revDwg : revPdf;
       const hasIssue = issueDraftHasData(revIssue);
@@ -459,8 +481,8 @@ export default function DrawingsPage() {
         setFormError("Choose PDF/DWG or optional receive/issue details.");
         return;
       }
-    } else if (revUploadMode === "new" && !revUnlockToken && !drawingCheckFilled(uploadTarget)) {
-      setFormError("Complete Drawing Check once for this drawing before the first file upload.");
+    } else if (revUploadMode === "new" && !revUnlockToken) {
+      setFormError("Complete the Drawing Check for this revision, including the signature, before uploading files.");
       return;
     } else if (!revPdf && !revDwg && !extraPdfs.length) {
       setFormError("Choose at least one of PDF or DWG.");
@@ -495,8 +517,8 @@ export default function DrawingsPage() {
         setExpandedId(uploadForId);
         setMsg(`${revForm.revisionNumber} receive/issue saved.`);
       } else {
-        if (revUploadMode === "new" && !revUnlockToken && !drawingCheckFilled(uploadTarget)) {
-          setFormError("Complete Drawing Check once for this drawing before the first file upload.");
+        if (revUploadMode === "new" && !revUnlockToken) {
+          setFormError("Complete the Drawing Check for this revision, including the signature, before uploading files.");
           return;
         }
         const fd = new FormData();
@@ -543,6 +565,7 @@ export default function DrawingsPage() {
     setPlannedDate(new Date().toISOString().slice(0, 10));
     setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
+    setUploadStep("confirm");
     if (latest) {
       setRevUploadMode("update");
       setReplaceRevisionId(latest.id);
@@ -556,6 +579,7 @@ export default function DrawingsPage() {
       return;
     }
     setRevUploadMode("new");
+    setUploadStep("confirm");
     setReplaceRevisionId(null);
     setRevIssue(emptyDrawingIssueDraft());
     setRevForm({
@@ -685,6 +709,9 @@ export default function DrawingsPage() {
                 }}
               >
                 Load UAT GFC workbook
+              </Button>
+              <Button type="button" className="!bg-sky-600 !font-medium" disabled={dumpBusy} onClick={() => void syncRegistersToDrive()}>
+                {dumpBusy ? "Syncing…" : "Sync now"}
               </Button>
               <Button type="button" variant="secondary" onClick={() => {
                 setAddRowForm((f) => ({
@@ -819,7 +846,7 @@ export default function DrawingsPage() {
                     (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
                   }}
                 >
-                  {dumpBusy ? "Publishing…" : "Publish registers → SharePoint"}
+                  {dumpBusy ? "Syncing…" : "Sync now"}
                 </Button>
               </>
             )}
@@ -1045,7 +1072,7 @@ export default function DrawingsPage() {
                           <span className="text-xs text-steel-muted">—</span>
                         )}
                         {drawingCheckFilled(d) && (
-                          <div className="text-[10px] text-steel-muted mt-0.5">Check filled once</div>
+                          <div className="text-[10px] text-steel-muted mt-0.5">Checklist logged</div>
                         )}
                       </td>
                       {revSlots.map((slot) => {
@@ -1305,7 +1332,9 @@ export default function DrawingsPage() {
         <UploadModal
           open={revModalOpen}
           title={
-            revUploadMode === "replace"
+            uploadStep === "confirm"
+              ? `Confirm ${revForm.revisionNumber || "revision"}`
+              : revUploadMode === "replace"
               ? `Replace ${revReplaceRole.toUpperCase()}`
               : revUploadMode === "update"
                 ? "Update same revision"
@@ -1315,23 +1344,36 @@ export default function DrawingsPage() {
             revUploadMode === "replace"
               ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only`
               : revUploadMode === "update"
-                ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · add/replace PDF or DWG on same row (no checklist)`
-                : drawingCheckFilled(uploadTarget)
-                  ? `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist already filled once`
-                  : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist once`
+                ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · same revision, signatures and files only`
+                : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist, then sign, then upload`
           }
           file={revPdf || revDwg}
           onFile={() => undefined}
           canSubmit={
-            revUploadMode === "replace"
+            uploadStep === "confirm"
+              ? !!revForm.revisionNumber
+              : revUploadMode === "replace"
               ? !!(revReplaceRole === "dwg" ? revDwg : revPdf) || extraPdfs.length > 0 || issueDraftHasData(revIssue)
               : revUploadMode === "update"
                 ? !!revPdf || !!revDwg || extraPdfs.length > 0 || issueDraftHasData(revIssue)
-                : (!!revPdf || !!revDwg || extraPdfs.length > 0) &&
-                  (!!revUnlockToken || drawingCheckFilled(uploadTarget))
+                : (!!revPdf || !!revDwg || extraPdfs.length > 0) && !!revUnlockToken
           }
           filePicker={
-            revUploadMode === "replace" && revReplaceRole === "dwg" ? (
+            uploadStep === "confirm" ? (
+              <div className="rounded-xl border border-line bg-sand/40 p-3 text-sm space-y-1">
+                <p className="font-medium text-ink">Confirm this revision, then the checklist opens</p>
+                <p><span className="text-steel-muted">Drawing no.</span> {uploadTarget.drawingNumber || "—"}</p>
+                <p><span className="text-steel-muted">Title</span> {uploadTarget.title || "—"}</p>
+                <p><span className="text-steel-muted">Drawing type</span> {uploadTarget.discipline || "—"}</p>
+                <p><span className="text-steel-muted">Building</span> {uploadTarget.buildingArea || uploadTarget.building || "—"}</p>
+                <p><span className="text-steel-muted">Revision</span> {revForm.revisionNumber || "—"}</p>
+                <p><span className="text-steel-muted">Planned date</span> {plannedDate || "—"}</p>
+                <p><span className="text-steel-muted">Revision date</span> {actualDate || "—"}</p>
+                <p className="text-xs text-steel-muted pt-1">
+                  An incomplete checklist can be saved as a draft in the checklist fill log. When every line is filled, upload the stakeholder signature, then this popup returns for the PDF and DWG.
+                </p>
+              </div>
+            ) : revUploadMode === "replace" && revReplaceRole === "dwg" ? (
               <DrawingUploadFilePicker
                 pdfFile={null}
                 dwgFile={revDwg}
@@ -1357,7 +1399,9 @@ export default function DrawingsPage() {
             )
           }
           primaryLabel={
-            revUploadMode === "replace" || revUploadMode === "update"
+            uploadStep === "confirm"
+              ? "Confirm and open checklist"
+              : revUploadMode === "replace" || revUploadMode === "update"
               ? "Save on same revision"
               : "Upload & log planned/actual"
           }
@@ -1450,6 +1494,7 @@ export default function DrawingsPage() {
                           });
                         } else {
                           setRevUploadMode("new");
+                          setUploadStep(revUnlockToken ? "files" : "confirm");
                           setReplaceRevisionId(null);
                           setRevForm({
                             ...revForm,
@@ -1490,23 +1535,26 @@ export default function DrawingsPage() {
                       onChange: (v: boolean) => setRevForm({ ...revForm, publish: v }),
                     },
                   ]),
+            ...(uploadStep === "confirm"
+              ? []
+              : [
             {
               kind: "custom" as const,
               node: (
                 <div className="space-y-3">
-                  {revUploadMode === "new" && !revUnlockToken && !drawingCheckFilled(uploadTarget) && (
-                    <div className="rounded-lg border border-brand/30 bg-brand-soft/40 px-3 py-2">
+                  {revUploadMode === "new" && !revUnlockToken && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
                       <p className="text-sm text-ink">
-                        Drawing Check is filled once for this drawing. Complete it before the first file upload. Later revisions reuse that fill.
+                        This revision still needs the Drawing Check. Save a draft if it is not complete. After submit, add the signature here and upload the files.
                       </p>
-                      <Button type="button" className="mt-2" onClick={() => launchDrawingCheck("revision", uploadTarget)}>
+                      <Button type="button" className="mt-2 !bg-amber-500 !font-medium" onClick={() => launchDrawingCheck("revision", uploadTarget)}>
                         Open Drawing Check
                       </Button>
                     </div>
                   )}
-                  {revUploadMode === "new" && drawingCheckFilled(uploadTarget) && (
-                    <p className="text-sm text-steel-muted">
-                      Drawing Check is already filled for {uploadTarget.drawingNumber}. This revision does not ask again.
+                  {revUploadMode === "new" && revUnlockToken && (
+                    <p className="text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+                      Checklist complete for {revForm.revisionNumber}. Add stakeholder signatures, then upload the PDF and DWG.
                     </p>
                   )}
                   <DrawingIssueFields
@@ -1521,6 +1569,7 @@ export default function DrawingsPage() {
                 </div>
               ),
             },
+              ]),
           ]}
         />
       )}

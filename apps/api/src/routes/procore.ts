@@ -1671,6 +1671,34 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
     },
   });
+  const { getProjectMatrixEmails } = await import("../services/matrixContacts.js");
+  const matrix = await getProjectMatrixEmails(req.params.projectId, "TECHNICAL");
+  const assignee = String(req.body.assignedToEmail || "").trim().toLowerCase();
+  const to = assignee || matrix.to[0] || matrix.cc[0] || "";
+  const cc = [...new Set([...matrix.to, ...matrix.cc].filter((email) => email && email !== to))];
+  if (to) {
+    const { queueProjectEmail } = await import("../services/email.js");
+    await queueProjectEmail({
+      projectId: req.params.projectId,
+      subject: `Design coordination — ${req.body.title}`,
+      body: [
+        `A design coordination issue was logged.`,
+        ``,
+        `Issue: ${req.body.title}`,
+        req.body.discipline ? `Drawing type: ${req.body.discipline}` : "",
+        req.body.description ? `Details: ${req.body.description}` : "",
+        req.body.assignedToName ? `Assigned to: ${req.body.assignedToName}` : "",
+        ``,
+        `Assignee is on To. Communication-matrix contacts (To and Cc) are copied.`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      context: "coordination.logged",
+      createdById: req.user!.id,
+      toOverride: to,
+      ccOverride: cc.join(", "),
+    }).catch(() => undefined);
+  }
   res.status(201).json(row);
 });
 

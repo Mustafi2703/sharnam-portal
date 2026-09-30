@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import type PDFKit from "pdfkit";
 import { prisma } from "../prisma.js";
-import { SPDC_PMC_NAME } from "@sharnam/shared";
+import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
 import { sharnamLogoPath } from "./brandedExport.js";
 
 const HEADER_FILL = "FF1E3A5F";
@@ -156,6 +156,31 @@ export async function loadRegisterPivotBundle(projectId: string): Promise<Regist
   };
 }
 
+function stampWorkbookBrand(sheet: ExcelJS.Worksheet, title: string, projectName: string, lastCol = 8) {
+  const logo = sharnamLogoPath();
+  sheet.getRow(1).height = 36;
+  if (logo) {
+    try {
+      const imgId = sheet.workbook.addImage({ filename: logo, extension: "png" });
+      sheet.addImage(imgId, { tl: { col: 0.15, row: 0.08 }, ext: { width: 120, height: 36 }, editAs: "oneCell" });
+    } catch {
+      /* logo optional */
+    }
+  }
+  sheet.mergeCells(1, 2, 1, Math.max(lastCol, 2));
+  const titleCell = sheet.getCell(1, 2);
+  titleCell.value = title;
+  titleCell.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+  titleCell.alignment = { vertical: "middle", wrapText: true };
+  sheet.mergeCells(2, 2, 2, Math.max(lastCol, 2));
+  const pmc = sheet.getCell(2, 2);
+  pmc.value = `PROJECT MANAGEMENT CONSULTANTS : ${SPDC_PMC_NAME}`;
+  pmc.font = { size: 10, color: { argb: HEADER_FILL } };
+  sheet.getCell(4, 2).value = projectName;
+  sheet.getCell(4, 2).font = { size: 10, color: { argb: SLATE } };
+}
+
 function styleHeaderRow(row: ExcelJS.Row) {
   row.eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
@@ -226,9 +251,7 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
   dash.getColumn(3).width = 18;
   dash.getColumn(4).width = 14;
 
-  dash.mergeCells("B3:F3");
-  dash.getCell("B3").value = `Drawing Register Dashboard — ${bundle.weekLabel}`;
-  dash.getCell("B3").font = { bold: true, size: 14, color: { argb: HEADER_FILL } };
+  stampWorkbookBrand(dash, `Drawing Register Dashboard — ${bundle.weekLabel}`, bundle.project.name);
 
   const kpis = [
     ["Total drawings", bundle.totals.lines],
@@ -283,9 +306,39 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
     bundle.pivots.byConsultant.map((x) => [x.label, x.value]),
   );
 
+  const issues = await prisma.designCoordinationIssue.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "asc" },
+  });
+  const issueSheet = wb.addWorksheet("Drawing issues");
+  stampWorkbookBrand(issueSheet, "Design coordination issues", bundle.project.name);
+  const issueHeaders = ["Issue", "Drawing type", "Status", "Assignee", "Follow-ups", "Last follow-up", "RFI", "Opened"];
+  issueHeaders.forEach((h, i) => {
+    issueSheet.getCell(5, i + 1).value = h;
+  });
+  styleHeaderRow(issueSheet.getRow(5));
+  issues.forEach((issue, idx) => {
+    const row = issueSheet.getRow(6 + idx);
+    const cells = [
+      issue.title,
+      issue.discipline || "",
+      issue.status,
+      issue.assignedToName || issue.assignedToEmail || "",
+      `${issue.followUpCount}/5`,
+      issue.lastFollowUpAt ? day(issue.lastFollowUpAt) : "",
+      issue.escalatedRfiId ? "Yes" : "",
+      day(issue.createdAt),
+    ];
+    cells.forEach((v, ci) => {
+      row.getCell(ci + 1).value = v;
+      row.getCell(ci + 1).border = BOX;
+    });
+  });
+
   const master = wb.addWorksheet("Master Drawing Register", {
     views: [{ state: "frozen", ySplit: 5 }],
   });
+  stampWorkbookBrand(master, "Master Drawing Register", bundle.project.name);
   const masterHeaders = [
     "Sr #",
     "Project Package",
@@ -368,10 +421,15 @@ export async function buildApprovalGfcLogXlsx(projectId: string): Promise<Buffer
   const slotCount = Math.min(Math.max(maxSlot + 1, 6), 8);
 
   const wb = new ExcelJS.Workbook();
+  wb.creator = SPDC_PMC_NAME;
   const sheet = wb.addWorksheet("GFC", { views: [{ state: "frozen", ySplit: 3 }] });
-  sheet.mergeCells(1, 1, 1, 6 + slotCount);
-  sheet.getCell(1, 1).value = `${(project.location || project.name).toUpperCase()} : DRAWING REGISTER`;
-  sheet.getCell(1, 1).font = { bold: true, size: 12, color: { argb: HEADER_FILL } };
+  const lastCol = 6 + slotCount + 1 + slotCount;
+  stampWorkbookBrand(
+    sheet,
+    `${(project.location || project.name).toUpperCase()} : DRAWING REGISTER`,
+    project.name,
+    lastCol,
+  );
 
   const headers = [
     "DISCIPLINE",
@@ -380,6 +438,8 @@ export async function buildApprovalGfcLogXlsx(projectId: string): Promise<Buffer
     "DWG. NO.",
     "TITLE",
     "Drawing Browse (From One Drive ) ",
+    ...Array.from({ length: slotCount }, (_, i) => `R${i}`),
+    "TOTAL",
     ...Array.from({ length: slotCount }, (_, i) => `R${i}`),
   ];
   headers.forEach((h, i) => {
@@ -396,20 +456,37 @@ export async function buildApprovalGfcLogXlsx(projectId: string): Promise<Buffer
     row.getCell(3).value = d.tlNo || "";
     row.getCell(4).value = d.drawingNumber;
     row.getCell(5).value = d.title;
-    row.getCell(6).value = latest?.pdfFileUrl || latest?.fileUrl || "";
+    row.getCell(6).value = latest?.pdfFileUrl || latest?.dwgFileUrl || latest?.fileUrl || "";
+    let total = 0;
     for (let slot = 0; slot < slotCount; slot++) {
       const rev = revisionForSlot(d.revisions, slot);
-      const cell = row.getCell(7 + slot);
       const dt = revDateValue(rev);
+      const dateCell = row.getCell(7 + slot);
+      const flagCell = row.getCell(8 + slotCount + slot);
       if (dt) {
-        cell.value = dt;
-        cell.numFmt = "dd-mmm-yy";
+        dateCell.value = dt;
+        dateCell.numFmt = "dd-mmm-yy";
+        flagCell.value = 1;
+        total += 1;
+      } else {
+        flagCell.value = 0;
       }
     }
-    row.eachCell((cell) => {
-      cell.border = BOX;
+    row.getCell(7 + slotCount).value = total;
+    if (idx % 2 === 1) {
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        if (col <= lastCol) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F0E6" } };
+        }
+      });
+    }
+    row.eachCell({ includeEmpty: true }, (cell, col) => {
+      if (col <= lastCol) cell.border = BOX;
     });
   });
+  const foot = sheet.getRow(5 + drawings.length);
+  foot.getCell(1).value = `PROJECT MANAGEMENT CONSULTANTS : ${SPDC_PMC_NAME} · ${SPDC_OFFICE_FOOTER}`;
+  foot.getCell(1).font = { italic: true, size: 9, color: { argb: SLATE } };
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
@@ -486,8 +563,18 @@ export async function buildDrawingRegisterDashboardPdf(projectId: string): Promi
     }
 
     y = 168;
-    drawBarChart(doc, 36, y, 360, "By discipline", bundle.pivots.byDiscipline);
-    drawBarChart(doc, 420, y, 360, "Critical drawing", bundle.pivots.byCritical);
+    drawBarChart(doc, 36, y, 360, "Total drawings submitted", bundle.pivots.byDiscipline);
+    drawBarChart(doc, 420, y, 360, "Total critical drawings", bundle.pivots.byCritical);
+    y = 360;
+    drawBarChart(
+      doc,
+      36,
+      y,
+      360,
+      "Submission delay in days",
+      bundle.pivots.delayByResponsibility.map((p) => ({ label: p.label, value: p.days })),
+    );
+    drawBarChart(doc, 420, y, 360, "Drawings submitted by org", bundle.pivots.byConsultant);
 
     doc.end();
   });

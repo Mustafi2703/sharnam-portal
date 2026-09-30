@@ -115,4 +115,24 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
     "text/csv",
     { replace: true },
   );
+
+  const weekFolder = `${folder}/Weekly/${drawingRegisterWeekStamp()}`;
+  await mockOneDrive.upload(project.code, weekFolder, "DRAWING-REGISTER-01.xlsx", registerXlsx, XLSX_MIME, {
+    replace: true,
+  });
+  await mockOneDrive.upload(project.code, weekFolder, "DRAWING-REGISTER-Dashboard.pdf", dashboardPdf, PDF_MIME, {
+    replace: true,
+  });
+  await mockOneDrive.upload(project.code, weekFolder, "Approval-GFC-Drawing-Log.xlsx", gfcXlsx, XLSX_MIME, {
+    replace: true,
+  });
+}
+
+export function drawingRegisterWeekStamp(d = new Date()) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }

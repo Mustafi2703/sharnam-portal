@@ -236,7 +236,7 @@ async function syncMasterRegisterFromRevision(opts: {
     });
     return;
   }
-  const planned = opts.plannedDate ?? line.plannedSubmissionDate;
+  const planned = line.plannedSubmissionDate ?? opts.plannedDate ?? null;
   const actual = opts.actualDate ?? line.actualSubmissionDate;
   let submissionDelayDays = line.submissionDelayDays;
   if (planned && actual) {
@@ -2034,9 +2034,9 @@ drawingsRouter.post(
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
     try {
-      const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
-      await publishDrawingRegistersToDrive(projectId);
-      res.json({ ok: true, files: ["DRAWING-REGISTER-01.xlsx", "DRAWING-REGISTER-Dashboard.pdf", "Approval-GFC-Drawing-Log.xlsx"] });
+      const { reconcileProjectSharePoint } = await import("../services/sharePointReconcile.js");
+      const out = await reconcileProjectSharePoint(projectId);
+      res.json({ ok: true, ...out });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message || "SharePoint publish failed" });
@@ -2381,6 +2381,14 @@ drawingsRouter.patch(
       "issueDate",
     ] as const) {
       if (body[d] !== undefined) data[d] = body[d] ? new Date(body[d]) : null;
+    }
+    if (data.plannedSubmissionDate !== undefined || data.actualSubmissionDate !== undefined) {
+      const current = await prisma.drawingRegisterLine.findUnique({ where: { id: req.params.id } });
+      const planned = data.plannedSubmissionDate !== undefined ? data.plannedSubmissionDate : current?.plannedSubmissionDate;
+      const actual = data.actualSubmissionDate !== undefined ? data.actualSubmissionDate : current?.actualSubmissionDate;
+      if (planned instanceof Date && actual instanceof Date) {
+        data.submissionDelayDays = Math.ceil((actual.getTime() - planned.getTime()) / 86400000);
+      }
     }
     const row = await prisma.drawingRegisterLine.update({
       where: { id: req.params.id },
@@ -2769,27 +2777,13 @@ drawingsRouter.post(
 
     let unlockSubmissionId = existingRev?.preCheckSubmissionId || null;
     if (!existingRev) {
-      const priorCheck =
-        drawing.revisions.find((r) => r.preCheckSubmissionId)?.preCheckSubmissionId ||
-        (
-          await prisma.checklistSubmission.findFirst({
-            where: { drawingId: drawing.id, purpose: "PreUploadDrawing", status: "Submitted" },
-            orderBy: { createdAt: "desc" },
-            select: { id: true },
-          })
-        )?.id ||
-        null;
-      if (priorCheck) {
-        unlockSubmissionId = priorCheck;
-      } else {
-        const unlock = await consumeDrawingUnlockToken({
-          projectId: drawing.projectId,
-          unlockToken: req.body.unlockToken || req.body.preCheckToken,
-          userId: req.user!.id,
-        });
-        if (!unlock.ok) return res.status(400).json({ error: unlock.error });
-        unlockSubmissionId = unlock.submissionId;
-      }
+      const unlock = await consumeDrawingUnlockToken({
+        projectId: drawing.projectId,
+        unlockToken: req.body.unlockToken || req.body.preCheckToken,
+        userId: req.user!.id,
+      });
+      if (!unlock.ok) return res.status(400).json({ error: unlock.error });
+      unlockSubmissionId = unlock.submissionId;
     }
 
     let primaryPdf = pdf;

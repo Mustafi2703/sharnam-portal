@@ -17,8 +17,16 @@ export async function createRfiFromCoordinationIssue(opts: {
     if (existing) return existing;
   }
 
-  const count = await prisma.rfi.count({ where: { projectId: opts.projectId } });
-  const number = `RFI-${String(count + 1).padStart(3, "0")}`;
+  const existing = await prisma.rfi.findMany({
+    where: { projectId: opts.projectId, rfiKind: "RequestForInformation" },
+    select: { number: true },
+  });
+  let max = 0;
+  for (const row of existing) {
+    const match = String(row.number || "").match(/(\d+)\s*$/);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  const number = `SPDC-RFI-${String(max + 1).padStart(3, "0")}`;
   const question = [
     issue.description || "",
     issue.location ? `Location: ${issue.location}` : "",
@@ -27,6 +35,13 @@ export async function createRfiFromCoordinationIssue(opts: {
   ]
     .filter(Boolean)
     .join("\n\n");
+
+  const assigneeUser = issue.assignedToEmail
+    ? await prisma.user.findFirst({
+        where: { email: issue.assignedToEmail.trim(), isActive: true },
+        select: { id: true },
+      })
+    : null;
 
   const rfi = await prisma.rfi.create({
     data: {
@@ -38,6 +53,7 @@ export async function createRfiFromCoordinationIssue(opts: {
       status: "Open",
       ballInCourt: "Assignee",
       createdById: opts.userId,
+      assignedToId: assigneeUser?.id || null,
       dueDate: issue.dueDate || new Date(Date.now() + 7 * 86400000),
       linkedDrawingId: issue.linkedDrawingId || null,
       scheduleImpact: "TBD",
@@ -50,13 +66,27 @@ export async function createRfiFromCoordinationIssue(opts: {
     data: { status: "Escalated", escalatedRfiId: rfi.id },
   });
 
+  const { getProjectMatrixEmails } = await import("./matrixContacts.js");
+  const matrix = await getProjectMatrixEmails(opts.projectId, "TECHNICAL");
+  const assignee = issue.assignedToEmail?.trim().toLowerCase() || "";
+  const to = assignee || matrix.to[0] || matrix.cc[0] || "";
+  const cc = [...new Set([...matrix.to, ...matrix.cc].filter((email) => email && email !== to))];
   await queueProjectEmail({
     projectId: opts.projectId,
     subject: `Coordination escalated to ${number} — ${issue.title}`,
-    body: `Design coordination issue was escalated to RFI.\n\n${number}: ${issue.title}\n\n${question}`,
+    body: `Design coordination issue was escalated to Ask PMC RFI.\n\n${number}: ${issue.title}\n\n${question}`,
     context: "coordination.escalate-rfi",
     createdById: opts.userId,
+    toOverride: to || undefined,
+    ccOverride: cc.join(", ") || undefined,
   });
+
+  try {
+    const { syncRfiToDrive } = await import("./syncRfiToDrive.js");
+    await syncRfiToDrive(rfi.id);
+  } catch (err) {
+    console.warn("[coordination] RFI SharePoint sync:", err instanceof Error ? err.message : err);
+  }
 
   return rfi;
 }
@@ -82,6 +112,10 @@ export async function sendCoordinationFollowUp(opts: {
   const toEmail = issue.assignedToEmail?.trim();
   if (!toEmail) throw new Error("Assignee email required for follow-up");
 
+  const { getProjectMatrixEmails } = await import("./matrixContacts.js");
+  const matrix = await getProjectMatrixEmails(opts.projectId, "TECHNICAL");
+  const cc = [...new Set([...matrix.to, ...matrix.cc].filter((email) => email !== toEmail.toLowerCase()))];
+
   await queueProjectEmail({
     projectId: opts.projectId,
     subject: `Follow-up ${nextCount}/${MAX_FOLLOW_UPS} — ${issue.title}`,
@@ -100,6 +134,7 @@ export async function sendCoordinationFollowUp(opts: {
     context: "coordination.follow-up",
     createdById: opts.userId,
     toOverride: toEmail,
+    ccOverride: cc.join(", "),
   });
 
   const updated = await prisma.designCoordinationIssue.update({
@@ -107,12 +142,7 @@ export async function sendCoordinationFollowUp(opts: {
     data: { followUpCount: nextCount, lastFollowUpAt: new Date() },
   });
 
-  if (nextCount >= MAX_FOLLOW_UPS) {
-    const rfi = await createRfiFromCoordinationIssue(opts);
-    return { issue: updated, autoEscalated: true, rfi };
-  }
-
-  return { issue: updated, autoEscalated: false };
+  return { issue: updated, autoEscalated: false, needsRfi: nextCount >= MAX_FOLLOW_UPS };
 }
 
 export { MAX_FOLLOW_UPS };

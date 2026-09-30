@@ -2,7 +2,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { DrawingRegisterCharts } from "../../components/DrawingRegisterCharts";
+import {
+  DrawingRegisterCharts,
+  filterRegisterLines,
+  isoWeekNumber,
+  isoWeekRange,
+  type RegisterDashLine,
+} from "../../components/DrawingRegisterCharts";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
 import { Badge, Button, Card, PageHeader } from "../../components/ui";
@@ -64,21 +70,103 @@ function PivotTable({
 }
 
 function DrawingRegisterDashboard({ data }: { data: any }) {
-  const buildingRows = (data.pivots?.byBuildingDiscipline || []).map((r: any) => [r.building, r.discipline, r.count]);
-  const disciplineRows = (data.pivots?.byDiscipline || []).map((r: any) => [r.label, r.value]);
-  const criticalRows = (data.pivots?.byCritical || []).map((r: any) => [r.label, r.value]);
-  const delayRows = (data.pivots?.delayByResponsibility || []).map((r: any) => [r.label, r.days]);
-  const consultantRows = (data.pivots?.byConsultant || []).map((r: any) => [r.label, r.value]);
+  const now = isoWeekNumber();
+  const [week, setWeek] = useState<string>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const lines = (data.lines || []) as RegisterDashLine[];
+  const range = useMemo(() => {
+    if (from || to) {
+      const start = from ? new Date(`${from}T00:00:00`) : new Date("2000-01-01");
+      const end = to ? new Date(`${to}T23:59:59`) : new Date("2100-01-01");
+      return { start, end, label: `${from || "…"} to ${to || "…"}` };
+    }
+    if (week !== "all") {
+      const span = isoWeekRange(now.year, Number(week));
+      return { ...span, label: `Week ${week}` };
+    }
+    return { start: null as Date | null, end: null as Date | null, label: `Week ${now.week}` };
+  }, [from, to, week, now.year, now.week]);
+  const shown = useMemo(
+    () => filterRegisterLines(lines, range.start, range.end),
+    [lines, range.start, range.end],
+  );
+  const submitted = shown.filter((l) => l.actualSubmissionDate).length;
+  const critical = shown.filter((l) => /yes/i.test(l.criticalDrawing || "")).length;
+  const delayed = shown.filter((l) => (l.submissionDelayDays ?? 0) > 0).length;
+  const buildingRows = (() => {
+    const acc = new Map<string, number>();
+    for (const line of shown) {
+      const key = `${line.building || "—"}|${line.discipline || "Other"}`;
+      acc.set(key, (acc.get(key) || 0) + 1);
+    }
+    return [...acc.entries()].map(([key, count]) => {
+      const [building, discipline] = key.split("|");
+      return [building, discipline, count];
+    });
+  })();
+  const disciplineRows = countRows(shown, (l) => l.discipline || "Other");
+  const criticalRows = countRows(shown, (l) => (/yes/i.test(l.criticalDrawing || "") ? "Yes" : "No"));
+  const delayMap = new Map<string, number>();
+  for (const line of shown) {
+    if (!line.submissionDelayDays) continue;
+    const label = (line.delayResponsibility || "").trim() || "Unassigned";
+    delayMap.set(label, (delayMap.get(label) || 0) + (line.submissionDelayDays || 0));
+  }
+  const delayRows = [...delayMap.entries()].map(([label, days]) => [label, days]);
+  const consultantRows = countRows(shown, (l) => (l.consultantName || "").trim() || "Unassigned");
 
   return (
     <div className="space-y-4">
+      <Card className="!p-4 flex flex-wrap gap-3 items-end">
+        <label className="text-xs text-steel-muted">
+          Week
+          <select
+            className="mt-1 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink"
+            value={week}
+            onChange={(e) => {
+              setWeek(e.target.value);
+              setFrom("");
+              setTo("");
+            }}
+          >
+            <option value="all">All dates · Week {now.week}</option>
+            {Array.from({ length: now.week }, (_, i) => now.week - i).map((n) => (
+              <option key={n} value={String(n)}>
+                Week {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-steel-muted">
+          From
+          <input
+            type="date"
+            className="mt-1 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </label>
+        <label className="text-xs text-steel-muted">
+          To
+          <input
+            type="date"
+            className="mt-1 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </label>
+        <p className="text-xs text-steel-muted max-w-xl">
+          {range.label}. Counts come from GFC uploads and the master register. A new week folder is filed on SharePoint for the WPR and DPR.
+        </p>
+      </Card>
       <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {[
-          ["Week", data.dashboard?.weekLabel ?? "Week #"],
-          ["Total drawings", data.totals?.lines || 0],
-          ["GFC type", data.totals?.gfc ?? 0],
-          ["Critical", data.totals?.critical ?? 0],
-          ["Linked to GFC upload", data.totals?.linkedGfc ?? 0],
+          ["Week", range.label],
+          ["Total drawings", shown.length],
+          ["Submitted", submitted],
+          ["Critical", critical],
+          ["Delayed", delayed],
         ].map(([l, v]) => (
           <Card key={l as string} className="!p-4">
             <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
@@ -86,29 +174,28 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
           </Card>
         ))}
       </div>
-      <DrawingRegisterCharts
-        byDiscipline={data.pivots?.byDiscipline || []}
-        byCritical={data.pivots?.byCritical || []}
-        delayByResponsibility={data.pivots?.delayByResponsibility || []}
-        byConsultant={data.pivots?.byConsultant || []}
-        byPackage={data.pivots?.byPackage || []}
-        byBuilding={data.pivots?.byBuilding || []}
-        byDrawingType={data.pivots?.byDrawingType || data.charts?.byDrawingType || []}
-        byBuildingDiscipline={data.pivots?.byBuildingDiscipline || []}
-        byFileLink={data.pivots?.byFileLink || []}
-      />
+      <DrawingRegisterCharts lines={shown} />
       <p className="text-xs text-steel-muted">
-        Same pivots as DRAWING REGISTER - 01.xlsx Dashboard. Excel and PDF exports match the workbook layout and file to SharePoint when you publish.
+        Same charts as DRAWING REGISTER - 01.xlsx Dashboard: location, total drawings, critical, submission delay, and submitted by org. Drawing type and the submitted percentage sit with them. Planned date and criticality are maintained on the master register.
       </p>
       <div className="grid lg:grid-cols-2 gap-4">
-        <PivotTable title="Building × discipline" headers={["Building", "Discipline", "Count"]} rows={buildingRows} />
-        <PivotTable title="Discipline" headers={["Discipline", "Count"]} rows={disciplineRows} />
+        <PivotTable title="Location · building × discipline" headers={["Building", "Discipline", "Count"]} rows={buildingRows} />
+        <PivotTable title="Total drawings · discipline" headers={["Discipline", "Count"]} rows={disciplineRows} />
         <PivotTable title="Critical drawing" headers={["Critical", "Count"]} rows={criticalRows} />
-        <PivotTable title="Delay responsibility" headers={["Responsibility", "Sum of delay (days)"]} rows={delayRows} />
-        <PivotTable title="Consultant" headers={["Consultant name", "Count"]} rows={consultantRows} />
+        <PivotTable title="Submission delay" headers={["Responsibility", "Sum of delay (days)"]} rows={delayRows} />
+        <PivotTable title="Submitted by org" headers={["Organisation", "Count"]} rows={consultantRows} />
       </div>
     </div>
   );
+}
+
+function countRows(lines: RegisterDashLine[], pick: (line: RegisterDashLine) => string) {
+  const acc = new Map<string, number>();
+  for (const line of lines) {
+    const label = pick(line);
+    acc.set(label, (acc.get(label) || 0) + 1);
+  }
+  return [...acc.entries()].map(([label, value]) => [label, value]);
 }
 
 export default function DrawingRegisterPage() {
@@ -231,8 +318,8 @@ export default function DrawingRegisterPage() {
         title={sheetView.label}
         subtitle={
           sheetKey === "master"
-            ? "Master Drawing Register — drawing types, planned dates, and delete live here. Actual dates come from the GFC log. Upload PDF/DWG on Approval & GFC."
-            : "DRAWING REGISTER - 01.xlsx Dashboard sheet — week, charts, and pivots. The master register is a separate tool."
+            ? "Master Drawing Register from the Excel. Revision date follows the GFC upload. PMC edits planned submission date and criticality here; delay days feed the dashboard."
+            : "DRAWING REGISTER - 01.xlsx Dashboard. Charts fill from GFC uploads and the master register. Pick a week or dates. Each week is filed for the WPR and DPR."
         }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
@@ -293,14 +380,14 @@ export default function DrawingRegisterPage() {
                   disabled={publishBusy}
                   onClick={() => {
                     setPublishBusy(true);
-                    setMsg("Publishing registers to SharePoint…");
+                    setMsg("Syncing the database into the SharePoint sheets…");
                     void api(`/api/drawings/project/${id}/publish-registers`, { method: "POST", token, timeoutMs: 180_000 })
-                      .then(() => setMsg("SharePoint updated — DRAWING-REGISTER-01.xlsx, Dashboard PDF, Approval-GFC log."))
+                      .then(() => setMsg("SharePoint synced — live sheets plus this week’s folder for the WPR and DPR."))
                       .catch((err) => setMsg(err instanceof Error ? err.message : "Publish failed"))
                       .finally(() => setPublishBusy(false));
                   }}
                 >
-                  {publishBusy ? "Publishing…" : "Publish → SharePoint"}
+                  {publishBusy ? "Syncing…" : "Sync now"}
                 </Button>
               </>
             )}

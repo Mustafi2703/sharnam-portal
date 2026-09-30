@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import PDFDocument from "pdfkit";
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
@@ -893,6 +894,7 @@ checklistRouter.post(
             responsesJson: responses,
             remarks,
             status: "Draft",
+            ...(assignment.template.checklistType === "DrawingCheck" ? { purpose: "PreUploadDrawing" } : {}),
           },
         })
       : await prisma.checklistSubmission.create({
@@ -905,7 +907,7 @@ checklistRouter.post(
             status: "Draft",
             responsesJson: responses,
             remarks,
-            purpose: "Fill",
+            purpose: assignment.template.checklistType === "DrawingCheck" ? "PreUploadDrawing" : "Fill",
           },
         });
 
@@ -1311,7 +1313,7 @@ checklistRouter.get("/project/:projectId/export.csv", async (req, res) => {
  * Full filled-schedule export — every submission with line-level answers,
  * remarks, and photo paths. Admin can download one XLSX with all data.
  */
-checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admin", "office"), async (req, res) => {
+checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admin", "office", "employee", "site_employee"), async (req, res) => {
   const type = typeof req.query.type === "string" ? req.query.type : undefined;
   const submissions = await prisma.checklistSubmission.findMany({
     where: {
@@ -1399,6 +1401,93 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
   const fname = `filled-checklists-${req.params.projectId}${type ? `-${type}` : ""}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+  res.send(buf);
+});
+
+checklistRouter.get("/project/:projectId/export-filled.pdf", requireRoles("admin", "office", "employee", "site_employee"), async (req, res) => {
+  const type = typeof req.query.type === "string" ? req.query.type : undefined;
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.projectId },
+    select: { code: true, name: true },
+  });
+  const submissions = await prisma.checklistSubmission.findMany({
+    where: {
+      assignment: {
+        projectId: req.params.projectId,
+        ...(type ? { template: { checklistType: type } } : {}),
+      },
+    },
+    include: {
+      assignment: { include: { template: { include: { items: { orderBy: { sortOrder: "asc" } } } } } },
+      submittedBy: { select: { fullName: true, role: true } },
+      drawing: { select: { drawingNumber: true } },
+      revision: { select: { revisionNumber: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const buf = await new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.font("Helvetica-Bold").fontSize(14).fillColor("#1e3a5f").text("Checklist fill log", { continued: false });
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor("#64748b")
+      .text(`${project?.code || ""} ${project?.name || ""}${type ? ` · ${type}` : ""} · ${submissions.length} fills`);
+    doc.moveDown(0.6);
+    if (!submissions.length) {
+      doc.font("Helvetica").fontSize(10).fillColor("#0f172a").text("No filled checklists yet.");
+    }
+    for (const s of submissions) {
+      const template = s.assignment.template;
+      let responses: Record<string, any> = {};
+      try {
+        responses = JSON.parse(s.responsesJson || "{}");
+      } catch {
+        responses = {};
+      }
+      const ordered = Object.entries(responses)
+        .filter(([key]) => key !== "_meta")
+        .map(([, value]) => value);
+      const heading = [
+        new Date(s.createdAt).toLocaleString("en-GB"),
+        template.name,
+        s.status,
+        s.submittedBy.fullName,
+        s.drawing?.drawingNumber || "",
+        s.revisionNumber || s.revision?.revisionNumber || "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      if (doc.y > 500) doc.addPage();
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#1e3a5f").text(heading);
+      if (s.remarks) doc.font("Helvetica").fontSize(8).fillColor("#475569").text(s.remarks);
+      const items = template.items.length ? template.items : [];
+      if (!items.length) {
+        doc.font("Helvetica").fontSize(8).fillColor("#0f172a").text("(no line items)");
+      }
+      items.forEach((item, i) => {
+        const key = item.id ?? item.itemCode ?? "";
+        const direct = (key && responses[key]) || (item.itemCode ? responses[item.itemCode] : undefined);
+        const ans = direct && (typeof direct === "string" || direct.answer || direct.value || direct.remarks) ? direct : ordered[i] || {};
+        const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "";
+        const remarks = typeof ans === "object" ? ans.remarks || ans.remark || "" : "";
+        const line = `${item.itemCode || i + 1}. ${(item.description || "").slice(0, 90)} — ${answer || "—"}${remarks ? ` (${remarks})` : ""}`;
+        if (doc.y > 540) doc.addPage();
+        doc.font("Helvetica").fontSize(8).fillColor("#0f172a").text(line);
+      });
+      doc.moveDown(0.4);
+    }
+    doc.end();
+  });
+
+  const fname = `filled-checklists-${project?.code || req.params.projectId}${type ? `-${type}` : ""}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(buf);
 });
@@ -1734,6 +1823,12 @@ checklistRouter.post(
     }
 
     const files = (req.files as Express.Multer.File[]) || [];
+    const hasSignature = files.some((f) => f.fieldname === "signature" || isSignatureUploadName(f.originalname, f.fieldname));
+    if (!hasSignature) {
+      return res.status(400).json({
+        error: "Upload the stakeholder signature before submitting a complete checklist. Save a draft if it is not ready.",
+      });
+    }
     const unlockToken = `dwgchk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     const submission = await prisma.checklistSubmission.create({
       data: {
@@ -1763,6 +1858,13 @@ checklistRouter.post(
       entityId: submission.id,
       meta: { projectId, unlockToken, files: files.length, itemAttachments: itemAttachCount },
     });
+
+    try {
+      const { syncChecklistSubmissionToDrive } = await import("../services/syncChecklistSubmissionToDrive.js");
+      await syncChecklistSubmissionToDrive(submission.id);
+    } catch (err) {
+      console.warn("[checklist] drive sync on drawing precheck:", err instanceof Error ? err.message : err);
+    }
 
     res.status(201).json({
       submissionId: submission.id,

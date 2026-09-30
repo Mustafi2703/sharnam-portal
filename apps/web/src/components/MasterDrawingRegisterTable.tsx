@@ -159,7 +159,7 @@ export function MasterDrawingRegisterTable({
               <th>Rev date</th>
               <th>Rev description</th>
               <th>Latest</th>
-              <th>Planned</th>
+              <th>Planned (PMC)</th>
               <th>Actual</th>
               <th>Delay</th>
               <th>Delay resp.</th>
@@ -230,7 +230,23 @@ export function MasterDrawingRegisterTable({
                 <td className="text-xs whitespace-nowrap">{fmtDay(r.issueDate)}</td>
                 <td className="font-mono">{r.copiesCount ?? "—"}</td>
                 <td>
-                  {/yes/i.test(r.criticalDrawing || "") ? (
+                  {canEdit ? (
+                    <select
+                      className="text-xs border border-line rounded px-1 py-0.5 bg-white"
+                      value={/yes/i.test(r.criticalDrawing || "") ? "Yes" : "No"}
+                      onChange={async (e) => {
+                        await api(`/api/drawings/register-lines/${r.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ criticalDrawing: e.target.value }),
+                        });
+                        await onLinePatched?.();
+                      }}
+                    >
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  ) : /yes/i.test(r.criticalDrawing || "") ? (
                     <Badge tone="warn">Yes</Badge>
                   ) : (
                     <span className="text-steel-muted text-xs">No</span>

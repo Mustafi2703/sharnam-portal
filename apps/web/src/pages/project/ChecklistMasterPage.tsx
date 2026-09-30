@@ -219,6 +219,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             {id && (
               <Button
                 type="button"
+                className="!bg-amber-400 !text-ink !font-medium"
                 onClick={() => void openFamilyChecklistFill(id, family, token, { templateId: activeId })}
               >
                 Fill checklist
@@ -279,7 +280,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           <div className="flex flex-wrap gap-3 mt-2">
             <button
               type="button"
-              className="text-sm font-semibold text-brand underline"
+              className="rounded-full bg-sky-100 px-4 py-2 text-sm font-medium text-sky-900 hover:bg-sky-200 disabled:opacity-60"
               disabled={syncPackBusy}
               onClick={async () => {
                 setSyncPackBusy(true);
@@ -300,8 +301,8 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             >
               {syncPackBusy ? "Reloading…" : "Reload from drawing check master XLS"}
             </button>
-            <Link to={`/projects/${id}/rfis?kind=DrawingChecklist&compose=1`} className="text-sm font-semibold text-brand">
-              Request checklist fill (RFI) →
+            <Link to={`/projects/${id}/rfis?kind=DrawingChecklist&compose=1`} className="rounded-full bg-violet-100 px-4 py-2 text-sm font-medium text-violet-900 hover:bg-violet-200">
+              Request checklist fill
             </Link>
           </div>
         </Card>
@@ -392,7 +393,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="secondary"
+              className="!bg-sky-600 !font-medium"
               onClick={() =>
                 downloadCsv(`checklist-${family}-empty.csv`, [...CHECKLIST_CSV_HEADERS], [])
               }
@@ -401,7 +402,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             </Button>
             <Button
               type="button"
-              variant="secondary"
+              className="!bg-indigo-600 !font-medium"
               onClick={() =>
                 downloadCsv(
                   `checklist-${family}-detailed.csv`,
@@ -415,7 +416,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             {detail?.items?.length > 0 && (
               <Button
                 type="button"
-                variant="secondary"
+                className="!bg-emerald-600 !font-medium"
                 onClick={() =>
                   downloadCsv(
                     `${detail.name || "checklist"}-export.csv`,
@@ -518,7 +519,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 />
               </label>
               )}
-              <Button type="submit" disabled={createBusy || !form.name.trim()}>
+              <Button type="submit" disabled={createBusy || !form.name.trim()} className="!bg-sky-600 !font-medium">
                 {createBusy ? "Creating…" : "Create checklist"}
               </Button>
             </form>
@@ -540,11 +541,11 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   rows={2}
                   disabled={!canEdit}
                 />
-                {canEdit && <Button type="submit" variant="secondary">Save header</Button>}
+                {canEdit && <Button type="submit" className="!bg-sky-600 !font-medium">Save header</Button>}
                 {canEdit && detail && (
                   <Button
                     type="button"
-                    variant="secondary"
+                    className="!bg-violet-500 !font-medium"
                     disabled={syncPackBusy}
                     onClick={async () => {
                       setSyncPackBusy(true);
@@ -624,7 +625,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                     Require photo on this line
                   </label>
                   )}
-                  <Button type="submit">Add line item</Button>
+                  <Button type="submit" className="!bg-emerald-500 !font-medium">Add line item</Button>
                 </form>
               )}
 
@@ -632,6 +633,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 <div className="flex flex-wrap gap-3 items-center border-t border-line pt-3">
                   <Button
                     type="button"
+                    className="!bg-amber-400 !text-ink !font-medium"
                     onClick={() => void openFamilyChecklistFill(id, family, token, { templateId: detail.id })}
                   >
                     Fill this checklist
@@ -639,7 +641,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   {canEdit && (
                     <Button
                       type="button"
-                      variant="secondary"
+                      className="!bg-sky-600 !font-medium"
                       onClick={async () => {
                         try {
                           await api(`/api/checklist/project/${id}/assign`, {
