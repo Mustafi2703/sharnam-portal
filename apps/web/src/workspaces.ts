@@ -66,20 +66,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     {
       to: "drawings/checklist-logs",
       label: "Checklist fill log",
-      blurb: "Who filled what — branded download with Sharnam logo.",
+      blurb: "Assigned people fill from this log — drafts and signed fills. Branded download with Sharnam logo.",
     },
     {
       to: "drawings/coordination",
       label: "Design coordination",
       blurb: "Clash / design issues — discipline, linked drawing, ball-in-court. Markup the attached drawing on the RFI, not here.",
       sheet: "Design coordination register",
-    },
-    {
-      to: "drawings/precheck",
-      label: "Fill drawing checklist",
-      fillFamily: "DrawingCheck",
-      roles: ["admin", "office", "site_employee", "employee", "vendor"],
-      blurb: "Open the drawing check fill window — same popup as GFC upload.",
     },
     {
       to: "rfis",
@@ -753,7 +746,7 @@ export const MODULE_META: Record<
 > = {
   drawings: {
     title: "Drawings",
-    desc: "GFC register, Drawing Check Master on upload, coordination, checklist fill, RFI register, and Ask (PMC RFI).",
+    desc: "GFC register (upload with checklist gate), Drawing Check Master, fill log for assigned people, coordination, RFI register, and Ask (PMC RFI).",
     path: "hub/drawings",
     accent: "#2563EB",
     soft: "#DBEAFE",

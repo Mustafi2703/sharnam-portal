@@ -1,6 +1,6 @@
 import { FieldDeskHome } from "../components/FieldDeskHome";
 
-/** Site landing — attendance, leave, calendar, documents, and separation (one desk at a time). */
+/** Site landing — attendance, leave, calendar, and documents. */
 export default function SiteAttendancePage() {
   return <FieldDeskHome variant="site" />;
 }

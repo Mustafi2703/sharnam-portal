@@ -67,10 +67,10 @@ export default function ProjectHomePage() {
 
   const tools = isVendor
     ? [
-        ["checklist", "Checklist fills", "Fill assigned quality / drawing-check sheets", "QA", "#2F6F4E"],
+        ["checklist", "Checklist fills", "Fill assigned quality / drawing-check sheets from the fill log", "QA", "#2F6F4E"],
         ["quality-inspections", "Quality inspections", "QI forms assigned to your company", "QI", "#2F6F4E"],
         ["rfis", "RFIs + checklist requests", "Respond and fill linked checklists", "RFI", "#0B6A78"],
-        ["drawings/precheck", "Drawing check", "Fill the drawing-check gate", "DWG", "#E4632A"],
+        ["drawings/checklist-logs", "Drawing checklist log", "Fill assigned drawing checks from the log", "DWG", "#E4632A"],
         ["safety", "Safety fills", "Observations assigned to you", "SAF", "#1C4A5A"],
         ["comms", "Meetings", "Agenda and MoM visibility", "MTG", "#C24D1A"],
         ["photos", "Photos", "Upload field images for fills", "PIC", "#1C4A5A"],

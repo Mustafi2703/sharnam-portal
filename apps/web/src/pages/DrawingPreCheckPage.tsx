@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card } from "../components/ui";
@@ -18,12 +18,13 @@ import { drawingUnlockStorageKey, notifyDrawingUnlock } from "../lib/drawingChec
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
 /**
- * Drawing Check Master popup — Yes/No/N.A. items only (no photos/links).
- * Revision upload auto-binds the sheet. New register upload has no drawing yet.
+ * Drawing Check Master — used as the GFC upload gate overlay (embed=1).
+ * Standalone tool route redirects to the checklist fill log for assigned fills.
  */
 export default function DrawingPreCheckPage() {
   const { id: projectId } = useParams();
   const [searchParams] = useSearchParams();
+  const embed = searchParams.get("embed") === "1";
   const revisionMode = searchParams.get("mode") === "revision";
   const lockedDrawingId = searchParams.get("drawing") || "";
   const lockedRevisionId = searchParams.get("revision") || "";
@@ -31,6 +32,9 @@ export default function DrawingPreCheckPage() {
   const { token, user } = useAuth();
   useStandaloneFormPage();
 
+  if (!embed && projectId) {
+    return <Navigate to={`/projects/${projectId}/drawings/checklist-logs`} replace />;
+  }
   const [template, setTemplate] = useState<{
     name: string;
     items: ChecklistFillItem[];

@@ -83,11 +83,10 @@ const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/attendance?desk=leave", label: "Leave", icon: "modules" },
   { to: "/attendance?desk=calendar", label: "Calendar", icon: "reports" },
   { to: "/attendance?desk=documents", label: "Documents", icon: "dms" },
-  { to: "/attendance?desk=separation", label: "Separation", icon: "master" },
   { to: "/vouchers", label: "Expense voucher", icon: "finance" },
 ];
 
-/** Contractor home — attendance, leave, documents, separation. Not bid tools. */
+/** Contractor home — attendance, leave, documents. Not bid tools. */
 const vendorDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/vendor-desk", label: "Attendance & leave", icon: "field" },
 ];

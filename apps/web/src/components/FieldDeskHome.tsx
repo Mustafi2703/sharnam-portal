@@ -52,7 +52,7 @@ function requestGeoQuiet(): Promise<{ lat: number; lng: number } | null> {
   });
 }
 
-/** Site and contractor landing — punch, calendar, leave, documents, separation. Letters stay with HR. */
+/** Site and contractor landing — punch, calendar, leave, documents. Letters stay with HR. */
 export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   const { token, user } = useAuth();
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -65,22 +65,20 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [halfDay, setHalfDay] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [sepDay, setSepDay] = useState("");
-  const [sepReason, setSepReason] = useState("");
   const [docKind, setDocKind] = useState("Aadhaar");
   const [docFile, setDocFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
 
   const site = variant === "site";
   const [searchParams, setSearchParams] = useSearchParams();
-  const desk = searchParams.get("desk") || "attendance";
+  const rawDesk = searchParams.get("desk") || "attendance";
+  const desk = rawDesk === "separation" ? "attendance" : rawDesk;
   const earlyFromGeo = searchParams.get("early") === "1";
   const sections = [
     { id: "attendance", label: "Attendance" },
     { id: "leave", label: "Leave" },
     { id: "calendar", label: "Calendar" },
     { id: "documents", label: "Documents" },
-    { id: "separation", label: "Separation" },
   ];
 
   const leaveDaysPreview = useMemo(() => {
@@ -102,7 +100,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
       api<LeaveType[]>("/api/hrm/leave-types", { token }).catch(() => []),
     ]);
     setBalances(b);
-    setLeaves(l);
+    setLeaves(l.filter((row) => !(row.reason || "").startsWith("SEPARATION:")));
     setDocs(d);
     setLeaveTypes(t);
     if (!leaveTypeId && t.length) {
@@ -116,6 +114,14 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   }, [token, user?.id]);
 
   useEffect(() => {
+    if (searchParams.get("desk") === "separation") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("desk");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (searchParams.get("halfDay") === "1") setHalfDay(true);
     if (earlyFromGeo || searchParams.get("halfDay") === "1") {
       const today = new Date();
@@ -125,9 +131,6 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
       if (!leaveReason && earlyFromGeo) setLeaveReason("Early checkout from site (GPS)");
     }
   }, [searchParams, earlyFromGeo]);
-
-  const separations = leaves.filter((row) => (row.reason || "").startsWith("SEPARATION:"));
-  const leaveRows = leaves.filter((row) => !(row.reason || "").startsWith("SEPARATION:"));
 
   async function applyLeave(e: FormEvent) {
     e.preventDefault();
@@ -155,26 +158,6 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not send leave request");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function requestSeparation(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMsg("");
-    try {
-      await api("/api/hrm/separation", {
-        method: "POST",
-        token,
-        body: JSON.stringify({ lastWorkingDay: sepDay, reason: sepReason }),
-      });
-      setSepReason("");
-      setMsg("Separation request sent. HR will issue the exit letter — you do not generate letters here.");
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not send separation request");
     } finally {
       setBusy(false);
     }
@@ -222,7 +205,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
             <BrandMark size="sm" compact />
             <p className="text-xs text-steel-muted mt-1">
               {site
-                ? "Site desk · clock in with selfie and GPS · leave, documents, and separation stay separate"
+                ? "Site desk · clock in with selfie and GPS · leave and documents"
                 : "Contractor desk · clock in with selfie and GPS · leave and documents"}
             </p>
           </div>
@@ -341,9 +324,9 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
               Send to HR
             </Button>
           </form>
-          {leaveRows.length > 0 && (
+          {leaves.length > 0 && (
             <ul className="text-sm space-y-1">
-              {leaveRows.slice(0, 5).map((row) => (
+              {leaves.slice(0, 5).map((row) => (
                 <li key={row.id} className="flex justify-between gap-2">
                   <span>
                     {new Date(row.fromDate).toLocaleDateString("en-IN")} – {new Date(row.toDate).toLocaleDateString("en-IN")}
@@ -400,48 +383,6 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
               </li>
             ))}
           </ul>
-        </Card>
-      </section>
-      )}
-
-      {desk === "separation" && (
-      <section className="space-y-3">
-        <h2 className="font-display text-lg">Separation</h2>
-        <p className="text-sm text-steel-muted">
-          Separate from leave. Tell HR your last working day. They issue the exit letter — you only raise the request here.
-        </p>
-        <Card className="!p-4 border-amber-200">
-          <form className="grid sm:grid-cols-2 gap-2" onSubmit={requestSeparation}>
-            <label className="text-xs text-steel-muted">
-              Last working day
-              <Input className="mt-1" type="date" required value={sepDay} onChange={(e) => setSepDay(e.target.value)} />
-            </label>
-            <label className="text-xs text-steel-muted">
-              Reason for leaving
-              <Input
-                className="mt-1"
-                required
-                placeholder="Reason for leaving"
-                value={sepReason}
-                onChange={(e) => setSepReason(e.target.value)}
-              />
-            </label>
-            <Button type="submit" disabled={busy} className="sm:col-span-2">
-              Request separation
-            </Button>
-          </form>
-          {separations.length > 0 && (
-            <ul className="mt-3 text-sm space-y-1">
-              {separations.map((row) => (
-                <li key={row.id} className="flex justify-between gap-2">
-                  <span>
-                    Last day {new Date(row.fromDate).toLocaleDateString("en-IN")} · {(row.reason || "").replace(/^SEPARATION:\s*/, "")}
-                  </span>
-                  <span className="text-steel-muted">{row.status}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </Card>
       </section>
       )}

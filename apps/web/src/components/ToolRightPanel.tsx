@@ -6,7 +6,6 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { formatUiText } from "../lib/formatUiText";
 import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
-import { openDrawingCheckWindow } from "../lib/drawingCheckWindow";
 
 export type RightPanelContext = {
   projectId: string;
@@ -179,9 +178,11 @@ export function ToolRightPanel({
         if (canUpload) {
           actions.push(
             {
-              label: "Upload drawing",
+              label: "Upload on GFC register",
               onClick: () =>
-                onUploadDrawing ? onUploadDrawing() : openDrawingCheckWindow(ctx.projectId, "register"),
+                onUploadDrawing
+                  ? onUploadDrawing()
+                  : navigate(`/projects/${ctx.projectId}/drawings`),
               primary: true,
             },
             {
@@ -190,8 +191,8 @@ export function ToolRightPanel({
               secondary: true,
             },
             {
-              label: "Fill drawing checklist",
-              onClick: () => void openFamilyChecklistFill(ctx.projectId, "DrawingCheck", token),
+              label: "Checklist fill log",
+              onClick: () => navigate(`/projects/${ctx.projectId}/drawings/checklist-logs`),
               secondary: true,
             },
             {

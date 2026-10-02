@@ -204,7 +204,21 @@ export default function DrawingsPage() {
 
   useEffect(() => {
     if (!id || !canUpload) return;
-    if (searchParams.get("upload") !== "1") return;
+    const uploadMode = searchParams.get("upload");
+    const drawingIdParam = searchParams.get("drawingId")?.trim() || "";
+
+    if (uploadMode === "rev" && drawingIdParam) {
+      if (!drawingsLoaded) return;
+      const match = drawings.find((d) => d.id === drawingIdParam);
+      setSearchParams({}, { replace: true });
+      if (match) {
+        openUploadRev(match);
+        setMsg(`Upload revision on GFC for ${match.drawingNumber}`);
+      }
+      return;
+    }
+
+    if (uploadMode !== "1") return;
 
     const drawingNumber = searchParams.get("drawingNumber")?.trim() || "";
     if (drawingNumber && !drawingsLoaded) return;

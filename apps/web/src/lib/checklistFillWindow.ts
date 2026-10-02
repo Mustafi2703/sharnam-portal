@@ -1,5 +1,4 @@
 import { api } from "../api";
-import { openDrawingCheckWindow } from "./drawingCheckWindow";
 import { openInPageOverlay } from "./inPageOverlay";
 
 export type ChecklistFillFamily =
@@ -104,6 +103,7 @@ export async function ensureFamilyAssignment(
 /**
  * Open the fill log for this family (assignees fill from a log row popup).
  * Pass assignmentId to skip straight to the fill popup.
+ * Drawing Check fills also go through the fill log — GFC upload uses its own overlay.
  */
 export async function openFamilyChecklistFill(
   projectId: string,
@@ -112,9 +112,6 @@ export async function openFamilyChecklistFill(
   opts?: { assignmentId?: string | null; templateId?: string | null; preferAssignmentFill?: boolean }
 ): Promise<Window | null> {
   const f = normalizeFillFamily(family);
-  if (f === "DrawingCheck" && !opts?.preferAssignmentFill && !opts?.assignmentId) {
-    return openDrawingCheckWindow(projectId);
-  }
   if (opts?.assignmentId) {
     return openChecklistFillWindow(projectId, opts.assignmentId, f);
   }

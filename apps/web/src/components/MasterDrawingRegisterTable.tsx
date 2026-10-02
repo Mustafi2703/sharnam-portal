@@ -268,10 +268,10 @@ export function MasterDrawingRegisterTable({
                         <span className="text-[10px] text-steel-muted">Draft GFC</span>
                       )}
                       <Link
-                        to={`/projects/${projectId}/drawings/upload-revision/${r.drawing.id}`}
+                        to={`/projects/${projectId}/drawings?drawingId=${encodeURIComponent(r.drawing.id)}&upload=rev`}
                         className="text-[10px] font-semibold text-brand whitespace-nowrap"
                       >
-                        Upload revision →
+                        Upload rev on GFC →
                       </Link>
                       <Link to={`/projects/${projectId}/drawings`} className="text-[10px] font-semibold text-brand whitespace-nowrap">
                         Open GFC register →
