@@ -240,7 +240,9 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="font-semibold text-sm text-ink">Attendance calendar</h2>
-          <p className="text-xs text-steel-muted mt-0.5">Clock-in, clock-out, time on site, and GPS (especially check-out).</p>
+          <p className="text-xs text-steel-muted mt-0.5">
+            Clock-in/out, selfie, and GPS for each day. Download Excel for the blue monthly calendar and daily geo log (HR / office).
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="secondary" onClick={() => shiftMonth(-1)} aria-label="Previous month">
@@ -251,7 +253,7 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
             →
           </Button>
           <Button type="button" variant="secondary" onClick={() => void downloadRegister()}>
-            Download Excel
+            Download month Excel
           </Button>
         </div>
       </div>

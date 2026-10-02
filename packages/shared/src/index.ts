@@ -310,6 +310,46 @@ export function formatAttendanceDuration(minutes: number | null | undefined): st
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+/** Great-circle distance in metres (WGS84). */
+export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Working days between two inclusive calendar dates (IST-friendly Date objects).
+ * Skips Saturday, Sunday, and holiday YYYY-MM-DD keys. Half-day always returns 0.5.
+ */
+export function countLeaveWorkingDays(opts: {
+  from: Date;
+  to: Date;
+  halfDay?: boolean;
+  holidayKeys?: Iterable<string>;
+}): number {
+  if (opts.halfDay) return 0.5;
+  const holidays = new Set(opts.holidayKeys || []);
+  const start = new Date(opts.from);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(opts.to);
+  end.setHours(0, 0, 0, 0);
+  if (end < start) return 0;
+  let days = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const dow = cur.getDay();
+    const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+    if (dow !== 0 && dow !== 6 && !holidays.has(key)) days += 1;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
 export {
   type SheetCell,
   colLetter,

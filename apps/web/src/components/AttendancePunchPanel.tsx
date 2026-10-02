@@ -163,6 +163,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
       setMsg(
         `${kind === "in" ? "Checked in" : "Checked out"} at ${formatIstPunchTime(punchTime)}` +
           ` · ${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}` +
+          (kind === "out" && row.checkoutDistanceM != null ? ` · ${row.checkoutDistanceM} m from check-in` : "") +
           (row.inGeofenceOk || row.outGeofenceOk ? " · site verified" : "") +
           (row.provider === "sharepoint" ? " · SharePoint" : row.sharePointWarning ? ` · ${row.sharePointWarning}` : "")
       );
@@ -185,7 +186,7 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         </h2>
         <p className="text-xs text-steel-muted mb-3">
           {isField
-            ? "Site, vendor, and employee punches need a live selfie and GPS. The photo and map show on the HR attendance desk."
+            ? "Live selfie and GPS are required. Check-out must be near your check-in location (about 500 m, plus GPS accuracy). Photos and map points go to the HR monthly attendance record."
             : "Office punch — one tap check-in/out. Auto clock-out at 18:00 IST if you forget to check out."}
         </p>
 
@@ -246,10 +247,21 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         )}
 
         <div className={`flex gap-3 mt-4 ${variant === "full" ? "attendance-punch__actions sticky bottom-3 z-10" : ""}`}>
-          <Button type="button" className="flex-1" disabled={busy} onClick={() => void punch("in")}>
+          <Button
+            type="button"
+            className="flex-1"
+            disabled={busy || Boolean(myToday?.checkIn && !myToday?.checkOut)}
+            onClick={() => void punch("in")}
+          >
             {busy ? "Working…" : "Check in"}
           </Button>
-          <Button type="button" variant="secondary" className="flex-1" disabled={busy} onClick={() => void punch("out")}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="flex-1"
+            disabled={busy || !myToday?.checkIn || Boolean(myToday?.checkOut)}
+            onClick={() => void punch("out")}
+          >
             Check out
           </Button>
         </div>

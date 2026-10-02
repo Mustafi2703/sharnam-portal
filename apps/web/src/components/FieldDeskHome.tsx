@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { countLeaveWorkingDays } from "@sharnam/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { BrandMark } from "./Brand";
 import { AttendanceCalendar } from "./AttendanceCalendar";
 import { AttendancePunchPanel } from "./AttendancePunchPanel";
 import { Button, Card, Input, PageHeader, Select } from "./ui";
@@ -36,6 +38,20 @@ type DocRow = {
 
 const DOC_KINDS = ["Aadhaar", "PAN", "Bank", "ID-card", "Medical", "Other"];
 
+function requestGeoQuiet(): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+  });
+}
+
 /** Site and contractor landing — punch, calendar, leave, documents, separation. Letters stay with HR. */
 export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   const { token, user } = useAuth();
@@ -66,6 +82,16 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
     { id: "documents", label: "Documents" },
     { id: "separation", label: "Separation" },
   ];
+
+  const leaveDaysPreview = useMemo(() => {
+    if (!leaveFrom) return null;
+    if (halfDay) return 0.5;
+    if (!leaveTo) return null;
+    const from = new Date(`${leaveFrom}T00:00:00`);
+    const to = new Date(`${leaveTo}T00:00:00`);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+    return countLeaveWorkingDays({ from, to, halfDay: false });
+  }, [leaveFrom, leaveTo, halfDay]);
 
   async function load() {
     if (!user?.id) return;
@@ -117,7 +143,6 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
           reason: leaveReason,
           leaveTypeId: leaveTypeId || undefined,
           halfDay,
-          days: halfDay ? 0.5 : undefined,
         }),
       });
       setLeaveReason("");
@@ -161,14 +186,24 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
     setBusy(true);
     setMsg("");
     try {
+      const geo = await requestGeoQuiet();
       const fd = new FormData();
       fd.append("userId", user.id);
       fd.append("category", docKind);
       fd.append("title", docFile.name);
+      fd.append("capturedAt", new Date().toISOString());
+      if (geo) {
+        fd.append("lat", String(geo.lat));
+        fd.append("lng", String(geo.lng));
+      }
       fd.append("files", docFile);
       await api("/api/hrm/employee-files", { method: "POST", token, body: fd });
       setDocFile(null);
-      setMsg("Document stored in your employee file.");
+      setMsg(
+        geo
+          ? "Document stored with location and time stamp in your employee file."
+          : "Document stored in your employee file (location was not available).",
+      );
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not store the document");
@@ -178,25 +213,41 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
   }
 
   return (
-    <div className="space-y-8 min-w-0 max-w-3xl mx-auto">
+    <div className="space-y-6 min-w-0 max-w-3xl mx-auto">
+      <div className="rounded-2xl border border-line bg-paper overflow-hidden shadow-sm">
+        <div className="h-1.5 bg-gradient-to-r from-brand via-mark to-brand" />
+        <div className="px-4 sm:px-5 py-4 flex flex-wrap items-center gap-4">
+          <img src="/logo-transparent.png" alt="Sharnam" className="h-10 w-auto object-contain" />
+          <div className="min-w-0 flex-1">
+            <BrandMark size="sm" compact />
+            <p className="text-xs text-steel-muted mt-1">
+              {site
+                ? "Site desk · clock in with selfie and GPS · leave, documents, and separation stay separate"
+                : "Contractor desk · clock in with selfie and GPS · leave and documents"}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <PageHeader
         eyebrow={site ? "Site desk" : "Contractor desk"}
         title={site ? "Site home" : "Contractor home"}
         subtitle={
           site
-            ? "Check in, see leave left, keep your documents, and raise separation separately. Appointment letters are issued once at onboarding — you do not generate them here."
-            : "Check in, see leave left, and keep your documents. Bid work stays on Bid management. Letters are issued by HR once, at onboarding."
+            ? "Use one section at a time. Attendance is selfie + GPS. Check-out must be near where you checked in. Expense vouchers are on Expense voucher in the sidebar."
+            : "Check in with selfie and GPS. Leave and documents are separate from bid tools. Letters are issued by HR at onboarding."
         }
         actions={undefined}
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Site desk sections">
         {sections.map((section) => (
           <Button
             key={section.id}
             type="button"
             variant={desk === section.id ? "primary" : "secondary"}
             className="!text-xs"
+            aria-selected={desk === section.id}
             onClick={() => {
               const next = new URLSearchParams(searchParams);
               if (section.id === "attendance") next.delete("desk");
@@ -233,7 +284,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Request leave</h3>
           <p className="text-xs text-steel-muted">
-            Pick type (CL / PL / SL), full or half day, then send. Approval is a separate HR step — you cannot approve your own leave here.
+            Days are counted as working days (weekends and company holidays excluded). Half day is 0.5. HR approves separately.
           </p>
           {earlyFromGeo && (
             <p className="text-xs rounded-lg px-3 py-2 bg-warn-soft text-warn">
@@ -274,6 +325,12 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
               />
               Half day (0.5 day)
             </label>
+            {leaveDaysPreview != null && (
+              <p className="sm:col-span-2 text-xs text-steel-muted">
+                Will request <strong className="text-ink">{leaveDaysPreview}</strong> working day
+                {leaveDaysPreview === 1 ? "" : "s"} (preview — HR holidays also apply on the server).
+              </p>
+            )}
             <Input
               className="sm:col-span-2"
               placeholder="Reason"
@@ -291,7 +348,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
                   <span>
                     {new Date(row.fromDate).toLocaleDateString("en-IN")} – {new Date(row.toDate).toLocaleDateString("en-IN")}
                     {row.leaveType?.name ? ` · ${row.leaveType.name}` : ""}
-                    {row.halfDay ? " · Half" : ""}
+                    {row.halfDay ? " · Half" : ` · ${row.days}d`}
                   </span>
                   <span className="text-steel-muted shrink-0">{row.status}</span>
                 </li>
@@ -302,13 +359,21 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
       </section>
       )}
 
-      {desk === "calendar" && <AttendanceCalendar compact />}
+      {desk === "calendar" && (
+        <section className="space-y-3">
+          <h2 className="font-display text-lg">Monthly attendance</h2>
+          <p className="text-sm text-steel-muted">
+            Your month record with check-in/out times, photos, and map points. Office and HR review the same calendar on the HR attendance desk.
+          </p>
+          <AttendanceCalendar compact />
+        </section>
+      )}
 
       {desk === "documents" && (
       <section className="space-y-3">
         <h2 className="font-display text-lg">My documents</h2>
         <p className="text-sm text-steel-muted">
-          After onboarding, store Aadhaar, PAN, bank proof, and other papers here. They go into your employee file. Letter templates are not part of this desk.
+          Store Aadhaar, PAN, bank proof, and other papers. Uploads are saved with time (and GPS when available) into your employee file.
         </p>
         <Card className="!p-4">
           <form className="grid sm:grid-cols-2 gap-2" onSubmit={storeDocument}>
@@ -343,18 +408,25 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
       <section className="space-y-3">
         <h2 className="font-display text-lg">Separation</h2>
         <p className="text-sm text-steel-muted">
-          This is separate from leave. Tell HR your last working day. They issue the exit letter — you only raise the request.
+          Separate from leave. Tell HR your last working day. They issue the exit letter — you only raise the request here.
         </p>
         <Card className="!p-4 border-amber-200">
           <form className="grid sm:grid-cols-2 gap-2" onSubmit={requestSeparation}>
-            <Input type="date" required value={sepDay} onChange={(e) => setSepDay(e.target.value)} />
-            <Input
-              required
-              placeholder="Reason for leaving"
-              value={sepReason}
-              onChange={(e) => setSepReason(e.target.value)}
-            />
-            <Button type="submit" disabled={busy}>
+            <label className="text-xs text-steel-muted">
+              Last working day
+              <Input className="mt-1" type="date" required value={sepDay} onChange={(e) => setSepDay(e.target.value)} />
+            </label>
+            <label className="text-xs text-steel-muted">
+              Reason for leaving
+              <Input
+                className="mt-1"
+                required
+                placeholder="Reason for leaving"
+                value={sepReason}
+                onChange={(e) => setSepReason(e.target.value)}
+              />
+            </label>
+            <Button type="submit" disabled={busy} className="sm:col-span-2">
               Request separation
             </Button>
           </form>

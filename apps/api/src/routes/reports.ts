@@ -19,7 +19,7 @@ import {
   buildDprPack,
   buildWprPack,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS, attendanceSiteMinutes } from "@sharnam/shared";
+import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS, attendanceSiteMinutes, haversineMeters, countLeaveWorkingDays } from "@sharnam/shared";
 import { ctcMonthlyEarnings } from "../services/ctcAnnexure.js";
 import { isHrDeskOnly } from "../services/hrDesk.js";
 
@@ -2190,11 +2190,11 @@ hrmRouter.get("/attendance/range", hrmStaff, async (req: AuthedRequest, res) => 
   });
 });
 
-/** Monthly attendance + leave register — Excel for HR / site records. */
+/** Monthly attendance + leave register — Excel calendar (blue days) + daily GPS log for HR. */
 hrmRouter.get("/attendance/register.xlsx", hrmStaff, async (req: AuthedRequest, res) => {
   await applyAutoEodClockOut();
-  const { attendanceSiteMinutes, formatIstDateKey } = await import("@sharnam/shared");
-  const XLSX = (await import("../lib/xlsx.js")).default;
+  const { formatIstDateKey } = await import("@sharnam/shared");
+  const { buildAttendanceRegisterWorkbook } = await import("../services/attendanceRegisterExport.js");
 
   const role = req.user!.role;
   const canViewAll = role === "admin" || role === "office" || role === "hr";
@@ -2229,53 +2229,19 @@ hrmRouter.get("/attendance/register.xlsx", hrmStaff, async (req: AuthedRequest, 
     orderBy: { fromDate: "asc" },
   });
 
-  const attRows = attendance.map((r) => {
-    const mins = attendanceSiteMinutes(r.checkIn, r.checkOut);
-    const hours = mins != null ? Math.round((mins / 60) * 100) / 100 : "";
-    return [
-      formatIstDateKey(r.date),
-      r.user.fullName,
-      r.status,
-      r.checkIn || "",
-      r.checkOut || "",
-      hours,
-      r.inSiteName || "",
-      r.inLat != null && r.inLng != null ? `${r.inLat},${r.inLng}` : "",
-      r.outSiteName || "",
-      r.outLat != null && r.outLng != null ? `${r.outLat},${r.outLng}` : "",
-      r.notes || "",
-    ];
+  let filterName: string | null = null;
+  if (userId) {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+    filterName = u?.fullName || null;
+  }
+
+  const buf = await buildAttendanceRegisterWorkbook({
+    from,
+    to,
+    attendance,
+    leave,
+    filterName,
   });
-
-  const leaveRows = leave.map((l) => [
-    l.fromDate.toISOString().slice(0, 10),
-    l.toDate.toISOString().slice(0, 10),
-    l.user.fullName,
-    l.leaveType?.name || l.leaveType?.code || "",
-    l.days,
-    l.halfDay ? "Half" : "Full",
-    l.status,
-    l.reason || "",
-  ]);
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(
-    wb,
-    XLSX.utils.aoa_to_sheet([
-      ["Date", "Employee", "Status", "Check-in", "Check-out", "Hours on site", "In site", "In GPS", "Out site", "Out GPS", "Notes"],
-      ...attRows,
-    ]),
-    "Attendance",
-  );
-  XLSX.utils.book_append_sheet(
-    wb,
-    XLSX.utils.aoa_to_sheet([
-      ["From", "To", "Employee", "Leave type", "Days", "Half/Full", "Status", "Reason"],
-      ...leaveRows,
-    ]),
-    "Leave",
-  );
-  const buf = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
   const fname = `SPDC-Attendance-${formatIstDateKey(from)}-${formatIstDateKey(to)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
@@ -2309,9 +2275,51 @@ hrmRouter.post(
     const date = istStartOfDay();
     const timeStr = formatIstTimeHHMM();
 
+    const existing = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: req.user!.id, date } },
+    });
+
+    if (kind === "out") {
+      if (!existing?.checkIn) {
+        return res.status(400).json({ error: "Check in first before you check out" });
+      }
+      if (existing.checkOut) {
+        return res.status(400).json({ error: "Already checked out today" });
+      }
+      if (existing.inLat == null || existing.inLng == null) {
+        return res.status(400).json({
+          error: "Check-in has no GPS. Ask HR to correct the day, or check in again with location on.",
+        });
+      }
+      const distanceM = haversineMeters(existing.inLat, existing.inLng, lat, lng);
+      const maxM = Math.max(80, Number(process.env.ATTENDANCE_CHECKOUT_MAX_M) || 500);
+      const accBuffer = Math.min(
+        200,
+        Math.max(
+          Number.isFinite(acc) ? acc : 0,
+          existing.inAccuracy != null && Number.isFinite(existing.inAccuracy) ? existing.inAccuracy : 0,
+          40,
+        ),
+      );
+      const allowedM = maxM + accBuffer;
+      if (distanceM > allowedM) {
+        return res.status(400).json({
+          error: `Check-out location is ${Math.round(distanceM)} m from check-in (limit ${Math.round(allowedM)} m). Return near where you checked in, turn on GPS, take a fresh selfie, and try again.`,
+          distanceMeters: Math.round(distanceM),
+          allowedMeters: Math.round(allowedM),
+          checkInMapsUrl: `https://www.google.com/maps?q=${existing.inLat},${existing.inLng}`,
+        });
+      }
+    }
+
+    if (kind === "in" && existing?.checkIn && !existing.checkOut) {
+      return res.status(400).json({ error: "Already checked in today — use Check out when you leave" });
+    }
+
     let geofenceOk = false;
     let matchedSite: string | undefined;
     let projectCode = "OFFICE";
+    let checkoutDistanceM: number | null = null;
     if (projectId) {
       const proj = await prisma.project.findUnique({ where: { id: projectId } });
       if (proj) {
@@ -2319,6 +2327,10 @@ hrmRouter.post(
         matchedSite = proj.location || proj.code;
         geofenceOk = true;
       }
+    }
+    if (kind === "out" && existing?.inLat != null && existing?.inLng != null) {
+      checkoutDistanceM = Math.round(haversineMeters(existing.inLat, existing.inLng, lat, lng));
+      geofenceOk = true;
     }
 
     const person = (req.user!.fullName || req.user!.email || "user").replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -2393,6 +2405,7 @@ hrmRouter.post(
         accuracyM: Number.isFinite(acc) ? Math.round(acc) : null,
         mapsUrl: `https://www.google.com/maps?q=${lat},${lng}`,
         geofenceOk,
+        checkoutDistanceM,
         provider: saved.provider,
         photoPath: saved.path,
         photoUrl: photoUrl,
@@ -2426,6 +2439,7 @@ hrmRouter.post(
           : undefined,
       earlyLeaveSuggested: earlyLeaveSuggested || undefined,
       siteMinutes: siteMins ?? undefined,
+      checkoutDistanceM: checkoutDistanceM ?? undefined,
     });
   }
 );
@@ -2812,6 +2826,11 @@ hrmRouter.post(
     if (!files.length) return res.status(400).json({ error: "Upload at least one file" });
     const category = String(req.body.category || "General");
     const titleBase = String(req.body.title || "").trim();
+    const capturedAt = String(req.body.capturedAt || "").trim() || new Date().toISOString();
+    const lat = parseFloat(String(req.body.lat ?? ""));
+    const lng = parseFloat(String(req.body.lng ?? ""));
+    const hasGeo = Number.isFinite(lat) && Number.isFinite(lng);
+    const geoStamp = hasGeo ? `${lat.toFixed(5)},${lng.toFixed(5)}` : "";
     const profile = await prisma.employeeProfile.findFirst({ where: { userId } });
     const {
       employeeVaultRelPath,
@@ -2837,12 +2856,15 @@ hrmRouter.post(
         file.buffer
       );
       const url = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
+      const titled =
+        titleBase ||
+        `${file.originalname || category}${geoStamp ? ` · ${geoStamp}` : ""} · ${capturedAt.slice(0, 19).replace("T", " ")} IST`;
       created.push(
         await prisma.employeeDocument.create({
           data: {
             userId,
             category,
-            title: titleBase || file.originalname || category,
+            title: titled,
             fileUrl: url,
             storagePath: saved.sharePointPath || saved.path,
             issuedOn: req.body.issuedOn ? new Date(req.body.issuedOn) : new Date(),
@@ -2862,7 +2884,14 @@ hrmRouter.post(
       userId: req.user!.id,
       entity: "EmployeeDocument",
       entityId: userId,
-      meta: { count: created.length, category },
+      meta: {
+        count: created.length,
+        category,
+        capturedAt,
+        lat: hasGeo ? lat : null,
+        lng: hasGeo ? lng : null,
+        mapsUrl: hasGeo ? `https://www.google.com/maps?q=${lat},${lng}` : null,
+      },
     });
     res.status(201).json(created);
   }
@@ -3315,17 +3344,53 @@ hrmRouter.get("/leave", hrmStaff, async (req: AuthedRequest, res) => {
 hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", "employee", "vendor"), async (req: AuthedRequest, res) => {
   const from = new Date(req.body.fromDate);
   const to = new Date(req.body.toDate);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    return res.status(400).json({ error: "Valid from and to dates are required" });
+  }
+  if (to < from) return res.status(400).json({ error: "To date cannot be before from date" });
   const halfDay = !!req.body.halfDay;
-  const days = Number(req.body.days) || Math.max(halfDay ? 0.5 : 1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const holidays = await prisma.holiday.findMany({
+    where: { date: { gte: from, lte: to }, isOptional: false },
+    select: { date: true },
+  });
+  const holidayKeys = holidays.map((h) => {
+    const d = h.date;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const computed = countLeaveWorkingDays({ from, to, halfDay, holidayKeys });
+  const clientDays = Number(req.body.days);
+  const days =
+    halfDay
+      ? 0.5
+      : Number.isFinite(clientDays) && clientDays > 0 && ["admin", "office", "hr"].includes(req.user!.role)
+        ? clientDays
+        : computed > 0
+          ? computed
+          : Math.max(1, Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  if (!halfDay && computed === 0) {
+    return res.status(400).json({
+      error: "Selected dates fall only on weekends or holidays — pick working days, or use half day on a working day.",
+    });
+  }
   const targetUserId =
     req.body.userId && ["admin", "office", "hr"].includes(req.user!.role) ? String(req.body.userId) : req.user!.id;
   await ensureDefaultLeaveBalancesForUser(targetUserId, from.getFullYear());
+  if (req.body.leaveTypeId && !["admin", "office", "hr"].includes(req.user!.role)) {
+    const bal = await prisma.leaveBalance.findFirst({
+      where: { userId: targetUserId, leaveTypeId: String(req.body.leaveTypeId), year: from.getFullYear() },
+    });
+    if (bal && bal.balance + 1e-6 < days) {
+      return res.status(400).json({
+        error: `Not enough leave balance (${bal.balance} left, request is ${days} day${days === 1 ? "" : "s"}).`,
+      });
+    }
+  }
   const row = await prisma.leaveRequest.create({
     data: {
       userId: targetUserId,
       leaveTypeId: req.body.leaveTypeId || null,
       fromDate: from,
-      toDate: to,
+      toDate: halfDay ? from : to,
       days,
       halfDay,
       reason: req.body.reason,
@@ -3349,11 +3414,12 @@ hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", 
       `From: ${row.fromDate.toISOString().slice(0, 10)}`,
       `To: ${row.toDate.toISOString().slice(0, 10)}`,
       `Days: ${row.days}`,
+      `Working days (excl. weekends/holidays): ${computed}`,
       `Reason: ${row.reason || ""}`,
       `Status: ${row.status}`,
     ].join("\n"),
   );
-  res.status(201).json(row);
+  res.status(201).json({ ...row, workingDaysComputed: computed });
 });
 
 hrmRouter.patch("/leave/:id", hrmDesk, async (req: AuthedRequest, res) => {
@@ -3504,7 +3570,11 @@ hrmRouter.post(
     const files = (req.files as Express.Multer.File[] | undefined) || [];
     if (!files.length) return res.status(400).json({ error: "Upload at least one bill (PDF or image)" });
     const person = (req.user!.fullName || req.user!.email || "user").replace(/[^a-zA-Z0-9._-]+/g, "_");
-    const uploaded: { name: string; url: string }[] = [];
+    const capturedAt = String(req.body.capturedAt || "").trim() || new Date().toISOString();
+    const lat = parseFloat(String(req.body.lat ?? ""));
+    const lng = parseFloat(String(req.body.lng ?? ""));
+    const hasGeo = Number.isFinite(lat) && Number.isFinite(lng);
+    const uploaded: { name: string; url: string; capturedAt: string; lat?: number; lng?: number; mapsUrl?: string }[] = [];
     for (const f of files) {
       const stamp = Date.now();
       const safe = (f.originalname || "bill").replace(/[^a-zA-Z0-9._-]+/g, "_");
@@ -3514,8 +3584,25 @@ hrmRouter.post(
         `${person}-${stamp}-${safe}`,
         f.buffer,
       );
-      uploaded.push({ name: f.originalname || safe, url: saved.sharePointUrl || saved.url || saved.path });
+      uploaded.push({
+        name: f.originalname || safe,
+        url: saved.sharePointUrl || saved.url || saved.path,
+        capturedAt,
+        ...(hasGeo
+          ? { lat, lng, mapsUrl: `https://www.google.com/maps?q=${lat},${lng}` }
+          : {}),
+      });
     }
+    await audit("hrm.voucher.bill_upload", {
+      userId: req.user!.id,
+      entity: "ExpenseVoucher",
+      meta: {
+        count: uploaded.length,
+        capturedAt,
+        lat: hasGeo ? lat : null,
+        lng: hasGeo ? lng : null,
+      },
+    });
     res.status(201).json({ bills: uploaded });
   },
 );

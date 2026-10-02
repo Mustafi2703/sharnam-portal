@@ -203,17 +203,35 @@ function SideNavBody({
               <span className="side-nav__section-hint">Field</span>
             </div>
             <nav className="side-nav__group" aria-label="Site tools">
-              {siteDeskNav.map((n) => (
-                <NavLink
-                  key={n.to}
-                  to={n.to}
-                  onClick={onNavigate}
-                  className={({ isActive }) => `side-nav__item ${isActive ? "is-active" : ""}`}
-                >
-                  <ModuleIcon name={n.icon} size={18} />
-                  <span>{formatUiText(n.label)}</span>
-                </NavLink>
-              ))}
+              {siteDeskNav.map((n) => {
+                const target = new URL(n.to, "http://local");
+                const targetDesk = target.searchParams.get("desk");
+                return (
+                  <NavLink
+                    key={n.to}
+                    to={n.to}
+                    end={n.to === "/attendance"}
+                    onClick={onNavigate}
+                    className={({ isActive }) => {
+                      const path = location.pathname;
+                      const desk = new URLSearchParams(location.search).get("desk");
+                      let on = false;
+                      if (target.pathname === "/vouchers") {
+                        on = path === "/vouchers" || path.endsWith("/expense-vouchers");
+                      } else if (target.pathname === "/attendance") {
+                        if (!targetDesk) on = path === "/attendance" && (!desk || desk === "attendance");
+                        else on = path === "/attendance" && desk === targetDesk;
+                      } else {
+                        on = isActive;
+                      }
+                      return `side-nav__item ${on ? "is-active" : ""}`;
+                    }}
+                  >
+                    <ModuleIcon name={n.icon} size={18} />
+                    <span>{formatUiText(n.label)}</span>
+                  </NavLink>
+                );
+              })}
             </nav>
           </section>
         )}

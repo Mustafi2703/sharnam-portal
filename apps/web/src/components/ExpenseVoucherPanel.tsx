@@ -131,6 +131,26 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
       if (billFiles.length) {
         const fd = new FormData();
         billFiles.forEach((f) => fd.append("bills", f, f.name));
+        fd.append("capturedAt", new Date().toISOString());
+        try {
+          const geo = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
+            if (!navigator.geolocation) {
+              resolve(null);
+              return;
+            }
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+              () => resolve(null),
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+            );
+          });
+          if (geo) {
+            fd.append("lat", String(geo.lat));
+            fd.append("lng", String(geo.lng));
+          }
+        } catch {
+          /* location optional for bills */
+        }
         const up = await api<{ bills: { name: string; url: string }[] }>("/api/hrm/vouchers/bill-upload", {
           method: "POST",
           token,
