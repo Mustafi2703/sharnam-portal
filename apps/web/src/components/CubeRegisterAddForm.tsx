@@ -1,5 +1,5 @@
 import { FormEvent, useRef } from "react";
-import { applyCubeFormula } from "@sharnam/shared";
+import { applyCubeFormula, CUBE_AGENCY_OPTIONS, CUBE_GRADE_OPTIONS, CUBE_RESULT_OPTIONS } from "@sharnam/shared";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { Input, Select } from "./ui";
 
@@ -91,11 +91,24 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
             </label>
             <label className="register-form-field">
               <span>Grade</span>
-              <Input value={form.grade} onChange={(e) => onChange({ ...form, grade: e.target.value })} placeholder="M25" />
+              <Select value={form.grade} onChange={(e) => onChange({ ...form, grade: e.target.value })} required>
+                {CUBE_GRADE_OPTIONS.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </Select>
             </label>
             <label className="register-form-field">
               <span>Testing agency</span>
-              <Input value={form.testAgency} onChange={(e) => onChange({ ...form, testAgency: e.target.value })} placeholder="NABL lab" />
+              <Select value={form.testAgency} onChange={(e) => onChange({ ...form, testAgency: e.target.value })}>
+                <option value="">Select agency…</option>
+                {CUBE_AGENCY_OPTIONS.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </Select>
             </label>
             <label className="register-form-field">
               <span>7-day test date</span>
@@ -106,10 +119,12 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
               <Input type="date" value={form.testDate28} onChange={(e) => onChange({ ...form, testDate28: e.target.value })} />
             </label>
             <label className="register-form-field">
-              <span>Result (28-day vs grade)</span>
+              <span>Result (28-day avg vs grade)</span>
               <Select value={form.result} onChange={(e) => onChange({ ...form, result: e.target.value })}>
-                {["Pending", "PASS", "FAIL"].map((r) => (
-                  <option key={r}>{r}</option>
+                {CUBE_RESULT_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
                 ))}
               </Select>
             </label>

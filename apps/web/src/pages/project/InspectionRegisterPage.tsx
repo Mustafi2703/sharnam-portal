@@ -54,9 +54,12 @@ export default function InspectionRegisterPage() {
 
   const load = async () => {
     const kinds = INSPECTION_KINDS.join(",");
-    const [payload, u, qi, saf, act, proj] = await Promise.all([
+    const [payload, allUsers, contacts, qi, saf, act, proj] = await Promise.all([
       api<any>(`/api/rfis/project/${id}?kind=${kinds}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
+      api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() =>
+        api<any[]>(`/api/comms/contacts/${id}`, { token }).catch(() => [])
+      ),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=QualityInspection`, { token }).catch(() => ({
         assignments: [],
       })),
@@ -68,7 +71,36 @@ export default function InspectionRegisterPage() {
     ]);
     const list = Array.isArray(payload) ? payload : payload.rfis || [];
     setRows(list);
-    setUsers(u);
+
+    const byId = new Map<string, { id: string; fullName: string; role?: string }>();
+    for (const m of proj?.members || []) {
+      const u = m.user;
+      if (u?.id) byId.set(u.id, { id: u.id, fullName: u.fullName, role: m.role || u.role || "member" });
+    }
+    const contactList = Array.isArray(contacts) ? contacts : [];
+    const emailToUser = new Map(
+      (allUsers || [])
+        .filter((u: any) => u.email)
+        .map((u: any) => [String(u.email).trim().toLowerCase(), u] as const),
+    );
+    for (const c of contactList) {
+      if (c.isSectionHeader || !c.email) continue;
+      const u = emailToUser.get(String(c.email).trim().toLowerCase());
+      if (u?.id && !byId.has(u.id)) {
+        byId.set(u.id, {
+          id: u.id,
+          fullName: c.personName || u.fullName,
+          role: `${c.orgSection || "Matrix"} · ${c.mailRole || "TO"}`,
+        });
+      }
+    }
+    // Fall back to all portal users if no project/matrix people resolved
+    if (byId.size === 0) {
+      for (const u of allUsers || []) {
+        if (u?.id) byId.set(u.id, { id: u.id, fullName: u.fullName, role: u.role });
+      }
+    }
+    setUsers(Array.from(byId.values()).sort((a, b) => a.fullName.localeCompare(b.fullName)));
     setQiAssignments(qi.assignments || []);
     setSafetyAssignments(saf.assignments || []);
     setActivityAssignments(act.assignments || []);
@@ -183,7 +215,7 @@ export default function InspectionRegisterPage() {
       <PageHeader
         eyebrow="Inspection module"
         title="Inspection register"
-        subtitle="Quality, Safety, and Activity inspections — pick the checklist from master, fill it, then the sheet-style report downloads when the fill is submitted."
+        subtitle="Raise Quality IR (SPDC/QA/F-01) to a directory or communication-matrix person, link a checklist from master — they fill it in the portal; branded IR / checklist exports download on submit."
       />
 
       <ReferenceSheetToolbar

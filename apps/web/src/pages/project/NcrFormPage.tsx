@@ -211,6 +211,15 @@ export default function NcrFormPage() {
     await downloadAuthFile(path, token, name);
   }
 
+  async function downloadPdf() {
+    if (!recordId) return;
+    const path = isQuality
+      ? `/api/checklist/project/${id}/ncr/${recordId}/export.pdf`
+      : `/api/safety/${recordId}/export.pdf`;
+    const name = `${row?.number || row?.ncrNumber || "NCR"}.pdf`;
+    await downloadAuthFile(path, token, name);
+  }
+
   function openPrintPdf() {
     const path = isQuality
       ? `/api/checklist/project/${id}/ncr/${recordId}/export.html`
@@ -587,10 +596,13 @@ export default function NcrFormPage() {
             {busy ? "Saving…" : "Save form"}
           </Button>
           <Button type="button" variant="secondary" className="!text-xs" onClick={() => void downloadXlsx()}>
-            Download XLSX
+            Download Excel
+          </Button>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => void downloadPdf()}>
+            Download PDF
           </Button>
           <Button type="button" variant="secondary" className="!text-xs" onClick={openPrintPdf}>
-            Print / PDF
+            Print preview
           </Button>
           {row.status === "Open" && isOfficeAdmin && (
             <Button

@@ -740,12 +740,29 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
     });
   }
   if (req.body.assignedToId) {
+    const assigneeId = String(req.body.assignedToId);
     const onProject = await prisma.projectMember.findFirst({
-      where: { projectId: req.params.projectId, userId: String(req.body.assignedToId) },
+      where: { projectId: req.params.projectId, userId: assigneeId },
       select: { id: true },
     });
     if (!onProject) {
-      return res.status(400).json({ error: "Assignee must be a named person on this project's directory." });
+      // Communication matrix people (matched by email → User) may not be ProjectMember yet
+      const assignee = await prisma.user.findUnique({
+        where: { id: assigneeId },
+        select: { email: true },
+      });
+      const email = assignee?.email?.trim();
+      const onMatrix = email
+        ? await prisma.communicationContact.findFirst({
+            where: { projectId: req.params.projectId, email },
+            select: { id: true },
+          })
+        : null;
+      if (!onMatrix) {
+        return res.status(400).json({
+          error: "Assignee must be on this project's directory or communication matrix (matching email).",
+        });
+      }
     }
   }
   if (req.body.responsibleVendorId) {
@@ -2087,7 +2104,8 @@ safetyRouter.get("/:id/export.xlsx", async (req, res) => {
     select: { name: true, code: true, clientName: true },
   });
   const { buildSafetyNcrXlsxFromTemplate } = await import("../services/ncrFormExport.js");
-  const buf = await buildSafetyNcrXlsxFromTemplate(row, project || undefined);
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
+  const buf = await stampSpdcWorkbookLogo(await buildSafetyNcrXlsxFromTemplate(row, project || undefined));
   const name = `${row.ncrNumber || row.title || "Safety-NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
@@ -2106,4 +2124,19 @@ safetyRouter.get("/:id/export.html", async (req, res) => {
   const html = buildSafetyNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
+});
+
+safetyRouter.get("/:id/export.pdf", async (req, res) => {
+  const row = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Not found" });
+  const project = await prisma.project.findUnique({
+    where: { id: row.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  const { buildSafetyNcrPdf } = await import("../services/ncrFormExport.js");
+  const buf = await buildSafetyNcrPdf(row, project || undefined);
+  const name = `${row.ncrNumber || row.title || "Safety-NCR"}.pdf`.replace(/[^\w.-]+/g, "_");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(buf);
 });

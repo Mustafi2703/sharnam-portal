@@ -1,11 +1,12 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { groupCubeRows, fmtCubeDate, orderCubeSpecimens, specimenPhase, type CubeRow } from "../lib/cubeRegister";
 import { cubeResultRowClass, fmtRegisterNum } from "../lib/inspectionRequestForms";
 import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
 import { CubeRegisterAddForm, emptyCubeForm, type CubeAddFormState } from "./CubeRegisterAddForm";
 import { RegisterScrollArea } from "./RegisterScrollArea";
-import { RegisterSheetCell } from "./RegisterSheetCell";
+import { RegisterSheetCell, RegisterSheetSelect } from "./RegisterSheetCell";
+import { CUBE_AGENCY_OPTIONS, CUBE_GRADE_OPTIONS, CUBE_RESULT_OPTIONS } from "@sharnam/shared";
 import { Badge, Button, Card, Select } from "./ui";
 import { RegisterFilterBar } from "./RegisterFilterBar";
 import { RegisterBrandHeader } from "./RegisterBrandHeader";
@@ -39,6 +40,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [patchErr, setPatchErr] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
   const [filters, setFilters] = useState<Record<string, string>>({
     grade: "All",
     result: "All",
@@ -112,6 +114,43 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
     } finally {
       if (!silent) setBusy(false);
       setSyncing(false);
+    }
+  }
+
+  async function importCubeFile(file: File) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("replace", "1");
+      const out = await api<{ imported: number; groups: number }>(
+        `/api/checklist/project/${projectId}/cubes/import`,
+        { method: "POST", token, body: fd }
+      );
+      setMsg(`Imported ${out.imported} specimens (${out.groups} groups) from ${file.name} — weekly quality pack updated.`);
+      await onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function recalculateFormulas() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ updated: number; groups: number }>(
+        `/api/checklist/project/${projectId}/cubes/recalculate`,
+        { method: "POST", token }
+      );
+      setMsg(`Recalculated IS 516 (kN÷22.5) + phase averages on ${out.updated} specimens (${out.groups} groups).`);
+      await onChanged();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Recalculate failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -316,6 +355,24 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
               <Button type="button" className="!text-xs" disabled={busy || syncing} onClick={() => void addGroup()}>
                 New cube group
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={busy || syncing}
+                onClick={() => importRef.current?.click()}
+              >
+                Import SPDC Excel
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={busy || syncing || !localRows.length}
+                onClick={() => void recalculateFormulas()}
+              >
+                Recalculate IS 516
+              </Button>
               {canLoadTemplate ? (
                 <Button type="button" variant="secondary" className="!text-xs" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
                   Load SPDC cube template
@@ -324,6 +381,18 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
             </div>
           )}
         </div>
+
+        <input
+          ref={importRef}
+          type="file"
+          accept=".xlsx,.xlsm"
+          className="hidden"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (f) await importCubeFile(f);
+            e.target.value = "";
+          }}
+        />
 
         <div className="shrink-0">
         <RegisterFilterBar
@@ -407,14 +476,32 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                               }, { className: "min-w-[10rem]" })}
                             </td>
                             <td rowSpan={span} className="text-left align-top border-b border-line/60">
-                              {cellInput(g.grade || "", (v) => {
-                                for (const s of g.specimens) void patchCube(s.id, { grade: v || null });
-                              })}
+                              {canEdit ? (
+                                <RegisterSheetSelect
+                                  value={g.grade || "M25"}
+                                  options={[...CUBE_GRADE_OPTIONS]}
+                                  onCommit={(v) => {
+                                    for (const s of g.specimens) void patchCube(s.id, { grade: v || null });
+                                  }}
+                                  allowCustom
+                                />
+                              ) : (
+                                g.grade || "—"
+                              )}
                             </td>
                             <td rowSpan={span} className="text-left align-top border-b border-line/60">
-                              {cellInput(g.testAgency || "", (v) => {
-                                for (const s of g.specimens) void patchCube(s.id, { testAgency: v || null });
-                              })}
+                              {canEdit ? (
+                                <RegisterSheetSelect
+                                  value={g.testAgency || ""}
+                                  options={[...CUBE_AGENCY_OPTIONS]}
+                                  onCommit={(v) => {
+                                    for (const s of g.specimens) void patchCube(s.id, { testAgency: v || null });
+                                  }}
+                                  allowCustom
+                                />
+                              ) : (
+                                g.testAgency || "—"
+                              )}
                             </td>
                           </>
                         ) : null}
@@ -459,8 +546,10 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                                   for (const s of g.specimens) void patchCube(s.id, { result: e.target.value });
                                 }}
                               >
-                                {["Pending", "PASS", "FAIL"].map((r) => (
-                                  <option key={r}>{r}</option>
+                                {CUBE_RESULT_OPTIONS.map((r) => (
+                                  <option key={r} value={r}>
+                                    {r}
+                                  </option>
                                 ))}
                               </Select>
                             ) : (

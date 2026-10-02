@@ -1,4 +1,4 @@
-# MODULE — Quality (QI · QAP · NCR · Inspection)
+# MODULE — Quality (QI · QAP · NCR · Cube · Inspection IR)
 
 **Prompt:** `module_prompts/Quality.md`  
 **SRS:** [CLIENT_REQUIREMENTS.md](../CLIENT_REQUIREMENTS.md) §4.4 · §3B
@@ -7,137 +7,99 @@
 
 ## 1. Purpose
 
-Quality inspections, QAP Week 50 register, NCR/CAR, SPDC cube crushing register, checklist master (Excel), and **Request for Inspection**.
+Live Quality module for projects: QAP Week 50, SPDC cube crushing register, Quality Dashboard workbook, branded NCR/CAR (NCR 01), Request for Inspection (Quality IR F-01), and QI checklist fills. Weekly SharePoint packs mirror the drawings pattern (live file + `Weekly/{week}` copy).
 
 ---
 
-## 2. Tools
+## 2. Tools (live)
 
-| Tool | Status | Notes |
-|------|--------|-------|
-| QI dashboard | Built | Procore-style inspections + **Quality Dashboard workbook tabs** |
-| Checklist master | Built | Create; **upload Excel**; choose template; **global master at `/master/checklists`** |
-| Branded fill export | Built | Fill log → **Branded Excel** (real SPDC forms, colour-coded like DPR/WPR) + HTML print |
-| **QAP (Week 50)** | Built | **`/qap`** — full Excel layout, ~295 rows, daily check columns, auto sync from seed |
-| Site checklists | Built | Assign / fill (Final Index family) |
-| **Cube register** | Built | SPDC grouped specimens — inline edit, test agency, DPR stats |
-| NCR / CAR | Built | NCR 01 form window, Excel export, status emails |
-| SOR Log | Built | Site observation + instruction → DPR date-wise |
-| **Request for Inspection** | Built (label) | Kind `QualityInspection` — **Drawings Ask (PMC RFI) moved to Drawings module** |
-
----
-
-## 3. Quality Inspection fields
-
-| Field | Type | Required | Notes / review |
-|-------|------|----------|----------------|
-| title | text | Y | |
-| inspectionType | text | N | Default Quality |
-| status | enum | Y | Draft → Ready → In Progress → Closed |
-| location | text | N | |
-| linkedDrawingId | link | N | Gate may require published drawing |
-| checklistTemplateId | link | N | |
-| trade | text | N | |
-| createdBy | user | Y | |
-| items[] | | | prompt, result, notes, photos |
+| Tool | Route | Notes |
+|------|-------|-------|
+| Quality dashboard | `/projects/:id/inspections` | KPI tiles from DB + workbook tabs |
+| QAP (Week 50) | `/projects/:id/qap` | Full Excel layout; import / sync / publish |
+| Cube register | `/inspections?sheet=cube-test` | SPDC cols B–M; import Excel; Phase/agency portal extras |
+| NCR / CAR | `/inspections?sheet=` CAR | Branded NCR 01 XLSX + HTML → Drive |
+| Inspection register | `/projects/:id/inspection` | Quality IR / Safety IR / Activity / HSE |
+| Checklist master | `/quality/checklist-master` | QI family templates |
+| QI fill log | `/quality/checklist-logs` | Assignees fill; branded export |
+| Request for Inspection | Inspection register · kind `QualityIR` | SPDC/QA/F-01; matrix assignee + checklist |
 
 ---
 
-## 4. QAP activity (Week 50 sheet)
-
-| Field | Type | Notes |
-|-------|------|-------|
-| weekLabel | text | Canonical `Week 50` (aliases `W50` filtered) |
-| srNo / section | text | Activity group (Site Survey, Reinforcement, …) |
-| description | text | Line item / material check |
-| frequency | text | From Excel col D |
-| codeOfConformance | text | Col E |
-| testAgency | text | Col F — also feeds DPR “Testing agency” line |
-| contractorPerformer / contractorChecker | text | Col G–H |
-| pmcRole / clientRole | text | Col I–J |
-| records / remarks | text | Col K–L |
-| dailyChecks | JSON | Cols M–S (7 day checkboxes) |
-| status | Open / Done | Inline edit on `/qap` |
-
-**Seed / sync:** `POST /api/checklist/project/:id/qap/sync-template` loads `Quality Assurance Plan Week 50.xlsx` from `SHARNAM_EXCEL_ROOT`. Auto-runs on `/qap` when register is partial or legacy.
-
----
-
-## 5. Cube test (SPDC CUBE REGISTER)
-
-| Field | Type | Notes |
-|-------|------|-------|
-| srNo | text | Footing / pour group |
-| castDate | date | Group cast date |
-| description / grade | text | Footing label, M:25 etc. |
-| testAgency | text | NABL / site lab — **DPR quality block** |
-| cubeWeight | number | Per specimen (kg) |
-| testDate7 / testDate28 | date | Group testing schedule |
-| load7 / load28 | number | kN per specimen row |
-| strength7 / strength28 | number | MPa — **7D and 28D rows are separate specimens** (not duplicate errors) |
-| avgStrength / result | number / PASS\|FAIL | Group summary |
-| source | text | `SPDC CUBE REGISTER (1).xlsx` or `portal` |
-
-**Seed / sync:** `POST /api/checklist/project/:id/cubes/sync-template` (~429 specimens / 73 groups). UI: inline edit all columns; KPI summary (pass/fail/pending/agencies).
-
----
-
-## 6. Quality NCR / CAR
-
-| Field | Type | Notes |
-|-------|------|-------|
-| number | auto | NCR-* / CAR-* |
-| description | text | |
-| formDataJson | JSON | SPDC NCR 01 form — required before close |
-| status | Open / Closed | Close via form window + email notify |
-
----
-
-## 7. Quality Dashboard workbook (sheet tabs)
-
-UI route: `/projects/:id/inspections` with `?sheet=` query. **QAP** is a dedicated page at **`/qap`**.
-
-| Tab | Sheet source | Purpose |
-|-----|--------------|---------|
-| Dashboard | Dashboard | KPI tiles — open QI, QAP open/done, concreting week |
-| **SOR Log** | SOR Log | Live totals from site obs/instruction + NCR/CAR |
-| Site observation / instruction | — | Inline + modal; feeds SOR + DPR |
-| Checklist summary | Sheet1 + Sheet2 | Catalog status + daily/weekly/monthly fill graphs (DPR) |
-| CAR / NCR register | CAR register · NCR 01 | Form window, Excel export |
-| Cube Test | SPDC Cube Register | Full register — scrollable grid |
-| QI & checklist fills | — | Active inspection assignments |
-
-**DPR wiring:** SOR lines, NCR/CAR today, cube sets, 7/28-day results, test agency, QI/Safety checklist counts → `buildDprAutoFill` (`dprIntegrations.ts`).
-
----
-
-## 8. Sheet sources (seed/data)
+## 3. Client sheet formats (source of truth)
 
 | File | Portal use |
 |------|------------|
-| `Quality Assurance Plan Week 50.xlsx` | QAP sync-template (~295 rows) |
-| `SPDC CUBE REGISTER (1).xlsx` | Cube sync-template |
-| `Quality Dashboard.xlsx` | Dashboard KPIs, CAR summary (not full QAP) |
-| `NCR 01 .xlsx` | NCR/CAR register seed |
+| `Quality Assurance Plan Week 50.xlsx` | QAP import / sync-template / weekly publish |
+| `Quality Dashboard.xlsx` | Dashboard stamp + CAR register from DB NCRs |
+| `SPDC CUBE REGISTER (1).xlsx` | Cube import / export (clear demo body on export) |
+| `SPDC_Request_for_Inspection_Form.xlsx` | Quality IR raise + branded export |
+| `NCR 01 .xlsx` | Branded NCR/CAR export |
 
-Requires `SHARNAM_EXCEL_ROOT=./seed/data` on server. After schema change: `npx prisma db push`.
+Templates live under `seed/data` and `module_prompts/Sharnam_modules_docs 2/`. Server uses `SHARNAM_EXCEL_ROOT`.
 
 ---
 
-## 9. Roles
+## 4. Weekly SharePoint pack
+
+`POST /api/checklist/project/:id/qap/publish` → `publishQualityPackToDrive`:
+
+1. QAP Week 50 workbook  
+2. SPDC Cube Register  
+3. Quality Dashboard (CAR from live NCRs)  
+4. Open NCRs as branded NCR 01 files  
+
+Each workbook is written to the ISO quality folder **and** `…/Weekly/{weekStamp}/` (same pattern as drawings). Day-close reconcile also refreshes the pack.
+
+---
+
+## 5. Cube register alignment
+
+- Excel layout: **Sr No → Result in columns B–M** (column A empty in the client file).  
+- Import auto-detects SheetJS offset (stripped A) vs ExcelJS (kept A).  
+- Export fills the SPDC template, **clears leftover demo rows**, stamps project branding.  
+- Portal UI adds **Test agency** and **Phase (7D/28D)** for site use; they are not extra Excel columns.  
+- `POST …/cubes/import` replaces rows from an uploaded client workbook and republishes the quality pack.
+
+---
+
+## 6. Quality IR + communication matrix
+
+1. Raise IR on Inspection register (SPDC F-01 fields).  
+2. Pick checklist from master + **assignee** from project members **or** TECHNICAL matrix contacts (email → portal user).  
+3. API accepts matrix assignees even when they are not yet `ProjectMember`.  
+4. Fill-request draft lands on the fill log for that assignee; they complete it in the portal fill window.  
+5. Export IR as branded XLSX/HTML.
+
+---
+
+## 7. Clear Quality · Safety (not drawings)
+
+- UI: Projects → **Clear Quality · Safety** (type project code).  
+- API: `POST /api/projects/:id/purge-quality-safety`  
+- Script: `npx tsx scripts/purge-quality-safety.mts --code "SHAR/SNT/26-27/Voltamp Transformers Ltd."`  
+
+Removes QAP, cubes, NCRs, quality/safety RFIs & checklist fills, safety records. **Keeps** drawings, cost, progress, members, vendors, matrix.
+
+---
+
+## 8. Roles
 
 | Role | Can |
 |------|-----|
-| Office / Site | Create templates, QI, NCR, QAP/cube edit, sync templates |
+| Admin / Office | Purge quality/safety, publish packs, load templates |
+| Site / Employee | Raise IR, edit QAP/cube, fill assigned checklists |
 | Client | View; raise concerns where enabled |
-| Contractor | Fill assigned forms |
+| Matrix / vendor assignee | Fill assigned IR checklist drafts |
 
 ---
 
-## 10. Review checklist
+## 9. Review checklist
 
-- [ ] Confirm photo count rules per checklist type  
-- [ ] Confirm drawing gate for QI create  
-- [ ] QAP Week 50 shows ~295 lines with frequency + daily checks on demo  
-- [ ] Cube register shows grouped 7D/28D rows + test agency logged  
-- [ ] DPR Maker quality block populates on report day with cube cast/test dates  
+- [x] Cube import/export aligned to SPDC CUBE REGISTER  
+- [x] Quality Dashboard CAR from DB  
+- [x] Weekly quality pack like drawings  
+- [x] Branded NCR 01 on publish  
+- [x] Quality IR assignees from communication matrix  
+- [ ] Voltamp Quality/Safety purged and empty registers ready for live entry  
+- [ ] Progress / Safety modules next (Cost / Finance after)  

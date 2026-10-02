@@ -21,6 +21,13 @@ export async function reconcileProjectSharePoint(projectId: string) {
   await publishDrawingRegistersToDrive(projectId);
 
   const week = drawingRegisterWeekStamp();
+  try {
+    const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
+    await publishQualityPackToDrive(projectId, "system-reconcile");
+  } catch (err) {
+    console.warn("[sharepoint] quality pack reconcile skipped:", err instanceof Error ? err.message : err);
+  }
+
   const rfis = await prisma.rfi.findMany({
     where: { projectId },
     include: {
@@ -53,6 +60,9 @@ export async function reconcileProjectSharePoint(projectId: string) {
       "04.02/DRAWING-REGISTER-Dashboard.pdf",
       "04.02/Approval-GFC-Drawing-Log.xlsx",
       `04.02/Weekly/${week}/`,
+      "08.01 Quality Assurance Plan + Weekly/",
+      "08.03 Cube register + Weekly/",
+      "08.01 Quality Dashboard + Weekly/",
       "03.06/_Registers/SPDC_RFI_Form_and_Register.xlsx",
       `03.06/_Registers/Weekly/${week}/SPDC_RFI_Form_and_Register.xlsx`,
     ],

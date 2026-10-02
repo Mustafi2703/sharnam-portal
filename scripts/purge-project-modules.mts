@@ -6,6 +6,7 @@
  *   npx tsx scripts/purge-project-modules.mts --code "SHAR/SNT/26-27/Voltamp Transformers Ltd."
  *   npx tsx scripts/purge-project-modules.mts --all
  */
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { purgeProjectModuleData } from "../apps/api/src/services/purgeProject.js";
 

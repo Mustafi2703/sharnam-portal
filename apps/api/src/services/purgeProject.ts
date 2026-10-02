@@ -172,6 +172,78 @@ export async function purgeProjectModuleData(tx: Db, projectId: string) {
   await purgeProjectTransactionalData(tx, projectId, { keepSetup: true });
 }
 
+const QUALITY_SAFETY_CHECKLIST_TYPES = [
+  "QualityInspection",
+  "Safety",
+  "SiteExecution",
+  "ActivityInspection",
+] as const;
+
+const QUALITY_SAFETY_RFI_KINDS = [
+  "QualityIR",
+  "SafetyIR",
+  "ActivityInspection",
+  "QualityInspection",
+  "SafetyChecklist",
+  "SiteExecution",
+] as const;
+
+/**
+ * Clear Quality + Safety transactional data only.
+ * Keeps drawings, cost, progress, finance, setup (members / vendors / matrix).
+ */
+export async function purgeQualitySafetyModuleData(tx: Db, projectId: string) {
+  const where = { projectId };
+
+  const qualityAssignments = await tx.checklistAssignment.findMany({
+    where: {
+      projectId,
+      template: { checklistType: { in: [...QUALITY_SAFETY_CHECKLIST_TYPES] } },
+    },
+    select: { id: true },
+  });
+  const assignmentIds = qualityAssignments.map((a) => a.id);
+  const submissionIds = assignmentIds.length
+    ? await ids(
+        tx.checklistSubmission.findMany({
+          where: { assignmentId: { in: assignmentIds } },
+          select: { id: true },
+        }),
+      )
+    : [];
+
+  if (submissionIds.length) {
+    await tx.checklistPhoto.deleteMany({ where: { submissionId: { in: submissionIds } } });
+    await tx.checklistSubmission.deleteMany({ where: { id: { in: submissionIds } } });
+  }
+  if (assignmentIds.length) {
+    await tx.checklistAssignment.deleteMany({ where: { id: { in: assignmentIds } } });
+  }
+
+  const rfiIds = await ids(
+    tx.rfi.findMany({
+      where: { projectId, rfiKind: { in: [...QUALITY_SAFETY_RFI_KINDS] } },
+      select: { id: true },
+    }),
+  );
+  if (rfiIds.length) {
+    await tx.rfiResponse.deleteMany({ where: { rfiId: { in: rfiIds } } });
+    await tx.rfi.deleteMany({ where: { id: { in: rfiIds } } });
+  }
+
+  const inspectionIds = await ids(tx.qualityInspection.findMany({ where, select: { id: true } }));
+  if (inspectionIds.length) {
+    await tx.inspectionItem.deleteMany({ where: { inspectionId: { in: inspectionIds } } });
+    await tx.qualityInspection.deleteMany({ where });
+  }
+
+  await tx.qualityNcr.deleteMany({ where });
+  await tx.qualitySiteRecord.deleteMany({ where });
+  await tx.qapActivity.deleteMany({ where });
+  await tx.cubeTest.deleteMany({ where });
+  await tx.safetyRecord.deleteMany({ where });
+}
+
 /**
  * Remove every row that blocks Project delete.
  * MySQL often has Restrict FKs even when Prisma says Cascade, so we delete

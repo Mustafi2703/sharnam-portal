@@ -2404,7 +2404,7 @@ checklistRouter.post(
           }
         : {
             projectName: project?.name || project?.code || "",
-            fromParty: "Sharnam Project Development Consultant",
+            fromParty: "Sharnam Project Development Consultants & Co.",
             toParty: contractorName,
             actionRequired: body.actionRequired ? String(body.actionRequired) : "",
             contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
@@ -2644,7 +2644,8 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req, re
     select: { name: true, code: true, clientName: true },
   });
   const { buildQualityNcrXlsxFromTemplate } = await import("../services/ncrFormExport.js");
-  const buf = await buildQualityNcrXlsxFromTemplate(row, project || undefined);
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
+  const buf = await stampSpdcWorkbookLogo(await buildQualityNcrXlsxFromTemplate(row, project || undefined));
   const name = `${row.number || "NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
@@ -2665,6 +2666,23 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req, re
   const html = buildQualityNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
+});
+
+checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req, res) => {
+  const row = await prisma.qualityNcr.findFirst({
+    where: { id: req.params.ncrId, projectId: req.params.projectId },
+  });
+  if (!row) return res.status(404).json({ error: "NCR not found" });
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.projectId },
+    select: { name: true, code: true, clientName: true },
+  });
+  const { buildQualityNcrPdf } = await import("../services/ncrFormExport.js");
+  const buf = await buildQualityNcrPdf(row, project || undefined);
+  const name = `${row.number || "NCR"}.pdf`.replace(/[^\w.-]+/g, "_");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(buf);
 });
 
 /** Quality site observation / site instruction — feeds SOR Log */
@@ -2802,7 +2820,10 @@ checklistRouter.patch(
     const data: Record<string, unknown> = {};
     if (b.srNo != null) data.srNo = String(b.srNo);
     if (b.description != null) data.description = String(b.description);
-    if (b.grade != null) data.grade = String(b.grade);
+    if (b.grade != null) {
+      const { normalizeCubeGrade } = await import("@sharnam/shared");
+      data.grade = normalizeCubeGrade(String(b.grade)) || String(b.grade);
+    }
     if (b.result != null) data.result = String(b.result);
     if (b.testAgency !== undefined) data.testAgency = b.testAgency ? String(b.testAgency) : null;
     if (b.castDate !== undefined) data.castDate = b.castDate ? new Date(b.castDate) : null;
@@ -2815,23 +2836,57 @@ checklistRouter.patch(
       where: { id: req.params.cubeId, projectId: req.params.projectId },
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
-    const { applyCubeFormula } = await import("@sharnam/shared");
+    const { applyCubeFormula, applyCubeGroupPhaseStats, cubeGroupKey } = await import("@sharnam/shared");
     const computed = applyCubeFormula({
-      load7: ("load7" in data ? (data.load7 as number | null) : existing.load7),
-      load28: ("load28" in data ? (data.load28 as number | null) : existing.load28),
-      strength7: b.strength7 != null ? Number(b.strength7) : "load7" in data ? undefined : existing.strength7,
-      strength28: b.strength28 != null ? Number(b.strength28) : "load28" in data ? undefined : existing.strength28,
-      avgStrength: b.avgStrength != null ? Number(b.avgStrength) : existing.avgStrength,
+      load7: "load7" in data ? (data.load7 as number | null) : existing.load7,
+      load28: "load28" in data ? (data.load28 as number | null) : existing.load28,
+      // Load always wins for IS 516 — omit stored strength when load changes
+      strength7: b.strength7 != null && !("load7" in data) ? Number(b.strength7) : undefined,
+      strength28: b.strength28 != null && !("load28" in data) ? Number(b.strength28) : undefined,
       grade: (data.grade as string | undefined) ?? existing.grade,
-      result: b.result != null ? String(b.result) : existing.result,
+      result: b.result != null ? String(b.result) : undefined,
     });
     data.strength7 = computed.strength7;
     data.strength28 = computed.strength28;
     data.strength = computed.strength;
     data.avgStrength = computed.avgStrength;
     if (b.result == null || b.result === "Pending") data.result = computed.result;
-    const row = await prisma.cubeTest.update({ where: { id: existing.id }, data });
+    await prisma.cubeTest.update({ where: { id: existing.id }, data });
+
+    // Recompute phase averages + PASS/FAIL across the footing group
+    const refreshed = await prisma.cubeTest.findUnique({ where: { id: existing.id } });
+    if (!refreshed) return res.status(404).json({ error: "Not found" });
+    const key = cubeGroupKey(refreshed);
+    const siblings = await prisma.cubeTest.findMany({ where: { projectId: req.params.projectId } });
+    const group = siblings.filter((r) => cubeGroupKey(r) === key);
+    const next = applyCubeGroupPhaseStats(group);
+    for (let i = 0; i < group.length; i++) {
+      await prisma.cubeTest.update({
+        where: { id: group[i].id },
+        data: {
+          strength7: next[i].strength7,
+          strength28: next[i].strength28,
+          strength: next[i].strength28 ?? next[i].strength7 ?? next[i].strength,
+          avgStrength: next[i].avgStrength,
+          result: b.result != null && group[i].id === existing.id ? String(b.result) : next[i].result || "Pending",
+          grade: next[i].grade || group[i].grade,
+        },
+      });
+    }
+    const row = await prisma.cubeTest.findUnique({ where: { id: existing.id } });
     res.json(row);
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/cubes/recalculate",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const { recalculateProjectCubes } = await import("../services/cubeRegisterImport.js");
+    const out = await recalculateProjectCubes(req.params.projectId);
+    const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
+    const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id).catch(() => []);
+    res.json({ ...out, drive });
   }
 );
 
@@ -2845,6 +2900,30 @@ checklistRouter.post(
     const fs = await import("fs");
     const out = await importCubeRegisterWorkbook(req.params.projectId, fs.readFileSync(file), true);
     res.json(out);
+  }
+);
+
+/** Upload client SPDC CUBE REGISTER workbook (same layout as the shared Excel). */
+checklistRouter.post(
+  "/project/:projectId/cubes/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer) return res.status(400).json({ error: "Excel file required — use SPDC CUBE REGISTER layout" });
+    const replace = String(req.body?.replace || "1") !== "0";
+    const { importCubeRegisterWorkbook } = await import("../services/cubeRegisterImport.js");
+    const out = await importCubeRegisterWorkbook(req.params.projectId, req.file.buffer, replace);
+    const { publishQualityPackToDrive, archiveUploadedWorkbook } = await import("../services/registerWorkbookPublish.js");
+    const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id).catch(() => []);
+    const archived = await archiveUploadedWorkbook({
+      projectId: req.params.projectId,
+      userId: req.user!.id,
+      moduleKey: "cube",
+      originalName: req.file.originalname,
+      buffer: req.file.buffer,
+      auditAction: "cube.workbook.archived",
+    });
+    res.json({ ...out, drive, archived });
   }
 );
 

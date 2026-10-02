@@ -1,8 +1,10 @@
-/** NCR / CAR form validation and branded Excel export (Safety NCR.xlsx · NCR 01 .xlsx layouts). */
+/** NCR / CAR form validation and branded Excel / HTML / PDF export (Safety NCR.xlsx · NCR 01 .xlsx). */
 import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import XLSX from "../lib/xlsx.js";
+import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
+import { sharnamLogoPath } from "./brandedExport.js";
 
 export type QualityNcrFormData = {
   projectName?: string;
@@ -300,7 +302,7 @@ export async function buildQualityNcrXlsxFromTemplate(
   ws.getCell("B4").value = row.number || "";
   ws.getCell("B6").value = fmtDate(row.issueDate);
   ws.getCell("B7").value = f.toParty || row.contractor || "";
-  ws.getCell("B8").value = f.fromParty || "Sharnam Project Development Consultant";
+  ws.getCell("B8").value = f.fromParty || SPDC_PMC_NAME;
   ws.getCell("B11").value = f.environmentalIssues || "—";
   ws.getCell("B12").value = row.ncrType || f.otherCause || f.actionResultOf || "";
   setMergedRow(ws, 14, row.description || "");
@@ -357,8 +359,8 @@ export async function buildSafetyNcrXlsxFromTemplate(
 
   setSafetyValue(ws, 2, project?.name || project?.code || "");
   setSafetyValue(ws, 3, project?.clientName || "");
-  setSafetyValue(ws, 4, "Sharnam Project Development Consultant");
-  setSafetyValue(ws, 5, "Sharnam Project Development Consultant");
+  setSafetyValue(ws, 4, SPDC_PMC_NAME);
+  setSafetyValue(ws, 5, SPDC_PMC_NAME);
   setSafetyValue(ws, 6, row.issuedTo || row.responsibleParty || "");
   setSafetyValue(ws, 7, row.ncrNumber || row.title || "");
   setSafetyValue(ws, 9, row.activityTask || "");
@@ -386,7 +388,16 @@ function escapeHtml(s: string) {
     .replace(/>/g, "&gt;");
 }
 
-function ncrHtmlShell(title: string, logoUrl: string, bodyRows: [string, string][], status: string) {
+function ncrHtmlShell(
+  title: string,
+  logoUrl: string,
+  bodyRows: [string, string][],
+  status: string,
+  meta?: { projectName?: string; clientName?: string; docNo?: string }
+) {
+  const projectLine = meta?.projectName ? escapeHtml(meta.projectName) : "";
+  const clientLine = meta?.clientName ? escapeHtml(meta.clientName) : "";
+  const docNo = escapeHtml(meta?.docNo || "SPDC/QA/NCR-01");
   const rows = bodyRows
     .map(
       ([k, v]) =>
@@ -394,13 +405,22 @@ function ncrHtmlShell(title: string, logoUrl: string, bodyRows: [string, string]
     )
     .join("");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escapeHtml(title)}</title>
-<style>@media print{body{margin:0}} body{font-family:system-ui,sans-serif;color:#1a1a1a;padding:24px;max-width:920px;margin:0 auto}
-.header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1F3864;padding-bottom:12px;margin-bottom:20px}
+<style>@media print{body{margin:12mm}.no-print{display:none}} body{font-family:"Segoe UI",system-ui,sans-serif;color:#1a1a1a;padding:28px;max-width:920px;margin:0 auto}
+.band{background:#1e3a5f;color:#fff;padding:10px 14px;font-size:11px;letter-spacing:.04em;margin:-28px -28px 18px}
+.header{display:flex;align-items:flex-start;gap:16px;border-bottom:3px solid #1e3a5f;padding-bottom:14px;margin-bottom:18px}
+.meta{font-size:12px;color:#334155;line-height:1.45;margin-top:6px}
 .badge{display:inline-block;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:700;background:${status === "Closed" ? "#c6efce" : "#fff2cc"};color:#1a1a1a}
-table{width:100%;border-collapse:collapse;font-size:13px}</style></head><body>
-<div class="header"><img src="${escapeHtml(logoUrl)}" alt="Sharnam" height="48"/><div><div style="font-size:11px;color:#666">शरणम् · Sharnam PMC Portal</div><h1 style="margin:4px 0 0;font-size:20px">${escapeHtml(title)}</h1><span class="badge">${escapeHtml(status)}</span></div></div>
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{width:32%;background:#eef2f7;color:#1e3a5f;font-weight:600}
+.foot{margin-top:28px;padding-top:12px;border-top:1px solid #cbd5e1;font-size:10px;color:#64748b}</style></head><body>
+<div class="band">शरणम् · ${escapeHtml(SPDC_PMC_NAME)} · Doc ${docNo}</div>
+<div class="header"><img src="${escapeHtml(logoUrl)}" alt="Sharnam" height="52"/><div>
+<h1 style="margin:0;font-size:20px;color:#1e3a5f">${escapeHtml(title)}</h1>
+<div class="meta">${projectLine ? `<div><strong>Project:</strong> ${projectLine}</div>` : ""}${clientLine ? `<div><strong>Client:</strong> ${clientLine}</div>` : ""}<div><strong>PMC:</strong> ${escapeHtml(SPDC_PMC_NAME)}</div></div>
+<span class="badge" style="margin-top:8px">${escapeHtml(status)}</span>
+</div></div>
 <table>${rows}</table>
-<p style="margin-top:24px;font-size:11px;color:#666">Generated from Sharnam portal · use browser Print → Save as PDF</p>
+<p class="foot">${escapeHtml(SPDC_OFFICE_FOOTER)} · Branded NCR 01 from Sharnam portal · Print → Save as PDF</p>
 </body></html>`;
 }
 
@@ -415,7 +435,7 @@ export function buildQualityNcrHtml(
     ["NCR / CAR No.", row.number || ""],
     ["Date", fmtDate(row.issueDate)],
     ["To", f.toParty || ""],
-    ["From", f.fromParty || "Sharnam PMC"],
+    ["From", f.fromParty || SPDC_PMC_NAME],
     ["Type", row.ncrType || ""],
     ["Contractor", row.contractor || ""],
     ["Location", row.location || ""],
@@ -432,8 +452,13 @@ export function buildQualityNcrHtml(
     ["Actual closure", fmtDate(row.actualClosure)],
     ["Status", row.status || "Open"],
   ];
-  const title = /^CAR/i.test(row.number || "") ? "Corrective Action Request (NCR 01)" : "Non-Conformance Report (NCR 01)";
-  return ncrHtmlShell(title, logoUrl, pairs, row.status || "Open");
+  const isCar = /^CAR/i.test(row.number || "");
+  const title = isCar ? "Corrective Action Request (NCR 01)" : "Non-Conformance Report (NCR 01)";
+  return ncrHtmlShell(title, logoUrl, pairs, row.status || "Open", {
+    projectName: f.projectName || project?.name || project?.code || "",
+    clientName: project?.clientName || "",
+    docNo: isCar ? "SPDC/QA/CAR-01" : "SPDC/QA/NCR-01",
+  });
 }
 
 export function buildSafetyNcrHtml(
@@ -444,7 +469,7 @@ export function buildSafetyNcrHtml(
   const pairs: [string, string][] = [
     ["Project", project?.name || project?.code || ""],
     ["Client", project?.clientName || ""],
-    ["PMC", "Sharnam Project Development Consultant"],
+    ["PMC", SPDC_PMC_NAME],
     ["NCR No.", row.ncrNumber || row.title || ""],
     ["Activity / task", row.activityTask || ""],
     ["Description", row.description || ""],
@@ -458,5 +483,140 @@ export function buildSafetyNcrHtml(
     ["Target completion", fmtDate(row.targetCompletion)],
     ["Status", row.status || "Open"],
   ];
-  return ncrHtmlShell("Site Safety Non Conformity Report", logoUrl, pairs, row.status || "Open");
+  return ncrHtmlShell("Site Safety Non Conformity Report", logoUrl, pairs, row.status || "Open", {
+    projectName: project?.name || project?.code || "",
+    clientName: project?.clientName || "",
+    docNo: "SPDC/HSE/NCR-01",
+  });
+}
+
+type QualityNcrRow = Parameters<typeof buildQualityNcrXlsxBuffer>[0];
+type QualityNcrProject = Parameters<typeof buildQualityNcrXlsxBuffer>[1];
+
+/** Branded A4 PDF for Quality NCR / CAR (SPDC NCR 01). */
+export async function buildQualityNcrPdf(row: QualityNcrRow, project?: QualityNcrProject): Promise<Buffer> {
+  const f = parseQualityFormData(row.formDataJson);
+  const isCar = /^CAR/i.test(row.number || "");
+  const title = isCar ? "Corrective Action Request (NCR 01)" : "Non-Conformance Report (NCR 01)";
+  const pairs: [string, string][] = [
+    ["Project", f.projectName || project?.name || project?.code || ""],
+    ["Client", project?.clientName || ""],
+    ["PMC", SPDC_PMC_NAME],
+    ["NCR / CAR No.", row.number || ""],
+    ["Date", fmtDate(row.issueDate)],
+    ["To", f.toParty || ""],
+    ["From", f.fromParty || SPDC_PMC_NAME],
+    ["Type", row.ncrType || ""],
+    ["Contractor", row.contractor || ""],
+    ["Location", row.location || ""],
+    ["Description", row.description || ""],
+    ["Action required", f.actionRequired || ""],
+    ["Planned closure", fmtDate(row.plannedClosure)],
+    ["Work carried out", f.workCarriedOutNote || ""],
+    ["Follow-up effective", f.followUpEffective || ""],
+    ["Pursue further costs?", f.pursueFurtherCosts || ""],
+    ["Site set-up modification?", f.siteSetupModification || ""],
+    ["Close-out action", f.correctiveActionDetail || f.furtherAction || ""],
+    ["By whom", f.actionByWhom || ""],
+    ["Completed", f.actionCompleted || ""],
+    ["Actual closure", fmtDate(row.actualClosure)],
+    ["Status", row.status || "Open"],
+  ];
+  return renderNcrPdf({
+    title,
+    docNo: isCar ? "SPDC/QA/CAR-01" : "SPDC/QA/NCR-01",
+    status: row.status || "Open",
+    pairs,
+  });
+}
+
+export async function buildSafetyNcrPdf(
+  row: Parameters<typeof buildSafetyNcrXlsxBuffer>[0],
+  project?: Parameters<typeof buildSafetyNcrXlsxBuffer>[1]
+): Promise<Buffer> {
+  const pairs: [string, string][] = [
+    ["Project", project?.name || project?.code || ""],
+    ["Client", project?.clientName || ""],
+    ["PMC", SPDC_PMC_NAME],
+    ["NCR No.", row.ncrNumber || row.title || ""],
+    ["Activity / task", row.activityTask || ""],
+    ["Description", row.description || ""],
+    ["Category", row.category || ""],
+    ["Risk level", row.severity || ""],
+    ["Location", row.location || ""],
+    ["Root cause", row.rootCause || ""],
+    ["Immediate action", row.immediateAction || ""],
+    ["Long-term action", row.longTermAction || ""],
+    ["Responsible party", row.responsibleParty || ""],
+    ["Target completion", fmtDate(row.targetCompletion)],
+    ["Status", row.status || "Open"],
+  ];
+  return renderNcrPdf({
+    title: "Site Safety Non Conformity Report",
+    docNo: "SPDC/HSE/NCR-01",
+    status: row.status || "Open",
+    pairs,
+  });
+}
+
+async function renderNcrPdf(opts: {
+  title: string;
+  docNo: string;
+  status: string;
+  pairs: [string, string][];
+}): Promise<Buffer> {
+  const PDFDocument = (await import("pdfkit")).default;
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 48,
+      info: { Title: opts.title, Author: SPDC_PMC_NAME },
+    });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const pageW = doc.page.width;
+    doc.rect(0, 0, pageW, 36).fill("#1e3a5f");
+    doc.fillColor("#ffffff").font("Helvetica").fontSize(9);
+    doc.text(`शरणम् · ${SPDC_PMC_NAME} · ${opts.docNo}`, 48, 12, { width: pageW - 96 });
+
+    let y = 52;
+    const logo = sharnamLogoPath();
+    if (logo) {
+      try {
+        doc.image(logo, 48, y, { fit: [120, 40] });
+      } catch {
+        /* optional */
+      }
+    }
+    doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(14);
+    doc.text(opts.title, 180, y + 4, { width: pageW - 228 });
+    doc.font("Helvetica").fontSize(10).fillColor("#334155");
+    doc.text(`Status: ${opts.status}`, 180, y + 24, { width: pageW - 228 });
+    y = 110;
+    doc.moveTo(48, y).lineTo(pageW - 48, y).strokeColor("#1e3a5f").lineWidth(2).stroke();
+    y += 14;
+
+    for (const [label, value] of opts.pairs) {
+      if (!String(value || "").trim()) continue;
+      const text = String(value);
+      const h = Math.max(22, doc.heightOfString(text, { width: pageW - 220 }) + 10);
+      if (y + h > doc.page.height - 64) {
+        doc.addPage();
+        y = 48;
+      }
+      doc.rect(48, y, pageW - 96, h).strokeColor("#cbd5e1").lineWidth(0.5).stroke();
+      doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(9);
+      doc.text(label, 54, y + 6, { width: 150 });
+      doc.fillColor("#1a1a1a").font("Helvetica").fontSize(9);
+      doc.text(text, 210, y + 6, { width: pageW - 270 });
+      y += h;
+    }
+
+    doc.fillColor("#64748b").font("Helvetica").fontSize(8);
+    doc.text(SPDC_OFFICE_FOOTER, 48, doc.page.height - 40, { width: pageW - 96, align: "center" });
+    doc.end();
+  });
 }

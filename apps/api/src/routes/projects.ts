@@ -6,7 +6,7 @@ import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER, PROJECT_LIBRARY_FOLDERS } from "../services/graph.js";
 import { consumeDrawingUnlockToken } from "../services/drawingUnlock.js";
 import { audit } from "../services/audit.js";
-import { purgeProjectChildren, purgeProjectModuleData } from "../services/purgeProject.js";
+import { purgeProjectChildren, purgeProjectModuleData, purgeQualitySafetyModuleData } from "../services/purgeProject.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const drawingUpload = upload.fields([
@@ -1058,6 +1058,45 @@ projectsRouter.post("/:id/purge-modules", requireRoles("admin", "office"), async
     meta: { code: project.code, name: project.name },
   });
   res.json({ ok: true, id: project.id, code: project.code });
+});
+
+/** Clear Quality + Safety data only — drawings, cost, progress, and setup stay. */
+projectsRouter.post("/:id/purge-quality-safety", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const confirmCode = String(req.body?.confirmCode || req.query.confirmCode || "").trim();
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, code: true, name: true },
+  });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  if (!confirmCode || confirmCode.toUpperCase() !== project.code.toUpperCase()) {
+    return res.status(400).json({
+      error: `Type the project code ${project.code} to confirm clearing Quality and Safety data.`,
+    });
+  }
+  try {
+    await prisma.$transaction(async (tx) => {
+      await purgeQualitySafetyModuleData(tx, project.id);
+    }, { timeout: 60_000, maxWait: 10_000 });
+  } catch (err) {
+    console.warn("[project] purge-quality-safety:", err instanceof Error ? err.message : err);
+    return res.status(409).json({
+      error: err instanceof Error ? err.message : "Could not clear Quality / Safety data.",
+    });
+  }
+  let driveCleared = 0;
+  try {
+    const { clearQualitySafetyDriveFiles } = await import("../services/clearQualitySafetyDrive.js");
+    driveCleared = await clearQualitySafetyDriveFiles(project.code);
+  } catch (err) {
+    console.warn("[project] purge-quality-safety drive:", err instanceof Error ? err.message : err);
+  }
+  await audit("project.purge_quality_safety", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { code: project.code, name: project.name, driveCleared },
+  });
+  res.json({ ok: true, id: project.id, code: project.code, scope: "quality-safety", driveCleared });
 });
 
 projectsRouter.get("/:id/sheet-pack", async (req, res) => {

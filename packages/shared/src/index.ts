@@ -429,10 +429,18 @@ export {
 
 export {
   CUBE_SIZE_MM,
+  CUBE_LOAD_TO_MPA,
+  CUBE_GRADE_OPTIONS,
+  CUBE_AGENCY_OPTIONS,
+  CUBE_RESULT_OPTIONS,
   cubeStrengthFromLoadKN,
   gradeTargetMPa,
+  normalizeCubeGrade,
+  earlyStrengthLimitMPa,
   cubeResultFromStrengths,
   applyCubeFormula,
+  averageStrengths,
+  applyCubeGroupPhaseStats,
   isPourCardTemplate,
   normalizeCubeSr,
   cubeGroupKey,

@@ -441,7 +441,21 @@ export default function InspectionsPage() {
                             )
                           }
                         >
-                          XLSX
+                          Excel
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!py-1 !px-2 !text-xs"
+                          onClick={() =>
+                            void downloadAuthFile(
+                              `/api/checklist/project/${id}/ncr/${n.id}/export.pdf`,
+                              token,
+                              `${n.number || "NCR"}.pdf`
+                            )
+                          }
+                        >
+                          PDF
                         </Button>
                       </td>
                     )}
@@ -481,11 +495,18 @@ export default function InspectionsPage() {
               value={ncrForm.number}
               onChange={(e) => setNcrForm({ ...ncrForm, number: e.target.value })}
             />
-            <Input
-              placeholder="Type (Workmanship / Material / …)"
+            <Select
               value={ncrForm.ncrType}
               onChange={(e) => setNcrForm({ ...ncrForm, ncrType: e.target.value })}
-            />
+            >
+              <option value="">Type…</option>
+              <option value="Workmanship">Workmanship</option>
+              <option value="Material">Material</option>
+              <option value="Documentation">Documentation</option>
+              <option value="Dimensional">Dimensional</option>
+              <option value="Safety">Safety</option>
+              <option value="Other">Other</option>
+            </Select>
             <TextArea
               className="sm:col-span-2 lg:col-span-3"
               placeholder="Description — what failed / corrective action required"
@@ -575,6 +596,26 @@ export default function InspectionsPage() {
             canEdit={canManage}
             message={msg || undefined}
             onAddRow={canManage ? () => setCubeAddOpen(true) : undefined}
+            uploadHint="Import client SPDC CUBE REGISTER .xlsx (cols B–M). Publish writes live + Weekly pack."
+            onUpload={
+              canManage
+                ? async (file) => {
+                    if (!id || !/\.xlsx?$/i.test(file.name)) {
+                      setMsg("Upload an SPDC CUBE REGISTER .xlsx file");
+                      return;
+                    }
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    fd.append("replace", "1");
+                    const out = await api<{ imported: number; groups: number }>(
+                      `/api/checklist/project/${id}/cubes/import`,
+                      { method: "POST", token, body: fd }
+                    );
+                    setMsg(`Imported ${out.imported} specimens (${out.groups} groups)`);
+                    await load();
+                  }
+                : undefined
+            }
             onDownloadXlsx={async () => {
               if (!id) return;
               await downloadAuthFile(`/api/checklist/project/${id}/cubes/download.xlsx`, token, `Cube-Register-${project?.code || id}.xlsx`);
@@ -588,19 +629,20 @@ export default function InspectionsPage() {
                 ? async () => {
                     if (!id) return;
                     try {
-                      const out = await api<{ url?: string; sharePointUrl?: string }>(
-                        `/api/checklist/project/${id}/cubes/publish`,
+                      const out = await api<{ url?: string; sharePointUrl?: string; files?: unknown[] }>(
+                        `/api/checklist/project/${id}/qap/publish`,
                         { method: "POST", token, body: JSON.stringify({}) }
                       );
                       const link = out.sharePointUrl || out.url || null;
                       setCubeSharePointUrl(link);
-                      setMsg("Cube register published to SharePoint");
+                      setMsg("Quality pack published (QAP + Cube + Dashboard + NCRs) with weekly copy");
                     } catch (err) {
                       setMsg(err instanceof Error ? err.message : "Publish failed");
                     }
                   }
                 : undefined
             }
+            publishLabel="Publish quality pack"
             sharePointUrl={cubeSharePointUrl}
           />
           </div>

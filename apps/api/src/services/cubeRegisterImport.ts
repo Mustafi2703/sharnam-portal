@@ -44,8 +44,24 @@ export type ParsedCubeSpecimen = {
   result: string | null;
 };
 
+/**
+ * SPDC CUBE REGISTER layout (Excel cols B–M). SheetJS often drops empty col A so
+ * Sr.No. lands at index 0; ExcelJS / openpyxl keep A empty so Sr.No. is at index 1.
+ */
+function cubeColOffset(rows: unknown[][]): number {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i] as unknown[];
+    for (let c = 0; c <= 2; c++) {
+      if (/sr\.?\s*no/i.test(String(row?.[c] ?? ""))) return c;
+    }
+  }
+  // Prefer stripped layout (SheetJS) when header not found
+  return 0;
+}
+
 export function parseCubeRegisterRows(rows: unknown[][]): ParsedCubeSpecimen[] {
-  let headerIdx = rows.findIndex((r) => /sr\.?\s*no/i.test(String(r[0] ?? "")));
+  const off = cubeColOffset(rows);
+  let headerIdx = rows.findIndex((r) => /sr\.?\s*no/i.test(String(r[off] ?? "")));
   if (headerIdx < 0) headerIdx = 8;
   const start = headerIdx + 2; // skip 7-day / 28-day sub-header row
 
@@ -59,32 +75,32 @@ export function parseCubeRegisterRows(rows: unknown[][]): ParsedCubeSpecimen[] {
 
   for (let i = start; i < rows.length; i++) {
     const row = rows[i] as unknown[];
-    const srRaw = s(row[0], 20);
-    const desc = s(row[2], 300);
-    const grade = s(row[3], 40);
+    const srRaw = s(row[off], 20);
+    const desc = s(row[off + 2], 300);
+    const grade = s(row[off + 3], 40);
 
     if (srRaw && /^\d+$/.test(srRaw)) {
       lastSr = srRaw;
-      lastCast = excelDate(row[1]);
+      lastCast = excelDate(row[off + 1]);
       if (desc) lastDesc = desc;
       if (grade) lastGrade = grade;
-      const t7 = excelDate(row[5]);
-      const t28 = excelDate(row[6]);
+      const t7 = excelDate(row[off + 5]);
+      const t28 = excelDate(row[off + 6]);
       if (t7) lastTest7 = t7;
       if (t28) lastTest28 = t28;
     }
 
-    const weight = n(row[4]) || null;
-    const load7 = n(row[7]) || null;
-    const load28 = n(row[8]) || null;
-    const strengthVal = n(row[9]) || null;
-    const avgStrength = n(row[10]) || null;
-    const result = s(row[11], 40) || null;
+    const weight = n(row[off + 4]) || null;
+    const load7 = n(row[off + 7]) || null;
+    const load28 = n(row[off + 8]) || null;
+    const strengthVal = n(row[off + 9]) || null;
+    const avgStrength = n(row[off + 10]) || null;
+    const result = s(row[off + 11], 40) || null;
 
     if (!lastSr || (!weight && !load7 && !load28 && !strengthVal)) continue;
 
-    const test7 = excelDate(row[5]) || lastTest7;
-    const test28 = excelDate(row[6]) || lastTest28;
+    const test7 = excelDate(row[off + 5]) || lastTest7;
+    const test28 = excelDate(row[off + 6]) || lastTest28;
 
     out.push({
       srNo: lastSr,
@@ -192,46 +208,80 @@ export async function importCubeRegisterWorkbook(projectId: string, buffer: Buff
   const parsed = parseCubeRegisterWorkbook(buffer);
   if (!parsed.length) throw new Error("No cube rows found — use SPDC CUBE REGISTER layout");
 
+  const { applyCubeGroupPhaseStats, normalizeCubeGrade, cubeGroupKey } = await import("@sharnam/shared");
+  const byGroup = new Map<string, typeof parsed>();
+  for (const row of parsed) {
+    const key = cubeGroupKey(row);
+    const list = byGroup.get(key) || [];
+    list.push(row);
+    byGroup.set(key, list);
+  }
+  const finalized = [...byGroup.values()].flatMap((group) => applyCubeGroupPhaseStats(group));
+
   await prisma.$transaction(async (tx) => {
     if (replace) {
       await tx.cubeTest.deleteMany({ where: { projectId } });
     }
-    const { applyCubeFormula } = await import("@sharnam/shared");
-    for (const row of parsed) {
-      const computed = applyCubeFormula({
-        load7: row.load7,
-        load28: row.load28,
-        strength7: row.strength7,
-        strength28: row.strength28,
-        avgStrength: row.avgStrength,
-        grade: row.grade,
-        result: row.result || "Pending",
-      });
+    for (const row of finalized) {
       await tx.cubeTest.create({
         data: {
           projectId,
           srNo: row.srNo,
           castDate: row.castDate,
           description: row.description,
-          grade: row.grade,
+          grade: normalizeCubeGrade(row.grade) || row.grade,
           cubeWeight: row.cubeWeight,
           testDate7: row.testDate7,
           testDate28: row.testDate28,
           load7: row.load7,
           load28: row.load28,
-          strength7: computed.strength7,
-          strength28: computed.strength28,
-          strength: computed.strength,
-          avgStrength: computed.avgStrength ?? row.avgStrength,
-          result: computed.result,
+          strength7: row.strength7,
+          strength28: row.strength28,
+          strength: row.strength28 ?? row.strength7,
+          avgStrength: row.avgStrength,
+          result: row.result || "Pending",
           source: "SPDC CUBE REGISTER (1).xlsx",
         },
       });
     }
   });
 
-  const groups = new Set(parsed.map((r) => r.srNo));
-  return { imported: parsed.length, groups: groups.size };
+  return { imported: finalized.length, groups: byGroup.size };
+}
+
+/** Recompute IS 516 strengths + phase averages + PASS/FAIL for every cube group on a project. */
+export async function recalculateProjectCubes(projectId: string) {
+  const { applyCubeGroupPhaseStats, normalizeCubeGrade, cubeGroupKey } = await import("@sharnam/shared");
+  const rows = await prisma.cubeTest.findMany({ where: { projectId } });
+  const byGroup = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = cubeGroupKey(row);
+    const list = byGroup.get(key) || [];
+    list.push(row);
+    byGroup.set(key, list);
+  }
+  let updated = 0;
+  for (const group of byGroup.values()) {
+    const next = applyCubeGroupPhaseStats(group);
+    for (let i = 0; i < group.length; i++) {
+      const prev = group[i];
+      const n = next[i];
+      const grade = normalizeCubeGrade(n.grade || prev.grade) || prev.grade;
+      await prisma.cubeTest.update({
+        where: { id: prev.id },
+        data: {
+          grade,
+          strength7: n.strength7,
+          strength28: n.strength28,
+          strength: n.strength28 ?? n.strength7 ?? n.strength,
+          avgStrength: n.avgStrength,
+          result: n.result || "Pending",
+        },
+      });
+      updated += 1;
+    }
+  }
+  return { updated, groups: byGroup.size };
 }
 
 export async function exportCubeWorkbook(projectId: string) {
@@ -263,6 +313,14 @@ export async function exportCubeWorkbook(projectId: string) {
       ws.getCell("E4").value = project.designConsultant || "";
       ws.getCell("E5").value = project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)";
       ws.getCell("E6").value = project.contractorName || "";
+      // Clear template demo body (Burckhardt sample etc.) so export matches portal rows only.
+      // Layout: header row 9, sub-header row 10, data from row 11 — cols B–M (2–13).
+      const lastDataRow = Math.max(ws.rowCount, 11);
+      for (let r = 11; r <= lastDataRow; r++) {
+        for (let c = 2; c <= 13; c++) {
+          ws.getCell(r, c).value = null;
+        }
+      }
       let excelRow = 11;
       for (const group of groups.values()) {
         const d7 = group.filter((r) => r.load7 || r.strength7 != null);

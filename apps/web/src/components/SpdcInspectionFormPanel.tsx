@@ -164,9 +164,9 @@ export function SpdcInspectionFormPanel({
           )}
         </div>
         <div>
-          <label className="text-[10px] uppercase text-steel-muted font-semibold">Assignee</label>
-          <Select className="mt-0.5" value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)}>
-            <option value="">PMC / matrix assignee</option>
+          <label className="text-[10px] uppercase text-steel-muted font-semibold">Assignee (project / communication matrix)</label>
+          <Select className="mt-0.5" value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} required>
+            <option value="">Select assignee…</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.fullName}
@@ -174,6 +174,9 @@ export function SpdcInspectionFormPanel({
               </option>
             ))}
           </Select>
+          {!users.length && (
+            <p className="text-[11px] text-amber-800 mt-1">Add people on project setup or the technical communication matrix first.</p>
+          )}
         </div>
       </div>
 
@@ -204,6 +207,10 @@ export function SpdcInspectionFormPanel({
           const irNumber = draft.irNumber || draft.checklistNo || "";
           if (!linkedAssignmentId) {
             window.alert("Select which checklist from master this inspection should fill.");
+            return;
+          }
+          if (!assignedToId) {
+            window.alert("Select an assignee from the project directory or communication matrix.");
             return;
           }
           await onSubmit({
