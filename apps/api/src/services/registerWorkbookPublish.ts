@@ -157,14 +157,8 @@ export async function publishQualityPackToDrive(projectId: string, userId: strin
   }
 
   try {
-    const ncrs = await prisma.qualityNcr.findMany({
-      where: { projectId },
-      orderBy: { createdAt: "asc" },
-    });
-    const { syncQualityNcrToDrive } = await import("./syncNcrToDrive.js");
-    for (const ncr of ncrs.slice(-20)) {
-      await syncQualityNcrToDrive(project, ncr).catch(() => undefined);
-    }
+    const { syncAllQualityNcrsForProject } = await import("./syncNcrToDrive.js");
+    await syncAllQualityNcrsForProject(projectId);
   } catch (err) {
     console.warn("[drive] NCR sync skipped:", err instanceof Error ? err.message : err);
   }

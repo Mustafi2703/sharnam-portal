@@ -35,8 +35,14 @@ export async function resolveNcrContractorEmail(
 
 function formHasContractorAction(formParsed?: Record<string, unknown> | null) {
   if (!formParsed) return false;
-  if (formParsed.contractorActed === true || formParsed.contractorActed === "yes") return true;
-  const action = String(formParsed.correctiveAction || formParsed.actionTaken || formParsed.contractorResponse || "").trim();
+  if (formParsed.contractorActed === true || formParsed.contractorActed === "Yes" || formParsed.contractorActed === "yes")
+    return true;
+  const work = String(formParsed.workCarriedOutNote || "").trim();
+  const signed = String(formParsed.signedContractor || "").trim();
+  if (work.length >= 8 && signed.length >= 2) return true;
+  const action = String(
+    formParsed.correctiveAction || formParsed.actionTaken || formParsed.contractorResponse || ""
+  ).trim();
   return action.length > 20;
 }
 
@@ -56,9 +62,8 @@ export async function notifyNcrStatus(opts: {
   formParsed?: Record<string, unknown> | null;
 }) {
   const label =
-    opts.kind === "SafetyNCR" ? "Safety NCR" : opts.kind === "QualityCAR" ? "CAR" : "Quality NCR";
-  const verb =
-    opts.event === "created" ? "raised" : opts.event === "closed" ? "closed" : "updated";
+    opts.kind === "SafetyNCR" ? "Safety NCR" : opts.kind === "QualityCAR" ? "CAR" : "NCR";
+  const verb = opts.event === "closed" ? "closed" : "updated";
 
   const registerUrl =
     opts.kind === "SafetyNCR"
@@ -100,18 +105,24 @@ export async function notifyNcrStatus(opts: {
     raisedAt: new Date(),
   };
 
-  const primaryUrl = opts.event === "created" ? formUrl : registerUrl;
-  const { bodyHtml, bodyText, subject } = buildNcrRaisedEmail({
+  const projectMail = buildNcrRaisedEmail({
     ctx: emailCtx,
-    registerUrl: primaryUrl,
+    registerUrl,
+    formUrl,
+    forContractor: false,
   });
 
   try {
     await queueProjectEmail({
       projectId: opts.projectId,
-      subject: opts.event === "created" ? `${label} raised — ${opts.number}` : `${label} ${opts.number} ${verb}`,
-      body: bodyText,
-      bodyHtml,
+      subject:
+        opts.event === "created"
+          ? `${label} raised — ${opts.number}`
+          : opts.event === "closed"
+            ? `${label} ${opts.number} closed — register updated`
+            : `${label} ${opts.number} ${verb}`,
+      body: projectMail.bodyText,
+      bodyHtml: projectMail.bodyHtml,
       context: `ncr.${opts.event}`,
       createdById: opts.createdById,
     });
@@ -119,41 +130,54 @@ export async function notifyNcrStatus(opts: {
     /* optional */
   }
 
-  /** Contractor receives form link on raise and when form is saved while still open */
+  /** Contractor receives form link on raise (and on fill save while still open) */
   const contractorEmail =
     opts.contractorEmail?.trim() ||
     (await resolveNcrContractorEmail(opts.projectId, opts.formParsed, opts.contractorName));
 
-  if ((opts.event === "created" || opts.event === "updated") && contractorEmail && opts.status !== "Closed") {
+  if (opts.event === "created" && contractorEmail) {
     const contractorMail = buildNcrRaisedEmail({
       ctx: emailCtx,
-      registerUrl: formUrl,
+      registerUrl,
+      formUrl,
+      forContractor: true,
     });
-    const contractorBody = [
-      contractorMail.bodyText,
-      "",
-      opts.event === "created"
-        ? "You are named on this notice. Complete the corrective action fields and sign off in the portal form."
-        : "The form has been updated. Review the latest fields and respond in the portal.",
-      "",
-      `Open form: ${formUrl}`,
-    ].join("\n");
-
     try {
       await queueProjectEmail({
         projectId: opts.projectId,
-        subject:
-          opts.event === "created"
-            ? `[Action required] ${label} ${opts.number} — ${project?.code || "Project"}`
-            : `[Form saved] ${label} ${opts.number} — please review / respond`,
-        body: contractorBody,
-        bodyHtml: contractorMail.bodyHtml.replace(/Open NCR \/ CAR register/g, "Open NCR / CAR form"),
-        context: opts.event === "created" ? "ncr.contractor_notice" : "ncr.contractor_save",
+        subject: `[Action required] ${label} ${opts.number} — ${project?.code || "Project"}`,
+        body: contractorMail.bodyText,
+        bodyHtml: contractorMail.bodyHtml,
+        context: "ncr.contractor_notice",
         createdById: opts.createdById,
         toOverride: contractorEmail,
       });
     } catch {
       /* optional */
+    }
+  } else if (opts.event === "updated" && contractorEmail && opts.status !== "Closed") {
+    // Only re-notify contractor when office updated (not when contractor themselves just saved)
+    const acted = formHasContractorAction(opts.formParsed);
+    if (!acted) {
+      const contractorMail = buildNcrRaisedEmail({
+        ctx: emailCtx,
+        registerUrl,
+        formUrl,
+        forContractor: true,
+      });
+      try {
+        await queueProjectEmail({
+          projectId: opts.projectId,
+          subject: `[Form updated] ${label} ${opts.number} — please review / respond`,
+          body: contractorMail.bodyText,
+          bodyHtml: contractorMail.bodyHtml,
+          context: "ncr.contractor_save",
+          createdById: opts.createdById,
+          toOverride: contractorEmail,
+        });
+      } catch {
+        /* optional */
+      }
     }
   }
 

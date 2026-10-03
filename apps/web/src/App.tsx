@@ -40,6 +40,7 @@ import RfisPage from "./pages/project/RfisPage";
 import InspectionsPage from "./pages/project/InspectionsPage";
 import InspectionRegisterPage from "./pages/project/InspectionRegisterPage";
 import NcrFormPage from "./pages/project/NcrFormPage";
+import NcrFillLogPage from "./pages/project/NcrFillLogPage";
 import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
@@ -274,6 +275,7 @@ export default function App() {
                   <Route path="inspection/checklist-master" element={<ChecklistMasterPage lockedFamily="ActivityInspection" />} />
                   <Route path="progress/checklist-master" element={<Navigate to="../quality/site-checklist-master" replace />} />
                   <Route path="quality/checklist-logs" element={<ChecklistLogsPage lockedFamily="QualityInspection" />} />
+                  <Route path="quality/ncr-fill-log" element={<NcrFillLogPage />} />
                   <Route path="quality/site-checklist-logs" element={<ChecklistLogsPage lockedFamily="SiteExecution" />} />
                   <Route path="safety/checklist-logs" element={<ChecklistLogsPage lockedFamily="Safety" />} />
                   <Route path="inspection/checklist-logs" element={<ChecklistLogsPage lockedFamily="ActivityInspection" />} />

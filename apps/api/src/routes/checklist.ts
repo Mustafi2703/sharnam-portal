@@ -1962,7 +1962,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         },
       },
     }),
-    prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
+    prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 200 }),
     prisma.cubeTest.findMany({ where: { projectId }, orderBy: [{ srNo: "asc" }, { castDate: "asc" }] }),
     prisma.qualitySiteRecord.findMany({
       where: { projectId },
@@ -2395,7 +2395,12 @@ checklistRouter.post(
       }
     }
 
-    const initialForm =
+    const raiser = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { fullName: true },
+    });
+    const raisedAt = new Date().toISOString();
+    const baseForm =
       body.formDataJson && typeof body.formDataJson === "object"
         ? {
             ...body.formDataJson,
@@ -2410,6 +2415,18 @@ checklistRouter.post(
             contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
             contractorEmail: contractorEmail || undefined,
           };
+    const initialForm = {
+      ...baseForm,
+      activityLog: [
+        {
+          at: raisedAt,
+          action: "raised",
+          by: raiser?.fullName || req.user!.email,
+          userId: req.user!.id,
+          note: kind === "CAR" ? "CAR raised — logged to NCR/CAR register" : "NCR raised — logged to NCR/CAR register",
+        },
+      ],
+    };
 
     const row = await prisma.qualityNcr.create({
       data: {
@@ -2423,17 +2440,39 @@ checklistRouter.post(
         plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : null,
         status: String(body.status || "Open").slice(0, 40),
         source: "portal",
-        formDataJson:
+        formDataJson: JSON.stringify(
           typeof body.formDataJson === "string"
-            ? body.formDataJson
-            : JSON.stringify(initialForm),
+            ? {
+                ...(() => {
+                  try {
+                    return JSON.parse(body.formDataJson);
+                  } catch {
+                    return {};
+                  }
+                })(),
+                contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
+                contractorEmail: contractorEmail || undefined,
+                activityLog: initialForm.activityLog,
+              }
+            : initialForm
+        ),
       },
     });
-    await audit("quality.ncr.create", {
+    await audit("quality.ncr.raised", {
       userId: req.user!.id,
       entity: "QualityNcr",
       entityId: row.id,
-      meta: { projectId: req.params.projectId, number: row.number, contractorEmail },
+      meta: {
+        projectId: req.params.projectId,
+        number: row.number,
+        kind,
+        contractorEmail,
+        issueDate: row.issueDate,
+        ncrType: row.ncrType,
+        contractor: row.contractor,
+        location: row.location,
+        plannedClosure: row.plannedClosure,
+      },
     });
     const { notifyNcrStatus } = await import("../services/ncrNotify.js");
     await notifyNcrStatus({
@@ -2452,9 +2491,16 @@ checklistRouter.post(
     });
     if (project?.code) {
       try {
-        const { syncQualityNcrToDrive } = await import("../services/syncNcrToDrive.js");
+        const { syncQualityNcrToDrive, publishQualityNcrRegisterToDrive } = await import(
+          "../services/syncNcrToDrive.js"
+        );
         const drive = await syncQualityNcrToDrive(project, row);
-        return res.status(201).json({ ...row, sharePointExports: drive.exports });
+        const register = await publishQualityNcrRegisterToDrive(req.params.projectId);
+        return res.status(201).json({
+          ...row,
+          fillPhase: drive.phase,
+          sharePointExports: [...drive.exports, ...register],
+        });
       } catch {
         /* optional */
       }
@@ -2483,22 +2529,30 @@ checklistRouter.post(
       return res.status(400).json({ error: "Cannot send follow-up on a closed NCR / CAR" });
     }
 
-    const formParsed = (() => {
-      try {
-        return existing.formDataJson ? JSON.parse(existing.formDataJson) : {};
-      } catch {
-        return {};
-      }
-    })() as Record<string, unknown>;
+    const { parseNcrFormObject, appendActivityToForm } = await import("../services/ncrActivity.js");
+    const formParsed = parseNcrFormObject(existing.formDataJson);
 
     const prevCount = Number(formParsed.followUpCount || 0);
     const nextCount = prevCount + 1;
     const nowIso = new Date().toISOString();
-    const mergedForm = {
-      ...formParsed,
-      followUpCount: nextCount,
-      lastFollowUpAt: nowIso,
-    };
+    const actor = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { fullName: true },
+    });
+    const mergedForm = appendActivityToForm(
+      {
+        ...formParsed,
+        followUpCount: nextCount,
+        lastFollowUpAt: nowIso,
+      },
+      {
+        at: nowIso,
+        action: "follow-up",
+        by: actor?.fullName || req.user!.email,
+        userId: req.user!.id,
+        note: req.body?.note ? String(req.body.note) : `Follow-up ${nextCount} emailed`,
+      }
+    );
 
     const row = await prisma.qualityNcr.update({
       where: { id: existing.id },
@@ -2532,7 +2586,7 @@ checklistRouter.post(
       userId: req.user!.id,
       entity: "QualityNcr",
       entityId: row.id,
-      meta: { followUpCount: nextCount },
+      meta: { followUpCount: nextCount, note: req.body?.note ? String(req.body.note) : undefined },
     });
 
     res.json({ ok: true, followUpCount: nextCount, lastFollowUpAt: nowIso, email, row });
@@ -2541,7 +2595,7 @@ checklistRouter.post(
 
 checklistRouter.patch(
   "/project/:projectId/ncr/:ncrId",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
     const existing = await prisma.qualityNcr.findFirst({
@@ -2549,9 +2603,34 @@ checklistRouter.patch(
     });
     if (!existing) return res.status(404).json({ error: "NCR not found" });
 
+    const role = req.user!.role || "";
+    const isOffice = role === "admin" || role === "office";
+    const isVendor = role === "vendor";
+
+    const { parseNcrFormObject, appendActivityToForm } = await import("../services/ncrActivity.js");
+    const existingForm = parseNcrFormObject(existing.formDataJson);
+
+    if (isVendor) {
+      const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+      const vendor = await resolveVendorForUser(req.user!);
+      if (!vendor) return res.status(403).json({ error: "Vendor account not linked" });
+      const linkedId = String(existingForm.contractorVendorId || "");
+      const nameMatch =
+        !!existing.contractor &&
+        !!vendor.name &&
+        existing.contractor.toLowerCase().includes(String(vendor.name).slice(0, 24).toLowerCase());
+      const emailMatch =
+        !!vendor.email &&
+        String(existingForm.contractorEmail || "").toLowerCase() === vendor.email.toLowerCase();
+      const assigned = (linkedId && linkedId === vendor.id) || emailMatch || nameMatch;
+      if (!assigned) {
+        return res.status(403).json({ error: "This NCR / CAR is not assigned to your company" });
+      }
+    }
+
     const nextStatus = body.status != null ? String(body.status) : existing.status;
     if (nextStatus === "Closed" && existing.status !== "Closed") {
-      if (req.user!.role !== "admin" && req.user!.role !== "office") {
+      if (!isOffice) {
         return res.status(403).json({
           error: "Only office admin can close an NCR / CAR after verifying contractor compliance",
         });
@@ -2577,30 +2656,78 @@ checklistRouter.patch(
       }
     }
 
+    const actor = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { fullName: true },
+    });
+
     const data: Record<string, unknown> = {};
-    if (body.status != null) data.status = String(body.status);
-    if (body.description != null) data.description = String(body.description);
-    if (body.location != null) data.location = String(body.location);
-    if (body.contractor != null) data.contractor = String(body.contractor);
-    if (body.plannedClosure !== undefined) data.plannedClosure = body.plannedClosure ? new Date(body.plannedClosure) : null;
-    if (body.actualClosure !== undefined) data.actualClosure = body.actualClosure ? new Date(body.actualClosure) : null;
-    if (body.ncrType != null) data.ncrType = String(body.ncrType);
+    if (body.status != null && isOffice) data.status = String(body.status);
+    if (body.description != null && !isVendor) data.description = String(body.description);
+    if (body.location != null && !isVendor) data.location = String(body.location);
+    if (body.contractor != null && !isVendor) data.contractor = String(body.contractor);
+    if (body.plannedClosure !== undefined && !isVendor)
+      data.plannedClosure = body.plannedClosure ? new Date(body.plannedClosure) : null;
+    if (body.issueDate !== undefined && !isVendor)
+      data.issueDate = body.issueDate ? new Date(body.issueDate) : null;
+    if (body.actualClosure !== undefined && isOffice)
+      data.actualClosure = body.actualClosure ? new Date(body.actualClosure) : null;
+    if (body.ncrType != null && !isVendor) data.ncrType = String(body.ncrType);
+
+    let nextForm = existingForm;
     if (body.formDataJson != null) {
-      data.formDataJson =
-        typeof body.formDataJson === "object" ? JSON.stringify(body.formDataJson) : String(body.formDataJson);
+      const incoming =
+        typeof body.formDataJson === "object"
+          ? (body.formDataJson as Record<string, unknown>)
+          : parseNcrFormObject(String(body.formDataJson));
+      if (isVendor) {
+        // Contractor may only update response / sign-off fields
+        const allowed = [
+          "workCarriedOutNote",
+          "signedContractor",
+          "positionContractor",
+          "actionByWhom",
+          "actionCompleted",
+          "correctiveActionDetail",
+          "furtherAction",
+          "contractorEmail",
+        ] as const;
+        nextForm = { ...existingForm };
+        for (const k of allowed) {
+          if (incoming[k] != null) nextForm[k] = incoming[k];
+        }
+      } else {
+        nextForm = { ...existingForm, ...incoming, activityLog: existingForm.activityLog };
+      }
     }
+
+    const closing = nextStatus === "Closed" && existing.status !== "Closed";
+    const activityAction = closing ? "closed" : isVendor ? "filled" : "updated";
+    nextForm = appendActivityToForm(nextForm, {
+      action: activityAction,
+      by: actor?.fullName || req.user!.email,
+      userId: req.user!.id,
+      note: closing
+        ? "Closed — register status updated"
+        : isVendor
+          ? "Contractor filled / saved response"
+          : "Form saved — register fields updated",
+    });
+    data.formDataJson = JSON.stringify(nextForm);
+
     const row = await prisma.qualityNcr.update({
       where: { id: req.params.ncrId },
       data,
     });
+    await audit(`quality.ncr.${activityAction}`, {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId, number: row.number, role },
+    });
+
     const { notifyNcrStatus } = await import("../services/ncrNotify.js");
-    const formParsed = (() => {
-      try {
-        return row.formDataJson ? JSON.parse(row.formDataJson) : {};
-      } catch {
-        return {};
-      }
-    })();
+    const formParsed = parseNcrFormObject(row.formDataJson);
     await notifyNcrStatus({
       projectId: req.params.projectId,
       recordId: row.id,
@@ -2609,8 +2736,8 @@ checklistRouter.patch(
       status: row.status,
       description: row.description,
       createdById: req.user!.id,
-      event: row.status === "Closed" && existing.status !== "Closed" ? "closed" : "updated",
-      contractorEmail: formParsed.contractorEmail || null,
+      event: closing ? "closed" : "updated",
+      contractorEmail: (formParsed.contractorEmail as string) || null,
       contractorName: row.contractor,
       location: row.location,
       plannedClosure: row.plannedClosure,
@@ -2634,7 +2761,368 @@ checklistRouter.patch(
   }
 );
 
-checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req, res) => {
+checklistRouter.get("/project/:projectId/ncr/:ncrId/activity", async (req, res) => {
+  const row = await prisma.qualityNcr.findFirst({
+    where: { id: req.params.ncrId, projectId: req.params.projectId },
+    select: { id: true },
+  });
+  if (!row) return res.status(404).json({ error: "NCR not found" });
+  const { listQualityNcrActivity } = await import("../services/ncrActivity.js");
+  const events = await listQualityNcrActivity(row.id);
+  res.json({ events });
+});
+
+checklistRouter.post(
+  "/project/:projectId/ncr/:ncrId/upload",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.qualityNcr.findFirst({
+      where: { id: req.params.ncrId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "NCR not found" });
+    if (existing.status === "Closed") {
+      return res.status(400).json({ error: "Cannot upload into a closed NCR / CAR" });
+    }
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      return res.status(400).json({ error: "Upload a filled NCR 01.xlsx file" });
+    }
+    const name = (file.originalname || "").toLowerCase();
+    if (!name.endsWith(".xlsx") && !name.endsWith(".xlsm")) {
+      return res.status(400).json({ error: "Only .xlsx filled NCR / CAR forms are accepted" });
+    }
+
+    const role = req.user!.role || "";
+    const isVendor = role === "vendor";
+    const { parseNcrFormObject, appendActivityToForm } = await import("../services/ncrActivity.js");
+    const existingForm = parseNcrFormObject(existing.formDataJson);
+
+    if (isVendor) {
+      const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+      const vendor = await resolveVendorForUser(req.user!);
+      const linkedId = String(existingForm.contractorVendorId || "");
+      if (vendor && linkedId && linkedId !== vendor.id) {
+        const emailMatch =
+          vendor.email &&
+          String(existingForm.contractorEmail || "").toLowerCase() === vendor.email.toLowerCase();
+        if (!emailMatch) {
+          return res.status(403).json({ error: "This NCR / CAR is not assigned to your company" });
+        }
+      }
+    }
+
+    const { parseQualityNcrFilledXlsx } = await import("../services/ncrFormExport.js");
+    let parsed: Awaited<ReturnType<typeof parseQualityNcrFilledXlsx>>;
+    try {
+      parsed = await parseQualityNcrFilledXlsx(file.buffer);
+    } catch (err) {
+      return res.status(400).json({
+        error: err instanceof Error ? err.message : "Could not read filled NCR / CAR Excel",
+      });
+    }
+
+    const actor = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { fullName: true },
+    });
+
+    let nextForm: Record<string, unknown> = { ...existingForm, ...parsed.formPatch };
+    if (isVendor) {
+      const pick = (key: keyof typeof parsed.formPatch) =>
+        parsed.formPatch[key] || (existingForm[key] != null ? String(existingForm[key]) : undefined);
+      // Keep office-controlled fields from existing when vendor uploads
+      nextForm = {
+        ...existingForm,
+        workCarriedOutNote: pick("workCarriedOutNote"),
+        signedContractor: pick("signedContractor"),
+        positionContractor: pick("positionContractor"),
+        actionByWhom: pick("actionByWhom"),
+        actionCompleted: pick("actionCompleted"),
+        correctiveActionDetail: pick("correctiveActionDetail"),
+        actionRequired:
+          existingForm.actionRequired != null
+            ? String(existingForm.actionRequired)
+            : parsed.formPatch.actionRequired,
+      };
+    }
+
+    nextForm = appendActivityToForm(nextForm, {
+      action: "uploaded",
+      by: actor?.fullName || req.user!.email,
+      userId: req.user!.id,
+      note: `Uploaded filled Excel: ${file.originalname}`,
+    });
+
+    const data: Record<string, unknown> = {
+      formDataJson: JSON.stringify(nextForm),
+    };
+    if (!isVendor) {
+      if (parsed.description) data.description = parsed.description;
+      if (parsed.contractor) data.contractor = parsed.contractor;
+      if (parsed.location) data.location = parsed.location;
+      if (parsed.ncrType) data.ncrType = String(parsed.ncrType).slice(0, 80);
+      if (parsed.issueDate) data.issueDate = new Date(parsed.issueDate);
+      if (parsed.plannedClosure) data.plannedClosure = new Date(parsed.plannedClosure);
+    }
+
+    const row = await prisma.qualityNcr.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    await audit("quality.ncr.uploaded", {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: row.id,
+      meta: {
+        projectId: req.params.projectId,
+        filename: file.originalname,
+        bytes: file.size,
+      },
+    });
+
+    // Store a copy on SharePoint under NCR uploads
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { name: true, code: true, clientName: true },
+    });
+    let sharePointExports: { kind: string; path: string; url?: string | null }[] = [];
+    if (project?.code) {
+      try {
+        const { mockOneDrive } = await import("../services/mockOneDrive.js");
+        const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+        const stamp = new Date().toISOString().slice(0, 10);
+        const safe = String(row.number || "NCR").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 72);
+        const up = await mockOneDrive.upload(
+          project.code,
+          `${MODULE_TO_ISO_FOLDER.ncr}/Quality/Uploads`,
+          `${safe}_filled_${stamp}.xlsx`,
+          file.buffer,
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        sharePointExports.push({
+          kind: "xlsx",
+          path: up.sharePointPath || up.path,
+          url: up.sharePointUrl || up.url,
+        });
+        const { syncQualityNcrToDrive } = await import("../services/syncNcrToDrive.js");
+        const drive = await syncQualityNcrToDrive(project, row);
+        sharePointExports = [...sharePointExports, ...drive.exports];
+      } catch {
+        /* optional */
+      }
+    }
+
+    const { notifyNcrStatus } = await import("../services/ncrNotify.js");
+    await notifyNcrStatus({
+      projectId: req.params.projectId,
+      recordId: row.id,
+      kind: /^CAR/i.test(row.number || "") ? "QualityCAR" : "QualityNCR",
+      number: row.number || row.id,
+      status: row.status,
+      description: row.description,
+      createdById: req.user!.id,
+      event: "updated",
+      contractorEmail: (nextForm.contractorEmail as string) || null,
+      contractorName: row.contractor,
+      location: row.location,
+      plannedClosure: row.plannedClosure,
+      formParsed: nextForm,
+    });
+
+    res.json({ ...row, sharePointExports, uploaded: true });
+  }
+);
+
+/** Fill log — same idea as drawing checklist fill log (Draft / resume / SharePoint). */
+checklistRouter.get("/project/:projectId/ncr-fill-log", async (req, res) => {
+  const rows = await prisma.qualityNcr.findMany({
+    where: { projectId: req.params.projectId },
+    orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }],
+    take: 200,
+  });
+  const { ncrFillProgress } = await import("../services/ncrFillState.js");
+  const { readActivityLog, parseNcrFormObject } = await import("../services/ncrActivity.js");
+  res.json(
+    rows.map((n) => {
+      const progress = ncrFillProgress(n);
+      const form = parseNcrFormObject(n.formDataJson);
+      const log = readActivityLog(form);
+      const last = log[log.length - 1];
+      return {
+        ...n,
+        kind: /^CAR/i.test(n.number || "") ? "CAR" : "NCR",
+        fillPhase: progress.phase,
+        progress,
+        lastActivity: last || null,
+        contractorEmail: form.contractorEmail || null,
+      };
+    })
+  );
+});
+
+/** Explicit Save draft — syncs branded form to SharePoint Drafts/ and updates register. */
+checklistRouter.post(
+  "/project/:projectId/ncr/:ncrId/draft",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.qualityNcr.findFirst({
+      where: { id: req.params.ncrId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "NCR not found" });
+    if (existing.status === "Closed") {
+      return res.status(400).json({ error: "Closed NCR / CAR cannot be saved as draft" });
+    }
+
+    const body = req.body || {};
+    const { parseNcrFormObject, appendActivityToForm } = await import("../services/ncrActivity.js");
+    const existingForm = parseNcrFormObject(existing.formDataJson);
+    const incoming =
+      body.formDataJson && typeof body.formDataJson === "object"
+        ? (body.formDataJson as Record<string, unknown>)
+        : body.formDataJson
+          ? parseNcrFormObject(String(body.formDataJson))
+          : {};
+
+    const role = req.user!.role || "";
+    const isVendor = role === "vendor";
+    let nextForm: Record<string, unknown> = { ...existingForm, ...incoming, activityLog: existingForm.activityLog };
+    if (isVendor) {
+      nextForm = {
+        ...existingForm,
+        workCarriedOutNote: incoming.workCarriedOutNote ?? existingForm.workCarriedOutNote,
+        signedContractor: incoming.signedContractor ?? existingForm.signedContractor,
+        positionContractor: incoming.positionContractor ?? existingForm.positionContractor,
+        actionByWhom: incoming.actionByWhom ?? existingForm.actionByWhom,
+        actionCompleted: incoming.actionCompleted ?? existingForm.actionCompleted,
+        correctiveActionDetail: incoming.correctiveActionDetail ?? existingForm.correctiveActionDetail,
+      };
+    }
+
+    const actor = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { fullName: true },
+    });
+    nextForm = appendActivityToForm(nextForm, {
+      action: "draft",
+      by: actor?.fullName || req.user!.email,
+      userId: req.user!.id,
+      note: "Draft saved — synced to SharePoint Drafts",
+    });
+
+    const data: Record<string, unknown> = { formDataJson: JSON.stringify(nextForm) };
+    if (!isVendor) {
+      if (body.description != null) data.description = String(body.description);
+      if (body.location != null) data.location = String(body.location);
+      if (body.contractor != null) data.contractor = String(body.contractor);
+      if (body.ncrType != null) data.ncrType = String(body.ncrType);
+      if (body.plannedClosure !== undefined)
+        data.plannedClosure = body.plannedClosure ? new Date(body.plannedClosure) : null;
+      if (body.issueDate !== undefined) data.issueDate = body.issueDate ? new Date(body.issueDate) : null;
+    }
+
+    const row = await prisma.qualityNcr.update({ where: { id: existing.id }, data });
+    await audit("quality.ncr.draft", {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId, number: row.number },
+    });
+
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { name: true, code: true, clientName: true },
+    });
+    let sharePointExports: { kind: string; path: string; url?: string | null }[] = [];
+    let fillPhase = "Draft";
+    if (project?.code) {
+      try {
+        const { syncQualityNcrToDrive, publishQualityNcrRegisterToDrive } = await import(
+          "../services/syncNcrToDrive.js"
+        );
+        const drive = await syncQualityNcrToDrive(project, row);
+        fillPhase = drive.phase;
+        const reg = await publishQualityNcrRegisterToDrive(req.params.projectId);
+        sharePointExports = [...drive.exports, ...reg];
+      } catch {
+        /* optional */
+      }
+    }
+
+    const { ncrFillProgress } = await import("../services/ncrFillState.js");
+    res.json({ ...row, sharePointExports, fillPhase, progress: ncrFillProgress(row) });
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/ncr/:ncrId/sync-sharepoint",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const row = await prisma.qualityNcr.findFirst({
+      where: { id: req.params.ncrId, projectId: req.params.projectId },
+    });
+    if (!row) return res.status(404).json({ error: "NCR not found" });
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { name: true, code: true, clientName: true },
+    });
+    if (!project?.code) return res.status(400).json({ error: "Project code required for SharePoint" });
+
+    const { syncQualityNcrToDrive, publishQualityNcrRegisterToDrive } = await import(
+      "../services/syncNcrToDrive.js"
+    );
+    const { parseNcrFormObject, appendActivityToForm } = await import("../services/ncrActivity.js");
+    const actor = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { fullName: true },
+    });
+    const nextForm = appendActivityToForm(parseNcrFormObject(row.formDataJson), {
+      action: "synced",
+      by: actor?.fullName || req.user!.email,
+      userId: req.user!.id,
+      note: "Manual Sync SharePoint",
+    });
+    const updated = await prisma.qualityNcr.update({
+      where: { id: row.id },
+      data: { formDataJson: JSON.stringify(nextForm) },
+    });
+
+    const drive = await syncQualityNcrToDrive(project, updated);
+    const register = await publishQualityNcrRegisterToDrive(req.params.projectId);
+    await audit("quality.ncr.sync-sharepoint", {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: row.id,
+      meta: { projectId: req.params.projectId, phase: drive.phase, files: drive.exports.length },
+    });
+    res.json({
+      ok: true,
+      phase: drive.phase,
+      folder: drive.folder,
+      sharePointExports: [...drive.exports, ...register],
+      row: updated,
+    });
+  }
+);
+
+checklistRouter.post(
+  "/project/:projectId/ncr/sync-sharepoint",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const { syncAllQualityNcrsForProject } = await import("../services/syncNcrToDrive.js");
+    const out = await syncAllQualityNcrsForProject(req.params.projectId);
+    await audit("quality.ncr.sync-sharepoint-all", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: req.params.projectId,
+      meta: { synced: out.synced },
+    });
+    res.json({ ok: true, ...out });
+  }
+);
+
+checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req: AuthedRequest, res) => {
   const row = await prisma.qualityNcr.findFirst({
     where: { id: req.params.ncrId, projectId: req.params.projectId },
   });
@@ -2647,12 +3135,18 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req, re
   const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
   const buf = await stampSpdcWorkbookLogo(await buildQualityNcrXlsxFromTemplate(row, project || undefined));
   const name = `${row.number || "NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
+  await audit("quality.ncr.downloaded", {
+    userId: req.user?.id,
+    entity: "QualityNcr",
+    entityId: row.id,
+    meta: { projectId: req.params.projectId, format: "xlsx", number: row.number },
+  });
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
   res.send(buf);
 });
 
-checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req, res) => {
+checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req: AuthedRequest, res) => {
   const row = await prisma.qualityNcr.findFirst({
     where: { id: req.params.ncrId, projectId: req.params.projectId },
   });
@@ -2664,11 +3158,17 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req, re
   const { buildQualityNcrHtml } = await import("../services/ncrFormExport.js");
   const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
   const html = buildQualityNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
+  await audit("quality.ncr.downloaded", {
+    userId: req.user?.id,
+    entity: "QualityNcr",
+    entityId: row.id,
+    meta: { projectId: req.params.projectId, format: "html", number: row.number },
+  });
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
 });
 
-checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req, res) => {
+checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req: AuthedRequest, res) => {
   const row = await prisma.qualityNcr.findFirst({
     where: { id: req.params.ncrId, projectId: req.params.projectId },
   });
@@ -2680,6 +3180,12 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req, res
   const { buildQualityNcrPdf } = await import("../services/ncrFormExport.js");
   const buf = await buildQualityNcrPdf(row, project || undefined);
   const name = `${row.number || "NCR"}.pdf`.replace(/[^\w.-]+/g, "_");
+  await audit("quality.ncr.downloaded", {
+    userId: req.user?.id,
+    entity: "QualityNcr",
+    entityId: row.id,
+    meta: { projectId: req.params.projectId, format: "pdf", number: row.number },
+  });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
   res.send(buf);

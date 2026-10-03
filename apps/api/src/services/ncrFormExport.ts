@@ -304,7 +304,7 @@ export async function buildQualityNcrXlsxFromTemplate(
   ws.getCell("B7").value = f.toParty || row.contractor || "";
   ws.getCell("B8").value = f.fromParty || SPDC_PMC_NAME;
   ws.getCell("B11").value = f.environmentalIssues || "—";
-  ws.getCell("B12").value = row.ncrType || f.otherCause || f.actionResultOf || "";
+  ws.getCell("B12").value = f.otherCause || f.actionResultOf || row.ncrType || "";
   setMergedRow(ws, 14, row.description || "");
   setMergedRow(ws, 16, f.actionRequired || "");
   setMergedRow(
@@ -343,6 +343,136 @@ export async function buildQualityNcrXlsxFromTemplate(
     f.actionCompleted || (row.status === "Closed" ? fmtDate(row.actualClosure) : "") || "Completed:";
 
   return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+function cellText(ws: ExcelJS.Worksheet, addr: string): string {
+  const v = ws.getCell(addr).value;
+  if (v == null) return "";
+  if (typeof v === "object" && v && "text" in v) return String((v as { text?: string }).text || "").trim();
+  if (typeof v === "object" && v && "result" in v) return String((v as { result?: unknown }).result ?? "").trim();
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).trim();
+}
+
+function rowText(ws: ExcelJS.Worksheet, row: number): string {
+  const a = cellText(ws, `A${row}`);
+  const b = cellText(ws, `B${row}`);
+  if (a && b && a !== b) return `${a}\n${b}`.trim();
+  return (a || b).trim();
+}
+
+function parseSignedLine(line: string): { signed?: string; position?: string } {
+  const signed = line.match(/Signed:\s*(.+?)(?:\s{2,}|\s+Position:|$)/i)?.[1]?.trim();
+  const position = line.match(/Position:\s*(.+?)(?:\s{2,}|\s+Date:|$)/i)?.[1]?.trim();
+  return {
+    signed: signed && !/^_{2,}$/.test(signed) ? signed : undefined,
+    position: position && !/^_{2,}$/.test(position) ? position : undefined,
+  };
+}
+
+function yesNoFromText(text: string): string {
+  if (/\bYes\b/i.test(text) && !/\bNo\b/i.test(text.replace(/\(If No[^)]*\)/i, ""))) return "Yes";
+  if (/\bYes\b/i.test(text) && /\bNo\b/i.test(text)) {
+    // Prefer explicit Yes when both appear in template wording — look for selected token after ?
+    const after = text.split("?")[1] || text;
+    if (/Yes\s*$/i.test(after.trim()) || /been effective\?\s*Yes/i.test(text)) return "Yes";
+    if (/No\s*$/i.test(after.trim()) || /been effective\?\s*No/i.test(text)) return "No";
+  }
+  if (/\bNo\b/i.test(text) && !/\bYes\b/i.test(text.replace(/\(If YES[^)]*\)/i, ""))) return "No";
+  return "";
+}
+
+function extractIsoDate(text: string): string | null {
+  const iso = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  if (iso) return iso[1];
+  const dmy = text.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/);
+  if (dmy) {
+    const dd = dmy[1].padStart(2, "0");
+    const mm = dmy[2].padStart(2, "0");
+    return `${dmy[3]}-${mm}-${dd}`;
+  }
+  const named = text.match(/\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(20\d{2})\b/i);
+  if (named) {
+    const months: Record<string, string> = {
+      jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+      jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+    };
+    const mm = months[named[2].slice(0, 3).toLowerCase()];
+    if (mm) return `${named[3]}-${mm}-${named[1].padStart(2, "0")}`;
+  }
+  return null;
+}
+
+/** Parse a filled NCR 01.xlsx (NCR CAR sheet) back into register + form fields. */
+export async function parseQualityNcrFilledXlsx(buf: Buffer): Promise<{
+  description?: string;
+  contractor?: string;
+  location?: string;
+  ncrType?: string;
+  issueDate?: string;
+  plannedClosure?: string | null;
+  formPatch: Partial<QualityNcrFormData>;
+}> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
+  const ws = wb.getWorksheet("NCR CAR") || wb.worksheets[0];
+  if (!ws) throw new Error("No worksheet found in uploaded NCR / CAR file");
+
+  const toParty = cellText(ws, "B7");
+  const fromParty = cellText(ws, "B8");
+  const environmentalIssues = cellText(ws, "B11");
+  const otherCause = cellText(ws, "B12");
+  const description = rowText(ws, 14);
+  const actionRequired = rowText(ws, 16).replace(/^Action Required[^\n]*\n?/i, "").trim() || rowText(ws, 16);
+  const plannedLine = rowText(ws, 17);
+  const plannedClosure = extractIsoDate(plannedLine);
+  const locationMatch = plannedLine.match(/Location:\s*(.+)$/im);
+  const workCarriedOutNote = rowText(ws, 18);
+  const signedLine = rowText(ws, 19);
+  const signed = parseSignedLine(signedLine);
+  const followLine = rowText(ws, 21);
+  const followUpEffective = yesNoFromText(followLine);
+  const reviewerLine = rowText(ws, 23);
+  const reviewer = parseSignedLine(reviewerLine);
+  const pursueLine = rowText(ws, 25);
+  const pursueFurtherCosts = yesNoFromText(pursueLine);
+  const siteLine = rowText(ws, 26);
+  const siteSetupModification = yesNoFromText(siteLine);
+  const actionBlock = rowText(ws, 27).replace(/^Action required:\s*/i, "").trim();
+  const byWhomRaw = cellText(ws, "A31").replace(/^By Whom:\s*/i, "").trim();
+  const completedRaw = cellText(ws, "B31").replace(/^Completed:\s*/i, "").trim();
+  const issueRaw = cellText(ws, "B6");
+  const issueDate = /^\d{4}-\d{2}-\d{2}/.test(issueRaw)
+    ? issueRaw.slice(0, 10)
+    : extractIsoDate(issueRaw) || undefined;
+
+  return {
+    description: description || undefined,
+    contractor: toParty || undefined,
+    location: locationMatch?.[1]?.trim() || undefined,
+    ncrType: otherCause || undefined,
+    issueDate,
+    plannedClosure: plannedClosure || null,
+    formPatch: {
+      projectName: cellText(ws, "B3") || undefined,
+      toParty: toParty || undefined,
+      fromParty: fromParty || undefined,
+      environmentalIssues: environmentalIssues || undefined,
+      otherCause: otherCause || undefined,
+      actionRequired: actionRequired || undefined,
+      workCarriedOutNote: workCarriedOutNote || undefined,
+      signedContractor: signed.signed,
+      positionContractor: signed.position,
+      followUpEffective: followUpEffective || undefined,
+      signedReviewer: reviewer.signed,
+      positionReviewer: reviewer.position,
+      pursueFurtherCosts: pursueFurtherCosts || undefined,
+      siteSetupModification: siteSetupModification || undefined,
+      correctiveActionDetail: actionBlock || undefined,
+      actionByWhom: byWhomRaw || undefined,
+      actionCompleted: completedRaw && completedRaw !== "Completed:" ? completedRaw : undefined,
+    },
+  };
 }
 
 /** Fill SPDC Safety NCR.xlsx template. */

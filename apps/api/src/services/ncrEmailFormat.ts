@@ -28,9 +28,20 @@ function kindLabel(kind: NcrEmailKind) {
     case "QualityCAR":
       return "Corrective Action Request (CAR)";
     case "SafetyNCR":
+      return "Safety Non-Conformance Report";
+    default:
+      return "Non-Conformance Report (NCR)";
+  }
+}
+
+function kindShort(kind: NcrEmailKind) {
+  switch (kind) {
+    case "QualityCAR":
+      return "CAR";
+    case "SafetyNCR":
       return "Safety NCR";
     default:
-      return "Quality NCR";
+      return "NCR";
   }
 }
 
@@ -84,8 +95,15 @@ function detailTableText(rows: RfiDetailRow[]) {
   return rows.map((r) => `${r.label}: ${r.value}`).join("\n");
 }
 
-export function buildNcrRaisedEmail(opts: { ctx: NcrEmailContext; registerUrl: string }) {
+export function buildNcrRaisedEmail(opts: {
+  ctx: NcrEmailContext;
+  registerUrl: string;
+  formUrl?: string;
+  forContractor?: boolean;
+}) {
   const label = kindLabel(opts.ctx.kind);
+  const short = kindShort(opts.ctx.kind);
+  const formUrl = opts.formUrl || opts.registerUrl;
   const rows = ncrDetailRows(opts.ctx);
   const rfiCtx = {
     projectCode: opts.ctx.projectCode,
@@ -99,20 +117,33 @@ export function buildNcrRaisedEmail(opts: { ctx: NcrEmailContext; registerUrl: s
     createdAt: opts.ctx.raisedAt,
   };
 
+  const intro = opts.forContractor
+    ? `A ${label} (${short}) has been served on your company via the Sharnam portal. Open the form, download the NCR 01 Excel format, fill corrective action / sign-off, upload the filled sheet or save in the portal — the register updates automatically.`
+    : `A new ${label} (${short}) has been raised. Stakeholders can open the form, download the branded Excel/PDF, fill and resolve — the NCR/CAR register updates when saved or closed.`;
+
+  const stepsHtml = `
+<ol style="margin:12px 0 0;padding-left:18px;font-size:13px;color:#334155;line-height:1.55;">
+  <li>Open the ${short} form in the portal</li>
+  <li>Download Excel (NCR 01 format) or PDF</li>
+  <li>Fill corrective action / contractor response and sign</li>
+  <li>Save in portal or upload the filled Excel — register row updates</li>
+</ol>`;
+
   const bodyHtml = wrapRfiEmailHtml({
-    eyebrow: `${label} raised`,
+    eyebrow: `${short} raised`,
     headline: `${opts.ctx.number} — action required`,
-    intro: `A new ${label} has been raised on the Sharnam portal. Review the details, complete the NCR/CAR form, and assign corrective actions before closing.`,
+    intro,
     ctx: rfiCtx,
     detailRows: rows,
     particularsLabel: `${label} particulars`,
-    questionLabel: "Non-conformance / observation",
-    primaryAction: { href: opts.registerUrl, label: registerActionLabel(opts.ctx.kind) },
-    extraHtml: `<p style="margin:10px 0 0;font-size:12px;color:#64748b;">Register link:<br/><a href="${escapeHtml(opts.registerUrl)}" style="color:#0b6a78;word-break:break-all;">${escapeHtml(opts.registerUrl)}</a></p>`,
+    questionLabel: "Description of the problem which requires rectification",
+    primaryAction: {
+      href: formUrl,
+      label: opts.forContractor ? formActionLabel(opts.ctx.kind) : registerActionLabel(opts.ctx.kind),
+    },
+    extraHtml: `${stepsHtml}<p style="margin:12px 0 0;font-size:12px;color:#64748b;">Form: <a href="${escapeHtml(formUrl)}" style="color:#0b6a78;word-break:break-all;">${escapeHtml(formUrl)}</a><br/>Register: <a href="${escapeHtml(opts.registerUrl)}" style="color:#0b6a78;word-break:break-all;">${escapeHtml(opts.registerUrl)}</a></p>`,
     footerNote:
-      opts.ctx.kind === "QualityCAR"
-        ? "Complete all mandatory fields on the branded CAR form export before marking Closed."
-        : "Complete all mandatory fields on the branded NCR form export before marking Closed.",
+      "NCR = Non-Conformance Report · CAR = Corrective Action Request. Activity (raise / fill / upload / close) is logged on the form.",
   });
 
   const bodyText = [
@@ -123,11 +154,19 @@ export function buildNcrRaisedEmail(opts: { ctx: NcrEmailContext; registerUrl: s
     "Description:",
     opts.ctx.description,
     "",
+    "Steps: 1) Open form  2) Download Excel/PDF  3) Fill & sign  4) Save or upload filled Excel",
+    "",
+    "Form:",
+    formUrl,
     "Register:",
     opts.registerUrl,
   ].join("\n");
 
-  return { bodyHtml, bodyText, subject: `[${opts.ctx.projectCode || "Portal"}] ${label} raised — ${opts.ctx.number}` };
+  return {
+    bodyHtml,
+    bodyText,
+    subject: `[${opts.ctx.projectCode || "Portal"}] ${short} raised — ${opts.ctx.number}`,
+  };
 }
 
 export function buildNcrFollowUpEmail(opts: {

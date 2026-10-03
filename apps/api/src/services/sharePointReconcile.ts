@@ -28,6 +28,16 @@ export async function reconcileProjectSharePoint(projectId: string) {
     console.warn("[sharepoint] quality pack reconcile skipped:", err instanceof Error ? err.message : err);
   }
 
+  try {
+    const { syncAllQualityNcrsForProject } = await import("./syncNcrToDrive.js");
+    const ncrSync = await syncAllQualityNcrsForProject(projectId);
+    console.log(
+      `[sharepoint] NCR/CAR sync ${project.code}: ${ncrSync.synced} forms + register (${ncrSync.register.length} files)`
+    );
+  } catch (err) {
+    console.warn("[sharepoint] NCR/CAR reconcile skipped:", err instanceof Error ? err.message : err);
+  }
+
   const rfis = await prisma.rfi.findMany({
     where: { projectId },
     include: {
@@ -63,6 +73,7 @@ export async function reconcileProjectSharePoint(projectId: string) {
       "08.01 Quality Assurance Plan + Weekly/",
       "08.03 Cube register + Weekly/",
       "08.01 Quality Dashboard + Weekly/",
+      "08.06 Quality NCR/CAR forms (Drafts/Open/Closed) + _Registers/SPDC_NCR_CAR_Register.xlsx",
       "03.06/_Registers/SPDC_RFI_Form_and_Register.xlsx",
       `03.06/_Registers/Weekly/${week}/SPDC_RFI_Form_and_Register.xlsx`,
     ],

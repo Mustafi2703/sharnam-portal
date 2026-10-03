@@ -53,6 +53,13 @@ export default function InspectionsPage() {
     location: "",
     contractor: "",
     contractorVendorId: "",
+    issueDate: new Date().toISOString().slice(0, 10),
+    plannedClosure: "",
+    actionRequired: "",
+    toParty: "",
+    fromParty: "Sharnam Project Development Consultants & Co.",
+    environmentalIssues: "",
+    otherCause: "",
   });
   const [ncrAddOpen, setNcrAddOpen] = useState(false);
   const [ncrAddBusy, setNcrAddBusy] = useState(false);
@@ -164,8 +171,24 @@ export default function InspectionsPage() {
         method: "POST",
         token,
         body: JSON.stringify({
-          ...ncrForm,
+          kind: ncrForm.kind,
+          number: ncrForm.number || undefined,
+          ncrType: ncrForm.ncrType || (ncrForm.kind === "CAR" ? "Corrective Action" : "General"),
+          description: ncrForm.description,
+          location: ncrForm.location || undefined,
+          contractor: ncrForm.contractor || undefined,
           contractorVendorId: ncrForm.contractorVendorId || undefined,
+          issueDate: ncrForm.issueDate || undefined,
+          plannedClosure: ncrForm.plannedClosure || undefined,
+          actionRequired: ncrForm.actionRequired || undefined,
+          formDataJson: {
+            projectName: project?.name || project?.code || "",
+            toParty: ncrForm.toParty || ncrForm.contractor || "",
+            fromParty: ncrForm.fromParty || "Sharnam Project Development Consultants & Co.",
+            actionRequired: ncrForm.actionRequired || "",
+            environmentalIssues: ncrForm.environmentalIssues || "",
+            otherCause: ncrForm.otherCause || ncrForm.ncrType || "",
+          },
         }),
       });
       setNcrForm({
@@ -176,6 +199,13 @@ export default function InspectionsPage() {
         location: "",
         contractor: "",
         contractorVendorId: "",
+        issueDate: new Date().toISOString().slice(0, 10),
+        plannedClosure: "",
+        actionRequired: "",
+        toParty: "",
+        fromParty: "Sharnam Project Development Consultants & Co.",
+        environmentalIssues: "",
+        otherCause: "",
       });
       setNcrAddOpen(false);
       const emailNote = vendor?.vendor?.email
@@ -183,7 +213,9 @@ export default function InspectionsPage() {
         : vendor
           ? " Selected contractor has no email on file — add email under Project → Vendors."
           : "";
-      setMsg(`${created.number || ncrForm.kind} raised — opening fill form.${emailNote}`);
+      setMsg(
+        `${created.number || ncrForm.kind} logged on NCR/CAR register — stakeholder email sent.${emailNote} Opening form to download / fill / resolve.`
+      );
       await load();
       openNcrFormWindow(id, "quality", created.id);
     } catch (err) {
@@ -352,17 +384,51 @@ export default function InspectionsPage() {
         />
         </div>
         <Card padding={false} className="register-table-panel spdc-register-panel register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-line shrink-0">
-          <h3 className="font-semibold mb-3">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
+          <div className="px-4 py-3 border-b border-line shrink-0 flex flex-wrap items-start justify-between gap-2">
+          <div>
+          <h3 className="font-semibold mb-1">NCR / CAR register (Quality Dashboard · NCR 01)</h3>
+          <p className="text-xs text-steel-muted mb-1">
+            <strong>NCR</strong> = Non-Conformance Report · <strong>CAR</strong> = Corrective Action Request — form follows NCR 01.xlsx
+          </p>
+          {id && (
+            <a href={`/projects/${id}/quality/ncr-fill-log`} className="text-xs font-semibold text-brand underline">
+              Open NCR / CAR fill log →
+            </a>
+          )}
+          </div>
+          {isOfficeAdmin && id && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs"
+              onClick={async () => {
+                try {
+                  const out = await api<{ synced: number }>(`/api/checklist/project/${id}/ncr/sync-sharepoint`, {
+                    method: "POST",
+                    token,
+                  });
+                  setMsg(`SharePoint synced — ${out.synced} NCR/CAR form(s) + register. Nightly day-close also runs after hours.`);
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Sync failed");
+                }
+              }}
+            >
+              Sync SharePoint
+            </Button>
+          )}
           </div>
           <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
             <table className="sheet-register__table min-w-[40rem] w-full">
               <thead className="sticky top-0 z-10">
                 <tr>
-                  <th className="text-left">No</th>
+                  <th className="text-left">No.</th>
+                  <th className="text-left">NCR Issue Date</th>
                   <th className="text-left">Type</th>
-                  <th className="text-left">Description</th>
                   <th className="text-left">Contractor</th>
+                  <th className="text-left">Brief Description of Non Conformance</th>
+                  <th className="text-left">Location</th>
+                  <th className="text-left">Planned Closure</th>
+                  <th className="text-left">Actual Closure</th>
                   <th className="text-left">Compliance</th>
                   <th className="text-left">Status</th>
                   {canManage && <th className="text-left">Action</th>}
@@ -374,9 +440,19 @@ export default function InspectionsPage() {
                   return (
                   <tr key={n.id}>
                     <td className="text-left font-mono text-xs">{n.number}</td>
+                    <td className="text-left text-xs whitespace-nowrap">
+                      {n.issueDate ? String(n.issueDate).slice(0, 10) : "—"}
+                    </td>
                     <td className="text-left">{n.ncrType || "—"}</td>
-                    <td className="text-left max-w-md">{n.description}</td>
                     <td className="text-left text-xs">{n.contractor || "—"}</td>
+                    <td className="text-left max-w-md">{n.description}</td>
+                    <td className="text-left text-xs">{n.location || "—"}</td>
+                    <td className="text-left text-xs whitespace-nowrap">
+                      {n.plannedClosure ? String(n.plannedClosure).slice(0, 10) : "—"}
+                    </td>
+                    <td className="text-left text-xs whitespace-nowrap">
+                      {n.actualClosure ? String(n.actualClosure).slice(0, 10) : "—"}
+                    </td>
                     <td className="text-left">
                       <Badge tone={compliance.tone}>{compliance.label}</Badge>
                       {compliance.followUpCount > 0 && (
@@ -475,80 +551,142 @@ export default function InspectionsPage() {
         </Card>
         <RegisterEntryModal
           open={ncrAddOpen && canManage}
-          title={`Raise ${ncrForm.kind}`}
-          size="xl"
+          title="Raise NCR / CAR — SPDC NCR 01"
+          size="3xl"
           onClose={() => setNcrAddOpen(false)}
           saving={ncrAddBusy}
-          saveLabel={`Raise ${ncrForm.kind}`}
+          saveLabel={ncrForm.kind === "CAR" ? "Raise CAR" : "Raise NCR"}
           onSave={() => ncrAddFormRef.current?.requestSubmit()}
         >
-          <form ref={ncrAddFormRef} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={submitNcrAdd}>
-            <Select
-              value={ncrForm.kind}
-              onChange={(e) => setNcrForm({ ...ncrForm, kind: e.target.value as "NCR" | "CAR" })}
-            >
-              <option value="NCR">NCR (defect)</option>
-              <option value="CAR">CAR (corrective action)</option>
-            </Select>
-            <Input
-              placeholder="Number (optional — auto if blank)"
-              value={ncrForm.number}
-              onChange={(e) => setNcrForm({ ...ncrForm, number: e.target.value })}
-            />
-            <Select
-              value={ncrForm.ncrType}
-              onChange={(e) => setNcrForm({ ...ncrForm, ncrType: e.target.value })}
-            >
-              <option value="">Type…</option>
-              <option value="Workmanship">Workmanship</option>
-              <option value="Material">Material</option>
-              <option value="Documentation">Documentation</option>
-              <option value="Dimensional">Dimensional</option>
-              <option value="Safety">Safety</option>
-              <option value="Other">Other</option>
-            </Select>
-            <TextArea
-              className="sm:col-span-2 lg:col-span-3"
-              placeholder="Description — what failed / corrective action required"
-              value={ncrForm.description}
-              onChange={(e) => setNcrForm({ ...ncrForm, description: e.target.value })}
-              required
-            />
-            <Input
-              placeholder="Location"
-              value={ncrForm.location}
-              onChange={(e) => setNcrForm({ ...ncrForm, location: e.target.value })}
-            />
-            <Select
-              value={ncrForm.contractorVendorId}
-              onChange={(e) => {
-                const vid = e.target.value;
-                const link = projectVendors.find((v) => v.vendorId === vid);
-                setNcrForm({
-                  ...ncrForm,
-                  contractorVendorId: vid,
-                  contractor: link?.vendor?.name || ncrForm.contractor,
-                });
-              }}
-            >
-              <option value="">Contractor / company on notice *</option>
-              {projectVendors.map((pv) => (
-                <option key={pv.vendorId} value={pv.vendorId}>
-                  {pv.vendor?.name || pv.vendorId}
-                  {pv.vendor?.email ? ` · ${pv.vendor.email}` : " · no email"}
-                </option>
-              ))}
-            </Select>
+          <form ref={ncrAddFormRef} className="ncr01-raise space-y-3" onSubmit={submitNcrAdd}>
+            <p className="text-xs text-steel-muted leading-relaxed">
+              Matches <strong>NCR 01.xlsx · NCR CAR</strong> sheet.{" "}
+              <strong>NCR</strong> = Non-Conformance Report · <strong>CAR</strong> = Corrective Action Request.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="ncr01-field">
+                <span>Document</span>
+                <Select
+                  value={ncrForm.kind}
+                  onChange={(e) => setNcrForm({ ...ncrForm, kind: e.target.value as "NCR" | "CAR" })}
+                >
+                  <option value="NCR">NCR — Non-Conformance Report</option>
+                  <option value="CAR">CAR — Corrective Action Request</option>
+                </Select>
+              </label>
+              <label className="ncr01-field">
+                <span>NCR / CAR No. (optional — auto if blank)</span>
+                <Input value={ncrForm.number} onChange={(e) => setNcrForm({ ...ncrForm, number: e.target.value })} placeholder="NCR-001 / CAR-001" />
+              </label>
+              <label className="ncr01-field">
+                <span>Date</span>
+                <Input type="date" value={ncrForm.issueDate} onChange={(e) => setNcrForm({ ...ncrForm, issueDate: e.target.value })} required />
+              </label>
+              <label className="ncr01-field">
+                <span>Date by which action must be completed</span>
+                <Input type="date" value={ncrForm.plannedClosure} onChange={(e) => setNcrForm({ ...ncrForm, plannedClosure: e.target.value })} />
+              </label>
+              <label className="ncr01-field">
+                <span>To (company on notice)</span>
+                <Select
+                  value={ncrForm.contractorVendorId}
+                  onChange={(e) => {
+                    const vid = e.target.value;
+                    const link = projectVendors.find((v) => v.vendorId === vid);
+                    const name = link?.vendor?.name || ncrForm.contractor;
+                    setNcrForm({
+                      ...ncrForm,
+                      contractorVendorId: vid,
+                      contractor: name,
+                      toParty: name,
+                    });
+                  }}
+                  required={!ncrForm.contractor.trim()}
+                >
+                  <option value="">Select contractor…</option>
+                  {projectVendors.map((pv) => (
+                    <option key={pv.vendorId} value={pv.vendorId}>
+                      {pv.vendor?.name || pv.vendorId}
+                      {pv.vendor?.email ? ` · ${pv.vendor.email}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="ncr01-field">
+                <span>To — name if not in list</span>
+                <Input
+                  value={ncrForm.contractor}
+                  onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value, toParty: e.target.value })}
+                  placeholder="Contractor / agency name"
+                />
+              </label>
+              <label className="ncr01-field">
+                <span>From (PMC)</span>
+                <Input value={ncrForm.fromParty} onChange={(e) => setNcrForm({ ...ncrForm, fromParty: e.target.value })} />
+              </label>
+              <label className="ncr01-field">
+                <span>Location</span>
+                <Input value={ncrForm.location} onChange={(e) => setNcrForm({ ...ncrForm, location: e.target.value })} placeholder="Grid / area / structure" />
+              </label>
+            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-steel-muted pt-1">
+              Action Required as a Result of
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="ncr01-field">
+                <span>Environmental Issues</span>
+                <Input
+                  value={ncrForm.environmentalIssues}
+                  onChange={(e) => setNcrForm({ ...ncrForm, environmentalIssues: e.target.value })}
+                  placeholder="— if none"
+                />
+              </label>
+              <label className="ncr01-field">
+                <span>Type (register)</span>
+                <Select value={ncrForm.ncrType} onChange={(e) => setNcrForm({ ...ncrForm, ncrType: e.target.value })}>
+                  <option value="">Select…</option>
+                  <option value="General">General</option>
+                  <option value="Workmanship">Workmanship</option>
+                  <option value="Material">Material</option>
+                  <option value="Documentation">Documentation</option>
+                  <option value="Dimensional">Dimensional</option>
+                  <option value="Schedule">Schedule</option>
+                  <option value="Safety">Safety</option>
+                  <option value="Corrective Action">Corrective Action</option>
+                  <option value="Other">Other</option>
+                </Select>
+              </label>
+              <label className="ncr01-field sm:col-span-2">
+                <span>Other</span>
+                <Input
+                  value={ncrForm.otherCause}
+                  onChange={(e) => setNcrForm({ ...ncrForm, otherCause: e.target.value })}
+                  placeholder="e.g. General — Project Schedule & Mix Design"
+                />
+              </label>
+            </div>
+            <label className="ncr01-field">
+              <span>Description of the problem which requires rectification</span>
+              <TextArea
+                rows={4}
+                value={ncrForm.description}
+                onChange={(e) => setNcrForm({ ...ncrForm, description: e.target.value })}
+                required
+              />
+            </label>
+            <label className="ncr01-field">
+              <span>Action required to rectify the problem (and prevent recurrence)</span>
+              <TextArea
+                rows={3}
+                value={ncrForm.actionRequired}
+                onChange={(e) => setNcrForm({ ...ncrForm, actionRequired: e.target.value })}
+              />
+            </label>
             {!projectVendors.length && (
-              <p className="sm:col-span-2 lg:col-span-3 text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
-                Assign contractors under Project → Vendors first — they receive the NCR/CAR form link by email when raised.
+              <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+                Assign contractors under Project → Vendors first — they receive the form link by email when raised.
               </p>
             )}
-            <Input
-              placeholder="Contractor name (if not in list)"
-              value={ncrForm.contractor}
-              onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value })}
-            />
           </form>
         </RegisterEntryModal>
         </div>

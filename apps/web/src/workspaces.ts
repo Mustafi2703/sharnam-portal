@@ -179,6 +179,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "CAR register · NCR 01",
     },
     {
+      to: "quality/ncr-fill-log",
+      label: "NCR / CAR fill log",
+      roles: ["admin", "office", "employee", "site_employee", "vendor"],
+      blurb: "Fill NCR 01 forms like drawing checklists — save drafts, Sync SharePoint, nightly reconcile.",
+      sheet: "NCR 01 · NCR CAR",
+    },
+    {
       to: "inspections",
       label: "Cube Test",
       query: "sheet=cube-test",

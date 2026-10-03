@@ -11956,6 +11956,143 @@ html.is-standalone-form #root {
   height: auto;
 }
 
+/* SPDC NCR 01.xlsx — paper form layout (NCR CAR sheet) */
+.ncr01-sheet {
+  border: 1px solid #1e3a5f;
+  background: #fff;
+  padding: 1rem 1.1rem 1.25rem;
+  border-radius: 0.35rem;
+}
+.ncr01-sheet__title {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e3a5f;
+  border-bottom: 3px solid #1e3a5f;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.ncr01-sheet__doc {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--color-steel-muted);
+  text-transform: uppercase;
+}
+.ncr01-sheet__grid {
+  display: grid;
+  gap: 0.55rem 0.75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .ncr01-sheet__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.ncr01-row,
+.ncr01-block,
+.ncr01-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.ncr01-row > span,
+.ncr01-block > span,
+.ncr01-field > span,
+.ncr01-section__h {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1e3a5f;
+}
+.ncr01-row--full {
+  grid-column: 1 / -1;
+  margin-top: 0.35rem;
+}
+.ncr01-section {
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed #cbd5e1;
+}
+.ncr01-section__h {
+  margin-bottom: 0.45rem;
+}
+.ncr01-block {
+  margin-top: 0.65rem;
+}
+.ncr01-legal {
+  margin: 0.85rem 0 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--color-steel-muted);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.25rem;
+}
+.ncr01-office {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #c7d2e0;
+  background: #f4f7fb;
+  border-radius: 0.35rem;
+}
+.ncr01-raise .ncr01-field span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1e3a5f;
+}
+.ncr01-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+.ncr01-activity li {
+  display: grid;
+  grid-template-columns: 7.5rem 5.5rem 1fr;
+  gap: 0.35rem 0.5rem;
+  font-size: 0.68rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.25rem;
+  background: #f8fafc;
+}
+@media (max-width: 640px) {
+  .ncr01-activity li {
+    grid-template-columns: 1fr;
+  }
+}
+.ncr01-activity__when {
+  font-family: var(--font-mono);
+  color: var(--color-steel-muted);
+}
+.ncr01-activity__action {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #1e3a5f;
+}
+.ncr01-activity__by {
+  color: var(--color-ink);
+}
+.ncr01-activity__note {
+  grid-column: 1 / -1;
+  color: var(--color-steel-muted);
+}
+
 .hrms-docx-preview-frame {
   max-height: min(520px, 52vh);
   min-height: 280px;
