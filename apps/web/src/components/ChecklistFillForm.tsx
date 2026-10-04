@@ -1,4 +1,4 @@
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { FilePickButton } from "./FilePickButton";
 import { SignaturePad } from "./SignaturePad";
@@ -15,6 +15,24 @@ export type ChecklistFillItem = {
   instructionFileName?: string;
   requirePhoto?: boolean;
 };
+
+/** Who signs each box at the end of a checklist (sent with the fill as signerName* fields). */
+export type ChecklistSignMeta = {
+  inspectorName: string;
+  pmcName: string;
+  clientName: string;
+  /** Client not available — a PMC user signs the client box on their behalf. */
+  clientByPmc: boolean;
+};
+
+/** Append the signer names + proxy flag to a checklist fill FormData. */
+export function appendSignMeta(fd: FormData, meta: ChecklistSignMeta | null | undefined) {
+  if (!meta) return;
+  if (meta.inspectorName.trim()) fd.append("signerNameInspector", meta.inspectorName.trim());
+  if (meta.pmcName.trim()) fd.append("signerNamePmc", meta.pmcName.trim());
+  if (meta.clientName.trim()) fd.append("signerNameClient", meta.clientName.trim());
+  if (meta.clientByPmc) fd.append("clientSignedByPmc", "1");
+}
 
 export type ChecklistFillLine = {
   answer: string;
@@ -112,7 +130,13 @@ type Props = {
   onPmcSignature?: (file: File | null) => void;
   onClientSignature?: (file: File | null) => void;
   canPmcSignClient?: boolean;
+  /** Person filling the checklist (Inspector / site engineer box). */
   signerName?: string;
+  /** Default name for the PMC box (editable). */
+  pmcSignerName?: string;
+  /** Default name for the client box — e.g. the project's client contact (editable). */
+  clientSignerName?: string;
+  onSignMeta?: (meta: ChecklistSignMeta) => void;
   minPhotos?: number;
   photoTotal: number;
   answered: number;
@@ -161,6 +185,9 @@ export function ChecklistFillForm({
   onClientSignature,
   canPmcSignClient,
   signerName,
+  pmcSignerName,
+  clientSignerName,
+  onSignMeta,
   minPhotos = 0,
   photoTotal,
   answered,
@@ -177,6 +204,26 @@ export function ChecklistFillForm({
   submitLabel = "Submit checklist form",
   headerActions,
 }: Props) {
+  const [signMeta, setSignMeta] = useState<ChecklistSignMeta>(() => ({
+    inspectorName: signerName || "",
+    pmcName: pmcSignerName || "",
+    clientName: clientSignerName || "",
+    clientByPmc: false,
+  }));
+  // Defaults arrive after async loads (user, project) — fill only boxes still empty.
+  useEffect(() => {
+    setSignMeta((m) => ({
+      ...m,
+      inspectorName: m.inspectorName || signerName || "",
+      pmcName: m.pmcName || pmcSignerName || "",
+      clientName: m.clientName || clientSignerName || "",
+    }));
+  }, [signerName, pmcSignerName, clientSignerName]);
+  useEffect(() => {
+    onSignMeta?.(signMeta);
+  }, [signMeta, onSignMeta]);
+  const patchSign = (p: Partial<ChecklistSignMeta>) => setSignMeta((m) => ({ ...m, ...p }));
+
   const familyLabel = checklistFamilyLabel(family);
   const answerPct = items.length ? Math.round((answered / items.length) * 100) : 0;
   const selectedDrawing = drawings.find((d) => d.id === drawingId);
@@ -563,30 +610,59 @@ export function ChecklistFillForm({
               )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 checklist-sign-grid">
                 {!clientSignOnly ? (
-                  <>
-                    <SignaturePad
-                      onCapture={onSignature}
-                      personName={signerName}
-                      label="Inspector / site engineer"
+                  <div className="space-y-2">
+                    <Input
+                      label="Inspector / site engineer — name"
+                      value={signMeta.inspectorName}
+                      onChange={(e) => patchSign({ inspectorName: e.target.value })}
+                      placeholder="Name of person who filled this"
                     />
-                    <SignaturePad
-                      onCapture={onPmcSignature || onSignature}
-                      personName={signerName}
-                      label="PMC"
-                    />
-                  </>
+                    <SignaturePad onCapture={onSignature} personName={signMeta.inspectorName} label="Inspector / site engineer" />
+                  </div>
                 ) : null}
-                <SignaturePad
-                  onCapture={onClientSignature || onSignature}
-                  personName={signerName}
-                  label={canPmcSignClient ? "Client (PMC may sign if client is away)" : "Client"}
-                />
+                {!clientSignOnly && onPmcSignature ? (
+                  <div className="space-y-2">
+                    <Input
+                      label="PMC — name"
+                      value={signMeta.pmcName}
+                      onChange={(e) => patchSign({ pmcName: e.target.value })}
+                      placeholder="SPDC PMC signatory"
+                    />
+                    <SignaturePad onCapture={onPmcSignature} personName={signMeta.pmcName} label="PMC" />
+                  </div>
+                ) : null}
+                {clientSignOnly || onClientSignature ? (
+                  <div className="space-y-2">
+                    <Input
+                      label={signMeta.clientByPmc ? "Signed by (PMC on behalf of client)" : "Client — name"}
+                      value={signMeta.clientName}
+                      onChange={(e) => patchSign({ clientName: e.target.value })}
+                      placeholder={signMeta.clientByPmc ? "PMC person signing for the client" : "Client signatory"}
+                    />
+                    <SignaturePad
+                      onCapture={onClientSignature || onSignature}
+                      personName={signMeta.clientName}
+                      label={signMeta.clientByPmc ? "Client (signed by PMC on behalf)" : "Client"}
+                    />
+                    {canPmcSignClient && !clientSignOnly ? (
+                      <label className="flex items-start gap-2 text-xs text-steel-muted">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={signMeta.clientByPmc}
+                          onChange={(e) =>
+                            patchSign({
+                              clientByPmc: e.target.checked,
+                              clientName: e.target.checked ? signMeta.pmcName || signerName || "" : clientSignerName || "",
+                            })
+                          }
+                        />
+                        <span>Client not available — PMC signs on behalf. The export marks this box as signed by PMC for the client.</span>
+                      </label>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-              {canPmcSignClient && (
-                <p className="text-[11px] text-steel-muted">
-                  PMC can sign the client box when the client is not available — the export marks it as Client (PMC proxy).
-                </p>
-              )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {(canFill || clientSignOnly) && (

@@ -6,6 +6,8 @@ import { Badge, Button, Card } from "../components/ui";
 import { StandaloneFormHeader } from "../components/StandaloneFormHeader";
 import {
   ChecklistFillForm,
+  appendSignMeta,
+  type ChecklistSignMeta,
   checklistFamilyLabel,
   emptyChecklistLine,
   emptyChecklistMeta,
@@ -38,6 +40,15 @@ export default function ChecklistFillPage() {
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [pmcSignatureFile, setPmcSignatureFile] = useState<File | null>(null);
   const [clientSignatureFile, setClientSignatureFile] = useState<File | null>(null);
+  const [signMeta, setSignMeta] = useState<ChecklistSignMeta | null>(null);
+  const [clientContact, setClientContact] = useState("");
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    void api<{ clientContactName?: string | null }>(`/api/projects/${projectId}`, { token })
+      .then((p) => setClientContact(p?.clientContactName || ""))
+      .catch(() => setClientContact(""));
+  }, [projectId, token]);
   const [drawings, setDrawings] = useState<ChecklistDrawingOption[]>([]);
   const [drawingId, setDrawingId] = useState("");
   const [revisionId, setRevisionId] = useState("");
@@ -171,10 +182,9 @@ export default function ChecklistFillPage() {
     if (photos.length) photos.forEach((f) => fd.append("photos", f));
     if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
     if (pmcSignatureFile) fd.append("signaturePmc", pmcSignatureFile, pmcSignatureFile.name);
-    if (clientSignatureFile) {
-      fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
-      if (["admin", "office", "employee"].includes(user?.role || "")) fd.append("clientSignedByPmc", "1");
-    }
+    if (clientSignatureFile) fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
+    // Proxy flag + names come from the form (explicit "Client not available" checkbox).
+    appendSignMeta(fd, signMeta);
     Object.entries(responses).forEach(([lineId, r]) => {
       r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
       r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
@@ -243,6 +253,7 @@ export default function ChecklistFillPage() {
       try {
         const fd = new FormData();
         fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
+        if (signMeta?.clientName.trim()) fd.append("signerNameClient", signMeta.clientName.trim());
         await api(`/api/checklist/assignments/${assignmentId}/client-signature`, {
           method: "POST",
           token,
@@ -384,6 +395,8 @@ export default function ChecklistFillPage() {
       onClientSignature={setClientSignatureFile}
       canPmcSignClient={["admin", "office", "employee"].includes(user?.role || "")}
       signerName={user?.fullName || user?.email || undefined}
+      clientSignerName={clientContact || undefined}
+      onSignMeta={setSignMeta}
       minPhotos={minPhotos}
       photoTotal={photoTotal}
       answered={answered}

@@ -50,7 +50,11 @@ async function persistChecklistUploads(opts: {
   submissionId: string;
   projectCode: string;
   commentsRaw?: unknown;
+  /** Request body — signer names + clientSignedByPmc for signature captions. */
+  body?: Record<string, unknown>;
+  submitterName?: string | null;
 }) {
+  const { signatureCaption } = await import("../services/checklistSignoff.js");
   if (!opts.files.length) return 0;
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
   const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
@@ -76,7 +80,7 @@ async function persistChecklistUploads(opts: {
         itemId,
         kind,
         fileUrl: storedUploadUrl(saved),
-        caption: f.originalname,
+        caption: signatureCaption(f.fieldname, opts.body, opts.submitterName) || f.originalname,
         comment: itemId ? itemComments[itemId] || null : null,
       },
     });
@@ -581,16 +585,8 @@ checklistRouter.post(
         const itemId = scoped?.[1] || null;
         const kind = checklistUploadKind(f, scoped?.[2]);
         if (itemId) itemAttachCount += 1;
-        const signCaption =
-          f.fieldname === "signaturePmc"
-            ? "PMC"
-            : f.fieldname === "signatureClient"
-              ? req.body.clientSignedByPmc === "1" || req.body.clientSignedByPmc === "true"
-                ? "Client (PMC proxy)"
-                : "Client"
-              : f.fieldname === "signature"
-                ? "Inspector"
-                : null;
+        const { signatureCaption } = await import("../services/checklistSignoff.js");
+        const signCaption = signatureCaption(f.fieldname, req.body, req.user?.fullName);
         const saved = await mockOneDrive.upload(
           assignment.project.code,
           checklistFolder,
@@ -805,7 +801,7 @@ checklistRouter.post(
         itemId: null,
         kind: "signature",
         fileUrl: storedUploadUrl(saved),
-        caption: "Client",
+        caption: `Client · ${String(req.body?.signerNameClient || req.user?.fullName || "").trim().slice(0, 120)}`.replace(/ · $/, ""),
       },
     });
 
@@ -1850,6 +1846,8 @@ checklistRouter.post(
       submissionId: submission.id,
       projectCode: project.code,
       commentsRaw: req.body?.itemCommentsJson,
+      body: req.body,
+      submitterName: req.user?.fullName,
     });
 
     await audit("checklist.drawing_precheck", {

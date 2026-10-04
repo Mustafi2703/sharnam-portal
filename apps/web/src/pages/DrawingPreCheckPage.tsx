@@ -6,6 +6,8 @@ import { Badge, Button, Card } from "../components/ui";
 import { StandaloneFormHeader } from "../components/StandaloneFormHeader";
 import {
   ChecklistFillForm,
+  appendSignMeta,
+  type ChecklistSignMeta,
   emptyChecklistLine,
   emptyChecklistMeta,
   type ChecklistDrawingOption,
@@ -50,6 +52,17 @@ export default function DrawingPreCheckPage() {
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [pmcSignatureFile, setPmcSignatureFile] = useState<File | null>(null);
+  const [clientSignatureFile, setClientSignatureFile] = useState<File | null>(null);
+  const [signMeta, setSignMeta] = useState<ChecklistSignMeta | null>(null);
+  const [clientContact, setClientContact] = useState("");
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    void api<{ clientContactName?: string | null }>(`/api/projects/${projectId}`, { token })
+      .then((p) => setClientContact(p?.clientContactName || ""))
+      .catch(() => setClientContact(""));
+  }, [projectId, token]);
   const [drawings, setDrawings] = useState<ChecklistDrawingOption[]>([]);
   const [drawingId, setDrawingId] = useState("");
   const [revisionId, setRevisionId] = useState("");
@@ -167,6 +180,9 @@ export default function DrawingPreCheckPage() {
     if (revNo) fd.append("revisionNumber", revNo);
     photos.forEach((f) => fd.append("photos", f));
     if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
+    if (pmcSignatureFile) fd.append("signaturePmc", pmcSignatureFile, pmcSignatureFile.name);
+    if (clientSignatureFile) fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
+    appendSignMeta(fd, signMeta);
     Object.entries(responses).forEach(([lineId, r]) => {
       r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
       r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
@@ -318,7 +334,12 @@ export default function DrawingPreCheckPage() {
       overallPhotos={photos}
       onOverallPhotos={setPhotos}
       onSignature={setSignatureFile}
+      onPmcSignature={setPmcSignatureFile}
+      onClientSignature={setClientSignatureFile}
+      canPmcSignClient={["admin", "office", "employee"].includes(user?.role || "")}
       signerName={user?.fullName || user?.email || undefined}
+      clientSignerName={clientContact || undefined}
+      onSignMeta={setSignMeta}
       minPhotos={0}
       photoTotal={photoTotal}
       answered={answered}

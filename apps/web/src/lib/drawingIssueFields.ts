@@ -9,6 +9,12 @@ export type DrawingIssueDraft = {
   clientSignPhotoId: string | null;
   pmcSignPhotoId: string | null;
   siteEngineerSignPhotoId: string | null;
+  /** Drawn or uploaded on the spot (used instead of a photo-storage pick). */
+  clientSignFile?: File | null;
+  pmcSignFile?: File | null;
+  siteEngineerSignFile?: File | null;
+  /** Client not available — PMC signs the client box on their behalf. */
+  clientSignedByPmc?: boolean;
   remarks: string;
 };
 
@@ -24,6 +30,10 @@ export function emptyDrawingIssueDraft(): DrawingIssueDraft {
     clientSignPhotoId: null,
     pmcSignPhotoId: null,
     siteEngineerSignPhotoId: null,
+    clientSignFile: null,
+    pmcSignFile: null,
+    siteEngineerSignFile: null,
+    clientSignedByPmc: false,
     remarks: "",
   };
 }
@@ -33,13 +43,21 @@ export function appendIssueToFormData(fd: FormData, issue: DrawingIssueDraft) {
   if (issue.copiesReceived) fd.append("copiesReceived", issue.copiesReceived);
   if (issue.issuedToContractorAt) fd.append("issuedToContractorAt", issue.issuedToContractorAt);
   if (issue.issuedToClientAt) fd.append("issuedToClientAt", issue.issuedToClientAt);
-  if (issue.clientSignName.trim()) fd.append("clientSignName", issue.clientSignName.trim());
+  if (issue.clientSignName.trim() || issue.clientSignedByPmc) {
+    // Proxy signature is recorded on the register as "<PMC name> (PMC on behalf of client)".
+    const who = issue.clientSignName.trim() || issue.pmcSignName.trim() || "PMC";
+    fd.append("clientSignName", issue.clientSignedByPmc ? `${who} (PMC on behalf of client)` : who);
+  }
   if (issue.pmcSignName.trim()) fd.append("pmcSignName", issue.pmcSignName.trim());
   if (issue.siteEngineerSignName.trim()) fd.append("siteEngineerSignName", issue.siteEngineerSignName.trim());
   if (issue.remarks.trim()) fd.append("issueRemarks", issue.remarks.trim());
   if (issue.clientSignPhotoId) fd.append("clientSignPhotoId", issue.clientSignPhotoId);
   if (issue.pmcSignPhotoId) fd.append("pmcSignPhotoId", issue.pmcSignPhotoId);
   if (issue.siteEngineerSignPhotoId) fd.append("siteEngineerSignPhotoId", issue.siteEngineerSignPhotoId);
+  // A drawn / uploaded signature wins over a photo-storage pick (server prefers the file).
+  if (issue.clientSignFile) fd.append("clientSignature", issue.clientSignFile, issue.clientSignFile.name);
+  if (issue.pmcSignFile) fd.append("pmcSignature", issue.pmcSignFile, issue.pmcSignFile.name);
+  if (issue.siteEngineerSignFile) fd.append("siteEngineerSignature", issue.siteEngineerSignFile, issue.siteEngineerSignFile.name);
 }
 
 export function issueDraftHasData(issue: DrawingIssueDraft) {
@@ -54,7 +72,10 @@ export function issueDraftHasData(issue: DrawingIssueDraft) {
     issue.remarks.trim() ||
     issue.clientSignPhotoId ||
     issue.pmcSignPhotoId ||
-    issue.siteEngineerSignPhotoId
+    issue.siteEngineerSignPhotoId ||
+    issue.clientSignFile ||
+    issue.pmcSignFile ||
+    issue.siteEngineerSignFile
   );
 }
 

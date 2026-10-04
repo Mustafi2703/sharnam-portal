@@ -39,8 +39,21 @@ function uploadRoot() {
   return process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
 }
 
+/** PNG chunk CRC — table-based so it works on every Node version (zlib.crc32 needs Node ≥ 20.15). */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
 function crc32(buf: Buffer) {
-  return zlib.crc32(buf) >>> 0;
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
 }
 
 function pngChunk(type: string, data: Buffer) {
@@ -188,9 +201,13 @@ function slot(role: string, name: string, date: string, url?: string | null): Si
 }
 
 export function collectChecklistSignSlots(src: SignSource, dir?: DirectorySignMap): SignSlot[] {
-  const fillPhoto = (src.photos || []).find(isSignPhoto);
+  const signs = (src.photos || []).filter(isSignPhoto);
+  const fillPhoto = signs.find((p) => signRole(p) === "inspector");
+  const pmcPhoto = signs.find((p) => signRole(p) === "pmc");
+  const clientPhoto = signs.find((p) => signRole(p) === "client");
+  const clientByPmc = /on behalf|pmc proxy/i.test(String(clientPhoto?.caption || ""));
   const rev = src.revision;
-  const filledName = src.submittedBy?.fullName || fillPhoto?.caption || "";
+  const filledName = signName(fillPhoto) || src.submittedBy?.fullName || "";
   const filledDate = fmtDate(src.createdAt);
   const reviewDate = fmtDate(src.reviewedAt) || filledDate;
   const dirDate = (d?: Date | null) => (d ? fmtDate(d) : "");
@@ -204,9 +221,9 @@ export function collectChecklistSignSlots(src: SignSource, dir?: DirectorySignMa
     ),
     slot(
       "Reviewed by (SPDC PMC)",
-      rev?.pmcSignName || dir?.pmc?.name || "SPDC PMC",
+      signName(pmcPhoto) || rev?.pmcSignName || dir?.pmc?.name || "SPDC PMC",
       reviewDate || dirDate(dir?.pmc?.updatedAt),
-      rev?.pmcSignUrl || dir?.pmc?.url
+      pmcPhoto?.fileUrl || rev?.pmcSignUrl || dir?.pmc?.url
     ),
     slot(
       "Site engineer",
@@ -215,10 +232,10 @@ export function collectChecklistSignSlots(src: SignSource, dir?: DirectorySignMa
       rev?.siteEngineerSignUrl || dir?.site?.url
     ),
     slot(
-      "Client / hold point",
-      rev?.clientSignName || dir?.client?.name || "",
+      clientByPmc ? "Client / hold point (signed by PMC on behalf)" : "Client / hold point",
+      signName(clientPhoto) || rev?.clientSignName || dir?.client?.name || "",
       reviewDate || dirDate(dir?.client?.updatedAt),
-      rev?.clientSignUrl || dir?.client?.url
+      clientPhoto?.fileUrl || rev?.clientSignUrl || dir?.client?.url
     ),
   ];
 }
@@ -234,4 +251,42 @@ export function checklistLogoPath() {
 export function isSignatureUploadName(fileName?: string | null, fieldName?: string | null) {
   const n = `${fileName || ""} ${fieldName || ""}`.toLowerCase();
   return /signature/.test(n) || fieldName === "signature";
+}
+
+
+/**
+ * Caption stored on a checklist signature upload: "<Role> · <Name>".
+ * Role is Inspector | PMC | Client | "Client (signed by PMC on behalf)".
+ */
+export function signatureCaption(
+  fieldName: string,
+  body: Record<string, unknown> | undefined,
+  fallbackName?: string | null,
+): string | null {
+  const b = body || {};
+  const name = (key: string) => String(b[key] || "").trim().slice(0, 120);
+  const proxy = b.clientSignedByPmc === "1" || b.clientSignedByPmc === "true";
+  const join = (role: string, who: string) => (who ? `${role} · ${who}` : role);
+  if (fieldName === "signature") return join("Inspector", name("signerNameInspector") || String(fallbackName || "").trim());
+  if (fieldName === "signaturePmc") return join("PMC", name("signerNamePmc"));
+  if (fieldName === "signatureClient") {
+    return join(proxy ? "Client (signed by PMC on behalf)" : "Client", name("signerNameClient") || (proxy ? "" : String(fallbackName || "").trim()));
+  }
+  return null;
+}
+
+type SignRole = "inspector" | "pmc" | "client";
+
+function signRole(p: { caption?: string | null }): SignRole {
+  const cap = String(p.caption || "").trim().toLowerCase();
+  if (cap.startsWith("pmc")) return "pmc";
+  if (cap.startsWith("client")) return "client";
+  return "inspector";
+}
+
+/** "PMC · Amit Desai" → "Amit Desai" (old captions without a name → ""). */
+function signName(p?: { caption?: string | null } | null): string {
+  const cap = String(p?.caption || "");
+  const i = cap.indexOf(" · ");
+  return i >= 0 ? cap.slice(i + 3).trim() : "";
 }
