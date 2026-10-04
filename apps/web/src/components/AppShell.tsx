@@ -118,6 +118,18 @@ const officeAdminNav: { to: string; label: string; icon: ModuleIconKey; end?: bo
 
 type Proj = { id: string; code: string; name: string };
 
+/** Same module page on another project; record-level segments (ids) are dropped so nothing from the old project carries over. */
+function sameToolInProject(pathname: string, nextId: string): string {
+  const m = /^\/projects\/[^/]+(\/.*)?$/.exec(pathname);
+  const rest = (m?.[1] || "").split("/").filter(Boolean);
+  const keep: string[] = [];
+  for (const seg of rest) {
+    if (/^c[a-z0-9]{20,}$/i.test(seg) || /^\d+$/.test(seg)) break;
+    keep.push(seg);
+  }
+  return `/projects/${nextId}${keep.length ? `/${keep.join("/")}` : ""}`;
+}
+
 function moduleActive(pathname: string, search: string, key: WorkspaceKey) {
   return isProjectModuleActive(pathname, search, key);
 }
@@ -509,10 +521,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       });
   }, [token]);
 
+  // The project in the URL wins: keep the top bar, side nav and project picker on the project being viewed.
+  const routeProjectId = /^\/projects\/([^/?#]+)/.exec(location.pathname)?.[1] || "";
+  useEffect(() => {
+    if (!routeProjectId || routeProjectId === projectId) return;
+    if (projects.length && !projects.some((p) => p.id === routeProjectId)) return;
+    setProjectId(routeProjectId);
+    try {
+      localStorage.setItem(WORKSPACE_PROJECT_KEY, routeProjectId);
+    } catch {
+      /* ignore */
+    }
+  }, [routeProjectId, projectId, projects]);
+
   function selectProject(id: string) {
     setProjectId(id);
     localStorage.setItem(WORKSPACE_PROJECT_KEY, id);
-    if (inProject) navigate(`/projects/${id}`);
+    if (inProject) navigate(sameToolInProject(location.pathname, id));
   }
 
   function onToggleTheme() {

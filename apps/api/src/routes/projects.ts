@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
@@ -458,6 +459,7 @@ const revisionInclude = {
 
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
+guardProjectParam(projectsRouter, "id");
 
 /** List/register fields only — skip large JSON blobs (workPackages, bidDisciplinesJson, enabledModules). */
 const PROJECT_LIST_SELECT = {
@@ -1557,6 +1559,7 @@ dmsRouter.get("/shared/:token/file", async (req, res) => {
 });
 
 dmsRouter.use(requireAuth);
+guardProjectParam(dmsRouter);
 
 const COMPANY_LIBRARIES = new Set(["SPDC_HRMS", "SPDC_CRM"]);
 
@@ -1797,6 +1800,7 @@ dmsRouter.post(
 
 export const drawingsRouter = Router();
 drawingsRouter.use(requireAuth);
+guardProjectParam(drawingsRouter);
 
 drawingsRouter.get("/project/:projectId", async (req, res) => {
   const drawings = await prisma.drawing.findMany({

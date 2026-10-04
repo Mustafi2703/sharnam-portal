@@ -4,12 +4,27 @@ import type { AuthUser, RoleKey, PortalKey, ModuleKey, PermissionAction } from "
 import { DEFAULT_ROLE_PERMISSIONS, can } from "@sharnam/shared";
 import { hrDeskApiAllowed, isHrDeskOnly } from "./services/hrDesk.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "sharnam-demo-jwt-secret";
+import { randomBytes } from "node:crypto";
+
+let bootSecret = "";
+/** Read at use time (route modules load before dotenv runs). Production never falls back to the public demo secret. */
+function jwtSecret(): string {
+  const configured = process.env.JWT_SECRET?.trim();
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") {
+    if (!bootSecret) {
+      bootSecret = randomBytes(48).toString("hex");
+      console.error("[auth] JWT_SECRET is not set: using a one-off secret, so logins reset on every restart. Set JWT_SECRET.");
+    }
+    return bootSecret;
+  }
+  return "sharnam-demo-jwt-secret";
+}
 
 export type AuthedRequest = Request & { user?: AuthUser };
 
 export function signToken(user: AuthUser): string {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign(user, jwtSecret(), { expiresIn: "7d" });
 }
 
 function tokenFromRequest(req: Request): string | null {
@@ -24,7 +39,7 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   const raw = tokenFromRequest(req);
   if (!raw) return res.status(401).json({ error: "Unauthorized" });
   try {
-    req.user = jwt.verify(raw, JWT_SECRET) as AuthUser;
+    req.user = jwt.verify(raw, jwtSecret()) as AuthUser;
     if (isHrDeskOnly(req.user.email, req.user.role) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
       return res.status(403).json({ error: "This login is HR portal only — people management." });
     }

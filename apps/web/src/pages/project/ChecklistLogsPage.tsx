@@ -67,6 +67,23 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
     openChecklistFillWindow(id, assignmentId, familyKey);
   }
 
+  const [deletingId, setDeletingId] = useState("");
+  async function deleteFill(s: any) {
+    const name = s.assignment?.template?.name || "this fill";
+    const when = s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "";
+    if (!window.confirm(`Delete ${name}${when ? ` (${when})` : ""} — ${s.status}?\n\nIt is removed from the fill log with its photos. This cannot be undone.\nCopies already filed in SharePoint stay there until you delete them manually.`)) return;
+    setDeletingId(s.id);
+    try {
+      await api(`/api/checklist/submissions/${s.id}`, { method: "DELETE", token });
+      setRows((prev) => prev.filter((r) => r.id !== s.id));
+      setMsg(`${name} deleted from the fill log.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not delete the fill");
+    } finally {
+      setDeletingId("");
+    }
+  }
+
   async function reviewSubmission(submissionId: string, status: "Approved" | "Rejected", closeRfi: boolean) {
     try {
       await api(`/api/checklist/submissions/${submissionId}/review`, {
@@ -386,6 +403,17 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                         }
                       >
                         {s.status === "Draft" ? "Resume fill" : "Open fill"}
+                      </Button>
+                    )}
+                    {canReview && (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        className="!text-xs !py-1.5 mr-1"
+                        disabled={deletingId === s.id}
+                        onClick={() => void deleteFill(s)}
+                      >
+                        {deletingId === s.id ? "Deleting…" : "Delete"}
                       </Button>
                     )}
                     {s.status !== "Draft" && (

@@ -3,6 +3,7 @@
  * Keeps commercial data cleanly separate from Cost (BOQ / BBS / MB / cashflow).
  */
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { buildFinanceDisciplineRollup, FINANCE_PACKAGES, FINANCE_MATERIAL_COLUMNS, FINANCE_RA_COLUMNS, materialMatchesPackage, raMatchesPackage, resolveFinancePackage } from "../modules/finance/disciplines.js";
 import { prisma } from "../prisma.js";
@@ -15,6 +16,7 @@ import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
 export const financeRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 financeRouter.use(requireAuth);
+guardProjectParam(financeRouter);
 
 async function vendorForRequest(req: AuthedRequest) {
   const user = req.user;

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
@@ -10,6 +11,7 @@ const meetingItemInclude = { assignedTo: { select: { id: true, fullName: true, e
 
 export const commsRouter = Router();
 commsRouter.use(requireAuth);
+guardProjectParam(commsRouter);
 
 commsRouter.get("/matrix/:projectId", async (req, res) => {
   const rows = await prisma.communicationMatrix.findMany({

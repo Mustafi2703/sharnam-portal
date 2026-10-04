@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -150,6 +151,7 @@ import {
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
+guardProjectParam(reportsRouter);
 
 const MODULE_KEYS: ModuleExportKey[] = [
   "rfis",
@@ -2559,13 +2561,110 @@ hrmRouter.post("/departments", hrmDesk, async (req, res) => {
   }
 });
 
-hrmRouter.delete("/departments/:id", hrmDesk, async (req, res) => {
-  try {
-    await prisma.hrmDepartment.update({ where: { id: req.params.id }, data: { isActive: false } });
-    res.json({ ok: true });
-  } catch {
-    res.status(404).json({ error: "Department not found" });
+hrmRouter.patch("/departments/:id", hrmDesk, async (req, res) => {
+  const before = await prisma.hrmDepartment.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "Department not found" });
+  const name = req.body.name != null ? String(req.body.name).trim() : before.name;
+  if (!name) return res.status(400).json({ error: "Department name is required" });
+  const row = await prisma.hrmDepartment.update({
+    where: { id: before.id },
+    data: {
+      name,
+      headName: req.body.headName !== undefined ? String(req.body.headName || "").trim() || null : before.headName,
+      isActive: true,
+    },
+  });
+  // Keep the roles under it pointing at the new name.
+  if (name !== before.name) {
+    await prisma.hrmDesignation.updateMany({ where: { department: before.name }, data: { department: name } });
   }
+  await audit("hrms.department.update", { userId: (req as AuthedRequest).user?.id, entity: "HrmDepartment", entityId: row.id, meta: { from: before.name, to: name } });
+  res.json(row);
+});
+
+hrmRouter.delete("/departments/:id", hrmDesk, async (req, res) => {
+  const dept = await prisma.hrmDepartment.findUnique({ where: { id: req.params.id } });
+  if (!dept) return res.status(404).json({ error: "Department not found" });
+  const openRoles = await prisma.hrmDesignation.count({ where: { department: dept.name, isActive: true } }).catch(() => 0);
+  if (openRoles) {
+    return res.status(400).json({
+      error: `${dept.name} still has ${openRoles} open role${openRoles === 1 ? "" : "s"}. Delete or move those roles first.`,
+    });
+  }
+  await prisma.hrmDepartment.update({ where: { id: dept.id }, data: { isActive: false } });
+  await audit("hrms.department.delete", { userId: (req as AuthedRequest).user?.id, entity: "HrmDepartment", entityId: dept.id, meta: { name: dept.name } });
+  res.json({ ok: true });
+});
+
+/* ---------- Roles / designations master ---------- */
+
+const LOGIN_ROLE_VALUES = new Set(["office", "hr", "site_employee", "employee", "admin"]);
+
+hrmRouter.get("/designations", hrmStaff, async (req, res) => {
+  const { ensureSpdcDesignationMasters } = await import("../services/spdcOrgSeed.js");
+  await ensureSpdcDesignationMasters();
+  const includeClosed = String(req.query.all || "") === "1";
+  try {
+    const rows = await prisma.hrmDesignation.findMany({
+      where: includeClosed ? {} : { isActive: true },
+      orderBy: [{ department: "asc" }, { sortOrder: "asc" }, { title: "asc" }],
+    });
+    const inUse = await prisma.employeeProfile.groupBy({ by: ["designation"], _count: { _all: true } }).catch(() => []);
+    const counts = new Map(inUse.map((r) => [String(r.designation || ""), r._count._all]));
+    res.json(rows.map((r) => ({ ...r, employees: counts.get(r.title) || 0 })));
+  } catch {
+    // Table not migrated yet: fall back to the built-in list.
+    const { SPDC_DESIGNATIONS } = await import("@sharnam/shared");
+    res.json(SPDC_DESIGNATIONS.map((d, i) => ({ id: d.title, title: d.title, department: d.department, scorecardRole: d.scorecardRole, loginRole: "site_employee", sortOrder: i, isActive: true, employees: 0 })));
+  }
+});
+
+hrmRouter.post("/designations", hrmDesk, async (req, res) => {
+  const title = String(req.body.title || "").trim();
+  const department = String(req.body.department || "").trim();
+  if (!title) return res.status(400).json({ error: "Role title is required" });
+  if (!department) return res.status(400).json({ error: "Choose the department this role sits under" });
+  const loginRole = LOGIN_ROLE_VALUES.has(String(req.body.loginRole)) ? String(req.body.loginRole) : "site_employee";
+  const scorecardRole = req.body.scorecardRole ? String(req.body.scorecardRole).trim() : null;
+  const row = await prisma.hrmDesignation.upsert({
+    where: { title },
+    create: { title, department, loginRole, scorecardRole, sortOrder: Number(req.body.sortOrder) || 500 },
+    update: { department, loginRole, scorecardRole, isActive: true },
+  });
+  await audit("hrms.designation.upsert", { userId: (req as AuthedRequest).user?.id, entity: "HrmDesignation", entityId: row.id, meta: { title, department } });
+  res.status(201).json(row);
+});
+
+hrmRouter.patch("/designations/:id", hrmDesk, async (req, res) => {
+  const before = await prisma.hrmDesignation.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "Role not found" });
+  const data: { title?: string; department?: string; loginRole?: string; scorecardRole?: string | null; isActive?: boolean } = {};
+  if (req.body.title != null) {
+    const t = String(req.body.title).trim();
+    if (!t) return res.status(400).json({ error: "Role title is required" });
+    data.title = t;
+  }
+  if (req.body.department != null) data.department = String(req.body.department).trim() || before.department;
+  if (req.body.loginRole != null && LOGIN_ROLE_VALUES.has(String(req.body.loginRole))) data.loginRole = String(req.body.loginRole);
+  if (req.body.scorecardRole !== undefined) data.scorecardRole = req.body.scorecardRole ? String(req.body.scorecardRole).trim() : null;
+  if (req.body.isActive != null) data.isActive = req.body.isActive !== false;
+  try {
+    const row = await prisma.hrmDesignation.update({ where: { id: before.id }, data });
+    await audit("hrms.designation.update", { userId: (req as AuthedRequest).user?.id, entity: "HrmDesignation", entityId: row.id, meta: data });
+    res.json(row);
+  } catch {
+    res.status(400).json({ error: "Another role already has that title" });
+  }
+});
+
+/** Closes the role: it leaves every picker, but people who already hold it keep the title. */
+hrmRouter.delete("/designations/:id", hrmDesk, async (req, res) => {
+  const row = await prisma.hrmDesignation.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Role not found" });
+  await prisma.hrmDesignation.update({ where: { id: row.id }, data: { isActive: false } });
+  const holders = await prisma.employeeProfile.count({ where: { designation: row.title } }).catch(() => 0);
+  await audit("hrms.designation.delete", { userId: (req as AuthedRequest).user?.id, entity: "HrmDesignation", entityId: row.id, meta: { title: row.title } });
+  res.json({ ok: true, holders });
 });
 
 hrmRouter.get("/leave-types", hrmStaff, async (_req, res) => {

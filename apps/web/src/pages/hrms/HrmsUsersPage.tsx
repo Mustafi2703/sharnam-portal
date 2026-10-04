@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
+import { rolesForDepartment, useHrmOrg } from "../../lib/hrmOrg";
 import { useAuth } from "../../auth";
 import { EmployeePayslipFields, EMPTY_PAYSLIP_SETUP, UserAccountEditModal, type PayslipSetup, type UserAccountRow } from "../../components/UserAccountEditModal";
 import { UserManageActions } from "../../components/UserManageActions";
@@ -11,7 +12,7 @@ import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "..
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
 import { isHiddenPortalListUser } from "../../lib/portalUserLists";
 import { canManageHrms, canManageAllPortalUsers, isSpdcStaffAccount, kindForAccount } from "../../lib/portalAccounts";
-import { spdcCompanyRoleOptions, suggestedLoginRoleForCompanyRole } from "@sharnam/shared";
+import { suggestedLoginRoleForCompanyRole } from "@sharnam/shared";
 import { formatUiText } from "../../lib/formatUiText";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -79,6 +80,8 @@ function AddUserModal({
   const [form, setForm] = useState({ ...EMPTY_USER_FORM, ctcAnnual: "", basicMonthly: "", hraMonthly: "" });
   const [payslip, setPayslip] = useState<PayslipSetup>(EMPTY_PAYSLIP_SETUP);
   const [busy, setBusy] = useState(false);
+  const { designations } = useHrmOrg(token);
+  const roleOptions = rolesForDepartment(designations, form.department, form.designation);
 
   async function createUser() {
     setBusy(true);
@@ -116,7 +119,7 @@ function AddUserModal({
         <Input placeholder="Password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} />
         <Input placeholder="Phone" value={form.phone} onChange={(ev) => setForm({ ...form, phone: ev.target.value })} />
         <Input placeholder="Emp code" value={form.empCode} onChange={(ev) => setForm({ ...form, empCode: ev.target.value })} />
-        <Select value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value })}>
+        <Select value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value, designation: "" })}>
           <option value="">Department</option>
           {departments.map((d) => (
             <option key={d.id} value={d.name}>
@@ -131,14 +134,14 @@ function AddUserModal({
             setForm({
               ...form,
               designation,
-              role: suggestedLoginRoleForCompanyRole(designation),
+              role: designations.find((d) => d.title === designation)?.loginRole || suggestedLoginRoleForCompanyRole(designation),
             });
           }}
         >
-          <option value="">Company role</option>
-          {spdcCompanyRoleOptions(form.designation ? [form.designation] : []).map((name) => (
-            <option key={name} value={name}>
-              {name}
+          <option value="">{form.department ? "Company role" : "Company role (pick department to narrow)"}</option>
+          {roleOptions.map((r) => (
+            <option key={r.id} value={r.title}>
+              {r.title}
             </option>
           ))}
         </Select>

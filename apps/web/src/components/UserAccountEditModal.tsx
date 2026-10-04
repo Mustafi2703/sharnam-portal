@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { rolesForDepartment, type HrmDesignationRow } from "../lib/hrmOrg";
 import {
   portalAccountKind,
   roleFromAccountKind,
@@ -216,11 +217,15 @@ export function UserAccountEditModal({
     setErr("");
   }, [user, forceKind]);
 
+  const [designations, setDesignations] = useState<HrmDesignationRow[]>([]);
   useEffect(() => {
     if (!open || !token) return;
     void api<DepartmentRow[]>("/api/hrm/departments", { token })
       .then((rows) => setDepartments(rows.map((d) => ({ id: d.id || d.name, name: d.name }))))
       .catch(() => setDepartments([]));
+    void api<HrmDesignationRow[]>("/api/hrm/designations", { token })
+      .then(setDesignations)
+      .catch(() => setDesignations([]));
   }, [open, token]);
 
   async function splitCtcFromCalculator() {
@@ -380,7 +385,10 @@ export function UserAccountEditModal({
                 Department
                 <Select className="mt-1" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
                   <option value="">Department</option>
-                  {departments.map((d) => (
+                  {(form.department && !departments.some((d) => d.name === form.department)
+                    ? [...departments, { id: `current:${form.department}`, name: form.department }]
+                    : departments
+                  ).map((d) => (
                     <option key={d.id} value={d.name}>
                       {d.name}
                     </option>
@@ -389,7 +397,14 @@ export function UserAccountEditModal({
               </label>
               <label className="text-xs font-semibold text-steel-muted sm:col-span-2">
                 Designation
-                <Input className="mt-1" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
+                <Select className="mt-1" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })}>
+                  <option value="">Designation</option>
+                  {rolesForDepartment(designations, form.department, form.designation).map((r) => (
+                    <option key={r.id} value={r.title}>
+                      {r.title}
+                    </option>
+                  ))}
+                </Select>
               </label>
             </div>
             <div className="space-y-2">

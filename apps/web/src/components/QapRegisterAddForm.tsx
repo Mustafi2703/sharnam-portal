@@ -1,6 +1,7 @@
 import { FormEvent, useRef } from "react";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { Button, Input, Select } from "./ui";
+import { QapPickerLists } from "./QapPickerLists";
 
 export type QapAddFormState = {
   addMode: "section" | "line";
@@ -11,6 +12,12 @@ export type QapAddFormState = {
   frequency: string;
   codeOfConformance: string;
   testAgency: string;
+  contractorPerformer?: string;
+  contractorChecker?: string;
+  pmcRole?: string;
+  clientRole?: string;
+  records?: string;
+  remarks?: string;
 };
 
 type Props = {
@@ -42,6 +49,7 @@ export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange
       saveLabel={saveLabel}
     >
       <form ref={formRef} className="space-y-4" onSubmit={onSubmit}>
+        <QapPickerLists />
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -120,7 +128,7 @@ export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange
             </label>
             <label className="register-form-field">
               <span>Frequency</span>
-              <Input value={form.frequency} onChange={(e) => set({ frequency: e.target.value })} placeholder="Daily" />
+              <Input value={form.frequency} list="qap-pick-frequency" onChange={(e) => set({ frequency: e.target.value })} placeholder="Daily" />
             </label>
             <label className="register-form-field">
               <span>Code of conformance</span>
@@ -132,7 +140,31 @@ export function QapRegisterAddForm({ open, busy, weeks, sections, form, onChange
             </label>
             <label className="register-form-field">
               <span>Test agency</span>
-              <Input value={form.testAgency} onChange={(e) => set({ testAgency: e.target.value })} placeholder="NABL lab" />
+              <Input value={form.testAgency} list="qap-pick-testAgency" onChange={(e) => set({ testAgency: e.target.value })} placeholder="NABL lab" />
+            </label>
+            <label className="register-form-field">
+              <span>Contractor performer</span>
+              <Input value={form.contractorPerformer || ""} list="qap-pick-contractorPerformer" onChange={(e) => set({ contractorPerformer: e.target.value })} placeholder="Site Engr" />
+            </label>
+            <label className="register-form-field">
+              <span>Contractor checker</span>
+              <Input value={form.contractorChecker || ""} list="qap-pick-contractorChecker" onChange={(e) => set({ contractorChecker: e.target.value })} placeholder="QC Engr" />
+            </label>
+            <label className="register-form-field">
+              <span>PMC checker</span>
+              <Input value={form.pmcRole || ""} list="qap-pick-pmcRole" onChange={(e) => set({ pmcRole: e.target.value })} placeholder="Witness / Review" />
+            </label>
+            <label className="register-form-field">
+              <span>Client checker</span>
+              <Input value={form.clientRole || ""} list="qap-pick-clientRole" onChange={(e) => set({ clientRole: e.target.value })} placeholder="Random / Witness" />
+            </label>
+            <label className="register-form-field">
+              <span>Records to maintain</span>
+              <Input value={form.records || ""} list="qap-pick-records" onChange={(e) => set({ records: e.target.value })} placeholder="Work Check List" />
+            </label>
+            <label className="register-form-field">
+              <span>Remarks</span>
+              <Input value={form.remarks || ""} list="qap-pick-remarks" onChange={(e) => set({ remarks: e.target.value })} placeholder="Pending / Completed" />
             </label>
           </div>
         </div>

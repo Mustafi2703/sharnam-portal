@@ -7,6 +7,8 @@ type Props = {
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+  /** id of a <datalist> with suggested values (free text still allowed) */
+  list?: string;
 };
 
 /** Controlled-ish cell input — keeps focus while typing; saves on blur/Enter without parent reload. */
@@ -17,6 +19,7 @@ export function RegisterSheetCell({
   className = "",
   disabled,
   placeholder,
+  list,
 }: Props) {
   const [draft, setDraft] = useState(String(value ?? ""));
   const [focused, setFocused] = useState(false);
@@ -35,6 +38,7 @@ export function RegisterSheetCell({
       type={type}
       value={draft}
       placeholder={placeholder}
+      list={list}
       className={`register-sheet-cell ${className}`}
       step={type === "number" ? "any" : undefined}
       onChange={(e) => setDraft(e.target.value)}

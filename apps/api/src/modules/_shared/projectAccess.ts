@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Response, Router } from "express";
 import { prisma } from "../../prisma.js";
 import type { AuthedRequest } from "../../auth.js";
 
@@ -47,4 +47,20 @@ export async function requireProjectAccess(req: AuthedRequest, res: Response, pr
     return false;
   }
   return true;
+}
+
+/**
+ * Router guard: every route on `router` with `:<param>` in its path is limited to people on that project.
+ * Mount after `router.use(requireAuth)`.
+ */
+export function guardProjectParam(router: Router, param = "projectId"): void {
+  router.param(param, async (req, res, next, value) => {
+    try {
+      const ok = await userCanAccessProject(req as AuthedRequest, String(value));
+      if (!ok) return void res.status(404).json({ error: "Not found" });
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
 }

@@ -34,7 +34,7 @@ function parseDailyChecks(row: unknown[], headerRow: unknown[]): Record<string, 
     const label = excelSerialToDay(headerRow[c]) || s(headerRow[c], 40);
     if (!label) continue;
     const val = row[c];
-    out[label] = val === true || val === "x" || val === "X" || val === 1 || val === "1" || val === "yes" || val === "Yes";
+    out[label] = val === true || val === 1 || /^(x|1|yes|y|done|ok|✓)$/i.test(String(val ?? "").trim());
   }
   return out;
 }
@@ -173,17 +173,31 @@ export function qapRowsNeedFullResync(rows: QapRowProbe[]): boolean {
   return legacy / set.length > 0.25;
 }
 
+/** QAP lines in plan order: sections in the order they were first entered, each section's lines together. */
+export function qapPlanOrder<T extends { section?: string | null; activity?: string | null; createdAt: Date }>(rows: T[]): T[] {
+  const byTime = [...rows].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const groups = new Map<string, T[]>();
+  for (const r of byTime) {
+    const key = (r.section || r.activity || "General").trim().toLowerCase();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(r);
+  }
+  return [...groups.values()].flat();
+}
+
 export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
-  const where: { projectId: string; weekLabel?: string } = { projectId };
-  if (weekLabel) where.weekLabel = weekLabel;
-  const rows = await prisma.qapActivity.findMany({
-    where,
-    orderBy: [{ weekLabel: "asc" }, { section: "asc" }, { srNo: "asc" }],
-  });
+  let wl = weekLabel;
+  if (!wl) {
+    // No week picked: the most recently worked week, never a mix of weeks.
+    const latest = await prisma.qapActivity.findFirst({ where: { projectId }, orderBy: { createdAt: "desc" }, select: { weekLabel: true } });
+    wl = latest?.weekLabel;
+  }
+  const rows = qapPlanOrder(
+    await prisma.qapActivity.findMany({ where: { projectId, ...(wl ? { weekLabel: wl } : {}) } })
+  );
   if (!rows.length) throw new Error("No QAP rows to export");
-
-  const wl = weekLabel || rows[0]?.weekLabel || "Week 50";
+  wl = wl || "Week 50";
   let dayLabels: string[] = [];
   for (const r of rows) {
     if (r.dailyChecks) {
@@ -239,65 +253,28 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
     ];
   });
 
-  const templatePath = resolveQapWeek50Path();
-  if (templatePath && fs.existsSync(templatePath)) {
-    const ExcelJS = (await import("exceljs")).default;
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.readFile(templatePath);
-    detachSharedStyles(wb);
-    const ws = wb.worksheets.find((s) => /sheet1/i.test(s.name)) || wb.worksheets[0];
-    if (ws) {
-      ws.getCell("C2").value = [project.name, project.location].filter(Boolean).join(" — ");
-      ws.getCell("C3").value = project.clientName || "";
-      ws.getCell("C4").value = project.designConsultant || "";
-      ws.getCell("C5").value = project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)";
-      ws.getCell("C6").value = project.contractorName || "";
-      ws.getCell("M7").value = wl;
+  const { buildQapWorkbook } = await import("./qapWorkbook.js");
+  const buffer = await buildQapWorkbook(project, rows, wl);
+  return { weekLabel: wl, buffer, sheets: [{ name: "Sheet1", rows: [header, ...dataRows] }] as SheetSpec[] };
+}
 
-      const dateCols: { col: number; key: string }[] = [];
-      for (let col = 13; col <= 34; col++) {
-        const raw = ws.getCell(8, col).value;
-        const key = excelSerialToDay(raw instanceof Date ? raw : typeof raw === "number" ? raw : String(raw ?? ""));
-        if (key) dateCols.push({ col, key });
-      }
-
-      const startRow = 11;
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
-        const excelRow = startRow + i;
-        ws.getCell(excelRow, 1).value = r.srNo || "";
-        ws.getCell(excelRow, 2).value = r.section || r.activity || "";
-        ws.getCell(excelRow, 3).value = r.description || "";
-        ws.getCell(excelRow, 4).value = r.frequency || "";
-        ws.getCell(excelRow, 5).value = r.codeOfConformance || "";
-        ws.getCell(excelRow, 6).value = r.testAgency || "";
-        ws.getCell(excelRow, 7).value = r.contractorPerformer || "";
-        ws.getCell(excelRow, 8).value = r.contractorChecker || "";
-        ws.getCell(excelRow, 9).value = r.pmcRole || "";
-        ws.getCell(excelRow, 10).value = r.clientRole || "";
-        ws.getCell(excelRow, 11).value = r.records || "";
-        ws.getCell(excelRow, 12).value = r.remarks || "";
-        let daily: Record<string, boolean> = {};
-        if (r.dailyChecks) {
-          try {
-            daily = JSON.parse(r.dailyChecks);
-          } catch {
-            daily = {};
-          }
-        }
-        for (const d of dateCols) {
-          ws.getCell(excelRow, d.col).value = daily[d.key] ? "x" : "";
-        }
-      }
-    }
-    const buf = await wb.xlsx.writeBuffer();
-    return {
-      weekLabel: wl,
-      buffer: Buffer.from(buf),
-      sheets: [{ name: ws?.name || "Sheet1", rows: [header, ...dataRows] }],
-    };
-  }
-
+/** Plain branded fallback (cover + sheet) — kept for callers that want the generic layout. */
+export async function exportQapWorkbookGeneric(projectId: string, weekLabel?: string) {
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  const rows = await prisma.qapActivity.findMany({
+    where: { projectId, ...(weekLabel ? { weekLabel } : {}) },
+    orderBy: [{ weekLabel: "asc" }, { section: "asc" }, { srNo: "asc" }],
+  });
+  if (!rows.length) throw new Error("No QAP rows to export");
+  const wl = weekLabel || rows[0]?.weekLabel || "Week 50";
+  const header = [
+    "Sr.No.", "Activity", "Description of Activity / Material", "Frequency of check", "Code of Conformance", "Test agency",
+    "Contractor Performer", "Contractor Checker", "PMC", "CLIENT", "Records and documents to be Maintained", "Remarks if any",
+  ];
+  const dataRows = rows.map((r) => [
+    r.srNo || "", r.section || r.activity, r.description || "", r.frequency || "", r.codeOfConformance || "", r.testAgency || "",
+    r.contractorPerformer || "", r.contractorChecker || "", r.pmcRole || "", r.clientRole || "", r.records || "", r.remarks || "",
+  ]);
   const coverRows: (string | number)[][] = [
     ["Quality Assurance Plan"],
     ["Project", project.name],

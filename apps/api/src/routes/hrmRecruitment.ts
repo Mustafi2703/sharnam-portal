@@ -91,11 +91,18 @@ hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
   );
 });
 
+/** A requisition's role must be an open role in the HRMS roles master under the chosen department (built-in list for older rows). */
+async function pickDesignation(title: string | null, department: string | null): Promise<{ title: string; department: string } | null> {
+  if (!title || !department) return null;
+  const row = await prisma.hrmDesignation.findFirst({ where: { title, isActive: true } }).catch(() => null);
+  if (row) return row.department === department ? { title: row.title, department: row.department } : null;
+  const legacy = designationRow(title);
+  return legacy && legacy.department === department ? { title: legacy.title, department: legacy.department } : null;
+}
+
 hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
-  const designation = s(req.body.designation);
-  const picked = designationRow(designation);
-  const department = s(req.body.department);
-  if (!picked || picked.department !== department) {
+  const picked = await pickDesignation(s(req.body.designation), s(req.body.department));
+  if (!picked) {
     return res.status(400).json({ error: "Choose a department and one of its designations." });
   }
   const row = await prisma.manpowerRequisition.create({
@@ -127,9 +134,9 @@ hrmRecruitmentRouter.patch("/requisitions/:id", requireRoles("admin", "office", 
   const isRejecting = before.status !== "Rejected" && nextStatus === "Rejected";
   const nextDesignation = s(req.body.designation) || before.designation;
   const nextDepartment = s(req.body.department) || before.department;
-  const picked = designationRow(nextDesignation);
   if (req.body.designation !== undefined || req.body.department !== undefined) {
-    if (!picked || picked.department !== nextDepartment) {
+    const picked = await pickDesignation(nextDesignation, nextDepartment);
+    if (!picked) {
       return res.status(400).json({ error: "Choose a department and one of its designations." });
     }
   }
@@ -1245,7 +1252,13 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     return res.status(400).json({ error: "Upload the resume first. The stage moves to Resume received, then you can schedule the interview." });
   }
   const fromSheet = isSpdcHiringRole(s(req.body.position)) ? s(req.body.position) : null;
-  const fromReq = candidate.requisition?.designation ? scorecardRoleForDesignation(candidate.requisition.designation) : null;
+  const reqTitle = candidate.requisition?.designation || null;
+  const masterRole = reqTitle
+    ? await prisma.hrmDesignation.findUnique({ where: { title: reqTitle }, select: { scorecardRole: true } }).catch(() => null)
+    : null;
+  const fromReq = reqTitle
+    ? isSpdcHiringRole(masterRole?.scorecardRole) ? masterRole!.scorecardRole! : scorecardRoleForDesignation(reqTitle)
+    : null;
   const appliedRole = fromSheet || fromReq || "";
   if (!appliedRole) {
     return res.status(400).json({ error: "Attach the candidate to an approved requisition before scheduling the interview." });

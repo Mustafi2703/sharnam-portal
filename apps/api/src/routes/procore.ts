@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
@@ -49,6 +50,7 @@ vendorsRouter.get("/consultant-types", async (_req, res) => {
 });
 
 vendorsRouter.use(requireAuth);
+guardProjectParam(vendorsRouter);
 
 vendorsRouter.get("/", async (req: AuthedRequest, res) => {
   const role = req.user?.role;
@@ -599,6 +601,7 @@ vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office")
 
 export const rfiRouter = Router();
 rfiRouter.use(requireAuth);
+guardProjectParam(rfiRouter);
 
 const rfiDetailInclude = {
   assignedTo: { select: { id: true, fullName: true } },
@@ -1167,6 +1170,7 @@ rfiRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequ
 
 export const inspectionsRouter = Router();
 inspectionsRouter.use(requireAuth);
+guardProjectParam(inspectionsRouter);
 
 inspectionsRouter.get("/project/:projectId", async (req, res) => {
   const rows = await prisma.qualityInspection.findMany({
@@ -1398,6 +1402,7 @@ inspectionsRouter.post("/:id/complete", requireRoles("admin", "office", "site_em
 
 export const directoryRouter = Router();
 directoryRouter.use(requireAuth);
+guardProjectParam(directoryRouter);
 
 directoryRouter.get("/project/:projectId/overview", async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
@@ -1929,6 +1934,7 @@ directoryRouter.post(
 
 export const safetyRouter = Router();
 safetyRouter.use(requireAuth);
+guardProjectParam(safetyRouter);
 
 safetyRouter.get("/project/:projectId", async (req, res) => {
   const records = await prisma.safetyRecord.findMany({

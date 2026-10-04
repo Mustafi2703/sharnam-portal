@@ -9,6 +9,8 @@ import { preferWeekLabel, weekMatchesFilter } from "../lib/qapWeek";
 import { useLocalRegisterRows } from "../hooks/useLocalRegisterRows";
 import { RegisterScrollArea } from "./RegisterScrollArea";
 import { RegisterSheetCell } from "./RegisterSheetCell";
+import { QapPickerLists } from "./QapPickerLists";
+import { QAP_PICKERS } from "@sharnam/shared";
 import { RegisterBrandHeader } from "./RegisterBrandHeader";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "./ui";
@@ -206,6 +208,7 @@ export function QapDetailRegister({
 
   return (
     <>
+      <QapPickerLists rows={rows} />
       <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden">
         {loading && <div className="spdc-register-loading">Loading QAP register…</div>}
 
@@ -350,6 +353,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top border border-line px-1 py-0.5">
                           <RegisterSheetCell
                             value={q.frequency || ""}
+                            list="qap-pick-frequency"
                             disabled={!canEdit}
                             onCommit={(v) => void patchRow(q.id, { frequency: v || null })}
                           />
@@ -357,6 +361,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top border border-line px-1 py-0.5">
                           <RegisterSheetCell
                             value={q.codeOfConformance || ""}
+                            list="qap-pick-codeOfConformance"
                             disabled={!canEdit}
                             onCommit={(v) => void patchRow(q.id, { codeOfConformance: v || null })}
                           />
@@ -364,6 +369,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top border border-line px-1 py-0.5">
                           <RegisterSheetCell
                             value={q.testAgency || ""}
+                            list="qap-pick-testAgency"
                             disabled={!canEdit}
                             onCommit={(v) => void patchRow(q.id, { testAgency: v || null })}
                           />
@@ -371,6 +377,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top qap-col-contractor">
                           <RegisterSheetCell
                             value={q.contractorPerformer || ""}
+                            list="qap-pick-contractorPerformer"
                             disabled={!canEdit}
                             className="min-w-[4.5rem]"
                             placeholder="P / C"
@@ -385,6 +392,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top qap-col-contractor">
                           <RegisterSheetCell
                             value={q.contractorChecker || ""}
+                            list="qap-pick-contractorChecker"
                             disabled={!canEdit}
                             className="min-w-[4.5rem]"
                             placeholder="C"
@@ -399,6 +407,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top qap-col-pmc">
                           <RegisterSheetCell
                             value={q.pmcRole || ""}
+                            list="qap-pick-pmcRole"
                             disabled={!canEdit}
                             className="min-w-[4.5rem]"
                             placeholder="R / W / A"
@@ -413,6 +422,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top qap-col-client">
                           <RegisterSheetCell
                             value={q.clientRole || ""}
+                            list="qap-pick-clientRole"
                             disabled={!canEdit}
                             className="min-w-[4.5rem]"
                             placeholder="W / RA"
@@ -427,6 +437,7 @@ export function QapDetailRegister({
                         <td className="text-left align-top border border-line px-1 py-0.5">
                           <RegisterSheetCell
                             value={q.records || ""}
+                            list="qap-pick-records"
                             disabled={!canEdit}
                             onCommit={(v) => void patchRow(q.id, { records: v || null })}
                           />
@@ -434,6 +445,7 @@ export function QapDetailRegister({
                         <td className={`text-left align-top border border-line px-1 py-0.5 ${remarksCellClass(q.remarks)}`}>
                           <RegisterSheetCell
                             value={q.remarks || ""}
+                            list="qap-pick-remarks"
                             disabled={!canEdit}
                             onCommit={(v) => void patchRow(q.id, { remarks: v || null })}
                           />
@@ -539,6 +551,7 @@ export function QapDetailRegister({
                 <span>{label}</span>
                 <Input
                   value={String(editRow[key] ?? "")}
+                  list={key in QAP_PICKERS ? `qap-pick-${key}` : undefined}
                   onChange={(e) => setEditRow({ ...editRow, [key]: e.target.value })}
                 />
               </label>

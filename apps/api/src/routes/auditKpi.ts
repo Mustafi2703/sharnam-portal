@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
@@ -8,6 +9,7 @@ import { audit } from "../services/audit.js";
 
 export const auditKpiRouter = Router();
 auditKpiRouter.use(requireAuth);
+guardProjectParam(auditKpiRouter);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 

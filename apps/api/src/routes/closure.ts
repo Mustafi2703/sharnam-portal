@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -11,6 +12,7 @@ import { isContentLessonRow, nextLessonSrNo } from "../services/lessonLearntUtil
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 export const closureRouter = Router();
 closureRouter.use(requireAuth);
+guardProjectParam(closureRouter);
 
 const DEFAULT_SECTIONS = {
   projectOverview: "",

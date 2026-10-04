@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import PDFDocument from "pdfkit";
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
@@ -90,6 +91,7 @@ async function persistChecklistUploads(opts: {
 
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
+guardProjectParam(checklistRouter);
 
 checklistRouter.post(
   "/project/:projectId/assign",
@@ -117,6 +119,28 @@ checklistRouter.delete(
     res.json({ ok: true });
   }
 );
+
+/** Admin / office: remove a fill (draft or signed) from the fill log. SharePoint copies are removed by hand. */
+checklistRouter.delete("/submissions/:submissionId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const sub = await prisma.checklistSubmission.findUnique({
+    where: { id: req.params.submissionId },
+    select: { id: true, status: true, assignment: { select: { projectId: true, template: { select: { name: true } } } } },
+  });
+  if (!sub) return res.status(404).json({ error: "Fill not found" });
+  const { userCanAccessProject } = await import("../modules/_shared/projectAccess.js");
+  if (!(await userCanAccessProject(req, sub.assignment.projectId))) return res.status(404).json({ error: "Fill not found" });
+  await prisma.$transaction([
+    prisma.drawingRevision.updateMany({ where: { preCheckSubmissionId: sub.id }, data: { preCheckSubmissionId: null } }),
+    prisma.checklistSubmission.delete({ where: { id: sub.id } }),
+  ]);
+  await audit("checklist.submission.delete", {
+    userId: req.user!.id,
+    entity: "ChecklistSubmission",
+    entityId: sub.id,
+    meta: { projectId: sub.assignment.projectId, template: sub.assignment.template?.name, status: sub.status },
+  });
+  res.json({ ok: true });
+});
 
 checklistRouter.get("/assignments/:assignmentId", async (req: AuthedRequest, res) => {
   const assignment = await prisma.checklistAssignment.findUnique({
@@ -1985,6 +2009,13 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   const countedFills = allQiFills.filter((f) => ["Submitted", "Approved", "Reviewed"].includes(f.status));
   const typeCount = (type: string) =>
     countedFills.filter((f) => f.assignment.template.checklistType === type).length;
+  {
+    // Weeks newest first; inside a week, plan order (sections as entered, lines kept under their section).
+    const { qapPlanOrder } = await import("../services/qapImportExport.js");
+    const weeks = [...new Set(qap.map((q) => q.weekLabel))];
+    const ordered = weeks.flatMap((w) => qapPlanOrder(qap.filter((q) => q.weekLabel === w)));
+    qap.splice(0, qap.length, ...ordered);
+  }
   const latestQapWeek = qap[0]?.weekLabel || "";
   const weekAgo = Date.now() - 7 * 86400000;
   const liveSamples = cubes.filter((c) => c.castDate && new Date(c.castDate).getTime() >= weekAgo).length;
@@ -2174,10 +2205,20 @@ checklistRouter.post(
         frequency: body.frequency ? String(body.frequency) : null,
         codeOfConformance: body.codeOfConformance ? String(body.codeOfConformance) : null,
         testAgency: body.testAgency ? String(body.testAgency) : null,
-        contractorOk: Boolean(body.contractorOk),
-        pmcOk: Boolean(body.pmcOk),
-        clientOk: Boolean(body.clientOk),
-        status: body.status || "Open",
+        contractorPerformer: body.contractorPerformer ? String(body.contractorPerformer) : null,
+        contractorChecker: body.contractorChecker ? String(body.contractorChecker) : null,
+        pmcRole: body.pmcRole ? String(body.pmcRole) : null,
+        clientRole: body.clientRole ? String(body.clientRole) : null,
+        records: body.records ? String(body.records) : null,
+        remarks: body.remarks ? String(body.remarks) : null,
+        dailyChecks: body.dailyChecks
+          ? typeof body.dailyChecks === "string" ? body.dailyChecks : JSON.stringify(body.dailyChecks)
+          : null,
+        contractorOk: body.contractorOk != null ? Boolean(body.contractorOk) : !!(body.contractorPerformer || body.contractorChecker),
+        pmcOk: body.pmcOk != null ? Boolean(body.pmcOk) : /review|witness|approve|yes/i.test(String(body.pmcRole || "")),
+        clientOk: body.clientOk != null ? Boolean(body.clientOk) : /witness|random|approve|yes/i.test(String(body.clientRole || "")),
+        status: body.status || (/complete|done/i.test(String(body.remarks || "")) ? "Done" : "Open"),
+        completedAt: body.status === "Done" || /complete|done/i.test(String(body.remarks || "")) ? new Date() : null,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
       },
     });

@@ -1038,6 +1038,21 @@ model HrmDepartment {
   updatedAt DateTime @updatedAt
 }
 
+/// Company roles / designations, each under a department. HR opens or closes them from HRMS · Masters.
+model HrmDesignation {
+  id            String   @id @default(cuid())
+  title         String   @unique
+  department    String
+  scorecardRole String?
+  loginRole     String   @default("site_employee")
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([department])
+}
+
 model LeaveBalance {
   id          String @id @default(cuid())
   userId      String

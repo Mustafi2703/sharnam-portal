@@ -5,7 +5,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
-import { QapRegisterAddForm } from "../../components/QapRegisterAddForm";
+import { QapRegisterAddForm, type QapAddFormState } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { normalizeWeekLabel, preferWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
 
@@ -22,7 +22,7 @@ export default function QapPage() {
   const [project, setProject] = useState<QapProjectMeta | null>(null);
   const [weekFilter, setWeekFilter] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState({
+  const [addForm, setAddForm] = useState<QapAddFormState>({
     addMode: "section" as "section" | "line",
     weekLabel: "Week 50",
     srNo: "",
@@ -31,6 +31,12 @@ export default function QapPage() {
     frequency: "",
     codeOfConformance: "",
     testAgency: "",
+    contractorPerformer: "",
+    contractorChecker: "",
+    pmcRole: "",
+    clientRole: "",
+    records: "",
+    remarks: "",
   });
   const [sharePointUrl, setSharePointUrl] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -156,9 +162,15 @@ export default function QapPage() {
           frequency: addForm.frequency,
           codeOfConformance: addForm.codeOfConformance,
           testAgency: addForm.testAgency,
+          contractorPerformer: addForm.contractorPerformer,
+          contractorChecker: addForm.contractorChecker,
+          pmcRole: addForm.pmcRole,
+          clientRole: addForm.clientRole,
+          records: addForm.records,
+          remarks: addForm.remarks,
         }),
       });
-      setAddForm({ ...addForm, section: addForm.addMode === "line" ? addForm.section : "", description: "", frequency: "", codeOfConformance: "", testAgency: "", srNo: "" });
+      setAddForm({ ...addForm, section: addForm.addMode === "line" ? addForm.section : "", description: "", frequency: "", codeOfConformance: "", testAgency: "", srNo: "", contractorPerformer: "", contractorChecker: "", pmcRole: "", clientRole: "", records: "", remarks: "" });
       setAddOpen(false);
       setMsg("QAP line added");
       await load();

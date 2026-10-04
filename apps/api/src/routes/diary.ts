@@ -1,10 +1,12 @@
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 
 export const diaryRouter = Router();
 diaryRouter.use(requireAuth);
+guardProjectParam(diaryRouter);
 
 function dayStart(d: string | Date) {
   const x = new Date(d);

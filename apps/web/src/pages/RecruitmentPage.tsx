@@ -1,6 +1,7 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
+import { rolesForDepartment, scorecardForRole, useHrmOrg, withCurrentOption } from "../lib/hrmOrg";
 import { useAuth } from "../auth";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { InterviewScorecard } from "../components/InterviewScorecard";
@@ -11,10 +12,7 @@ import {
   CANDIDATE_STAGES,
   candidateStageLabel,
   candidateStageTone,
-  designationsForDepartment,
   INTERVIEWER_SEATS,
-  scorecardRoleForDesignation,
-  SPDC_HIRING_DEPARTMENTS,
   SPDC_HIRING_ROLES,
 } from "@sharnam/shared";
 import { StatusNote } from "../components/StatusNote";
@@ -168,7 +166,9 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
   const blank = { requisitionNo: "", department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" };
   const [form, setForm] = useState(blank);
   const [editId, setEditId] = useState<string | null>(null);
-  const designationOptions = designationsForDepartment(form.department);
+  const org = useHrmOrg(token);
+  const departmentOptions = withCurrentOption(org.departments.map((d) => d.name), form.department);
+  const designationOptions = rolesForDepartment(org.designations, form.department, form.designation);
   async function add(e: FormEvent) {
     e.preventDefault();
     try {
@@ -216,7 +216,7 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
               required
             >
               <option value="">{formatUiText("Select department")}</option>
-              {SPDC_HIRING_DEPARTMENTS.map((name) => (
+              {departmentOptions.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </Select>
@@ -1022,6 +1022,7 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
 /* ────────────────────────────  4  Interviews & scorecard  ──────────────────────────── */
 
 function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
+  const { designations: orgRoles } = useHrmOrg(token);
   const navigate = useNavigate();
   const [sp] = useSearchParams();
   const preselected = sp.get("candidateId") || "";
@@ -1061,8 +1062,8 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
     }).catch(() => setRounds([]));
     const person = candidates.find((c: { id: string; requisition?: { designation?: string }; posting?: { title?: string } }) => c.id === candidateId);
     const title = person?.requisition?.designation || person?.posting?.title || "";
-    if (title) setForm((prev) => ({ ...prev, position: scorecardRoleForDesignation(title) }));
-  }, [candidateId, token, candidates]);
+    if (title) setForm((prev) => ({ ...prev, position: scorecardForRole(orgRoles, title) }));
+  }, [candidateId, token, candidates, orgRoles]);
 
   async function schedule(e: FormEvent) {
     e.preventDefault();
@@ -1313,7 +1314,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                     <InterviewScorecard
                       key={r.id}
                       token={token}
-                      positionHint={scorecardRoleForDesignation(candidate.requisition?.designation || candidate.posting?.title || "")}
+                      positionHint={scorecardForRole(orgRoles, candidate.requisition?.designation || candidate.posting?.title || "")}
                       roundHint={r.roundType}
                       saved={(() => {
                         try {

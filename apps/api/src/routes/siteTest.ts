@@ -3,6 +3,7 @@
  * Everything lands in SharePoint (or mock OneDrive when MOCK_ONEDRIVE=true).
  */
 import { Router } from "express";
+import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, type AuthedRequest } from "../auth.js";
@@ -13,6 +14,7 @@ import { graphConfig } from "../services/graph.js";
 export const siteTestRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 siteTestRouter.use(requireAuth);
+guardProjectParam(siteTestRouter);
 
 const DEFAULT_FOLDER = "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/UploadLab";
 
