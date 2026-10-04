@@ -1,5 +1,7 @@
 # HR Desk UAT Script
 
+The full CRM and HRMS run is in `docs/CRM_HRMS_UAT.md` (C1–C11, then H1–H17). Use that one to share and verify. This file is the shorter HR-only pass.
+
 Date: 29 Sep 2026  
 Portal: https://portal.spdc.in  
 Sign in as the HR Head. Do not send onboarding email. Do not delete the Voltamp project.
