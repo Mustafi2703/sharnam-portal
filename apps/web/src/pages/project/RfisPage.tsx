@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useParams, useSearchParams, useLocation } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
@@ -26,6 +26,7 @@ import {
   rfiLogTitle,
   rfiModuleScope,
   rfiPageCopy,
+  rfiSearchForKind,
   type RfiKindFilter,
 } from "../../lib/rfiModuleScope";
 import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
@@ -37,6 +38,7 @@ export default function RfisPage() {
   const { id } = useParams();
   const location = useLocation();
   const [search] = useSearchParams();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [rfis, setRfis] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
@@ -144,8 +146,21 @@ export default function RfisPage() {
     }
     setVendors([...byId.values()]);
     setDirectoryMembers(overview?.members || []);
-    if (!active && list[0]) setActive(list[0].id);
+    if (!search.get("rfi") && !active && list[0]) setActive(list[0].id);
   };
+
+  // Deep link ?rfi=<id> (e-mails, coordination escalation): select it, or reopen it in the module it belongs to.
+  const wantedRfi = search.get("rfi");
+  useEffect(() => {
+    if (!wantedRfi || !rfis.length) return;
+    const target = rfis.find((r: any) => r.id === wantedRfi);
+    if (!target) return;
+    if (moduleScoped && !rfiKindAllowedInModuleScope(moduleScope, target.rfiKind)) {
+      navigate(`/projects/${id}/rfis${rfiSearchForKind(target.rfiKind, target.id)}`, { replace: true });
+      return;
+    }
+    setActive(target.id);
+  }, [wantedRfi, rfis, moduleScoped, moduleScope, id, navigate]);
 
   useEffect(() => {
     void load();

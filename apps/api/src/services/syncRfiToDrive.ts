@@ -21,7 +21,56 @@ const rfiInclude = {
   responses: { include: { respondedBy: { select: { fullName: true } } }, orderBy: { createdAt: "asc" as const } },
 };
 
+const INSPECTION_KINDS = ["QualityIR", "SafetyIR", "ActivityInspection"];
+/** Fill requests: the filled checklist itself is filed when it is submitted (no RFI form). */
+const CHECKLIST_FILL_KINDS = ["DrawingChecklist", "QualityInspection", "SafetyChecklist", "SiteExecution"];
+
+/** Request for Inspection (SPDC/QA/F-01) — filed under Quality (or Safety for Safety IR), never on the RFI register. */
+async function syncInspectionRequestToDrive(rfiId: string): Promise<{ exports: RfiDriveExport[] }> {
+  const rfi = await prisma.rfi.findUnique({ where: { id: rfiId } });
+  if (!rfi) return { exports: [] };
+  const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
+  if (!project) return { exports: [] };
+  const linkedAssignment = rfi.linkedAssignmentId
+    ? await prisma.checklistAssignment.findUnique({
+        where: { id: rfi.linkedAssignmentId },
+        include: { template: { select: { name: true } } },
+      })
+    : null;
+  const { buildInspectionIrXlsx, renderInspectionIrHtml, safeInspectionIrFilename } = await import("./spdcInspectionIr.js");
+  const root = rfi.rfiKind === "SafetyIR" ? MODULE_TO_ISO_FOLDER.safety : MODULE_TO_ISO_FOLDER.qualityChecklist;
+  const closed = /closed|approved|rejected/i.test(rfi.status);
+  const folder = `${root}/Inspection_Requests/${closed ? "Closed" : "Open"}`;
+  const exports: RfiDriveExport[] = [];
+  try {
+    const buf = await buildInspectionIrXlsx({ ...rfi, linkedAssignment } as never, project as never);
+    const up = await mockOneDrive.upload(
+      project.code,
+      folder,
+      safeInspectionIrFilename(rfi.number, "xlsx"),
+      buf,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    exports.push({ kind: "xlsx", path: up.sharePointPath || up.path, url: up.sharePointUrl || up.url });
+  } catch (err) {
+    console.warn("[ir] XLSX drive sync failed:", err instanceof Error ? err.message : err);
+  }
+  try {
+    const html = renderInspectionIrHtml({ ...rfi, linkedAssignment } as never, project as never);
+    const up = await mockOneDrive.upload(project.code, folder, safeInspectionIrFilename(rfi.number, "html"), Buffer.from(html, "utf8"), "text/html");
+    exports.push({ kind: "html", path: up.sharePointPath || up.path, url: up.sharePointUrl || up.url });
+  } catch (err) {
+    console.warn("[ir] HTML drive sync failed:", err instanceof Error ? err.message : err);
+  }
+  return { exports };
+}
+
 export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDriveExport[] }> {
+  const head = await prisma.rfi.findUnique({ where: { id: rfiId }, select: { rfiKind: true } });
+  if (!head) return { exports: [] };
+  if (INSPECTION_KINDS.includes(head.rfiKind)) return syncInspectionRequestToDrive(rfiId);
+  if (CHECKLIST_FILL_KINDS.includes(head.rfiKind)) return { exports: [] };
+
   const rfi = await prisma.rfi.findUnique({ where: { id: rfiId }, include: rfiInclude });
   if (!rfi) return { exports: [] };
   const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });

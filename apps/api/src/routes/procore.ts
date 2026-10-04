@@ -879,11 +879,14 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   res.status(201).json({ ...rfi, sharePointExports });
 });
 
+/** SPDC RFI register = design queries only (Request for Information). Inspection / checklist requests have their own registers. */
+const SPDC_RFI_REGISTER_KINDS = ["RequestForInformation", "Manual"];
+
 rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Project not found" });
   const rfis = await prisma.rfi.findMany({
-    where: { projectId: project.id },
+    where: { projectId: project.id, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
     include: rfiDetailInclude,
     orderBy: { createdAt: "asc" },
   });
@@ -896,7 +899,7 @@ rfiRouter.get("/project/:projectId/register.html", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Project not found" });
   const rfis = await prisma.rfi.findMany({
-    where: { projectId: project.id },
+    where: { projectId: project.id, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
     include: rfiDetailInclude,
     orderBy: { createdAt: "asc" },
   });

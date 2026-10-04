@@ -12,6 +12,7 @@ import path from "path";
 import ExcelJS from "exceljs";
 import { checklistLogoPath, collectChecklistSignSlots, type SignSlot } from "./checklistSignoff.js";
 import type { DirectorySignMap } from "./directorySignatures.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 type ResponseCell = { answer?: string; remarks?: string; remark?: string; value?: string };
 type Item = {
@@ -155,7 +156,7 @@ function normalizeAnswer(raw: string): string {
 export function classifyAnswer(answer: string): "ok" | "fail" | "na" | "pending" | "other" {
   const a = normalizeAnswer(answer).toLowerCase();
   if (!a || a === "—" || a === "-") return "pending";
-  if (/^(n\/?a|na|not applicable)$/i.test(a)) return "na";
+  if (/^(n\.?\/?a\.?|na|not applicable)$/i.test(a)) return "na";
   if (/^(ok|yes|y|pass|passed|compliant|satisfactory|cleared|s1|good|true|✓|✔)$/i.test(a)) return "ok";
   if (
     /^(not\s*ok|nok|no|n|fail|failed|non[- ]?compliant|unsatisfactory|reject|rejected|s3|s4|false|✗|✘)$/i.test(a)
@@ -352,8 +353,10 @@ function sectionBand(ws: ExcelJS.Worksheet, row: number, cols: number[], title: 
     cell.value = c === cols[0] ? title : "";
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
     cell.font = { bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { horizontal: "left", vertical: "middle", indent: 1 };
     thinBorder(cell);
   }
+  ws.getRow(row).height = 18;
   try {
     ws.mergeCells(row, cols[0], row, cols[cols.length - 1]);
   } catch {
@@ -400,6 +403,7 @@ async function fillActivityChecklist(
   if (!file) throw new Error("SPDC Activity Inspection Checklist template not found");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  detachSharedStyles(wb);
   keepOnlySheets(wb, ["Checklist Format (Blank)"]);
   const ws = wb.worksheets[0];
   ws.name = "Activity Checklist";
@@ -420,12 +424,13 @@ async function fillActivityChecklist(
   paintInput(ws, 8, 9, "");
   paintInput(ws, 9, 5, template?.name || "");
   paintInput(ws, 9, 9, template?.category || template?.checklistType || "");
+  // F-02 rows: 10 Location | Quantity / Unit · 11 Drawing No. & Rev. | Specification Clause · 12 Method Stmt | ITP Ref.
   paintInput(ws, 10, 5, fillMeta.location || project?.location || "");
-  paintInput(ws, 10, 9, "");
+  paintInput(ws, 10, 9, fillMeta.quantity || "");
   paintInput(ws, 11, 5, fillMeta.refDrawing || drawingLabel(submission));
   paintInput(ws, 11, 9, "");
-  paintInput(ws, 12, 5, fillMeta.quantity || "");
-  paintInput(ws, 12, 9, submission.status || "");
+  paintInput(ws, 12, 5, "");
+  paintInput(ws, 12, 9, "");
 
   // Replace blank A–H skeleton with live filled lines (preserve header styling).
   unmergeFromRow(ws, 15);
@@ -433,8 +438,13 @@ async function fillActivityChecklist(
   clearBodyRows(ws, 15, lastRow, 2, 9);
 
   let r = 15;
-  sectionBand(ws, r, [2, 3, 4, 5, 6, 7, 8, 9], "CHECK POINTS — FILLED FROM PORTAL");
-  r += 1;
+  const hasSections = items.some((it) => String((it as { section?: string | null }).section || "").trim());
+  if (!hasSections) {
+    sectionBand(ws, r, [2, 3, 4, 5, 6, 7, 8, 9], "CHECK POINTS");
+    r += 1;
+  }
+  let currentSection = "";
+  let srInSection = 0;
 
   let ok = 0;
   let fail = 0;
@@ -443,6 +453,14 @@ async function fillActivityChecklist(
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
+    const section = String((it as { section?: string | null }).section || "").trim();
+    if (hasSections && section !== currentSection) {
+      currentSection = section;
+      srInSection = 0;
+      sectionBand(ws, r, [2, 3, 4, 5, 6, 7, 8, 9], (section || "OTHER CHECKS").toUpperCase());
+      r += 1;
+    }
+    srInSection += 1;
     const { answer, remark } = getAnswer(responses, it, byOrder[i]);
     const kind = classifyAnswer(answer);
     if (kind === "ok") ok += 1;
@@ -450,22 +468,24 @@ async function fillActivityChecklist(
     else if (kind === "na") na += 1;
     else pending += 1;
 
+    // F-02 columns: Sr | Check | Requirement / acceptance | Method | Reference document | Status | Observation | Remarks
     const vals: Array<string | number> = [
-      i + 1,
+      hasSections ? srInSection : i + 1,
       it.description || it.itemCode || "",
       it.instruction || "",
       "",
-      it.itemCode || "",
-      normalizeAnswer(answer) || "",
+      "",
+      normalizeAnswer(answer) || "Pending",
       remark || "",
-      submission.remarks && i === 0 ? String(submission.remarks) : "",
+      "",
     ];
     // cols B..I = 2..9
     for (let c = 0; c < 8; c++) {
       const cell = ws.getCell(r, c + 2);
       cell.value = vals[c] === "" ? null : vals[c];
       cell.font = { size: 9, color: { argb: "FF000000" } };
-      cell.alignment = { wrapText: true, vertical: "top" };
+      cell.alignment = { wrapText: true, vertical: "top", horizontal: c === 0 ? "center" : "left" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
       thinBorder(cell);
       if (c === 5) {
         const { bg, fg } = statusFill(kind);
@@ -501,29 +521,48 @@ async function fillActivityChecklist(
     ["Overall remarks", submission.remarks || ""],
   ];
   for (const [label, value] of summary) {
+    // Label across Sr + Check columns (B:C), value across D:E — the Sr column alone is too narrow.
+    for (let c = 2; c <= 9; c++) {
+      const cell = ws.getCell(r, c);
+      cell.value = null;
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+      cell.border = {};
+    }
+    try {
+      ws.mergeCells(r, 2, r, 3);
+      ws.mergeCells(r, 4, r, 5);
+    } catch {
+      /* already merged */
+    }
     writeValue(ws, r, 2, label);
     ws.getCell(r, 2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: LABEL } };
     ws.getCell(r, 2).font = { bold: true, size: 9 };
-    paintInput(ws, r, 3, value as any);
+    ws.getCell(r, 2).alignment = { horizontal: "left", vertical: "middle", indent: 1 };
+    ws.getRow(r).height = 18;
+    paintInput(ws, r, 4, value as any);
+    ws.getCell(r, 4).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
     for (let c = 2; c <= 5; c++) thinBorder(ws.getCell(r, c));
-    if (label === "OK / Yes") {
-      ws.getCell(r, 3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: OK_BG } };
-      ws.getCell(r, 3).font = { bold: true, color: { argb: OK_FG } };
-    }
-    if (label === "Not OK / No") {
-      ws.getCell(r, 3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: FAIL_BG } };
-      ws.getCell(r, 3).font = { bold: true, color: { argb: FAIL_FG } };
-    }
-    if (label === "NA") {
-      ws.getCell(r, 3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: NA_BG } };
-      ws.getCell(r, 3).font = { bold: true, color: { argb: NA_FG } };
+    const tone =
+      label === "OK / Yes" ? [OK_BG, OK_FG] : label === "Not OK / No" ? [FAIL_BG, FAIL_FG] : label === "NA" ? [NA_BG, NA_FG] : null;
+    if (tone) {
+      ws.getCell(r, 4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: tone[0] } };
+      ws.getCell(r, 4).font = { bold: true, size: 10, color: { argb: tone[1] } };
     }
     r += 1;
   }
 
   // Signature block (navy band like SPDC forms)
   r += 1;
-  applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9], dirSigns);
+  const endRow = applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8, 9], dirSigns);
+  // Remove the blank template grid that used to sit below the original A–F skeleton.
+  for (let rr = endRow; rr <= Math.max(lastRow, endRow + 40); rr++) {
+    for (let c = 1; c <= 12; c++) {
+      const cell = ws.getCell(rr, c);
+      cell.value = null;
+      cell.style = {};
+    }
+  }
+  ws.pageSetup.printArea = `A1:I${endRow}`;
 
   return wb;
 }
@@ -538,6 +577,7 @@ async function fillSafetyChecklist(
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
 
+  detachSharedStyles(wb);
   // Keep walkthrough + IR cover; drop activity-specific / register for a clean fill pack.
   keepOnlySheets(wb, ["Safety Checklist (General)", "Safety IR Form", "Procedure & Legend"]);
 
@@ -721,6 +761,7 @@ async function fillInspectionRequest(
   if (!file) throw new Error("SPDC Request for Inspection Form template not found");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  detachSharedStyles(wb);
   const ws = wb.worksheets[0];
   embedLogo(wb, ws);
   const template = submission.assignment?.template;
@@ -779,6 +820,7 @@ async function fillRfiForm(
   if (!file) throw new Error("SPDC RFI Form template not found");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  detachSharedStyles(wb);
   keepOnlySheets(wb, ["03_RFI_FORM"]);
   const ws = wb.worksheets[0];
   ws.name = "RFI Form";
@@ -827,6 +869,7 @@ async function withIrCover(
   if (!file) return filled;
   const irWb = new ExcelJS.Workbook();
   await irWb.xlsx.readFile(file);
+  detachSharedStyles(irWb);
   fillIrParticulars(irWb.worksheets[0], submission, project);
   const out = new ExcelJS.Workbook();
   copyWorksheet(irWb.worksheets[0], out, "IR Form");

@@ -25,56 +25,64 @@ export async function archiveClosedRfiReport(opts: {
   const stamp = new Date().toISOString().slice(0, 10);
   const folder = `${MODULE_TO_ISO_FOLDER.rfiInformation}/Closed`;
 
-  /** Minimal RFI closure register row (always) */
-  const registerCsv = [
-    "Number,Subject,Kind,Status,ClosedAt,LinkedAssignment",
-    [
-      rfi.number,
-      JSON.stringify(rfi.subject || ""),
-      rfi.rfiKind || "",
-      rfi.status,
-      rfi.closedAt?.toISOString() || new Date().toISOString(),
-      rfi.linkedAssignmentId || "",
-    ].join(","),
-  ].join("\n");
+  const { isSpdcRfiRegisterKind } = await import("./spdcRfiForm.js");
+  if (isSpdcRfiRegisterKind(rfi.rfiKind)) {
+    /** Minimal RFI closure register row (always) */
+    const registerCsv = [
+      "Number,Subject,Kind,Status,ClosedAt,LinkedAssignment",
+      [
+        rfi.number,
+        JSON.stringify(rfi.subject || ""),
+        rfi.rfiKind || "",
+        rfi.status,
+        rfi.closedAt?.toISOString() || new Date().toISOString(),
+        rfi.linkedAssignmentId || "",
+      ].join(","),
+    ].join("\n");
 
-  const reg = await mockOneDrive.upload(
-    project.code,
-    folder,
-    `${safeName(rfi.number)}_CLOSED_${stamp}.csv`,
-    Buffer.from(registerCsv, "utf8"),
-    "text/csv"
-  );
-  uploaded.push({ kind: "rfi-register", path: reg.sharePointPath || reg.path, url: reg.sharePointUrl || reg.url });
-
-  try {
-    const all = await prisma.rfi.findMany({
-      where: { projectId: opts.projectId },
-      include: {
-        assignedTo: { select: { fullName: true } },
-        createdBy: { select: { fullName: true } },
-        drawing: { select: { drawingNumber: true, title: true, currentRev: true } },
-        vendor: { select: { name: true } },
-        responses: { include: { respondedBy: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
-      },
-      orderBy: { createdAt: "asc" },
-    });
-    const { buildSpdcRfiXlsxBuffer } = await import("./spdcRfiForm.js");
-    const formBuf = await buildSpdcRfiXlsxBuffer({ project, rfis: all, selectRfiId: rfi.id });
-    const formFile = await mockOneDrive.upload(
+    const reg = await mockOneDrive.upload(
       project.code,
       folder,
-      `${safeName(rfi.number)}_FORM_${stamp}.xlsx`,
-      formBuf,
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      `${safeName(rfi.number)}_CLOSED_${stamp}.csv`,
+      Buffer.from(registerCsv, "utf8"),
+      "text/csv"
     );
-    uploaded.push({
-      kind: "rfi-form",
-      path: formFile.sharePointPath || formFile.path,
-      url: formFile.sharePointUrl || formFile.url,
-    });
-  } catch (err) {
-    console.warn("[RFI] SPDC form archive failed:", err instanceof Error ? err.message : err);
+    uploaded.push({ kind: "rfi-register", path: reg.sharePointPath || reg.path, url: reg.sharePointUrl || reg.url });
+
+    try {
+      const all = await prisma.rfi.findMany({
+        where: { projectId: opts.projectId },
+        include: {
+          assignedTo: { select: { fullName: true } },
+          createdBy: { select: { fullName: true } },
+          drawing: { select: { drawingNumber: true, title: true, currentRev: true } },
+          vendor: { select: { name: true } },
+          responses: { include: { respondedBy: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      const { buildSpdcRfiXlsxBuffer } = await import("./spdcRfiForm.js");
+      const formBuf = await buildSpdcRfiXlsxBuffer({ project, rfis: all, selectRfiId: rfi.id });
+      const formFile = await mockOneDrive.upload(
+        project.code,
+        folder,
+        `${safeName(rfi.number)}_FORM_${stamp}.xlsx`,
+        formBuf,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      uploaded.push({
+        kind: "rfi-form",
+        path: formFile.sharePointPath || formFile.path,
+        url: formFile.sharePointUrl || formFile.url,
+      });
+    } catch (err) {
+      console.warn("[RFI] SPDC form archive failed:", err instanceof Error ? err.message : err);
+    }
+  } else if (["QualityIR", "SafetyIR", "ActivityInspection"].includes(rfi.rfiKind)) {
+    // Closed inspection request → re-file the SPDC Request for Inspection form under .../Inspection_Requests/Closed.
+    const { syncRfiToDrive } = await import("./syncRfiToDrive.js");
+    const out = await syncRfiToDrive(rfi.id).catch(() => ({ exports: [] }));
+    for (const e of out.exports) uploaded.push({ kind: `ir-${e.kind}`, path: e.path, url: e.url });
   }
 
   if (!rfi.linkedAssignmentId) return { uploaded };

@@ -241,3 +241,14 @@ export function checklistLogsPath(family: string, projectId: string): string {
   if (family === "SiteExecution") return `/projects/${projectId}/quality/site-checklist-logs`;
   return `/projects/${projectId}/quality/checklist-logs`;
 }
+
+
+/** Query string that opens an RFI of this kind in the module it belongs to (mirrors the API's email links). */
+export function rfiSearchForKind(kind: string | null | undefined, rfiId?: string): string {
+  const q = new URLSearchParams();
+  const k = kind || "RequestForInformation";
+  if (k === "RequestForInformation" || k === "Manual" || k === "DrawingChecklist") q.set("view", "register");
+  else q.set("kind", k);
+  if (rfiId) q.set("rfi", rfiId);
+  return `?${q.toString()}`;
+}

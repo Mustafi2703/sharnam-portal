@@ -7,6 +7,7 @@ import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { parseQapDetailSheet, qapStatusFromRow, type QapDetailRow } from "./qualityDashboardSheets.js";
 import { renderBrandedReportHtml, workbookBuffer, type SheetSpec } from "./brandedExport.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 function s(v: unknown, max = 500) {
   const t = String(v ?? "").trim();
@@ -243,6 +244,7 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
+    detachSharedStyles(wb);
     const ws = wb.worksheets.find((s) => /sheet1/i.test(s.name)) || wb.worksheets[0];
     if (ws) {
       ws.getCell("C2").value = [project.name, project.location].filter(Boolean).join(" — ");

@@ -38,6 +38,7 @@ import ExcelJS from "exceljs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { fillScurveHistorySheet, loadDprScurveHistory, normalizeScurveEntries } from "./dprCharts.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -473,6 +474,7 @@ export async function buildDprWorkbook(
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(templatePath);
 
+  detachSharedStyles(wb);
   const inputSheet = wb.getWorksheet("INPUT");
   if (!inputSheet) {
     throw new Error(`Template ${templateName} is missing the INPUT sheet`);

@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -306,6 +307,7 @@ export async function exportCubeWorkbook(projectId: string) {
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);
+    detachSharedStyles(wb);
     const ws = wb.worksheets[0];
     if (ws) {
       ws.getCell("E2").value = [project.name, project.location].filter(Boolean).join(" — ");

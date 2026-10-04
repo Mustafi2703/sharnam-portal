@@ -8,6 +8,7 @@ import { prisma } from "../prisma.js";
 import { findWorkbook } from "../lib/excelRoot.js";
 import { SPDC_PMC_NAME } from "@sharnam/shared";
 import { drawingRegisterWeekStamp } from "./drawingRegisterDrive.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 function day(v?: Date | null) {
   if (!v) return "";
@@ -37,6 +38,7 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(tpl);
 
+  detachSharedStyles(wb);
   const pass7 = cubes.filter((c) => c.strength7 != null && /pass/i.test(c.result || "")).length;
   const samples = cubes.filter((c) => c.strength7 != null || c.strength28 != null || c.strength != null).length;
 

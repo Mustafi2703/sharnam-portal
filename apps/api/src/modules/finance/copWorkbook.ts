@@ -15,6 +15,7 @@ import ExcelJS from "exceljs";
 import { type WorkSheet } from "../../lib/xlsx.js";
 import { prisma } from "../../prisma.js";
 import { sharnamLogoPath } from "../../services/brandedExport.js";
+import { detachSharedStyles } from "../../lib/excelTemplate.js";
 
 const ISO_COP_FOLDER = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
 
@@ -310,6 +311,7 @@ export async function buildViatrixCopWorkbook(copId: string): Promise<{ buffer: 
 
   if (templatePath && fs.existsSync(templatePath)) {
     await wb.xlsx.readFile(templatePath);
+    detachSharedStyles(wb);
     // Keep only sheet "02" (single COP page) — remove the other sample tabs.
     const keep = wb.getWorksheet("02") || wb.worksheets[0];
     if (keep) {

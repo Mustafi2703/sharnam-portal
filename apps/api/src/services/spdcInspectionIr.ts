@@ -7,6 +7,7 @@ import ExcelJS from "exceljs";
 import { fileURLToPath } from "url";
 import { renderBrandedReportHtml } from "./brandedExport.js";
 import { sharnamLogoPath } from "./brandedExport.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INPUT = "FFFFF2CC";
@@ -96,7 +97,7 @@ export function resolveInspectionFormData(
     }
   }
   const defaults: Record<string, string> = {
-    projectFacility: project?.code || project?.name || "",
+    projectFacility: project?.name || project?.code || "",
     employerClient: project?.clientName || "",
     contractorAgency: project?.contractorName || "",
     pmcEngineer: "SPDC",
@@ -130,7 +131,9 @@ function embedLogo(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet) {
   if (!logo) return;
   try {
     const imgId = wb.addImage({ filename: logo, extension: "png" });
-    ws.addImage(imgId, { tl: { col: 0.2, row: 0.1 }, ext: { width: 110, height: 36 }, editAs: "oneCell" });
+    // Logo gets its own band in row 1 so it never sits on the company name below.
+    ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 0), 34);
+    ws.addImage(imgId, { tl: { col: 0.2, row: 0.08 }, ext: { width: 110, height: 36 }, editAs: "oneCell" });
   } catch {
     /* optional */
   }
@@ -148,6 +151,7 @@ export async function buildInspectionIrXlsx(
     if (!file) throw new Error("Safety IR template not found");
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(file);
+    detachSharedStyles(wb);
     const ir = wb.getWorksheet("Safety IR Form");
     if (!ir) throw new Error("Safety IR Form sheet missing");
     embedLogo(wb, ir);
@@ -171,27 +175,66 @@ export async function buildInspectionIrXlsx(
     return Buffer.from(buf as ArrayBuffer);
   }
 
-  const templateFile =
-    kind === "ActivityInspection"
-      ? "SPDC_Activity_Inspection_Checklist_Format.xlsx"
-      : "SPDC_Request_for_Inspection_Form.xlsx";
-  const file = resolveTemplate(templateFile);
-  if (!file) throw new Error(`${templateFile} not found`);
+  const irNo = form.irNumber || form.checklistNo || rfi.irNumber || rfi.number;
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (kind === "ActivityInspection") {
+    // SPDC/QA/F-02 particulars: values in E (col 5) and I (col 9), rows 6–12.
+    const file = resolveTemplate("SPDC_Activity_Inspection_Checklist_Format.xlsx");
+    if (!file) throw new Error("SPDC_Activity_Inspection_Checklist_Format.xlsx not found");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    detachSharedStyles(wb);
+    for (const extra of wb.worksheets.slice(1)) wb.removeWorksheet(extra.id);
+    const ws = wb.worksheets[0];
+    ws.name = "Activity Checklist";
+    embedLogo(wb, ws);
+    paintInput(ws, 6, 5, form.projectFacility);
+    paintInput(ws, 6, 9, irNo);
+    paintInput(ws, 7, 5, form.employerClient);
+    paintInput(ws, 7, 9, form.dateRaised || today);
+    paintInput(ws, 8, 5, form.contractorAgency);
+    paintInput(ws, 8, 9, form.linkedIrNo);
+    paintInput(ws, 9, 5, form.activityDescription || rfi.subject);
+    paintInput(ws, 9, 9, form.discipline);
+    paintInput(ws, 10, 5, form.location);
+    paintInput(ws, 10, 9, form.quantityUnit);
+    paintInput(ws, 11, 5, form.drawingRef);
+    paintInput(ws, 11, 9, form.specClause);
+    paintInput(ws, 12, 5, form.methodStmtNo);
+    paintInput(ws, 12, 9, form.itpRef);
+    const buf = await wb.xlsx.writeBuffer();
+    return Buffer.from(buf as ArrayBuffer);
+  }
+
+  // SPDC/QA/F-01 Request for Inspection: value boxes start in D (col 4) and J (col 10).
+  const file = resolveTemplate("SPDC_Request_for_Inspection_Form.xlsx");
+  if (!file) throw new Error("SPDC_Request_for_Inspection_Form.xlsx not found");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  detachSharedStyles(wb);
   const ws = wb.worksheets[0];
   embedLogo(wb, ws);
-  paintInput(ws, 5, 5, form.projectFacility);
-  paintInput(ws, 5, 11, form.irNumber || form.checklistNo || rfi.irNumber || rfi.number);
-  paintInput(ws, 6, 5, form.employerClient);
-  paintInput(ws, 6, 11, form.dateRaised || new Date().toISOString().slice(0, 10));
-  paintInput(ws, 7, 5, form.contractorAgency);
+  paintInput(ws, 5, 4, form.projectFacility);
+  paintInput(ws, 5, 10, irNo);
+  paintInput(ws, 6, 4, form.employerClient);
+  paintInput(ws, 6, 10, form.dateRaised || today);
+  paintInput(ws, 7, 4, form.contractorAgency);
+  paintInput(ws, 7, 10, form.packageWoNo);
   paintInput(ws, 8, 4, form.pmcEngineer || "SPDC");
-  paintInput(ws, 8, 11, form.discipline || form.packageWoNo);
-  paintInput(ws, 11, 5, form.activityDescription || rfi.subject);
-  paintInput(ws, 12, 5, form.location);
-  paintInput(ws, 15, 5, form.drawingRef);
-  paintInput(ws, 16, 4, form.checklistRef || rfi.linkedAssignment?.template?.name);
+  paintInput(ws, 8, 10, form.discipline);
+  paintInput(ws, 11, 4, form.activityDescription || rfi.subject);
+  paintInput(ws, 12, 4, form.location);
+  paintInput(ws, 13, 4, form.quantityUnit);
+  paintInput(ws, 13, 10, form.stageOfWork);
+  paintInput(ws, 14, 4, form.itpRef);
+  paintInput(ws, 14, 10, form.controlPoint);
+  paintInput(ws, 15, 4, form.drawingRef);
+  paintInput(ws, 15, 10, form.specClause);
+  paintInput(ws, 16, 4, form.methodStmtNo);
+  paintInput(ws, 16, 10, form.previousIrNo);
+  paintInput(ws, 17, 6, form.requiredDate || form.requestedDate);
+  paintInput(ws, 17, 10, form.requiredTime);
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf as ArrayBuffer);
 }
@@ -211,22 +254,63 @@ export function renderInspectionIrHtml(rfi: InspectionRfiRecord, project: Inspec
         ? "Activity Inspection Checklist"
         : "Request for Inspection (RIA)";
 
-  const fieldRows = [
+  const no = form.irNumber || form.checklistNo || rfi.irNumber || rfi.number || "";
+  const common: [string, string | undefined][] = [
     ["Project / facility", form.projectFacility],
     ["Employer / client", form.employerClient],
     ["Contractor / agency", form.contractorAgency],
     ["PMC / engineer", form.pmcEngineer],
-    ["IR / checklist no.", form.irNumber || form.checklistNo || rfi.irNumber || rfi.number || ""],
-    ["Date", form.dateRaised],
-    ["Activity / work", form.activityDescription || rfi.subject || ""],
-    ["Location", form.location],
-    ["Drawing ref (text)", form.drawingRef],
-    ["Linked checklist", rfi.linkedAssignment?.template?.name || form.checklistRef || ""],
-    ["Linked quality IR", form.linkedQualityIrNo || ""],
-    ["High-risk type", form.highRiskType || ""],
-    ["Risk rating", form.riskRating || ""],
-    ["Clearance result", form.clearanceResult || ""],
-    ["Action required", form.actionRequired || ""],
+  ];
+  // Rows follow the SPDC form for each kind (F-01 quality IR, F-02 activity checklist, safety clearance).
+  const fieldRows = [
+    ...common,
+    ...(rfi.rfiKind === "SafetyIR"
+      ? ([
+          ["Safety IR no.", no],
+          ["Date of raising", form.dateRaised],
+          ["Linked quality IR", form.linkedQualityIrNo],
+          ["High-risk activity", form.highRiskType],
+          ["Description of work", form.activityDescription || rfi.subject],
+          ["Location", form.location],
+          ["Clearance sought from", form.clearanceSoughtFrom],
+          ["Valid up to", form.validUpTo],
+          ["Risk rating", form.riskRating],
+          ["Result (S1–S4)", form.clearanceResult],
+          ["Action required / conditions", form.actionRequired],
+          ["Safety checklist", rfi.linkedAssignment?.template?.name || form.checklistRef],
+        ] as [string, string | undefined][])
+      : rfi.rfiKind === "ActivityInspection"
+        ? ([
+            ["Checklist no.", no],
+            ["Date of check", form.dateRaised],
+            ["Linked IR no.", form.linkedIrNo],
+            ["Activity checked", form.activityDescription || rfi.subject],
+            ["Discipline", form.discipline],
+            ["Location / grid / level", form.location],
+            ["Quantity / unit", form.quantityUnit],
+            ["Drawing no. & rev.", form.drawingRef],
+            ["Specification clause", form.specClause],
+            ["Approved method stmt. no.", form.methodStmtNo],
+            ["ITP ref. / control point", form.itpRef],
+          ] as [string, string | undefined][])
+        : ([
+            ["IR no.", no],
+            ["Date of raising", form.dateRaised],
+            ["Package / WO no.", form.packageWoNo],
+            ["Discipline", form.discipline],
+            ["Description of activity", form.activityDescription || rfi.subject],
+            ["Location / grid / level", form.location],
+            ["Quantity offered / unit", form.quantityUnit],
+            ["Stage of work", form.stageOfWork],
+            ["ITP ref. / activity code", form.itpRef],
+            ["Control point", form.controlPoint],
+            ["Drawing no. / rev.", form.drawingRef],
+            ["Specification clause", form.specClause],
+            ["Approved method stmt. no.", form.methodStmtNo],
+            ["Previous IR no. (if re-offer)", form.previousIrNo],
+            ["Inspection required on", [form.requiredDate || form.requestedDate, form.requiredTime].filter(Boolean).join(" ")],
+            ["Linked activity checklist", rfi.linkedAssignment?.template?.name || form.checklistRef],
+          ] as [string, string | undefined][])),
     ["Status", rfi.status || ""],
   ].filter((row): row is [string, string] => Boolean(row[1]));
 

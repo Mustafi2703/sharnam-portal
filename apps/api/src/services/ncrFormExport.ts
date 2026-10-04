@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import XLSX from "../lib/xlsx.js";
 import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
 import { sharnamLogoPath } from "./brandedExport.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 export type QualityNcrFormData = {
   projectName?: string;
@@ -296,6 +297,7 @@ export async function buildQualityNcrXlsxFromTemplate(
   const f = parseQualityFormData(row.formDataJson);
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(tpl);
+  detachSharedStyles(wb);
   const ws = wb.worksheets[0];
 
   ws.getCell("B3").value = f.projectName || project?.name || project?.code || "";
@@ -415,6 +417,7 @@ export async function parseQualityNcrFilledXlsx(buf: Buffer): Promise<{
 }> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
+  detachSharedStyles(wb);
   const ws = wb.getWorksheet("NCR CAR") || wb.worksheets[0];
   if (!ws) throw new Error("No worksheet found in uploaded NCR / CAR file");
 
@@ -485,6 +488,7 @@ export async function buildSafetyNcrXlsxFromTemplate(
 
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(tpl);
+  detachSharedStyles(wb);
   const ws = wb.worksheets[0];
 
   setSafetyValue(ws, 2, project?.name || project?.code || "");

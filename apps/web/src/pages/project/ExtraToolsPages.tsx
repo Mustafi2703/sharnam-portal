@@ -642,7 +642,7 @@ export function CoordinationPage() {
                     </>
                   )}
                   {canEdit && selected.status === "Escalated" && selected.escalatedRfiId && (
-                    <Link to={`/projects/${id}/rfis`} className="text-xs font-semibold text-brand">
+                    <Link to={`/projects/${id}/rfis?view=register&rfi=${selected.escalatedRfiId}`} className="text-xs font-semibold text-brand">
                       View linked RFI →
                     </Link>
                   )}

@@ -80,9 +80,9 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "SafetyChecklist") return "safety";
     if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
     if (kind === "SiteExecution") return "quality";
-    const stored = getActiveWorkspace();
-    if (stored === "quality" || stored === "drawings" || stored === "safety" || stored === "comms" || stored === "inspection") return stored;
-    return "quality";
+    if (kind === "ClientConcern") return "comms";
+    // No kind → neutral "all requests" desk. (Falling back to the last-visited module hid RFIs of other modules.)
+    return "home";
   }
 
   if (["directory", "vendors"].includes(tail)) return "home";

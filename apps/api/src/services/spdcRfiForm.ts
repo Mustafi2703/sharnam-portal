@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 const INPUT = "FFFFF2CC";
 const PMC_NAME = "Sharnam Project Development Consultants & Co., Vadodara";
@@ -424,12 +425,18 @@ async function loadTemplate(): Promise<ExcelJS.Workbook> {
   if (!file) throw new Error("SPDC RFI Form template not found (SPDC_RFI_Form_and_Register.xlsx)");
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  detachSharedStyles(wb);
   wb.calcProperties.fullCalcOnLoad = true;
   return wb;
 }
 
 function sheet(wb: ExcelJS.Workbook, name: string) {
   return wb.worksheets.find((w) => w.name === name) || null;
+}
+
+/** Kinds that belong on SPDC_RFI_Form_and_Register (Request for Information). */
+export function isSpdcRfiRegisterKind(kind?: string | null) {
+  return !kind || kind === "RequestForInformation" || kind === "Manual";
 }
 
 export async function buildSpdcRfiWorkbook(opts: {
@@ -452,7 +459,8 @@ export async function buildSpdcRfiWorkbook(opts: {
   fillControl(control, opts.project, selectedForm);
   if (register) {
     clearRegisterSample(register);
-    const filled = opts.rfis.map(fillSpdcRfiRow);
+    // The SPDC RFI register is for design queries only — never inspection or checklist-fill requests.
+    const filled = opts.rfis.filter((r) => isSpdcRfiRegisterKind(r.rfiKind)).map(fillSpdcRfiRow);
     filled.forEach((row, i) => writeRegisterRow(register, REGISTER_START + i, row));
   }
 

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES } from "./interviewFramework.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
 export { INTERVIEW_PARAMS, INTERVIEW_ROLES };
 
@@ -145,6 +146,7 @@ export async function scorecardWorkbook(
   }
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(template);
+  detachSharedStyles(wb);
   const ws = wb.getWorksheet("Scorecard");
   if (!ws) {
     const out = await wb.xlsx.writeBuffer();

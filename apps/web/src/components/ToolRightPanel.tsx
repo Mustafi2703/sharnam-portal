@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { RoleKey } from "@sharnam/shared";
 import { Button, Input, TextArea } from "./ui";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { formatUiText } from "../lib/formatUiText";
 import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
+import { rfiModuleScope } from "../lib/rfiModuleScope";
 
 export type RightPanelContext = {
   projectId: string;
@@ -35,7 +36,10 @@ export function ToolRightPanel({
   onAssignChecklist?: () => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { token } = useAuth();
+  /** On /rfis the panel follows the module that owns the page (drawing RFIs never show under Quality / Safety). */
+  const rfiScope = rfiModuleScope(location.pathname, location.search);
   const isClient = ctx.role === "client";
   const canUpload = ctx.role && ctx.role !== "client";
   const canFill = ctx.role && ["admin", "office", "site_employee", "employee", "vendor"].includes(ctx.role);
@@ -333,11 +337,37 @@ export function ToolRightPanel({
         actions.push({ label: "Open DPR / WPR", to: "reports", primary: true });
         break;
       case "rfis":
-        actions.push(
-          { label: "Ask PMC RFI", to: "rfis?kind=RequestForInformation&compose=1", primary: true },
-          { label: "Request checklist fill", to: "rfis?kind=DrawingChecklist&compose=1", secondary: true },
-          { label: "RFI register", to: "rfis?view=register", secondary: true }
-        );
+        if (rfiScope === "quality") {
+          actions.push(
+            { label: "New quality inspection request", to: "rfis?kind=QualityInspection", primary: true },
+            { label: "Inspection register (IR)", to: "inspection-register?tab=quality-ir", secondary: true },
+            { label: "Quality checklist master", onClick: () => navigate(`/projects/${ctx.projectId}/quality/checklist-master`), secondary: true }
+          );
+        } else if (rfiScope === "safety") {
+          actions.push(
+            { label: "New safety checklist request", to: "rfis?kind=SafetyChecklist", primary: true },
+            { label: "Safety IR register", to: "inspection-register?tab=safety-ir", secondary: true },
+            { label: "Safety checklist master", onClick: () => navigate(`/projects/${ctx.projectId}/safety/checklist-master`), secondary: true }
+          );
+        } else if (rfiScope === "inspection") {
+          actions.push(
+            { label: "Quality IR register", to: "inspection-register?tab=quality-ir", primary: true },
+            { label: "Safety IR register", to: "inspection-register?tab=safety-ir", secondary: true },
+            { label: "Activity checklists", to: "inspection-register?tab=activity-checklist", secondary: true }
+          );
+        } else if (rfiScope === "drawings") {
+          actions.push(
+            { label: "Ask PMC RFI", to: "rfis?kind=RequestForInformation&compose=1", primary: true },
+            { label: "Request checklist fill", to: "rfis?kind=DrawingChecklist&compose=1", secondary: true },
+            { label: "RFI register", to: "rfis?view=register", secondary: true }
+          );
+        } else {
+          actions.push(
+            { label: "Drawing RFI register", to: "rfis?view=register", primary: true },
+            { label: "Quality inspection requests", to: "rfis?kind=QualityInspection", secondary: true },
+            { label: "Inspection register (IR)", to: "inspection-register", secondary: true }
+          );
+        }
         break;
       case "diary":
         if (canFill) actions.push({ label: "Add manpower / notes", to: "diary", primary: true }, { label: "Attach photos", to: "photos", secondary: true });
@@ -551,7 +581,19 @@ export function ToolRightPanel({
         <div className="pt-3 border-t border-line">
           <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-2">Related</p>
           <div className="flex flex-col gap-1">
-            {(tool === "rfis" || tool === "coordination"
+            {(tool === "rfis" && rfiScope !== "drawings" && rfiScope !== "home"
+              ? rfiScope === "safety"
+                ? [
+                    ["safety", "Safety dashboard"],
+                    ["inspection-register?tab=safety-ir", "Safety IR register"],
+                    ["inspection-register?tab=hse-register", "HSE register"],
+                  ]
+                : [
+                    ["inspections", "Quality dashboard"],
+                    ["inspection-register?tab=quality-ir", "Inspection register (IR)"],
+                    ["inspection-register?tab=activity-checklist", "Activity checklists"],
+                  ]
+              : (tool === "rfis" && rfiScope === "drawings") || tool === "coordination"
               ? [
                   ["drawings", "Approval & GFC log"],
                   ["drawings/register/master", "Master register"],
@@ -573,7 +615,7 @@ export function ToolRightPanel({
                     ? [
                         ["inspections", "Quality Inspections"],
                         ["safety", "Safety"],
-                        ["rfis", "QI fill RFIs"],
+                        ["rfis?kind=QualityInspection", "Quality inspection requests"],
                       ]
                     : tool === "checklist" || tool === "quality-inspections"
                       ? [

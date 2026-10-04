@@ -38,8 +38,9 @@ export async function reconcileProjectSharePoint(projectId: string) {
     console.warn("[sharepoint] NCR/CAR reconcile skipped:", err instanceof Error ? err.message : err);
   }
 
+  // SPDC RFI register holds design queries only; inspection / checklist requests are separate registers.
   const rfis = await prisma.rfi.findMany({
-    where: { projectId },
+    where: { projectId, rfiKind: { in: ["RequestForInformation", "Manual"] } },
     include: {
       assignedTo: { select: { id: true, fullName: true } },
       createdBy: { select: { id: true, fullName: true } },
