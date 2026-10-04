@@ -87,6 +87,43 @@ SharePoint folder for this module: `<Project>/04.02 Drawings and Specifications/
 | H4 | Import a DC register row with a new issue title | Created as a new Open issue; no email is sent for imported rows. | |
 | H5 | Log in as a non-office user (SPDC engineer, site, consultant) | No Import buttons on any register; Download Excel / PDF still available. | |
 
+## I. Ask PMC (RFI) page
+
+| # | Step | Expected | Pass/Fail |
+|---|------|----------|-----------|
+| I1 | Drawings → **Ask PMC RFI** tab | Only the module tab strip on top. No "← Back to RFI register" link and no extra pills (Ask / Drawing checklist fill / All drawing RFIs). | |
+| I2 | Look at the form | "Drawing Check checklist to attach **(optional)**". "Contractor proposed solution **\***" is required, with a note that an RFI without it is returned unanswered. | |
+| I3 | Fill Subject + Question, leave proposed solution empty, click **Open RFI** | Browser blocks submit and points to the proposed-solution field. | |
+| I4 | Add a proposed solution, link a drawing, **no checklist**, submit | RFI created (SPDC-RFI-00x). Message confirms it was written to SharePoint. | |
+| I5 | Force an error (e.g. disconnect network) and submit | Message shows in **red**, not green. | |
+
+## J. Right-hand action panel (every project module)
+
+| # | Module page | Click | Expected | Pass/Fail |
+|---|-------------|-------|----------|-----------|
+| J1 | Approval & GFC log | **Upload drawing (GFC)** | Drawing Check Master checklist opens; page shows "Waiting for Drawing Check Master". | |
+| J2 | Approval & GFC log | **Master register** / **Ask PMC RFI** | Opens Master register / the Ask PMC form. | |
+| J3 | RFI register / Ask PMC | **Ask PMC RFI**, **Request checklist fill**, **RFI register** | Each opens that exact screen. Related links: Approval & GFC log, Master register, Design coordination. | |
+| J4 | Design coordination | **Ask PMC RFI** / **RFI register** | Opens the Ask form / register (no button pretends to escalate). | |
+| J5 | Comms | **New meeting (agenda)** | Agenda tab opens with the New meeting wizard. | |
+| J6 | Comms | **Communication matrix** / **Minutes of meeting** | Opens the Matrix tab / MoM tab. | |
+| J7 | Any page with "How this works" | — | No "Demo flow" badge. | |
+
+## K. Meetings — agenda first, then schedule (Procore style)
+
+| # | Step | Expected | Pass/Fail |
+|---|------|----------|-----------|
+| K1 | Comms → Agenda → **+ New meeting** | Step 1 "Agenda": title + numbered agenda rows (add, reorder ↑↓, remove). Esc closes. | |
+| K2 | Click **Next** with no agenda lines | Amber message: add at least one agenda item or use the standard agenda. | |
+| K3 | **Use standard site agenda** → Next | Step 2 "Schedule & invite": date & time, duration, location, Teams option. | |
+| K4 | Look at the people list | Everyone with an email on the Technical + Commercial matrix, grouped Client / PMC / Consultant / Contractor. A person on both matrices appears once. | |
+| K5 | Tick a whole section, then a single person; switch one person between **To** and **Cc**; search by company | Counter shows "N selected · x To · y Cc"; search filters the list. | |
+| K6 | Add an extra email in "Other emails" | Included as To. An invalid email blocks scheduling with a message. | |
+| K7 | **Schedule & send invite** | Meeting appears with **Invited (N)** chips (To / Cc). Message says the invite is logged and will go out once mail is switched on. | |
+| K8 | Email log | One invite: To = the To people, Cc = the Cc people — **only** those picked, not the whole matrix. Subject has the project code once. | |
+| K9 | **Re-send agenda** | "Agenda re-sent to the invited attendees." Same recipients in the email log; agenda lines not duplicated. | |
+| K10 | Start MoM → Create follow-up | Follow-up meeting keeps the same invited list; its email goes to the same people. | |
+
 ---
 
 **Sign-off:** Tester ____________  Date ________  Result: ☐ Pass ☐ Pass with notes ☐ Fail

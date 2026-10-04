@@ -110,7 +110,7 @@ export function ToolRightPanel({
         const data = await api<any[]>(`/api/comms/contacts/${ctx.projectId}`, { token }).catch(() => []);
         opts = (Array.isArray(data) ? data : []).slice(0, 40).map((c: any) => ({
           id: c.id,
-          label: `${c.name} · ${c.company || c.designation || "contact"}`,
+          label: `${c.personName || c.email || "Contact"} · ${c.company || c.orgName || c.designation || "contact"}`,
           endpoint: `/api/comms/contacts/${c.id}`,
         }));
       } else if (tool === "submittals") {
@@ -178,11 +178,12 @@ export function ToolRightPanel({
         if (canUpload) {
           actions.push(
             {
-              label: "Upload on GFC register",
+              label: "Upload drawing (GFC)",
+              // ?upload=1 → GFC page opens Drawing Check Master first, then the upload form.
               onClick: () =>
                 onUploadDrawing
                   ? onUploadDrawing()
-                  : navigate(`/projects/${ctx.projectId}/drawings`),
+                  : navigate(`/projects/${ctx.projectId}/drawings?upload=1`),
               primary: true,
             },
             {
@@ -196,8 +197,13 @@ export function ToolRightPanel({
               secondary: true,
             },
             {
-              label: "Ask (drawing RFI)",
-              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=RequestForInformation`),
+              label: "Master register",
+              onClick: () => navigate(`/projects/${ctx.projectId}/drawings/register/master`),
+              secondary: true,
+            },
+            {
+              label: "Ask PMC RFI",
+              onClick: () => navigate(`/projects/${ctx.projectId}/rfis?kind=RequestForInformation&compose=1`),
               secondary: true,
             }
           );
@@ -328,8 +334,9 @@ export function ToolRightPanel({
         break;
       case "rfis":
         actions.push(
-          { label: "Create request", to: "rfis", primary: true },
-          { label: "Site checklists", to: "checklist", secondary: true }
+          { label: "Ask PMC RFI", to: "rfis?kind=RequestForInformation&compose=1", primary: true },
+          { label: "Request checklist fill", to: "rfis?kind=DrawingChecklist&compose=1", secondary: true },
+          { label: "RFI register", to: "rfis?view=register", secondary: true }
         );
         break;
       case "diary":
@@ -341,10 +348,10 @@ export function ToolRightPanel({
       case "comms":
         if (canUpload) {
           actions.push(
-            { label: "Edit communication matrix", to: "comms", primary: true },
-            { label: "Open Excel in SharePoint", onClick: () => void openMatrixSharePoint(), secondary: true },
-            { label: "Generate agenda", to: "comms", secondary: true },
-            { label: "Start MoM", to: "comms", secondary: true }
+            { label: "New meeting (agenda)", to: "comms?tab=agenda&new=1", primary: true },
+            { label: "Communication matrix", to: "comms?tab=matrix", secondary: true },
+            { label: "Minutes of meeting", to: "comms?tab=mom", secondary: true },
+            { label: "Open matrix Excel in SharePoint", onClick: () => void openMatrixSharePoint(), secondary: true }
           );
         }
         break;
@@ -353,7 +360,12 @@ export function ToolRightPanel({
         if (canUpload) actions.push({ label: "Assign employee", to: "directory", primary: true }, { label: "Assign vendor", to: "vendors", secondary: true }, { label: "Open HRM master", onClick: () => navigate("/hrm"), secondary: true });
         break;
       case "coordination":
-        if (canUpload) actions.push({ label: "Log coordination issue", to: "drawings/coordination", primary: true }, { label: "Escalate to Ask RFI", to: "rfis?kind=RequestForInformation", secondary: true });
+        if (canUpload)
+          actions.push(
+            { label: "Log coordination issue", to: "drawings/coordination", primary: true },
+            { label: "Ask PMC RFI", to: "rfis?kind=RequestForInformation&compose=1", secondary: true },
+            { label: "RFI register", to: "rfis?view=register", secondary: true }
+          );
         break;
       case "email":
         if (canEmail) actions.push({ label: "Compose email", onClick: () => openCompose(), primary: true }, { label: "Email settings", to: "email", secondary: true });
@@ -539,11 +551,11 @@ export function ToolRightPanel({
         <div className="pt-3 border-t border-line">
           <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-2">Related</p>
           <div className="flex flex-col gap-1">
-            {(tool === "rfis"
+            {(tool === "rfis" || tool === "coordination"
               ? [
-                  ["drawings", "GFC register"],
-                  ["checklist", "Final Index"],
-                  ["comms", "Matrix"],
+                  ["drawings", "Approval & GFC log"],
+                  ["drawings/register/master", "Master register"],
+                  [tool === "rfis" ? "drawings/coordination" : "comms?tab=matrix", tool === "rfis" ? "Design coordination" : "Communication matrix"],
                 ]
               : tool === "diary"
                 ? [

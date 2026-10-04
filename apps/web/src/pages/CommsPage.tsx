@@ -9,6 +9,7 @@ import { SearchableSelect } from "../components/SearchableSelect";
 import { UploadModal } from "../components/UploadModal";
 import { isToolWindow } from "../lib/moduleToolWindow";
 import { StatusNote } from "../components/StatusNote";
+import { MeetingScheduleWizard } from "../components/MeetingScheduleWizard";
 
 type Tab = "matrix" | "agenda" | "mom" | "followup" | "log";
 
@@ -47,14 +48,16 @@ export default function CommsPage() {
   const [momFile, setMomFile] = useState<File | null>(null);
   const [momError, setMomError] = useState("");
   const [agendaDraft, setAgendaDraft] = useState("");
-  const [schedule, setSchedule] = useState({
-    title: "Weekly Site Coordination",
-    meetingDate: new Date().toISOString().slice(0, 16),
-    location: "Site cabin / Microsoft Teams",
-    durationMins: "60",
-    attendeeEmails: "",
-    createTeams: true,
-  });
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  // "New meeting" from the right panel / hub links → ?new=1 opens the agenda wizard once.
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setWizardOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [logForm, setLogForm] = useState({ subject: "", body: "", toRoles: "client", channel: "In-App" });
 
   const canEdit =
@@ -93,25 +96,11 @@ export default function CommsPage() {
           ]);
         }
         setContacts(matrixKind === "COMMERCIAL" ? comm2 : tech2);
-        const allEmails = [...tech2, ...comm2]
-          .filter((r: any) => !r.isSectionHeader && r.email)
-          .map((r: any) => r.email.trim())
-          .filter(Boolean);
-        if (allEmails.length) {
-          setSchedule((s) => ({ ...s, attendeeEmails: Array.from(new Set(allEmails)).join(", ") }));
-        }
       } catch {
         setContacts(matrixKind === "COMMERCIAL" ? commContacts : techContacts);
       }
     } else {
       setContacts(matrixKind === "COMMERCIAL" ? commContacts : techContacts);
-      const allEmails = [...techContacts, ...commContacts]
-        .filter((r: any) => !r.isSectionHeader && r.email)
-        .map((r: any) => r.email.trim())
-        .filter(Boolean);
-      if (allEmails.length) {
-        setSchedule((s) => ({ ...s, attendeeEmails: Array.from(new Set(allEmails)).join(", ") }));
-      }
     }
 
     const want = searchParams.get("meeting");
@@ -130,47 +119,6 @@ export default function CommsPage() {
 
   const flowActive = tab === "matrix" ? 0 : tab === "agenda" ? 1 : tab === "mom" ? 2 : tab === "followup" ? 3 : 1;
 
-  async function createMeeting(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMsg("");
-    try {
-      const m = await api<any>(`/api/comms/meetings/${id}`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          title: schedule.title,
-          meetingDate: new Date(schedule.meetingDate).toISOString(),
-          location: schedule.location,
-          status: "Agenda",
-          durationMins: Number(schedule.durationMins) || 60,
-          attendeeEmails: schedule.attendeeEmails.trim() || undefined,
-          createTeams: schedule.createTeams,
-          agendaItems: agendaDraft
-            .split(/\n+/)
-            .map((s) => s.trim())
-            .filter(Boolean),
-        }),
-      });
-      setActiveMeeting(m.id);
-      setTab("agenda");
-      setMsg(
-        m.invite?.email?.skipped
-          ? "Meeting created — email skipped (check project email settings)."
-          : m.invite?.error
-            ? `Meeting created — invite failed: ${m.invite.error}`
-            : m.invite?.teamsJoinUrl
-              ? "Meeting created — one formatted invite sent with Microsoft Teams join link."
-              : m.invite?.email
-                ? "Meeting created — one formatted invite email sent to all attendees."
-                : "Meeting created in Agenda stage — add invite emails to send Teams invite."
-      );
-      await load();
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function generateAgenda() {
     if (!activeMeeting) return;
     setBusy(true);
@@ -180,15 +128,23 @@ export default function CommsPage() {
         .split(/\n+/)
         .map((s) => s.trim())
         .filter(Boolean);
-      await api(`/api/comms/meetings/${activeMeeting}/generate-agenda`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ items: lines, agendaNotes: agendaDraft || undefined }),
-      });
+      const hasAgenda = !!selected?.items?.some((it: any) => it.category === "Agenda");
+      const out = await api<{ reused?: boolean; notify?: { skipped?: boolean } }>(
+        `/api/comms/meetings/${activeMeeting}/generate-agenda`,
+        {
+          method: "POST",
+          token,
+          // Existing agenda → re-send it to the invitees instead of silently doing nothing.
+          body: JSON.stringify({ items: lines, agendaNotes: agendaDraft || undefined, force: hasAgenda || undefined }),
+        },
+      );
+      const who = selected?.attendeesJson ? "the invited attendees" : "the communication matrix";
       setMsg(
-        lines.length
-          ? "Agenda published from your lines and emailed to communication matrix contacts."
-          : "Standard agenda published and emailed to communication matrix contacts."
+        out?.notify?.skipped
+          ? "Agenda saved. No email went out — nobody on the invite list has an email yet."
+          : hasAgenda
+            ? `Agenda re-sent to ${who}.`
+            : `Agenda published and sent to ${who}.`,
       );
       await load();
     } catch (err) {
@@ -344,6 +300,36 @@ export default function CommsPage() {
 
       <StatusNote msg={msg} />
 
+      {id && (
+        <MeetingScheduleWizard
+          open={wizardOpen}
+          projectId={id}
+          token={token}
+          onClose={() => setWizardOpen(false)}
+          onCreated={(m, count) => {
+            setWizardOpen(false);
+            setActiveMeeting(m.id);
+            setTab("agenda");
+            const invite = (m.invite || {}) as {
+              email?: { skipped?: boolean; transport?: string; error?: string };
+              error?: string;
+              teamsJoinUrl?: string;
+            };
+            const who = `${count} ${count === 1 ? "person" : "people"}`;
+            setMsg(
+              invite.error || invite.email?.error
+                ? `Meeting scheduled — but the invite could not be sent: ${invite.error || invite.email?.error}`
+                : invite.email?.skipped
+                  ? `Meeting scheduled for ${who}. No invite was emailed — check the project email settings.`
+                  : invite.email?.transport === "mock"
+                    ? `Meeting scheduled for ${who}. The invite is logged and will be emailed once portal mail is switched on.`
+                    : `Meeting scheduled — invite emailed to ${who}${invite.teamsJoinUrl ? " with a Teams link" : ""}.`,
+            );
+            void load();
+          }}
+        />
+      )}
+
       {tab === "matrix" && id && (
         <CommsMatrixPanel
           projectId={id}
@@ -365,8 +351,8 @@ export default function CommsPage() {
           sheetLabel={tab === "agenda" ? "Agenda meetings" : tab === "mom" ? "Minutes of meeting" : "Follow-up actions"}
           rowCount={listForTab.length}
           canEdit={canEdit && tab === "agenda"}
-          onAddRow={tab === "agenda" ? () => document.getElementById("add-meeting-form")?.scrollIntoView({ behavior: "smooth", block: "start" }) : undefined}
-          addRowLabel="+ Add meeting"
+          onAddRow={tab === "agenda" ? () => setWizardOpen(true) : undefined}
+          addRowLabel="+ New meeting"
         />
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-4">
           <Card padding={false} className="overflow-hidden h-fit">
@@ -392,50 +378,10 @@ export default function CommsPage() {
               ))}
               {!listForTab.length && <li className="p-4 text-sm text-steel-muted">None in this stage yet.</li>}
             </ul>
-            {canEdit && tab === "agenda" && (
-              <form id="add-meeting-form" className="p-3 border-t border-line space-y-2" onSubmit={createMeeting}>
-                <Input value={schedule.title} onChange={(e) => setSchedule({ ...schedule, title: e.target.value })} />
-                <Input
-                  type="datetime-local"
-                  value={schedule.meetingDate}
-                  onChange={(e) => setSchedule({ ...schedule, meetingDate: e.target.value })}
-                />
-                <Input
-                  value={schedule.location}
-                  onChange={(e) => setSchedule({ ...schedule, location: e.target.value })}
-                  placeholder="Location (site cabin / Microsoft Teams)"
-                />
-                <Input
-                  type="number"
-                  min={15}
-                  max={480}
-                  value={schedule.durationMins}
-                  onChange={(e) => setSchedule({ ...schedule, durationMins: e.target.value })}
-                  placeholder="Duration (minutes)"
-                />
-                <Input
-                  value={schedule.attendeeEmails}
-                  onChange={(e) => setSchedule({ ...schedule, attendeeEmails: e.target.value })}
-                  placeholder="Attendee emails (TO + CC from both matrices)"
-                />
-                <label className="flex items-center gap-2 text-xs text-steel-muted px-1">
-                  <input
-                    type="checkbox"
-                    checked={schedule.createTeams}
-                    onChange={(e) => setSchedule({ ...schedule, createTeams: e.target.checked })}
-                  />
-                  Schedule Microsoft Teams via Graph
-                </label>
-                <TextArea
-                  rows={3}
-                  value={agendaDraft}
-                  onChange={(e) => setAgendaDraft(e.target.value)}
-                  placeholder="Agenda lines (one per row). Leave blank to use the standard site agenda."
-                />
-                <Button type="submit" disabled={busy} className="w-full !text-xs">
-                  New meeting (Agenda)
-                </Button>
-              </form>
+            {canEdit && tab === "agenda" && !listForTab.length && (
+              <p className="p-3 border-t border-line text-[11px] text-steel-muted leading-snug">
+                Use + New meeting: build the agenda first, then schedule it and pick attendees from the communication matrix.
+              </p>
             )}
           </Card>
 
@@ -456,6 +402,29 @@ export default function CommsPage() {
                         {selected.location ? ` · ${selected.location}` : ""}
                         {selected.durationMins ? ` · ${selected.durationMins} min` : ""}
                       </p>
+                      {(() => {
+                        let list: { email: string; name?: string | null; company?: string | null; mailRole: string }[] = [];
+                        try {
+                          list = selected.attendeesJson ? JSON.parse(selected.attendeesJson) : [];
+                        } catch {
+                          list = [];
+                        }
+                        if (!list.length) return null;
+                        return (
+                          <div className="meet-attendees">
+                            <span className="meet-attendees__label">
+                              Invited ({list.length})
+                            </span>
+                            {list.map((a) => (
+                              <span key={a.email} className={`meet-attendees__chip${a.mailRole === "CC" ? " is-cc" : ""}`} title={a.email} data-preserve-case>
+                                {a.name || a.email}
+                                {a.company ? <span className="opacity-70"> · {a.company}</span> : null}
+                                <span className="meet-attendees__role">{a.mailRole === "CC" ? "Cc" : "To"}</span>
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {selected.teamsJoinUrl && (
                         <a
                           href={selected.teamsJoinUrl}
@@ -490,7 +459,7 @@ export default function CommsPage() {
                         {selected.status === "Agenda" || selected.status === "Scheduled" ? (
                           <>
                             <Button type="button" variant="secondary" disabled={busy} onClick={() => void generateAgenda()}>
-                              {selected.items?.some((it: any) => it.category === "Agenda") ? "Update agenda" : "Publish agenda"}
+                              {selected.items?.some((it: any) => it.category === "Agenda") ? "Re-send agenda" : "Publish agenda"}
                             </Button>
                             <Button type="button" disabled={busy} onClick={() => void startMom()}>
                               Start MoM

@@ -105,7 +105,7 @@ export async function queueProjectEmail(opts: {
   const subjectBase = opts.subject.replace(/^(Re:\s*)+/i, "").trim();
   const subject = prior
     ? `[${project.code}] Re: ${subjectBase.replace(new RegExp(`^\\[${project.code}\\]\\s*(Re:\\s*)?`, "i"), "")}`
-    : `[${project.code}] ${opts.subject}`;
+    : `[${project.code}] ${opts.subject.replace(new RegExp(`^\\[${project.code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\s*`, "i"), "")}`;
   const bodyPlain = `${opts.body}\n\n— ${fromName}`;
   const bodyStore = opts.bodyHtml
     ? `${bodyPlain}\n\n[HTML version sent via Graph]`

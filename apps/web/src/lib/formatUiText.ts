@@ -79,10 +79,15 @@ function formatWord(word: string): string {
 }
 
 /** Title-case UI copy: each word capitalized, rest lowercase; preserves acronyms and drawing codes. Skip user-entered values — use `data-preserve-case` on those nodes. */
+/** Emails, web links and file names keep their exact case. */
+const VERBATIM_RE = /([^\s@]+@[^\s@]+\.[^\s@,;)]+|https?:\/\/\S+|www\.\S+|\b[\w-]+\.(?:xlsx|xls|pdf|docx|dwg|csv|png|jpe?g)\b)/gi;
+
 export function formatUiText(text: string | null | undefined): string {
   if (text == null || text === "") return text ?? "";
-  const formatted = String(text).replace(/\b([A-Za-z0-9']+)\b/g, (word) => formatWord(word));
-  return formatted;
+  return String(text)
+    .split(VERBATIM_RE)
+    .map((part, i) => (i % 2 === 1 ? part : part.replace(/\b([A-Za-z0-9']+)\b/g, (word) => formatWord(word))))
+    .join("");
 }
 
 /** Alias for static copy in nav/config modules. */

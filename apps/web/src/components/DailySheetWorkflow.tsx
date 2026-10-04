@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Button } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import { canBulkProvisionSheets } from "../lib/productionUi";
+import { StatusNote } from "./StatusNote";
 
 type PackCheck = {
   key: string;
@@ -113,7 +114,7 @@ export function DailySheetWorkflow({
           )}
         </div>
       </div>
-      {localMsg && <p className="text-xs text-brand px-3 py-1 bg-brand-soft">{localMsg}</p>}
+      <StatusNote msg={localMsg} compact />
       <div className={`grid sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-line ${compact ? "text-xs" : "text-sm"}`}>
         {FLOW.map((step, i) => {
           const ok = step.keys.every((k) => {

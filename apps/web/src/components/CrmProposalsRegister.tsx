@@ -20,6 +20,7 @@ import {
   proposalStatusTone,
   scopeLineItems,
 } from "../lib/crmProposalUtils";
+import { StatusNote } from "./StatusNote";
 
 const PAGE_SIZE = 50;
 
@@ -335,7 +336,7 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
               )}
 
               <div className="flex flex-col gap-2 border-t border-line pt-3">
-                {awardMsg && <p className="text-xs text-ok leading-relaxed">{awardMsg}</p>}
+                <StatusNote msg={awardMsg} compact />
                 {driveUrl && (
                   <a
                     href={driveUrl}

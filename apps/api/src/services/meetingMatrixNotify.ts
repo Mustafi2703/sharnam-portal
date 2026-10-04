@@ -1,6 +1,6 @@
 import { prisma } from "../prisma.js";
 import { queueProjectEmail } from "./email.js";
-import { getOnboardedMatrixEmails } from "./matrixContacts.js";
+import { meetingRecipientLists } from "./matrixContacts.js";
 import { portalOrigin } from "./rfiFlowNotify.js";
 
 type MeetingStage = "agenda" | "mom" | "followup" | "invite";
@@ -19,7 +19,7 @@ function stageSubject(stage: MeetingStage, title: string, projectCode?: string) 
   }
 }
 
-/** Notify all communication-matrix contacts about a meeting stage change. */
+/** Notify the meeting's invited attendees (or the matrix for older meetings) about a stage change. */
 export async function notifyMeetingMatrixContacts(opts: {
   projectId: string;
   meetingId: string;
@@ -36,7 +36,7 @@ export async function notifyMeetingMatrixContacts(opts: {
   });
   if (!meeting) return { skipped: true as const, reason: "meeting_not_found" };
 
-  const { all, to, cc } = await getOnboardedMatrixEmails(opts.projectId);
+  const { all, to, cc } = await meetingRecipientLists(meeting);
   if (!all.length) return { skipped: true as const, reason: "no_onboarded_matrix_emails" };
 
   const portal = portalOrigin();

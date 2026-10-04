@@ -568,6 +568,9 @@ model Meeting {
   momFileName     String?
   momUploadedAt   DateTime?
   durationMins    Int      @default(60)
+  /// Invited people picked from the communication matrix (+ extra emails):
+  /// JSON [{ email, name?, company?, section?, mailRole: "TO" | "CC" }]. Later meeting emails go to these.
+  attendeesJson   String?  @db.Text
   /// Microsoft Teams join URL (Graph onlineMeeting or calendar event)
   teamsJoinUrl    String?
   /// Graph calendar event id or onlineMeeting id

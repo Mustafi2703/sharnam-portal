@@ -86,3 +86,62 @@ export async function resolveMeetingRecipients(
 
   return { csv: "", to: [], cc: [], source: "none" };
 }
+
+
+export type MeetingAttendee = {
+  email: string;
+  name?: string | null;
+  company?: string | null;
+  section?: string | null;
+  mailRole: "TO" | "CC";
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Clean an attendee list from the request: valid unique emails, TO wins over CC. */
+export function normalizeMeetingAttendees(raw: unknown): MeetingAttendee[] {
+  if (!Array.isArray(raw)) return [];
+  const byEmail = new Map<string, MeetingAttendee>();
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const row = r as Record<string, unknown>;
+    const email = normEmail(String(row.email || ""));
+    if (!email || !EMAIL_RE.test(email)) continue;
+    const mailRole: "TO" | "CC" = String(row.mailRole || "TO").toUpperCase() === "CC" ? "CC" : "TO";
+    const prev = byEmail.get(email);
+    if (prev && prev.mailRole === "TO") continue;
+    byEmail.set(email, {
+      email,
+      name: row.name ? String(row.name).trim().slice(0, 120) : null,
+      company: row.company ? String(row.company).trim().slice(0, 120) : null,
+      section: row.section ? String(row.section).trim().slice(0, 40) : null,
+      mailRole,
+    });
+  }
+  return [...byEmail.values()].slice(0, 200);
+}
+
+export function parseMeetingAttendees(json?: string | null): MeetingAttendee[] {
+  if (!json) return [];
+  try {
+    return normalizeMeetingAttendees(JSON.parse(json));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Who gets a meeting's emails: the invited attendees when the meeting has them,
+ * otherwise the onboarded communication-matrix To/CC (older meetings).
+ */
+export async function meetingRecipientLists(meeting: { projectId: string; attendeesJson?: string | null }): Promise<MatrixEmailLists> {
+  const attendees = parseMeetingAttendees(meeting.attendeesJson);
+  if (attendees.length) {
+    const to = attendees.filter((a) => a.mailRole === "TO").map((a) => a.email);
+    const toSet = new Set(to);
+    const cc = attendees.filter((a) => a.mailRole === "CC" && !toSet.has(a.email)).map((a) => a.email);
+    const all = Array.from(new Set([...to, ...cc]));
+    return { to, cc, all, csv: all.join(", ") };
+  }
+  return getOnboardedMatrixEmails(meeting.projectId);
+}

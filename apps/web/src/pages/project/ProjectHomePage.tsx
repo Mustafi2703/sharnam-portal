@@ -11,6 +11,7 @@ import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignature
 import { ClientProjectSignPanel } from "../../components/ClientProjectSignPanel";
 import { ProjectManageActions, type ManageableProject } from "../../components/ProjectManageActions";
 import { canBulkProvisionSheets } from "../../lib/productionUi";
+import { StatusNote } from "../../components/StatusNote";
 
 export default function ProjectHomePage() {
   const { id } = useParams();
@@ -174,7 +175,7 @@ export default function ProjectHomePage() {
             busy={packBusy}
             onProvision={() => void provisionSheets()}
           />
-          {packMsg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{packMsg}</p>}
+          <StatusNote msg={packMsg} />
         </div>
       )}
 

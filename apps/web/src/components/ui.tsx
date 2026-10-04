@@ -187,7 +187,6 @@ export function WorkflowStrip({
         <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-steel-muted">
           {fmt("How this works")}
         </span>
-        <Badge tone="brand">{fmt("Demo flow")}</Badge>
       </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-0">
         {steps.map((s, i) => {

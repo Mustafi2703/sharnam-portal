@@ -402,15 +402,21 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
   const agendaFromBody = Array.isArray(req.body.agendaItems)
     ? req.body.agendaItems.map(String).map((s: string) => s.trim()).filter(Boolean)
     : [];
+  const { normalizeMeetingAttendees } = await import("../services/matrixContacts.js");
+  const attendees = normalizeMeetingAttendees(req.body.attendees);
+  const title = String(req.body.title || "").trim();
+  if (!title) return res.status(400).json({ error: "Meeting title is required" });
+  if (Number.isNaN(meetingDate.getTime())) return res.status(400).json({ error: "Choose a valid meeting date and time" });
 
   const meeting = await prisma.meeting.create({
     data: {
       projectId: req.params.projectId,
-      title: req.body.title,
+      title,
       meetingDate,
       location: req.body.location,
       status: req.body.status || "Agenda",
       durationMins,
+      attendeesJson: attendees.length ? JSON.stringify(attendees) : null,
       agendaNotes: agendaFromBody.length ? agendaFromBody.join("\n") : req.body.agendaNotes || null,
       items: agendaFromBody.length
         ? {
@@ -426,11 +432,14 @@ commsRouter.post("/meetings/:projectId", requireRoles("admin", "office", "employ
   });
   await audit("meeting.schedule", { userId: req.user!.id, entity: "Meeting", entityId: meeting.id });
 
-  const { resolveMeetingRecipients } = await import("../services/matrixContacts.js");
-  const recipients = await resolveMeetingRecipients(
-    req.params.projectId,
-    typeof req.body.attendeeEmails === "string" ? req.body.attendeeEmails : undefined
-  );
+  const { resolveMeetingRecipients, meetingRecipientLists } = await import("../services/matrixContacts.js");
+  // Invite goes to the people picked from the matrix (TO / CC); legacy comma-separated list still works.
+  const recipients = attendees.length
+    ? await meetingRecipientLists(meeting)
+    : await resolveMeetingRecipients(
+        req.params.projectId,
+        typeof req.body.attendeeEmails === "string" ? req.body.attendeeEmails : undefined
+      );
   const attendeeRaw = recipients.to.join(", ");
   const ccRaw = recipients.cc.join(", ");
 
@@ -537,6 +546,13 @@ commsRouter.patch("/meetings/:id", requireRoles("admin", "office", "employee", "
       status: req.body.status,
       title: req.body.title,
       location: req.body.location,
+      ...(req.body.attendees !== undefined
+        ? await (async () => {
+            const { normalizeMeetingAttendees } = await import("../services/matrixContacts.js");
+            const list = normalizeMeetingAttendees(req.body.attendees);
+            return { attendeesJson: list.length ? JSON.stringify(list) : null };
+          })()
+        : {}),
     },
   });
   res.json(meeting);
@@ -558,6 +574,8 @@ commsRouter.post("/meetings/:id/carry-over", requireRoles("admin", "office", "em
       location: source.location,
       status: "Follow-up",
       parentMeetingId: source.id,
+      durationMins: source.durationMins,
+      attendeesJson: source.attendeesJson,
       items: {
         create: openItems.map((i) => ({
           category: "Follow-up",
@@ -826,8 +844,8 @@ commsRouter.post(
       const ownerEmails = meeting.items
         .map((it) => it.assignedTo?.email)
         .filter((e): e is string => Boolean(e));
-      const { getOnboardedMatrixEmails } = await import("../services/matrixContacts.js");
-      const matrixEmails = await getOnboardedMatrixEmails(meeting.projectId);
+      const { meetingRecipientLists } = await import("../services/matrixContacts.js");
+      const matrixEmails = await meetingRecipientLists(meeting);
       const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.to]));
       const cc = matrixEmails.cc.filter((email) => !to.includes(email));
 
@@ -874,8 +892,8 @@ commsRouter.post(
           .split(/[,;\s]+/)
           .filter(Boolean);
     const ownerEmails = meeting.items.map((it) => it.assignedTo?.email).filter((e): e is string => Boolean(e));
-    const { getOnboardedMatrixEmails } = await import("../services/matrixContacts.js");
-    const matrixEmails = await getOnboardedMatrixEmails(meeting.projectId);
+    const { meetingRecipientLists } = await import("../services/matrixContacts.js");
+    const matrixEmails = await meetingRecipientLists(meeting);
     const to = Array.from(new Set([...bodyEmails, ...ownerEmails, ...matrixEmails.to]));
     const cc = matrixEmails.cc.filter((email) => !to.includes(email));
 

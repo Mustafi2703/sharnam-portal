@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { StatusNote } from "../../components/StatusNote";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
 import { InspectionRequestReference } from "../../components/InspectionRequestReference";
@@ -238,8 +239,9 @@ export default function RfisPage() {
     form.rfiKind === "QualityIR" ||
     form.rfiKind === "SafetyIR" ||
     form.rfiKind === "ActivityInspection" ||
-    form.rfiKind === "SiteExecution" ||
-    (form.rfiKind === "RequestForInformation" && moduleScope === "drawings");
+    form.rfiKind === "SiteExecution";
+  /** Ask (PMC RFI) is clarification only — a Drawing Check checklist can be attached but is optional. */
+  const showChecklistPicker = needsChecklist || (form.rfiKind === "RequestForInformation" && moduleScope === "drawings");
   const checklistOptions =
     form.rfiKind === "QualityInspection" || form.rfiKind === "QualityIR"
       ? qiAssignments
@@ -357,15 +359,8 @@ export default function RfisPage() {
         </Card>
       )}
 
-      {!isClient && composeMode && moduleScope === "drawings" && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Link to={`/projects/${id}/rfis?view=register`} className="text-brand underline font-medium">
-            ← Back to RFI register
-          </Link>
-        </div>
-      )}
 
-      {!isClient && (moduleScoped && !registerMode ? kindPills.length > 1 : !registerMode && true) && (
+      {!isClient && !composeMode && (moduleScoped && !registerMode ? kindPills.length > 1 : !registerMode && true) && (
       <div className="flex flex-wrap gap-2">
         {(moduleScoped ? kindPills : [
           ["All", "All"],
@@ -558,25 +553,33 @@ export default function RfisPage() {
                   value={form.specClause}
                   onChange={(e) => setForm({ ...form, specClause: e.target.value })}
                 />
-                <Input
-                  placeholder="Contractor proposed solution (optional)"
+                <TextArea
+                  rows={2}
+                  required={form.rfiKind === "RequestForInformation"}
+                  label={form.rfiKind === "RequestForInformation" ? "Contractor proposed solution *" : "Contractor proposed solution (optional)"}
+                  hint={
+                    form.rfiKind === "RequestForInformation"
+                      ? "Required on the SPDC RFI form — an RFI without a proposed solution is returned unanswered."
+                      : undefined
+                  }
+                  placeholder="What the contractor proposes"
                   value={form.contractorSolution}
                   onChange={(e) => setForm({ ...form, contractorSolution: e.target.value })}
-                  className="sm:col-span-2"
+                  fieldClassName="sm:col-span-2"
                 />
               </div>
             )}
             {!isClient && (
               <div className="grid sm:grid-cols-2 gap-2">
-                {needsChecklist && (
+                {showChecklistPicker && (
                   <Select
-                    required
+                    required={needsChecklist}
                     value={form.linkedAssignmentId}
                     onChange={(e) => setForm({ ...form, linkedAssignmentId: e.target.value })}
                   >
                     <option value="">
                       {form.rfiKind === "RequestForInformation"
-                        ? "Drawing Check checklist to attach *"
+                        ? "Drawing Check checklist to attach (optional)"
                         : "Checklist to fill *"}
                     </option>
                     {checklistOptions.map((a) => (
@@ -586,7 +589,7 @@ export default function RfisPage() {
                     ))}
                   </Select>
                 )}
-                {needsChecklist && (
+                {showChecklistPicker && (
                   <div>
                     <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-1">
                       Vendor from project directory
@@ -643,13 +646,13 @@ export default function RfisPage() {
                   : form.rfiKind === "SafetyChecklist"
                     ? "Safety fill — send to a named person or a vendor from this project's directory. No drawing file attachment."
                     : form.rfiKind === "RequestForInformation"
-                      ? "PMC / drawing clarification — link drawing revision and attach one Drawing Check checklist per RFI."
+                      ? "PMC / drawing clarification — link the drawing revision. Attaching a Drawing Check checklist is optional."
                       : "Pick a named directory person or an assigned vendor. The request is emailed and lands on their fill inbox."}
             </p>
             <Button type="submit">
               {isClient ? "Submit concern" : moduleScope === "quality" ? "Request QI fill" : moduleScope === "drawings" && form.rfiKind === "DrawingChecklist" ? "Request checklist fill" : "Open RFI"}
             </Button>
-            {syncNote && <p className="text-xs text-ok leading-relaxed">{syncNote}</p>}
+            <StatusNote msg={syncNote} compact />
           </form>
         </Card>
         </div>
