@@ -10,6 +10,7 @@ import { SearchableSelect } from "../../components/SearchableSelect";
 import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../components/RfiProgressBar";
 import { InspectionRequestReference } from "../../components/InspectionRequestReference";
 import { DrawingRfiRegisterTable } from "../../components/DrawingRfiRegisterTable";
+import { RfiDeleteButton } from "../../components/RfiDeleteButton";
 import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
 import { spdcFormDataFromCompose, spdcRegisterDashboard } from "../../lib/rfiRegisterColumns";
 import { rfiUsesDrawingLink } from "../../lib/inspectionRequestForms";
@@ -753,7 +754,18 @@ export default function RfisPage() {
           {selected && (
             <div className="space-y-4">
               <div>
-                <div className="font-mono text-xs text-brand">{selected.number}</div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-mono text-xs text-brand">{selected.number}</div>
+                  <RfiDeleteButton
+                    rfi={selected}
+                    token={token}
+                    role={user?.role}
+                    onDeleted={async () => {
+                      setActive(null);
+                      await load();
+                    }}
+                  />
+                </div>
                 <h2 className="font-display text-2xl mt-1">{selected.subject}</h2>
                 {selectedProgress && (
                   <div className="mt-3 space-y-2">
@@ -927,6 +939,16 @@ export default function RfisPage() {
                   >
                     Print / PDF
                   </Button>
+                  <RfiDeleteButton
+                    rfi={selected}
+                    token={token}
+                    role={user?.role}
+                    onDeleted={async () => {
+                      setRegisterDetailOpen(false);
+                      setActive(null);
+                      await load();
+                    }}
+                  />
                 </div>
                 <div>
                   <h3 className="font-semibold text-sm mb-2">Responses</h3>

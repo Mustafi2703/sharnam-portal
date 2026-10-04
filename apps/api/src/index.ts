@@ -234,6 +234,12 @@ if (webDist) {
 }
 
 app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const explicit = Number((err as Error & { status?: number; statusCode?: number }).status || (err as { statusCode?: number }).statusCode);
+  const status = explicit >= 400 && explicit < 600 ? explicit : /^No .+ (to export|found)/i.test(err.message || "") ? 404 : 500;
+  if (status < 500) {
+    if (!res.headersSent) res.status(status).json({ error: err.message || "Request failed" });
+    return;
+  }
   console.error(err);
   const authed = req as express.Request & { user?: { id?: string; email?: string } };
   pushRuntimeLog({
@@ -255,7 +261,7 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
     return;
   }
   if (!res.headersSent) {
-    res.status(500).json({ error: err.message || "Server error" });
+    res.status(status).json({ error: err.message || "Server error" });
   }
 });
 

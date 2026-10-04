@@ -1144,10 +1144,25 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
 rfiRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "RFI not found" });
-  await prisma.rfiResponse.deleteMany({ where: { rfiId: existing.id } });
-  await prisma.rfi.delete({ where: { id: existing.id } });
-  await audit("rfi.delete", { userId: req.user!.id, entity: "Rfi", entityId: existing.id });
-  res.json({ ok: true });
+  await prisma.$transaction([
+    prisma.inspectionItem.updateMany({ where: { linkedRfiId: existing.id }, data: { linkedRfiId: null } }),
+    prisma.designCoordinationIssue.updateMany({ where: { escalatedRfiId: existing.id }, data: { escalatedRfiId: null } }),
+    prisma.rfiResponse.deleteMany({ where: { rfiId: existing.id } }),
+    prisma.rfi.delete({ where: { id: existing.id } }),
+  ]);
+  await audit("rfi.delete", {
+    userId: req.user!.id,
+    entity: "Rfi",
+    entityId: existing.id,
+    meta: { number: existing.number, kind: existing.rfiKind, projectId: existing.projectId },
+  });
+  // Keep the live SharePoint register in step; the RFI's own files are removed from SharePoint by hand.
+  if (!["QualityIR", "SafetyIR", "ActivityInspection", "DrawingChecklist", "QualityInspection", "SafetyChecklist", "SiteExecution"].includes(existing.rfiKind)) {
+    void import("../services/syncRfiToDrive.js")
+      .then(({ refreshRfiRegisterOnDrive }) => refreshRfiRegisterOnDrive(existing.projectId))
+      .catch((err) => console.warn("[rfi] register refresh after delete:", err instanceof Error ? err.message : err));
+  }
+  res.json({ ok: true, number: existing.number });
 });
 
 export const inspectionsRouter = Router();

@@ -131,3 +131,18 @@ export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDrive
 
   return { exports };
 }
+
+/** Rewrite only the live RFI register (e.g. after an RFI is deleted). Per-RFI files are left for manual cleanup. */
+export async function refreshRfiRegisterOnDrive(projectId: string): Promise<void> {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return;
+  const rfis = await prisma.rfi.findMany({ where: { projectId }, include: rfiInclude, orderBy: { createdAt: "asc" } });
+  const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis });
+  await mockOneDrive.upload(
+    project.code,
+    `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`,
+    "SPDC_RFI_Form_and_Register.xlsx",
+    registerBuf,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+}

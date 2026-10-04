@@ -14,6 +14,22 @@ type PortalRow = {
   updated?: string;
   portalPath: string;
   downloadPath?: string;
+  /** Shown in the Type column, e.g. "RFI", "Quality IR", "QI fill". */
+  typeLabel?: string;
+};
+
+const IR_TAB: Record<string, string> = { QualityIR: "quality-ir", SafetyIR: "safety-ir", ActivityInspection: "activity-checklist" };
+const TYPE_LABEL: Record<string, string> = {
+  RequestForInformation: "RFI",
+  Manual: "RFI",
+  DrawingChecklist: "Drawing check fill",
+  QualityInspection: "QI fill request",
+  SafetyChecklist: "Safety fill request",
+  SiteExecution: "Site checklist fill",
+  QualityIR: "Quality IR",
+  SafetyIR: "Safety IR",
+  ActivityInspection: "Activity checklist",
+  ClientConcern: "Client concern",
 };
 
 type Props = {
@@ -41,15 +57,23 @@ export function ModulePortalFilesPanel({ projectId, token, config }: Props) {
             token,
           });
           for (const x of r.rfis || []) {
+            const kind = String(x.rfiKind || "RequestForInformation");
+            const irTab = IR_TAB[kind];
+            const isRfi = kind === "RequestForInformation" || kind === "Manual" || kind === "ClientConcern";
             out.push({
               id: x.id,
               kind: "rfi",
-              ref: x.number || "RFI",
+              typeLabel: TYPE_LABEL[kind] || "Request",
+              ref: x.irNumber || x.number || "RFI",
               title: x.subject || x.title || "—",
               status: x.status || "Open",
               updated: x.updatedAt || x.createdAt,
-              portalPath: `/projects/${projectId}/rfis?kind=${encodeURIComponent(x.rfiKind || "All")}`,
-              downloadPath: `/api/rfis/${x.id}/download.xlsx`,
+              // Inspection requests live on the inspection register; RFIs open in their module with the row selected.
+              portalPath: irTab
+                ? `/projects/${projectId}/inspection-register?tab=${irTab}`
+                : `/projects/${projectId}/rfis?${isRfi ? "view=register" : `kind=${encodeURIComponent(kind)}`}&rfi=${x.id}`,
+              // RFI → SPDC RFI form; inspection → SPDC Request for Inspection form; fill requests have no form of their own.
+              downloadPath: irTab ? `/api/rfis/${x.id}/inspection.xlsx` : isRfi ? `/api/rfis/${x.id}/download.xlsx` : undefined,
             });
           }
         }
@@ -159,7 +183,7 @@ export function ModulePortalFilesPanel({ projectId, token, config }: Props) {
             <tbody>
               {[...grouped.rfis, ...grouped.ncrs].map((r) => (
                 <tr key={`${r.kind}-${r.id}`} className="border-b border-line/60 hover:bg-sand/30">
-                  <td className="py-2 px-4 text-xs uppercase text-steel-muted">{r.kind === "rfi" ? "RFI" : "NCR/CAR"}</td>
+                  <td className="py-2 px-4 text-xs uppercase text-steel-muted">{r.typeLabel || (r.kind === "rfi" ? "RFI" : "NCR/CAR")}</td>
                   <td className="py-2 pr-3 font-mono text-xs">{r.ref}</td>
                   <td className="py-2 pr-3">{r.title}</td>
                   <td className="py-2 pr-3">

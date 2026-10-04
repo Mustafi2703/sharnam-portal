@@ -110,6 +110,10 @@ Create these from CRM / HRMS (or reuse existing ones). Use a separate browser pr
 | 7.6 | Same for a quality request link while last on Drawings | Opens in Quality with that request selected. | |
 | 7.7 | Design coordination → escalate → **View linked RFI** | Opens the register with the escalated RFI selected. | |
 | 7.8 | Ask PMC RFI without a proposed solution | Blocked: proposed solution is required (SPDC rule). Checklist attachment is optional. | |
+| 7.9 | As admin / office: open a test RFI → **Delete** → confirm | Removed from the log; detail clears. Live `SPDC_RFI_Form_and_Register.xlsx` on SharePoint is rewritten without it within a minute. The RFI's own files in SharePoint stay — delete them by hand. | |
+| 7.10 | Quality → Inspection register → select a test request → **Delete** | Removed from the register. Site / client logins do not see Delete. | |
+| 7.11 | Every module → **Files** tab, open each folder | Folders load quickly (Quality no longer waits on regenerating the pack). Records show the right Type and open the right register. | |
+| 7.12 | Quality → QAP / Cube register download on a project with no rows | Short red notice "No QAP rows yet — nothing to download." The portal keeps working. | |
 
 ## 8. Progress (L1 / L2)
 

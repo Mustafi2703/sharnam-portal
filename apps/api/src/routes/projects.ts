@@ -1631,6 +1631,9 @@ dmsRouter.get("/:projectId/folders", async (req, res) => {
   res.json({ projectCode: project.code, folders: PROJECT_LIBRARY_FOLDERS });
 });
 
+const QUALITY_ISO_REFRESH_MS = 15 * 60_000;
+const qualityIsoRefreshAt = new Map<string, number>();
+
 dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Not found" });
@@ -1654,11 +1657,15 @@ dmsRouter.get("/:projectId/browse", async (req: AuthedRequest, res) => {
     folderPath.includes("08.03_") ||
     folderPath.includes("08.06_");
   if (qualityIso && req.user?.id) {
-    try {
-      const { ensureQualityIsoLinked } = await import("../services/registerWorkbookPublish.js");
-      await ensureQualityIsoLinked(project.id, req.user.id);
-    } catch (err) {
-      console.warn("[dms] quality ISO link:", err instanceof Error ? err.message : err);
+    // Refresh the Quality register copies in the background (throttled). Doing this inline regenerated and
+    // uploaded every quality workbook to SharePoint before listing — on live SharePoint the browse timed out.
+    const last = qualityIsoRefreshAt.get(project.id) || 0;
+    if (Date.now() - last > QUALITY_ISO_REFRESH_MS) {
+      qualityIsoRefreshAt.set(project.id, Date.now());
+      const userId = req.user.id;
+      void import("../services/registerWorkbookPublish.js")
+        .then(({ ensureQualityIsoLinked }) => ensureQualityIsoLinked(project.id, userId))
+        .catch((err) => console.warn("[dms] quality ISO link:", err instanceof Error ? err.message : err));
     }
   }
   let children = await mockOneDrive.listChildrenLive(project.code, folderPath);

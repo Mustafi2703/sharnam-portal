@@ -8,6 +8,7 @@ import { ToolLink } from "../../components/ToolLink";
 import { InspectionRegisterTable, registerFormRefForTab } from "../../components/InspectionRegisterTable";
 import { SpdcInspectionFormPanel } from "../../components/SpdcInspectionFormPanel";
 import { SpdcInspectionIrPanel } from "../../components/SpdcInspectionIrPanel";
+import { RfiDeleteButton } from "../../components/RfiDeleteButton";
 import {
   ACTIVITY_CHECKLIST_FORM,
   HSE_REGISTER_REF,
@@ -345,6 +346,23 @@ export default function InspectionRegisterPage() {
           }
         />
       </Card>
+
+      {selected && tab !== "hse-register" && id && (user?.role === "admin" || user?.role === "office") && (
+        <div className="flex items-center justify-end gap-2 text-xs text-steel-muted">
+          <span>
+            Clean up the log: <span className="font-mono text-brand">{selected.number}</span>
+          </span>
+          <RfiDeleteButton
+            rfi={selected}
+            token={token}
+            role={user?.role}
+            onDeleted={async () => {
+              setActive(null);
+              await load();
+            }}
+          />
+        </div>
+      )}
 
       {selected && tab !== "hse-register" && id && (
         <SpdcInspectionIrPanel
