@@ -110,7 +110,7 @@ export function ProjectTeamAllocatePanel({
         token,
         body: JSON.stringify({ assignments }),
       });
-      onMsg(`${selectedIds.length} team member(s) assigned to this project.`);
+      onMsg(`${selectedIds.length} SPDC team member(s) assigned to this project.`);
       onChange([]);
       onChanged?.();
     } catch (err) {
@@ -129,7 +129,7 @@ export function ProjectTeamAllocatePanel({
       onMsg(`${name} removed from project team.`);
       onChanged?.();
     } catch (err) {
-      onMsg(err instanceof Error ? err.message : "Could not remove team member");
+      onMsg(err instanceof Error ? err.message : "Could not remove SPDC team member");
     } finally {
       setBusy(false);
     }
@@ -170,14 +170,14 @@ export function ProjectTeamAllocatePanel({
 
   return (
     <Card className="!p-4 space-y-3">
-      <h3 className="font-semibold text-sm">Team</h3>
+      <h3 className="font-semibold text-sm">SPDC Team</h3>
       <p className="text-xs text-steel-muted">
         Mark the company role on this project card — Director, Coordinator, Project Manager, Senior / Junior / Billing / Planning / Safety / MEPF engineer. It is saved on the person and used on the communication matrix.
       </p>
       {staffMembers.length > 0 && (
         <>
           <Input
-            placeholder="Search team on this project…"
+            placeholder="Search SPDC team on this project…"
             value={listQ}
             onChange={(e) => setListQ(e.target.value)}
           />
@@ -236,7 +236,7 @@ export function ProjectTeamAllocatePanel({
             items={staffItems}
             selectedIds={selectedIds}
             onChange={onChange}
-            placeholder="Search team by name, company role, or email…"
+            placeholder="Search SPDC team by name, company role, or email…"
             emptyMessage="No SPDC team in HRMS → Users yet."
             maxHeightClass="max-h-48"
           />
@@ -255,13 +255,13 @@ export function ProjectTeamAllocatePanel({
                 </Select>
               </div>
               <Button type="button" variant="secondary" disabled={busy || !selectedIds.length} onClick={() => void persist()}>
-                Add to team ({selectedIds.length})
+                Add to SPDC team ({selectedIds.length})
               </Button>
             </div>
           ) : (
             <p className="text-[11px] text-steel-muted">
               {selectedIds.length
-                ? `${selectedIds.length} team member(s) selected — they save with the project card (roles from HRMS company role).`
+                ? `${selectedIds.length} SPDC team member(s) selected — they save with the project card (roles from HRMS company role).`
                 : "Select team members; they save with the project card."}
             </p>
           )}

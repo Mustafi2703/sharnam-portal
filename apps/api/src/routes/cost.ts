@@ -786,7 +786,7 @@ async function sendCostDownload(req: AuthedRequest, res: import("express").Respo
   }
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
   if (fmt === "xlsx") {
-    const buf = workbookBuffer([{ name: pack.title.slice(0, 31), rows: [pack.headers, ...pack.rows] }], {
+    const buf = await workbookBuffer([{ name: pack.title.slice(0, 31), rows: [pack.headers, ...pack.rows] }], {
       title: pack.title,
       projectCode: project?.code || projectId,
     });

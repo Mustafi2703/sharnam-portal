@@ -384,7 +384,7 @@ export async function exportCubeWorkbook(projectId: string) {
     r.result || "Pending",
   ]);
   return {
-    buffer: workbookBuffer([{ name: "Sheet1", rows: [["CUBE REGISTER"], [], header, ...dataRows] }], {
+    buffer: await workbookBuffer([{ name: "Sheet1", rows: [["CUBE REGISTER"], [], header, ...dataRows] }], {
       title: "Cube Register",
       projectCode: project.code,
     }),

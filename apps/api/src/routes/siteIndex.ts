@@ -217,7 +217,7 @@ siteIndexRouter.get("/download.xlsx", async (_req, res) => {
   const { workbookBuffer } = await import("../services/brandedExport.js");
   const headers = ["Sr", "Drawing No", "Title", "Discipline", "Stage", "Status", "Package", "Notes"];
   const data = rows.map((r) => [r.srNo, r.drawingNo, r.title, r.discipline, r.stage, r.status, r.packageHint || "", r.notes || ""]);
-  const buf = workbookBuffer([{ name: "Site & Final Index", rows: [headers, ...data] }], {
+  const buf = await workbookBuffer([{ name: "Site & Final Index", rows: [headers, ...data] }], {
     title: "Sharnam · Site / Final Drawing Index master",
     projectCode: "MASTER",
   });

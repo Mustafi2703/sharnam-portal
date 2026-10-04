@@ -353,7 +353,7 @@ reportsRouter.get("/:projectId/due-dates", requireAuth, async (req, res) => {
 
 reportsRouter.get("/analytics/:projectId/download.xlsx", async (req, res) => {
   const pack = await buildAnalyticsPack(req.params.projectId);
-  const buf = workbookBuffer(analyticsToSheets(pack), {
+  const buf = await workbookBuffer(analyticsToSheets(pack), {
     title: "Project analytics dashboard",
     projectCode: pack.project.code,
   });
@@ -375,7 +375,7 @@ reportsRouter.get("/module/:projectId/:module/download.xlsx", async (req, res) =
   if (!MODULE_KEYS.includes(module)) return res.status(400).json({ error: "Unknown module" });
   const pack = await buildModuleExport(req.params.projectId, module);
   const code = (await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } }))?.code || "project";
-  const buf = workbookBuffer(pack.sheets, { title: pack.title, projectCode: code });
+  const buf = await workbookBuffer(pack.sheets, { title: pack.title, projectCode: code });
   const fname = `Sharnam-${module}-${code}.xlsx`;
   await sendStampedXlsx(res, buf, fname);
 });

@@ -144,24 +144,195 @@ export function ensureEmailHtmlUsesInlineLogo(html: string): string {
   return out;
 }
 
-export function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; projectCode?: string }): Buffer {
-  const wb = XLSX.utils.book_new();
-  const cover: (string | number)[][] = [
-    ["Sharnam Project Development Consultants & Co."],
-    ["शरणम् · PMC Client Report"],
-    [meta?.title || "Project analytics export"],
-    ["Project", meta?.projectCode || "—"],
-    ["Generated", new Date().toLocaleString("en-IN")],
-    [],
-    ["Sheets in this workbook:"],
-    ...sheets.map((s, i) => [`${i + 1}. ${s.name}`]),
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cover), "Cover");
-  for (const sheet of sheets) {
-    const safe = sheet.name.replace(/[\\/?*[\]]/g, "-").slice(0, 31) || "Sheet";
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet.rows), safe);
+/* ───────────── Sharnam-branded generic workbook (every module dashboard / register export) ───────────── */
+
+const BRAND_NAVY = "FF1E3A5F";
+const BRAND_ZEBRA = "FFF4F0E6";
+const BRAND_GRID = "FFB8C2CC";
+const BRAND_COMPANY = "SHARNAM PROJECT DEVELOPMENT CONSULTANTS & CO. (SPDC)";
+const BRAND_FOOTER =
+  "PROJECT MANAGEMENT CONSULTANTS : Sharnam Project Development Consultants & Co. · 1018, Samanvay Silver, BS Royal Orchid Hotel near Mujmahuda Circle, Akota, Vadodara, Gujarat 390020";
+
+/** Columns whose values get status colour-coding. */
+const STATUS_HEADER_RE = /status|result|outcome|stage|critical|delay|rag|approval|compliance|condition|overdue/i;
+const TONE_OK = /^(closed|approved|complete(d)?|done|yes|ok|pass(ed)?|received|issued|resolved|on track|green|signed|accepted|cleared|compliant|satisfactory|achieved|in place|available|active|published|gfc)$/i;
+const TONE_BAD = /^(rejected|fail(ed)?|not ok|overdue|delayed|red|nc|non[- ]?compliant|unsatisfactory|escalated|lost|blocked|expired|missing|shortage|behind)$/i;
+const TONE_WARN = /^(open|pending|in progress|hold|on hold|amber|partial|draft|awaiting.*|under review|scheduled|planned|queued.*|to do|not started|at risk|follow-?up)$/i;
+const TONES = {
+  ok: { bg: "FFC6EFCE", fg: "FF006100" },
+  bad: { bg: "FFFFC7CE", fg: "FF9C0006" },
+  warn: { bg: "FFFFEB9C", fg: "FF9C5700" },
+};
+
+function toneFor(header: string, value: unknown): keyof typeof TONES | null {
+  if (!STATUS_HEADER_RE.test(header)) return null;
+  if (typeof value === "number") {
+    if (/delay|overdue|shortage|variance/i.test(header)) return value > 0 ? "bad" : value < 0 ? "ok" : null;
+    return null;
   }
-  return Buffer.from(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+  const v = String(value ?? "").trim();
+  if (!v || v === "—" || v === "-") return null;
+  if (/critical/i.test(header)) return /^yes$/i.test(v) ? "warn" : null;
+  if (/^no$/i.test(v)) return /approval|compliance|condition/i.test(header) ? "bad" : null;
+  if (TONE_OK.test(v)) return "ok";
+  if (TONE_BAD.test(v)) return "bad";
+  if (TONE_WARN.test(v)) return "warn";
+  return null;
+}
+
+function isHeaderRow(row: SheetSpec["rows"][number] | undefined) {
+  if (!row) return false;
+  const filled = row.filter((c) => c !== null && c !== undefined && String(c).trim() !== "");
+  return filled.length >= 2 && filled.every((c) => typeof c === "string");
+}
+
+/**
+ * Build a Sharnam-branded XLSX: cover sheet + one styled sheet per spec.
+ * Logo sits in its own reserved band (never on top of text), navy header row, zebra rows, borders,
+ * status colour-coding, frozen header, filters, landscape A4 fit-to-width and the SPDC footer.
+ */
+export async function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; projectCode?: string }): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Sharnam Project Development Consultants & Co. (SPDC)";
+  wb.created = new Date();
+  const logo = sharnamLogoPath();
+  let logoId: number | null = null;
+  if (logo) {
+    try {
+      logoId = wb.addImage({ filename: logo, extension: "png" });
+    } catch {
+      logoId = null;
+    }
+  }
+  const generated = new Date().toLocaleString("en-IN");
+  const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
+  const thin = { style: "thin" as const, color: { argb: BRAND_GRID } };
+  const box = { top: thin, left: thin, bottom: thin, right: thin };
+
+  /**
+   * Rows 1–3 letterhead: logo top-left, company / title / project right-aligned across the full width
+   * (call after column widths are set; sheets are kept ≥ ~80 chars wide so text never meets the logo).
+   */
+  const brandBand = (ws: ExcelJS.Worksheet, title: string, lastCol: number) => {
+    const span = Math.max(lastCol, 1);
+    const total = Array.from({ length: span }, (_, i) => ws.getColumn(i + 1).width || 10).reduce((a, b) => a + b, 0);
+    if (total < 80) ws.getColumn(span).width = (ws.getColumn(span).width || 10) + (80 - total);
+    for (const r of [1, 2, 3]) ws.getRow(r).height = r === 1 ? 24 : 18;
+    if (logoId !== null) ws.addImage(logoId, { tl: { col: 0.1, row: 0.15 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+    const put = (r: number, text: string, font: Partial<ExcelJS.Font>) => {
+      if (span > 1) ws.mergeCells(r, 1, r, span);
+      const c = ws.getCell(r, 1);
+      c.value = text;
+      c.font = { name: "Arial", ...font };
+      c.alignment = { vertical: "middle", horizontal: "right" };
+    };
+    put(1, BRAND_COMPANY, { bold: true, size: 11, color: { argb: BRAND_NAVY } });
+    put(2, title, { bold: true, size: 13 });
+    put(3, `Project: ${meta?.projectCode || "—"}   ·   Generated: ${generated}`, { size: 9, color: { argb: "FF555555" } });
+    for (let c = 1; c <= span; c++) {
+      ws.getCell(3, c).border = { bottom: { style: "medium", color: { argb: BRAND_NAVY } } };
+    }
+    return 5;
+  };
+
+  // ── Cover ──
+  const cover = wb.addWorksheet("Cover", { views: [{ showGridLines: false }] });
+  [16, 16, 60].forEach((w, i) => (cover.getColumn(i + 1).width = w));
+  let r = brandBand(cover, meta?.title || "Project export", 3);
+  cover.getCell(r, 1).value = "Sheets in this workbook";
+  cover.getCell(r, 1).font = { name: "Arial", bold: true, size: 10, color: { argb: BRAND_NAVY } };
+  sheets.forEach((s, i) => {
+    r += 1;
+    cover.getCell(r, 1).value = `${i + 1}. ${s.name}`;
+    cover.getCell(r, 1).font = { name: "Arial", size: 10 };
+    cover.getCell(r, 3).value = `${Math.max(0, s.rows.length - 1)} rows`;
+    cover.getCell(r, 3).font = { name: "Arial", size: 9, color: { argb: "FF666666" } };
+  });
+  r += 2;
+  cover.mergeCells(r, 1, r, 3);
+  cover.getCell(r, 1).value = BRAND_FOOTER;
+  cover.getCell(r, 1).font = { name: "Arial", italic: true, size: 8, color: { argb: "FF666666" } };
+  cover.getCell(r, 1).alignment = { wrapText: true };
+  cover.getRow(r).height = 28;
+
+  // ── Data sheets ──
+  const used = new Set<string>(["Cover"]);
+  for (const sheet of sheets) {
+    let name = sheet.name.replace(/[\\/?*[\]:]/g, "-").slice(0, 31) || "Sheet";
+    for (let n = 2; used.has(name); n++) name = `${name.slice(0, 28)} ${n}`;
+    used.add(name);
+    const rows = sheet.rows || [];
+    const width = Math.max(1, ...rows.map((row) => row?.length || 0));
+    const ws = wb.addWorksheet(name, {
+      views: [{ showGridLines: false }],
+      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    // Title-ish rows above the first real header row are written as plain captions.
+    const headerIdx = rows.findIndex((row) => isHeaderRow(row));
+    const hdr = headerIdx >= 0 ? rows[headerIdx].map((h) => String(h ?? "")) : [];
+    const bodyRows = headerIdx >= 0 ? rows.slice(headerIdx + 1) : rows;
+    // Column widths from header + content, before the letterhead (it needs the total width).
+    const colMax = new Array(width).fill(8);
+    hdr.forEach((h, i) => (colMax[i] = Math.max(colMax[i], Math.min(h.length + 2, 28))));
+    bodyRows.forEach((row) => {
+      for (let i = 0; i < width; i++) colMax[i] = Math.max(colMax[i], Math.min(String(row?.[i] ?? "").length + 2, 50));
+    });
+    colMax.forEach((w, i) => (ws.getColumn(i + 1).width = Math.max(i < 2 ? 12 : 8, w)));
+    let at = brandBand(ws, sheet.name, width);
+    rows.slice(0, Math.max(0, headerIdx)).forEach((row) => {
+      if (row.some((c) => String(c ?? "").trim())) {
+        ws.getCell(at, 1).value = row.filter((c) => String(c ?? "").trim()).join("  ·  ") as string;
+        ws.getCell(at, 1).font = { name: "Arial", bold: true, size: 10 };
+        at += 1;
+      }
+    });
+
+    const headerRow = at;
+    if (headerIdx >= 0) {
+      hdr.forEach((h, i) => {
+        const c = ws.getCell(at, i + 1);
+        c.value = h;
+        c.font = { name: "Arial", bold: true, size: 9, color: { argb: "FFFFFFFF" } };
+        c.fill = solid(BRAND_NAVY);
+        c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        c.border = box;
+      });
+      ws.getRow(at).height = 30;
+      at += 1;
+    }
+
+    bodyRows.forEach((row, ri) => {
+      for (let i = 0; i < width; i++) {
+        const raw = row?.[i];
+        const c = ws.getCell(at, i + 1);
+        c.value = raw === null || raw === undefined ? "" : (raw as ExcelJS.CellValue);
+        c.font = { name: "Arial", size: 9 };
+        c.alignment = { vertical: "top", wrapText: true, horizontal: typeof raw === "number" ? "right" : "left" };
+        c.border = box;
+        if (ri % 2 === 1) c.fill = solid(BRAND_ZEBRA);
+        const tone = toneFor(hdr[i] || "", raw);
+        if (tone) {
+          c.fill = solid(TONES[tone].bg);
+          c.font = { name: "Arial", size: 9, bold: true, color: { argb: TONES[tone].fg } };
+          c.alignment = { vertical: "top", horizontal: "center", wrapText: true };
+        }
+      }
+      at += 1;
+    });
+
+    if (headerIdx >= 0) {
+      ws.views = [{ state: "frozen", ySplit: headerRow, showGridLines: false }];
+      ws.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: headerRow, column: width } };
+      ws.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`;
+    }
+    at += 1;
+    ws.mergeCells(at, 1, at, Math.max(width, 4));
+    ws.getCell(at, 1).value = BRAND_FOOTER;
+    ws.getCell(at, 1).font = { name: "Arial", italic: true, size: 8, color: { argb: "FF666666" } };
+  }
+
+  const out = await wb.xlsx.writeBuffer();
+  return Buffer.from(out);
 }
 
 export async function sendStampedXlsx(
@@ -189,6 +360,8 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
     await wb.xlsx.readFile(tmpPath);
     const ws = wb.worksheets[0];
     if (!ws) return buffer;
+    // Already branded (our builders place the logo in a reserved band) — don't paint a second logo over text.
+    if (ws.getImages().length > 0) return buffer;
     const imgId = wb.addImage({ filename: logo, extension: "png" });
     ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
     ws.addImage(imgId, {
@@ -639,7 +812,15 @@ export function analyticsToHtml(pack: Awaited<ReturnType<typeof buildAnalyticsPa
 
 export type ModuleExportKey = "rfis" | "comms" | "quality" | "safety" | "drawings" | "progress" | "field" | "cost";
 
+/** Module dashboard export — register sheets mapped to the client's Excel formats where available. */
 export async function buildModuleExport(projectId: string, module: ModuleExportKey) {
+  const base = await buildModuleExportBase(projectId, module);
+  const { moduleRegisterSheets } = await import("./moduleRegisterSheets.js");
+  const mapped = await moduleRegisterSheets(projectId, module);
+  return mapped ? { ...base, sheets: mapped } : base;
+}
+
+async function buildModuleExportBase(projectId: string, module: ModuleExportKey) {
   const pack = await buildAnalyticsPack(projectId);
   const p = pack.project;
 

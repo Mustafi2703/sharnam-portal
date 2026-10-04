@@ -309,7 +309,7 @@ export async function exportQapWorkbook(projectId: string, weekLabel?: string) {
     ...dataRows,
   ];
   const sheets: SheetSpec[] = [{ name: "Sheet1", rows: coverRows }];
-  return { weekLabel: wl, buffer: workbookBuffer(sheets, { title: "Quality Assurance Plan", projectCode: project.code }), sheets };
+  return { weekLabel: wl, buffer: await workbookBuffer(sheets, { title: "Quality Assurance Plan", projectCode: project.code }), sheets };
 }
 
 export async function exportQapHtml(projectId: string, weekLabel?: string) {

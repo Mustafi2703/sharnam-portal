@@ -34,6 +34,7 @@ function familyOf(type?: string | null) {
 
 export function buildBrandedChecklistHtml(
   submission: {
+    id?: string;
     status?: string | null;
     remarks?: string | null;
     createdAt?: Date | string | null;
@@ -74,6 +75,17 @@ export function buildBrandedChecklistHtml(
   dirSigns?: DirectorySignMap
 ) {
   const template = submission?.assignment?.template;
+  // Report no. typed on the fill, else a stable number from the submission id (never the internal type name).
+  const checklistNumber = (() => {
+    try {
+      const meta = JSON.parse(submission?.responsesJson || "{}")?._meta;
+      if (meta?.reportNo) return String(meta.reportNo);
+    } catch {
+      /* ignore */
+    }
+    const prefix = /drawing/i.test(String(template?.checklistType || "")) ? "DWG-CHK" : "CHK";
+    return submission?.id ? `${prefix}-${String(submission.id).slice(-6).toUpperCase()}` : "—";
+  })();
   const items = template?.items || [];
   let responses: Record<string, { answer?: string; remarks?: string; remark?: string; value?: string }> = {};
   try {
@@ -199,7 +211,7 @@ export function buildBrandedChecklistHtml(
       <div class="lbl">Project / Facility</div>
       <div class="val">${escapeHtml(project?.name || project?.code || "—")}</div>
       <div class="lbl">Checklist / IR No.</div>
-      <div class="val">${escapeHtml(template?.checklistType || "—")}</div>
+      <div class="val">${escapeHtml(checklistNumber)}</div>
       <div class="lbl">Employer / Client</div>
       <div class="val">${escapeHtml(project?.clientName || "—")}</div>
       <div class="lbl">Date of check</div>

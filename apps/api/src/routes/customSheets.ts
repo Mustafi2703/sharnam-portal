@@ -225,7 +225,7 @@ customSheetsRouter.get("/masters/:masterId/download.xlsx", async (req, res) => {
       : row.category === MASTER_CATEGORY.monitoring
         ? "Monitoring master"
         : "MB master";
-  const buf = workbookBuffer([{ name: row.name.slice(0, 31), rows: [headers, ...dataRows] }], {
+  const buf = await workbookBuffer([{ name: row.name.slice(0, 31), rows: [headers, ...dataRows] }], {
     title: `Sharnam · ${kindLabel} — ${row.name}`,
     projectCode: "MASTER",
   });

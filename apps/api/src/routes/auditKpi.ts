@@ -435,7 +435,7 @@ auditKpiRouter.get("/project/:projectId/download/:sheet.xlsx", async (req, res) 
     return res.status(400).json({ error: "Unknown sheet — use findings | subjects | role-kra | site-walk | dc-interview | folder-sample" });
   }
 
-  const buf = workbookBuffer([{ name: title.slice(0, 31), rows: [headers, ...rows] }], {
+  const buf = await workbookBuffer([{ name: title.slice(0, 31), rows: [headers, ...rows] }], {
     title,
     projectCode: project.code,
   });

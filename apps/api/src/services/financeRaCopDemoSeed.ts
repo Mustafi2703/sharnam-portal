@@ -27,7 +27,7 @@ async function seedRaBillStageWorkbooks(
   let latestUrl: string | undefined;
   for (const stage of stages) {
     const fileName = `${raNumber}-${stage}-workbook.xlsx`;
-    const buf = workbookBuffer(
+    const buf = await workbookBuffer(
       [
         {
           name: "RA Bill",

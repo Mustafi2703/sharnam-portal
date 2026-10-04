@@ -18,6 +18,7 @@ import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { CHECKLIST_FILLED_MESSAGE } from "../../lib/inPageOverlay";
 import { StatusNote } from "../../components/StatusNote";
+import { ReportExportButtons } from "../../components/ReportExportButtons";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
@@ -255,6 +256,7 @@ export default function InspectionsPage() {
           <Link to={`/projects/${id}/qap`}>
             <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
           </Link>
+          {id ? <ReportExportButtons projectId={id} kind="quality" compact /> : null}
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
           <button

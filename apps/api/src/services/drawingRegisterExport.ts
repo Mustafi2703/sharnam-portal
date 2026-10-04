@@ -248,12 +248,12 @@ function writePivotBlock(
   return startRow + 2 + rows.length + 2;
 }
 
-function revNumIndex(revisionNumber?: string | null) {
+export function revNumIndex(revisionNumber?: string | null) {
   const n = parseInt(String(revisionNumber || "").replace(/\D/g, ""), 10);
   return Number.isFinite(n) ? n : -1;
 }
 
-function revisionForSlot(
+export function revisionForSlot(
   revisions: { revisionNumber: string; createdAt: Date; actualDate?: Date | null; plannedDate?: Date | null }[],
   slot: number,
 ) {
@@ -262,7 +262,7 @@ function revisionForSlot(
   return matches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 }
 
-function revDateValue(rev?: { actualDate?: Date | null; plannedDate?: Date | null; createdAt: Date } | null) {
+export function revDateValue(rev?: { actualDate?: Date | null; plannedDate?: Date | null; createdAt: Date } | null) {
   if (!rev) return null;
   const d = rev.actualDate || rev.plannedDate || rev.createdAt;
   return d ? new Date(d) : null;
@@ -873,7 +873,7 @@ export async function buildApprovalGfcLogPdf(projectId: string): Promise<Buffer>
   });
 }
 
-async function loadCoordinationRows(projectId: string) {
+export async function loadCoordinationRows(projectId: string) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true, name: true } });
   if (!project) throw new Error("Project not found");
   const issues = await prisma.designCoordinationIssue.findMany({
@@ -912,7 +912,7 @@ async function loadCoordinationRows(projectId: string) {
   return { project, rows };
 }
 
-const COORDINATION_HEADERS = [
+export const COORDINATION_HEADERS = [
   "Sr #",
   "Date Raised",
   "Issue",

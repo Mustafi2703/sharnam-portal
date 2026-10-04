@@ -835,6 +835,207 @@ async function withIrCover(
 }
 
 /**
+ * Drawing Check Master — clean SPDC sheet that mirrors the branded PDF exactly:
+ * header band · Particulars · check lines (status cell coloured per answer only) · 4 signature slots · legend.
+ * (The Activity Inspection template was reused before; its column fills bled through every row.)
+ */
+async function fillDrawingCheckSheet(
+  submission: BrandedChecklistSubmission,
+  project?: ProjectMeta,
+  dirSigns?: DirectorySignMap,
+): Promise<ExcelJS.Workbook> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Sharnam Project Development Consultants & Co. (SPDC)";
+  const ws = wb.addWorksheet("Drawing Check", {
+    views: [{ showGridLines: false }],
+    pageSetup: {
+      paperSize: 9,
+      orientation: "portrait",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+    },
+  });
+  // A # | B label | C value / description | D status | E label | F value / observation
+  [6, 18, 40, 13, 18, 34].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+
+  const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
+  const box = (r: number, c0: number, c1 = c0) => {
+    for (let c = c0; c <= c1; c++) thinBorder(ws.getCell(r, c));
+  };
+  const put = (
+    r: number,
+    c0: number,
+    c1: number,
+    value: string | number,
+    opts: { fill?: string; bold?: boolean; size?: number; color?: string; align?: "left" | "center" | "right"; wrap?: boolean; italic?: boolean } = {},
+  ) => {
+    if (c1 > c0) ws.mergeCells(r, c0, r, c1);
+    const cell = ws.getCell(r, c0);
+    cell.value = value;
+    cell.font = { name: "Arial", size: opts.size ?? 10, bold: !!opts.bold, italic: !!opts.italic, color: { argb: opts.color || "FF000000" } };
+    cell.alignment = { vertical: "middle", horizontal: opts.align || "left", wrapText: opts.wrap ?? true, indent: opts.align === "center" ? 0 : 1 };
+    if (opts.fill) for (let c = c0; c <= c1; c++) ws.getCell(r, c).fill = solid(opts.fill);
+    box(r, c0, c1);
+    return cell;
+  };
+  const band = (r: number, title: string) => {
+    put(r, 1, 6, title, { fill: NAVY, bold: true, color: "FFFFFFFF", size: 10 });
+    ws.getRow(r).height = 20;
+  };
+
+  const meta = parseFillMetaFromResponses(submission.responsesJson);
+  const responses = parseResponses(submission.responsesJson);
+  const ordered = orderedAnswers(responses);
+  const items = submission.assignment?.template?.items || [];
+  const templateName = submission.assignment?.template?.name || "Drawing Check Master";
+
+  // ── Header band (rows 1–3) ──
+  for (const r of [1, 2, 3]) ws.getRow(r).height = 22;
+  ws.mergeCells(1, 1, 3, 2);
+  ws.getCell(1, 1).fill = solid(HEADER_BG);
+  box(1, 1, 2);
+  box(3, 1, 2);
+  const logo = checklistLogoPath();
+  if (logo) {
+    try {
+      const imgId = wb.addImage({ filename: logo, extension: "png" });
+      ws.addImage(imgId, { tl: { col: 0.2, row: 0.35 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+    } catch {
+      /* logo optional */
+    }
+  }
+  ws.mergeCells(1, 3, 3, 3);
+  const co = ws.getCell(1, 3);
+  co.value = "SHARNAM PROJECT DEVELOPMENT\nCONSULTANTS & CO. (SPDC)";
+  co.font = { name: "Arial", size: 10, bold: true };
+  co.alignment = { vertical: "middle", horizontal: "left", wrapText: true, indent: 1 };
+  co.fill = solid(HEADER_BG);
+  ws.mergeCells(1, 4, 3, 5);
+  const title = ws.getCell(1, 4);
+  title.value = { richText: [
+    { text: "DRAWING CHECK CHECKLIST\n", font: { name: "Arial", size: 13, bold: true } },
+    { text: templateName, font: { name: "Arial", size: 9, bold: true, color: { argb: "FF444444" } } },
+  ] };
+  title.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  ws.mergeCells(1, 6, 3, 6);
+  const doc = ws.getCell(1, 6);
+  doc.value = { richText: [
+    { text: "DOC. NO.\n", font: { name: "Arial", size: 8, bold: true, color: { argb: "FF444444" } } },
+    { text: templateName, font: { name: "Arial", size: 9 } },
+  ] };
+  doc.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  doc.fill = solid(LABEL);
+  for (const r of [1, 2, 3]) box(r, 3, 6);
+
+  // ── Particulars ──
+  let r = 4;
+  band(r, "PARTICULARS");
+  const tally = { ok: 0, fail: 0, na: 0 };
+  items.forEach((item, idx) => {
+    const k = classifyAnswer(getAnswer(responses, item, ordered[idx]).answer);
+    if (k === "ok") tally.ok += 1;
+    else if (k === "fail") tally.fail += 1;
+    else if (k === "na") tally.na += 1;
+  });
+  const checklistNo = meta.reportNo || `DWG-CHK-${String(submission.id || "").slice(-6).toUpperCase() || "—"}`;
+  const pairs: [string, string, string, string][] = [
+    ["Project / Facility", project?.name || "—", "Checklist No.", checklistNo],
+    ["Employer / Client", project?.clientName || "—", "Date of check", fmtDateTime(submission.createdAt)],
+    ["Drawing", drawingLabel(submission) || meta.refDrawing || "—", "Filled by", submission.submittedBy?.fullName || "—"],
+    ["Status", submission.status || "—", "OK / Not OK / NA", `${tally.ok} / ${tally.fail} / ${tally.na}`],
+  ];
+  for (const [l1, v1, l2, v2] of pairs) {
+    r += 1;
+    put(r, 1, 2, l1, { fill: LABEL, bold: true });
+    put(r, 3, 4, v1, { fill: INPUT });
+    put(r, 5, 5, l2, { fill: LABEL, bold: true });
+    put(r, 6, 6, v2, { fill: INPUT });
+    ws.getRow(r).height = String(v1).length > 46 ? 30 : 18;
+  }
+  r += 1;
+  put(r, 1, 2, "Overall remarks", { fill: LABEL, bold: true });
+  put(r, 3, 6, submission.remarks || "—", { fill: INPUT });
+  ws.getRow(r).height = 18;
+
+  // ── Check lines ──
+  r += 1;
+  put(r, 1, 1, "#", { fill: LABEL, bold: true, align: "center" });
+  put(r, 2, 3, "Check description", { fill: LABEL, bold: true });
+  put(r, 4, 4, "Status", { fill: LABEL, bold: true, align: "center" });
+  put(r, 5, 6, "Actual observation / remarks", { fill: LABEL, bold: true });
+  ws.getRow(r).height = 20;
+  const headerRow = r;
+  items.forEach((item, idx) => {
+    r += 1;
+    const { answer, remark } = getAnswer(responses, item, ordered[idx]);
+    const kind = classifyAnswer(answer);
+    const { bg, fg } = statusFill(kind);
+    put(r, 1, 1, item.itemCode || idx + 1, { align: "center" });
+    put(r, 2, 3, item.description || "", { bold: true });
+    put(r, 4, 4, normalizeAnswer(answer) || "Pending", { fill: bg, color: fg, bold: true, align: "center" });
+    put(r, 5, 6, remark || "", {});
+    ws.getRow(r).height = String(item.description || "").length > 60 ? 30 : 20;
+  });
+  ws.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`;
+
+  // ── Signatures ──
+  r += 1;
+  band(r, "8. SIGNATURES");
+  const slots = collectChecklistSignSlots(submission, dirSigns);
+  const spans: [number, number][] = [[1, 2], [3, 3], [4, 5], [6, 6]];
+  const roleRow = r + 1;
+  const imgRow = r + 2;
+  const nameRow = r + 3;
+  const dateRow = r + 4;
+  ws.getRow(roleRow).height = 26;
+  ws.getRow(imgRow).height = 48;
+  ws.getRow(nameRow).height = 18;
+  ws.getRow(dateRow).height = 16;
+  slots.slice(0, 4).forEach((slot, i) => {
+    const [c0, c1] = spans[i];
+    put(roleRow, c0, c1, slot.role.toUpperCase(), { bold: true, size: 8, color: NAVY });
+    put(imgRow, c0, c1, "", {});
+    put(nameRow, c0, c1, slot.name || "—", { bold: true });
+    put(dateRow, c0, c1, slot.date || "", { size: 8, color: "FF666666" });
+    if (slot.buffer) {
+      try {
+        const imgId = wb.addImage({ base64: slot.buffer.toString("base64"), extension: "png" });
+        // Fixed-size image anchored inside the (taller) image row — below the role label, above the name.
+        ws.addImage(imgId, {
+          tl: { col: c0 - 1 + 0.08, row: imgRow - 1 + 0.12 },
+          ext: { width: 140, height: 46 },
+          editAs: "oneCell",
+        });
+      } catch {
+        /* image optional */
+      }
+    }
+  });
+
+  // ── Legend + footer ──
+  r = dateRow + 2;
+  const legend: [string, string][] = [
+    ["OK / Yes / Pass", OK_BG],
+    ["Not OK / No / Fail", FAIL_BG],
+    ["NA", NA_BG],
+    ["Pending / other", PENDING_BG],
+    ["Fill-in cell", INPUT],
+  ];
+  const legendCols: [number, number][] = [[1, 2], [3, 3], [4, 4], [5, 5], [6, 6]];
+  legend.forEach(([label, color], i) => {
+    const [c0, c1] = legendCols[i];
+    put(r, c0, c1, label, { fill: color, size: 8, align: "center" });
+  });
+  r += 1;
+  put(r, 1, 4, "Enclosure to IR (SPDC/QA/F-01) · Sharnam Portal project record", { size: 8, italic: true, color: "FF666666" });
+  put(r, 5, 6, fmtDateTime(new Date()), { size: 8, italic: true, color: "FF666666", align: "right" });
+  ws.pageSetup.printArea = `A1:F${r}`;
+  return wb;
+}
+
+/**
  * Build branded SPDC-format XLSX for a checklist submission fill.
  */
 export async function buildBrandedChecklistXlsxBuffer(
@@ -857,9 +1058,7 @@ export async function buildBrandedChecklistXlsxBuffer(
   } else if (family === "rfi") {
     wb = await fillRfiForm(submission, project, dirSigns);
   } else if (family === "drawing") {
-    wb = await fillActivityChecklist(submission, project, dirSigns);
-    const sheet = wb.worksheets[0];
-    if (sheet) sheet.name = "Drawing Check";
+    wb = await fillDrawingCheckSheet(submission, project, dirSigns);
   } else if (family === "ir") {
     wb = await fillInspectionRequest(submission, project, dirSigns);
   } else {
