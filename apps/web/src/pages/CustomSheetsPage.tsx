@@ -14,6 +14,7 @@ import { api, apiBase } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Input, PageHeader, Select } from "../components/ui";
 import { FilePickButton } from "../components/FilePickButton";
+import { StatusNote } from "../components/StatusNote";
 
 /**
  * Interactive Sheet Maker — Notion-like grid: rename columns, edit cells, =formulas, export Excel.
@@ -158,7 +159,7 @@ export default function CustomSheetsPage() {
       {loadErr ? (
         <p className="text-sm text-danger border border-danger/30 rounded-lg px-3 py-2">{loadErr}</p>
       ) : null}
-      {msg ? <p className="maker-flash maker-flash--ok">{msg}</p> : null}
+      <StatusNote msg={msg} />
 
       {canWrite && (
         <div className="maker-section">
@@ -499,7 +500,7 @@ export function CustomSheetEditorPage() {
           </p>
         ) : null}
 
-        {msg ? <p className="text-xs text-brand">{msg}</p> : null}
+        <StatusNote msg={msg} compact />
 
         {sheet && (
           <div className="maker-toolbar">

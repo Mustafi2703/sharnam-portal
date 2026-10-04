@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
+import { StatusNote } from "../components/StatusNote";
 
 /**
  * Payroll — Pay Hike + Payslip generation.
@@ -81,9 +82,7 @@ export default function PayrollPage() {
         ))}
       </nav>
 
-      {msg ? (
-        <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft/50 text-brand-dark border border-brand/20">{msg}</p>
-      ) : null}
+      <StatusNote msg={msg} />
 
       {tab === "payslip" ? (
         <PayslipTab

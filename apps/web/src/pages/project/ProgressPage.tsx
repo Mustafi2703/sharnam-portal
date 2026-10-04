@@ -15,6 +15,7 @@ import { CRM_BID_DISCIPLINES } from "../../lib/crmBidDisciplines";
 import { WprTrackerRegisters } from "../../components/WprTrackerRegisters";
 import { isToolWindow } from "../../lib/moduleToolWindow";
 import { ToolLink } from "../../components/ToolLink";
+import { StatusNote } from "../../components/StatusNote";
 
 const SCURVE_DISCIPLINES = [{ key: "OVERALL", label: "Overall project" }, ...CRM_BID_DISCIPLINES.map((d) => ({ key: d.key, label: d.label }))];
 
@@ -709,7 +710,7 @@ export default function ProgressPage() {
       </div>
 
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {!isProgressRegister && (
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 w-full shrink-0">
@@ -1417,7 +1418,7 @@ export default function ProgressPage() {
                   <th className="py-2.5 pr-3">Category</th>
                   <th className="py-2.5 pr-3">Type of Hindrance</th>
                   <th className="py-2.5 pr-3">Date of Occurrence</th>
-                  <th className="py-2.5 pr-3">Date Resolved</th>
+                  <th className="py-2.5 pr-3">Target Resolve Date</th>
                   <th className="py-2.5 pr-3">No. of Days</th>
                   <th className="py-2.5 pr-3">Baseline Start Date</th>
                   <th className="py-2.5 pr-3">Schedule Impact</th>

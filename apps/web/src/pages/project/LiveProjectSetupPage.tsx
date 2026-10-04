@@ -12,6 +12,7 @@ import { ProjectClientRepresentativesPanel } from "../../components/ProjectClien
 import { DirectoryMySignaturePanel } from "../../components/DirectoryMySignaturePanel";
 import { DirectorySignOffRegister } from "../../components/DirectorySignOffRegister";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
+import { StatusNote } from "../../components/StatusNote";
 
 type SetupSummary = {
   project: { id: string; code: string; name: string; clientName?: string | null; clientEmail?: string | null };
@@ -175,7 +176,7 @@ export default function LiveProjectSetupPage() {
         title={summary ? `Set up ${summary.project.code}` : "Project setup"}
         subtitle="Fill the header, tick packages, pick client / consultants / vendors, assign SPDC staff from HRMS, then launch when ready."
       />
-      {msg && <p className="text-sm text-ok">{msg}</p>}
+      <StatusNote msg={msg} />
       {status && (
         <div className="flex flex-wrap gap-2">
           {status.ready ? <Badge tone="ok">Ready</Badge> : <Badge tone="warn">Setup in progress</Badge>}

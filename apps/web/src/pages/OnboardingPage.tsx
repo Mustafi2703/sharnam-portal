@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, TextArea } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
 import { HR_FILE_KINDS, hrFileContentUrl, isHrImage } from "../lib/hrFileView";
+import { StatusNote } from "../components/StatusNote";
 
 /**
  * Onboarding hub — top level shows all offers past "Accepted" with a live pre-join +
@@ -518,7 +519,7 @@ function OfferOnboardingPage() {
           ) : null}
         </div>
       </div>
-      {msg && <p className="text-sm text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canHrWrite && form ? (
         <Card>

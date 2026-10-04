@@ -20,6 +20,7 @@ import {
   masterRegisterPayload,
   type MasterRegisterForm,
 } from "../../lib/masterDrawingRegister";
+import { StatusNote } from "../../components/StatusNote";
 
 function DrawingRegisterDashboard({ data }: { data: any }) {
   const now = isoWeekNumber();
@@ -324,7 +325,7 @@ export default function DrawingRegisterPage() {
       />
       </div>
 
-      {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {sheetKey === "" && data && (
         <DrawingRegisterDashboard data={data} />

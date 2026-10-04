@@ -109,7 +109,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
             <div className="app-topbar__meta">
               <span className="app-topbar__role-badge">HR desk</span>
               <div className="app-topbar__title truncate">
-                {activeTool?.label === "Dashboard" ? "Human Resources" : activeTool?.label || "HRMS"}
+                {activeTool?.label === "Home" ? "Human Resources" : activeTool?.label || "HRMS"}
               </div>
             </div>
 

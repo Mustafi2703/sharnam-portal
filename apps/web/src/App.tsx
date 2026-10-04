@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth";
 import { AppShell } from "./components/AppShell";
+import { GlobalActivityBar } from "./components/StatusNote";
 import MasterModulePage from "./pages/MasterModulePage";
 import { LoginHubPage, PortalLoginPage, DynamicPortalLoginRoute } from "./pages/PortalLogins";
 import StakeholderDeskPage from "./pages/StakeholderDeskPage";
@@ -30,6 +31,7 @@ import CrmVendorBidsPage from "./pages/CrmVendorBidsPage";
 import HrmsProtected from "./pages/hrms/HrmsProtected";
 import HrmsLayout from "./pages/hrms/HrmsLayout";
 import HrmsShell from "./pages/hrms/HrmsShell";
+import HrmPage from "./pages/HrmPage";
 import ModuleFilesPage from "./pages/project/ModuleFilesPage";
 import AuditKpiPage from "./pages/project/AuditKpiPage";
 import ProjectToolsLayout from "./pages/project/ProjectToolsLayout";
@@ -129,6 +131,7 @@ function RedirectDrawingsCoordination() {
 export default function App() {
   return (
     <>
+      <GlobalActivityBar />
       <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/options" element={<Navigate to="/login" replace />} />
@@ -181,7 +184,7 @@ export default function App() {
         }
       >
         <Route element={<HrmsLayout />}>
-          <Route index element={<Navigate to="/hrm/recruitment" replace />} />
+          <Route index element={<HrmPage />} />
           <Route path="recruitment" element={<RecruitmentPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="onboarding/:offerId" element={<OnboardingPage />} />

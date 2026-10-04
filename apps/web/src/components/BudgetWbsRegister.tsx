@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, formatINR } from "../api";
 import { Button, Card, Input, Select, TextArea } from "./ui";
 import { SheetAddKindBar } from "./SheetAddKindBar";
+import { StatusNote } from "./StatusNote";
 
 export type BudgetLine = {
   id: string;
@@ -193,7 +194,7 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-2 min-w-0">
-      {msg && <p className="text-sm text-brand font-medium shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {canEdit && (
         <SheetAddKindBar

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { Button, Card } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type Node = {
   name: string;
@@ -110,7 +111,7 @@ export function CrmBidSharePointPanel({
         )}
       </div>
 
-      {err && <p className="text-xs text-warn mb-2">{err}</p>}
+      <StatusNote msg={err} tone="danger" className="mb-2" compact />
 
       {tree?.comparativeSharePointUrl && (
         <p className="text-xs mb-3">

@@ -4,6 +4,7 @@ import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { RegisterFilterBar } from "./RegisterFilterBar";
 import { ReferenceSheetToolbar } from "./ReferenceSheetToolbar";
+import { StatusNote } from "./StatusNote";
 
 export type QualitySiteRecord = {
   id: string;
@@ -142,7 +143,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       <ReferenceSheetToolbar
         sheetLabel={`${recordType} register`}

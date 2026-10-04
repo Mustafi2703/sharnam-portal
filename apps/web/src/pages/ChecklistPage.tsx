@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../components/ui";
 import { moduleForChecklistFamily } from "../lib/rfiModuleScope";
 import { openChecklistFillWindow, openFamilyChecklistFill } from "../lib/checklistFillWindow";
+import { StatusNote } from "../components/StatusNote";
 
 export type ChecklistFamily = "SiteExecution" | "QualityInspection";
 
@@ -233,7 +234,7 @@ export default function ChecklistPage({ family = "SiteExecution" as ChecklistFam
               Open assign desk →
             </Link>
           </div>
-          {msg && <p className="text-sm text-steel-muted mt-2">{msg}</p>}
+          <StatusNote msg={msg} className="mt-2" />
         </Card>
       )}
 

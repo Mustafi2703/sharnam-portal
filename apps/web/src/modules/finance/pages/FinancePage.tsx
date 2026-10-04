@@ -20,6 +20,7 @@ import { FilePickButton } from "../../../components/FilePickButton";
 import { WprTrackerRegisters } from "../../../components/WprTrackerRegisters";
 import { ReferenceSheetToolbar } from "../../../components/ReferenceSheetToolbar";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../../components/ui";
+import { StatusNote } from "../../../components/StatusNote";
 
 const TOOLS = [
   { id: "overview", label: "Overview" },
@@ -123,7 +124,7 @@ export default function FinancePage() {
         }
       />
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {isVendor && tab !== "ra" && (
         <Card className="!p-4 text-sm">

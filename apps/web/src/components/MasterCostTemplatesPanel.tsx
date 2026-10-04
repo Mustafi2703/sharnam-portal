@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type MasterKind = "mb" | "bbs";
 
@@ -117,7 +118,7 @@ export function MasterCostTemplatesPanel({ token }: Props) {
         ))}
       </div>
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end" onSubmit={onUpload}>
         <Input placeholder="Master name (e.g. Dormitory MB)" value={name} onChange={(e) => setName(e.target.value)} />

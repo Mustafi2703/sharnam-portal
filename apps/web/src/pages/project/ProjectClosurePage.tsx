@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../
 import { LessonsLearntRegister } from "../../components/LessonsLearntRegister";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { closureSheetFromParams } from "../../lib/closureSheetViews";
+import { StatusNote } from "../../components/StatusNote";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -84,7 +85,7 @@ export default function ProjectClosurePage() {
         }
       />
 
-      {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {sheetKey === "" && data && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">

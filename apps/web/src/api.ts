@@ -1,3 +1,5 @@
+import { rememberError } from "./lib/activityTracker";
+
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export function apiBase(): string {
@@ -10,6 +12,7 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    rememberError(message);
   }
 }
 

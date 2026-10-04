@@ -11,6 +11,7 @@ import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { MakerRecentPanel, fileNameFromPublishedPath } from "../components/MakerRecentPanel";
 import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import { DailySheetWorkflow } from "../components/DailySheetWorkflow";
+import { StatusNote } from "../components/StatusNote";
 
 async function downloadWithAuth(url: string, token: string | null | undefined, filename: string) {
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -772,7 +773,7 @@ export default function DprMakerPage() {
 
         {projectId && <DailySheetWorkflow projectId={projectId} compact />}
 
-        {msg && <p className="text-xs text-brand-dark bg-brand-soft rounded px-2 py-1">{msg}</p>}
+        <StatusNote msg={msg} compact />
         <SharePointStatusBanner />
       </div>
 

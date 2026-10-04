@@ -37,6 +37,27 @@ type AttendanceRow = {
 };
 
 type StaffOpt = { id: string; fullName: string; role?: string };
+type LeaveOverlay = {
+  id: string;
+  userId: string;
+  fromDate: string;
+  toDate: string;
+  halfDay?: boolean;
+  status: string;
+  leaveType?: { name?: string; code?: string } | null;
+};
+type HolidayOverlay = { date: string; name: string; isOptional?: boolean };
+
+function dayKeyOf(raw: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? raw.slice(0, 10) : formatIstDateKey(d);
+}
+
+/** Short "09:30" for the calendar cell — handles HH:MM strings and ISO timestamps. */
+function cellTime(t?: string | null) {
+  return t ? formatIstPunchTime(t).replace(/ IST$/, "") : "";
+}
 
 function ymdLocal(d: Date) {
   const y = d.getFullYear();
@@ -129,7 +150,14 @@ function DetailBlock({ row, token }: { row: AttendanceRow; token?: string | null
 }
 
 /** Month calendar of attendance — in/out times, duration, checkout GPS. */
-export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
+export function AttendanceCalendar({
+  compact = false,
+  initialUserId = "",
+}: {
+  compact?: boolean;
+  /** HR: open this team member's calendar directly. */
+  initialUserId?: string;
+}) {
   const { token, user } = useAuth();
   const canViewTeam = canManageHrms(user);
   const todayKey = formatIstDateKey(istStartOfDay());
@@ -137,7 +165,13 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
     const t = istStartOfDay();
     return { year: t.getFullYear(), month: t.getMonth() + 1 };
   });
-  const [userId, setUserId] = useState("");
+  const [userId, setUserId] = useState(initialUserId);
+  const [leaves, setLeaves] = useState<LeaveOverlay[]>([]);
+  const [holidays, setHolidays] = useState<HolidayOverlay[]>([]);
+
+  useEffect(() => {
+    setUserId(initialUserId);
+  }, [initialUserId]);
   const [staff, setStaff] = useState<StaffOpt[]>([]);
   const [staffQuery, setStaffQuery] = useState("");
   const [rows, setRows] = useState<AttendanceRow[]>([]);
@@ -167,6 +201,50 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Leave + holiday overlay: own calendar, or the selected team member for HR.
+  useEffect(() => {
+    if (!token) return;
+    const leaveUrl = canViewTeam
+      ? userId
+        ? `/api/hrm/leave?all=1&userId=${encodeURIComponent(userId)}`
+        : null
+      : "/api/hrm/leave";
+    if (leaveUrl) {
+      void api<LeaveOverlay[]>(leaveUrl, { token })
+        .then(setLeaves)
+        .catch(() => setLeaves([]));
+    } else {
+      setLeaves([]);
+    }
+    void api<HolidayOverlay[]>(`/api/hrm/holidays?year=${cursor.year}`, { token })
+      .then(setHolidays)
+      .catch(() => setHolidays([]));
+  }, [token, canViewTeam, userId, cursor.year]);
+
+  const holidayByDate = useMemo(() => {
+    const m = new Map<string, HolidayOverlay>();
+    for (const h of holidays) m.set(dayKeyOf(h.date), h);
+    return m;
+  }, [holidays]);
+
+  const leaveByDate = useMemo(() => {
+    const m = new Map<string, LeaveOverlay>();
+    for (const l of leaves) {
+      if (l.status !== "Approved" && l.status !== "Pending") continue;
+      const [fy, fm, fd] = dayKeyOf(l.fromDate).split("-").map(Number);
+      const [ty, tm, td] = dayKeyOf(l.toDate).split("-").map(Number);
+      const cur = new Date(fy, fm - 1, fd);
+      const end = new Date(ty, tm - 1, td);
+      for (let guard = 0; cur <= end && guard < 400; guard++) {
+        const k = ymdLocal(cur);
+        const prev = m.get(k);
+        if (!prev || prev.status !== "Approved") m.set(k, l);
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+    return m;
+  }, [leaves]);
 
   useEffect(() => {
     if (!canViewTeam || !token) return;
@@ -296,18 +374,30 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
           const mins = primary ? attendanceSiteMinutes(primary.checkIn, primary.checkOut) : null;
           const isToday = cell.date === todayKey;
           const isSelected = cell.date === selectedDate;
+          const dow = new Date(cell.date + "T12:00:00").getDay();
+          const weekend = dow === 0 || dow === 6;
+          const holiday = holidayByDate.get(cell.date);
+          const leave = !weekend && !(holiday && !holiday.isOptional) ? leaveByDate.get(cell.date) : undefined;
           return (
             <button
               key={cell.date}
               type="button"
-              className={`attendance-cal__cell${dayRows.length ? " attendance-cal__cell--present" : ""}${isToday ? " attendance-cal__cell--today" : ""}${isSelected ? " attendance-cal__cell--selected" : ""}`}
+              className={`attendance-cal__cell${dayRows.length ? " attendance-cal__cell--present" : ""}${isToday ? " attendance-cal__cell--today" : ""}${isSelected ? " attendance-cal__cell--selected" : ""}${weekend ? " attendance-cal__cell--weekend" : ""}${holiday ? " attendance-cal__cell--holiday" : ""}${leave ? (leave.status === "Approved" ? " attendance-cal__cell--leave" : " attendance-cal__cell--leave-pending") : ""}`}
               onClick={() => setSelectedDate(cell.date)}
             >
               <span className="attendance-cal__day-num">{cell.day}</span>
+              {holiday ? <span className="attendance-cal__tag attendance-cal__tag--holiday">{holiday.name}</span> : null}
+              {leave ? (
+                <span className="attendance-cal__tag attendance-cal__tag--leave">
+                  {leave.leaveType?.code || leave.leaveType?.name || "Leave"}
+                  {leave.halfDay ? " ½" : ""}
+                  {leave.status === "Pending" ? " · pending" : ""}
+                </span>
+              ) : null}
               {primary?.checkIn ? (
                 <span className="attendance-cal__times">
-                  {primary.checkIn}
-                  {primary.checkOut ? ` – ${primary.checkOut}` : ""}
+                  {cellTime(primary.checkIn)}
+                  {primary.checkOut ? ` – ${cellTime(primary.checkOut)}` : ""}
                 </span>
               ) : null}
               {mins != null ? <span className="attendance-cal__duration">{formatAttendanceDuration(mins)}</span> : null}
@@ -327,6 +417,20 @@ export function AttendanceCalendar({ compact = false }: { compact?: boolean }) {
               year: "numeric",
             })}
           </h3>
+          {holidayByDate.get(selectedDate) ? (
+            <p className="text-sm mb-2">
+              <span className="attendance-cal__tag attendance-cal__tag--holiday">Holiday</span>{" "}
+              {holidayByDate.get(selectedDate)!.name}
+              {holidayByDate.get(selectedDate)!.isOptional ? " (optional)" : ""}
+            </p>
+          ) : null}
+          {leaveByDate.get(selectedDate) ? (
+            <p className="text-sm mb-2">
+              <span className="attendance-cal__tag attendance-cal__tag--leave">Leave</span>{" "}
+              {leaveByDate.get(selectedDate)!.leaveType?.name || "Leave"} — {leaveByDate.get(selectedDate)!.status}
+              {leaveByDate.get(selectedDate)!.halfDay ? " (half day)" : ""}
+            </p>
+          ) : null}
           {!selectedRows.length ? (
             <p className="text-sm text-steel-muted">No attendance record for this day.</p>
           ) : (

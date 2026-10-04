@@ -34,6 +34,7 @@ import {
 } from "../../lib/gfcRegister";
 import { MASTER_REGISTER_DISCIPLINES } from "../../lib/masterDrawingRegister";
 import { downloadAuthFile } from "../../lib/downloadReport";
+import { StatusNote } from "../../components/StatusNote";
 
 const GFC_DISCIPLINE_TABS = ["Architecture", "Structural", "MEPF"] as const;
 const GFC_REVISION_CHOICES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"] as const;
@@ -877,7 +878,7 @@ export default function DrawingsPage() {
         </details>
       </div>
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canUpload && precheckOpen && !unlockToken && precheckMode === "register" && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">

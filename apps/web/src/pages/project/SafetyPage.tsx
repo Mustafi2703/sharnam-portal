@@ -13,6 +13,7 @@ import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { HiraRegisterTable } from "../../components/HiraRegisterTable";
+import { StatusNote } from "../../components/StatusNote";
 
 const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
@@ -264,7 +265,7 @@ export default function SafetyPage() {
         </div>
       )}
 
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {sheetKey === "hira" && (
         <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">

@@ -10,6 +10,7 @@ import { RegisterSheetCell } from "./RegisterSheetCell";
 import { MB_COLUMN_GROUPS, mbColClass } from "../lib/costSheetColumns";
 import { mbBandEmpty, MB_DATA_COLS } from "../lib/costBandRows";
 import { isMbSpacerRow, mbRowBandClass, mbRowKind, type MbRowKind } from "../lib/costSheetRows";
+import { StatusNote } from "./StatusNote";
 
 export type MbRow = {
   id: string;
@@ -216,7 +217,7 @@ export function MbEntryTable({
             <Button type="button" variant="ghost" className="!text-xs" onClick={() => setShowEmpty((v) => !v)}>
               {showEmpty ? "Hide empty lines" : `Show ${hiddenCount} empty lines`}
             </Button>
-            {msg ? <span className="text-[11px] text-brand-dark">{msg}</span> : null}
+            <StatusNote msg={msg} compact />
           </div>
         ) : undefined
       }

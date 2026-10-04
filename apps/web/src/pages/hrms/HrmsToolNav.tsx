@@ -33,31 +33,22 @@ export default function HrmsToolNav() {
   const loc = useLocation();
   const { user } = useAuth();
   const isAdmin = canManageHrms(user);
-  const onDashboard = loc.pathname === "/hrm" || loc.pathname === "/hrm/";
 
   return (
     <nav className="tool-strip" aria-label="HRMS tools">
       <div className="flex gap-1.5 overflow-x-auto scrollbars-visible items-center">
-        <NavLink
-          to="/hrm"
-          end
-          className={() => tabClass(onDashboard)}
-          style={onDashboard ? { background: HRMS_ACCENT, borderColor: HRMS_ACCENT } : undefined}
-        >
-          Hub
-        </NavLink>
-        {HRMS_SECTIONS.map((section) => {
+        {HRMS_SECTIONS.map((section, si) => {
           const tools = section.tools.filter((t) => !t.adminOnly || isAdmin);
           if (!tools.length) return null;
           return (
             <Fragment key={section.id}>
-              <span className="crm-nav-divider" aria-hidden />
+              {si > 0 ? <span className="crm-nav-divider" aria-hidden /> : null}
               {tools.map((t) => {
                 const to = toolPath(t.to);
                 const on = isToolActive(loc.pathname, t.to, t.end);
                 return (
                   <NavLink
-                    key={t.to}
+                    key={t.to || "home"}
                     to={to}
                     end={t.end}
                     className={() => tabClass(on)}

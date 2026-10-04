@@ -17,6 +17,7 @@ import {
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
 import { closeEmbedOrWindow, notifyChecklistFilled } from "../lib/inPageOverlay";
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
+import { StatusNote } from "../components/StatusNote";
 
 /** Popup fill for Quality, Safety, site, activity, and drawing-check assignments. */
 export default function ChecklistFillPage() {
@@ -311,7 +312,7 @@ export default function ChecklistFillPage() {
             <p className="text-steel-muted text-sm max-w-md mx-auto">
               {assignment?.template?.name || familyLabel} is saved on the fill log and ISO drive. Counts update on Quality, Safety, and Progress dashboards. The next week sheet is ready.
             </p>
-            {msg ? <p className="text-sm text-brand-dark">{msg}</p> : null}
+            <StatusNote msg={msg} />
             <Button type="button" onClick={() => closeEmbedOrWindow()}>
               Close
             </Button>

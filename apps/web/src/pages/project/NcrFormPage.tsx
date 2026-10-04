@@ -15,6 +15,7 @@ import {
   openNcrPrintPdf,
   type QualityNcrFormData,
 } from "../../lib/ncrFormFields";
+import { StatusNote } from "../../components/StatusNote";
 
 type NcrActivityEvent = {
   at: string;
@@ -400,7 +401,7 @@ export default function NcrFormPage() {
           }
         />
 
-        {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+        <StatusNote msg={msg} />
 
         {isQuality && id && (
           <Card className="!p-3 bg-slate-50 border-slate-200">

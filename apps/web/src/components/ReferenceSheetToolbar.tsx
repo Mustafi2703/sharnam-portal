@@ -4,6 +4,7 @@ import { canBrowseSharePoint } from "../lib/driveAccess";
 import { canLoadSheetTemplates } from "../lib/productionUi";
 import { FilePickButton } from "./FilePickButton";
 import { Button } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type ReferenceSheetToolbarProps = {
   sheetLabel: string;
@@ -71,7 +72,7 @@ export function ReferenceSheetToolbar({
         <strong className="text-sm text-ink">{formatUiText(sheetLabel)}</strong>
         {rowCount != null && <span className="text-xs text-steel-muted ml-2">{rowCount} rows</span>}
         {uploadHint && <p className="text-xs text-steel-muted mt-0.5 max-w-xl">{uploadHint}</p>}
-        {message && <p className="text-xs text-brand-dark mt-0.5">{message}</p>}
+        <StatusNote msg={message} className="mt-0.5" compact />
         {sharePointUrl && showDrive && (
           <a href={sharePointUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand font-semibold ml-2">
             Open in SharePoint ↗

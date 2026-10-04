@@ -19,6 +19,7 @@ import {
 } from "../../lib/vendorTypes";
 import { trimField } from "../../lib/stringUtils";
 import { formatUiText, uiCopy } from "../../lib/formatUiText";
+import { StatusNote } from "../../components/StatusNote";
 
 function directoryVendorsQuery(tab: string) {
   if (tab === "vendors") return "?partyType=Contractor";
@@ -476,7 +477,7 @@ export function DirectoryCompaniesPanel({
               ) : null}
             </div>
           )}
-          {msg && <p className="text-xs text-brand-dark">{msg}</p>}
+          <StatusNote msg={msg} compact />
         </form>
         {tab === "clients" && selected ? (
           <CompanyRepresentativesPanel

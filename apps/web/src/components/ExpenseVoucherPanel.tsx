@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { isHrApprover } from "../lib/driveAccess";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { FilePickButton } from "./FilePickButton";
+import { StatusNote } from "./StatusNote";
 
 export type VoucherLine = {
   date?: string;
@@ -195,7 +196,7 @@ export function ExpenseVoucherPanel({ variant = "full", defaultProjectId, title 
 
   return (
     <div className="space-y-5">
-      {msg && <p className="text-sm text-ok">{msg}</p>}
+      <StatusNote msg={msg} />
       <div className={`grid gap-4 ${isDaily ? "" : "lg:grid-cols-2"}`}>
         <Card className="space-y-3">
           <h3 className="font-semibold">{title || (isDaily ? "Daily expense voucher" : "Raise voucher")}</h3>

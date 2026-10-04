@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
 import { FilePickButton } from "../../../components/FilePickButton";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
+import { StatusNote } from "../../../components/StatusNote";
 
 const STAGES = [
   { key: "Submitted" as const, label: "Submission", uploadLabel: "Upload submission" },
@@ -213,7 +214,7 @@ export function RaBillWorkbookSlots({
           );
         })}
       </div>
-      {msg && <div className="ra-bill-files__msg">{msg}</div>}
+      <StatusNote msg={msg} />
       <input ref={stageInputRef} type="file" hidden aria-hidden />
       {preview && (
         <DocumentPreviewModal

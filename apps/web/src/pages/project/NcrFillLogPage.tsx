@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHeader } from "../../components/ui";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
+import { StatusNote } from "../../components/StatusNote";
 
 type FillRow = {
   id: string;
@@ -123,7 +124,7 @@ export default function NcrFillLogPage() {
         )}
       </div>
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
       {busy && <p className="text-sm text-steel-muted">Loading fill log…</p>}
 
       <Card padding={false}>

@@ -17,6 +17,7 @@ import {
   formatVendorBidDisciplines,
   parseVendorBidDisciplines,
 } from "../../lib/crmBidDisciplines";
+import { StatusNote } from "../../components/StatusNote";
 
 type VendorRow = VendorFormState & {
   id: string;
@@ -109,7 +110,7 @@ export default function HrmsVendorsPage() {
         </div>
       </div>
 
-      {msg && <p className="text-sm text-ok bg-brand-soft/40 border border-brand/20 px-3 py-2 rounded-lg">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <div className="flex flex-wrap gap-2">
         <Select value={filter} onChange={(e) => setFilter(e.target.value as VendorPartyType | "All")}>

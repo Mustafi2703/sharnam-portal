@@ -34,6 +34,7 @@ import {
   letterFormUsesWarningExtras,
   LETTER_VARIABLES,
 } from "./hrmsLetterDesk";
+import { StatusNote } from "../../components/StatusNote";
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
@@ -415,7 +416,7 @@ export default function HrmsDocumentsPage() {
             ))}
           </Select>
         </div>
-        {msg ? <div className="text-xs text-brand font-medium">{msg}</div> : null}
+        <StatusNote msg={msg} compact />
       </div>
 
       {canManage && (
@@ -456,11 +457,17 @@ export default function HrmsDocumentsPage() {
                     Letter types
                   </div>
                   <ul className="overflow-y-auto overscroll-contain divide-y divide-line flex-1">
-                    {KIND_OPTIONS.map((k) => {
+                    {KIND_OPTIONS.map((k, i) => {
                       const existing = subjectRows.find((r) => r.kind === k.key && r.status !== "Cancelled");
                       const active = form.kind === k.key;
+                      const newStage = i === 0 || KIND_OPTIONS[i - 1].stage !== k.stage;
                       return (
                         <li key={k.key}>
+                          {newStage ? (
+                            <div className="px-3 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-steel-muted bg-sand/40">
+                              {k.stage}
+                            </div>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => selectKind(k.key)}
@@ -471,9 +478,11 @@ export default function HrmsDocumentsPage() {
                             <div className="font-semibold text-ink">{k.label}</div>
                             <div className="text-[10px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div>
                             {existing ? (
-                              <span className="inline-block mt-1 text-[10px] font-mono text-brand">{existing.refNo}</span>
+                              <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700">
+                                ✓ Filed · <span className="font-mono">{existing.refNo}</span>
+                              </span>
                             ) : (
-                              <span className="inline-block mt-1 text-[10px] text-steel-muted">Not on file</span>
+                              <span className="inline-block mt-1 text-[10px] text-steel-muted">Not generated yet</span>
                             )}
                           </button>
                         </li>

@@ -10,6 +10,7 @@ import { CostRegisterShell } from "./CostRegisterShell";
 import { BBS_COLUMN_GROUPS, bbsColClass } from "../lib/costSheetColumns";
 import { bbsBandEmpty, BBS_DATA_COLS } from "../lib/costBandRows";
 import { bbsRowBandClass, bbsRowKind, isBbsSpacerRow } from "../lib/costSheetRows";
+import { StatusNote } from "./StatusNote";
 
 function CellInput({
   value,
@@ -298,7 +299,7 @@ export function BbsEntryTable({
             <Button type="button" variant="ghost" className="!text-xs" onClick={() => setShowEmpty((v) => !v)}>
               {showEmpty ? "Hide empty lines" : `Show ${hiddenCount} empty lines`}
             </Button>
-            {msg ? <span className="text-[11px] text-brand-dark">{msg}</span> : null}
+            <StatusNote msg={msg} compact />
           </div>
         ) : undefined
       }
@@ -329,7 +330,7 @@ export function BbsEntryTable({
               ))}
             </div>
           )}
-          {msg ? <p className="sm:col-span-2 lg:col-span-4 text-sm text-brand-dark">{msg}</p> : null}
+          <StatusNote msg={msg} className="sm:col-span-2" />
         </div>
       }
     >

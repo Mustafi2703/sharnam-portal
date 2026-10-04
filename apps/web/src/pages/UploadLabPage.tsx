@@ -8,6 +8,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
 import { EvidencePanel, type EvidenceItem } from "../components/EvidencePanel";
 import { FilePickButton } from "../components/FilePickButton";
+import { StatusNote } from "../components/StatusNote";
 
 type DriveItem = { name: string; path: string; type: "folder" | "file"; url?: string };
 type GraphHealth = {
@@ -244,7 +245,7 @@ export default function UploadLabPage() {
         }
       />
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-1 space-y-3">

@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
 import { UploadModal } from "../components/UploadModal";
 import { DrawingFileViewer } from "../components/DrawingFileViewer";
 import { drawingFileKind, type DrawingPreview } from "../lib/drawingPreview";
+import { StatusNote } from "../components/StatusNote";
 
 type DriveItem = {
   name: string;
@@ -543,7 +544,7 @@ export default function DmsPage({
         }
       />
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {!isDrawings && !isModule && data?.note ? (
         <p className="text-xs text-steel-muted">{data.note}</p>

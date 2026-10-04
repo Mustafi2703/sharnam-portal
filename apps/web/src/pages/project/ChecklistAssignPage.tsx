@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
+import { StatusNote } from "../../components/StatusNote";
 
 /** Full page — assign checklist types to project (Procore-style tool) */
 export default function ChecklistAssignPage() {
@@ -133,7 +134,7 @@ export default function ChecklistAssignPage() {
             </Select>
           </label>
           {error && <p className="text-sm text-danger">{error}</p>}
-          {msg && <p className="text-sm text-ok">{msg}</p>}
+          <StatusNote msg={msg} />
           <Button type="submit" disabled={busy || !templateId} className="w-full !py-3">
             {busy ? "Assigning…" : "Assign checklist type"}
           </Button>

@@ -3,9 +3,11 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./auth";
 import { loadSavedTheme } from "./themes";
+import { installActivityTracker } from "./lib/activityTracker";
 import "./index.css";
 
 loadSavedTheme();
+installActivityTracker();
 
 /** Suppress PerformanceObserver noise from embedded previews (undefined entry.startTime). */
 if (typeof window !== "undefined") {

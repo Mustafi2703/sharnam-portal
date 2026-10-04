@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { Badge, Button, Card } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type Health = {
   configured: boolean;
@@ -135,7 +136,7 @@ export default function SharePointStatusPanel({ token }: Props) {
         </Button>
       </div>
 
-      {msg && <p className="text-xs text-steel">{msg}</p>}
+      <StatusNote msg={msg} compact />
 
       {(!status?.configured || status?.mockOneDrive) && (
         <div className="text-xs bg-brand-soft border border-brand/30 rounded-sm p-3 space-y-2">

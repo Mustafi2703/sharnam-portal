@@ -16,6 +16,7 @@ import { uiCopy } from "../../lib/formatUiText";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
 import { suggestedProjectMemberRole } from "@sharnam/shared";
 import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../../lib/workPackages";
+import { StatusNote } from "../../components/StatusNote";
 
 type ProjectRow = {
   id: string;
@@ -573,7 +574,7 @@ export default function CrmProjectSetupPage() {
         })}
       </nav>
 
-      {msg && <p className="text-sm text-ok leading-relaxed">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {step === "project" && (
         <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-4">

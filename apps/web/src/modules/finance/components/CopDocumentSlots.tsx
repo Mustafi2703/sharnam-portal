@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, apiBase } from "../../../api";
 import { FilePickButton } from "../../../components/FilePickButton";
+import { StatusNote } from "../../../components/StatusNote";
 
 const COP_STAGES = [
   { key: "Draft" as const, label: "Draft / XLSX" },
@@ -254,7 +255,7 @@ export function CopDocumentSlots({
           );
         })}
       </div>
-      {msg && <div className="ra-bill-files__msg">{msg}</div>}
+      <StatusNote msg={msg} />
     </div>
   );
 }

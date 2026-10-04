@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
+import { StatusNote } from "../../../components/StatusNote";
 
 const STAGES: Array<{ key: "Submitted" | "Corrected" | "Certified"; label: string; hint: string }> = [
   { key: "Submitted", label: "+ Submitted", hint: "Contractor drops the first RA bill workbook" },
@@ -142,7 +143,7 @@ export function RaBillStageButtons({
           Latest ({latest.stage} R{latest.revisionNo}) →
         </button>
       )}
-      {msg && <span className="text-[10px] text-steel-muted">{msg}</span>}
+      <StatusNote msg={msg} compact />
       <input
         ref={inputRef}
         type="file"

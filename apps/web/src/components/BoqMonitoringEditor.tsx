@@ -6,6 +6,7 @@ import { RegisterEntryModal } from "./RegisterEntryModal";
 import { SheetAddKindBar } from "./SheetAddKindBar";
 import { MON_COLUMN_GROUPS, monitoringColClass } from "../lib/costSheetColumns";
 import { monitoringBandEmpty, MON_DATA_COLS } from "../lib/costBandRows";
+import { StatusNote } from "./StatusNote";
 
 export type MonLine = {
   id: string;
@@ -718,7 +719,7 @@ export function BoqMonitoringEditor({
 
   return (
     <div className={`flex flex-col flex-1 min-h-0 min-w-0 ${className}`.trim()}>
-      {msg && <p className="text-sm text-brand font-medium shrink-0 px-1">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {canFullEdit && (
         <RegisterEntryModal

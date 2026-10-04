@@ -21,6 +21,19 @@ export type HrmsSection = {
 
 export const HRMS_SECTIONS: HrmsSection[] = [
   {
+    id: "home",
+    label: "Overview",
+    tools: [
+      {
+        to: "",
+        label: "Home",
+        end: true,
+        icon: "modules",
+        subtitle: "The hiring-to-exit journey with live counts and what needs attention today.",
+      },
+    ],
+  },
+  {
     id: "lifecycle",
     label: "People lifecycle",
     tools: [
@@ -44,9 +57,9 @@ export const HRMS_SECTIONS: HrmsSection[] = [
     tools: [
       {
         to: "attendance",
-        label: "Attendance",
+        label: "Attendance & calendar",
         icon: "field",
-        subtitle: "Geo check-in/out with today's roster and site assignment.",
+        subtitle: "Team calendar of present / leave / holiday / absent, each person's month, and geo check-in/out.",
       },
       {
         to: "leave",

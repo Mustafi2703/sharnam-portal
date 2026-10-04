@@ -5,6 +5,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { api, apiBase } from "../api";
 import { Button, Card, FileField, Input, Select } from "./ui";
 import { FilePickButton } from "./FilePickButton";
+import { StatusNote } from "./StatusNote";
 
 export type SheetFileRecord = {
   id: string;
@@ -131,7 +132,7 @@ export function CostSheetUploadPanel({
 
   return (
     <div className="space-y-4">
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canEdit && (
         <div className={kind === "bbs" ? "" : "grid lg:grid-cols-2 gap-4"}>

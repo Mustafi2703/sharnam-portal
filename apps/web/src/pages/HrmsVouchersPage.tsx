@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { Button } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
 import { ExpenseVoucherPanel } from "../components/ExpenseVoucherPanel";
+import { StatusNote } from "../components/StatusNote";
 
 /** HR desk voucher register — same raise + approve flow as the employee page. */
 export default function HrmsVouchersPage() {
@@ -29,7 +30,7 @@ export default function HrmsVouchersPage() {
           </Button>
         </div>
       )}
-      {msg ? <p className="text-sm text-ink">{msg}</p> : null}
+      <StatusNote msg={msg} />
       <ExpenseVoucherPanel variant="full" title="Raise / approve vouchers" />
     </div>
   );

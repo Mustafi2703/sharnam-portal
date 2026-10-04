@@ -156,15 +156,16 @@ export function Button({
 }) {
   const variants = {
     primary:
-      "bg-[var(--color-brand)] hover:brightness-[0.94] text-white shadow-sm border border-transparent",
-    secondary: "bg-paper border border-line text-ink hover:bg-[var(--color-brand-soft)]",
+      "bg-[var(--color-brand)] hover:brightness-[0.92] hover:shadow-md text-white shadow-sm border border-black/5",
+    secondary:
+      "bg-paper border border-line text-ink shadow-sm hover:border-[var(--wd-accent,var(--color-brand))] hover:text-[var(--wd-accent,var(--color-brand))] hover:bg-[var(--color-brand-soft)]",
     ghost: "text-steel-muted hover:text-ink hover:bg-sand/70",
-    dark: "bg-ink text-white hover:bg-steel-2",
-    danger: "bg-white border border-red-300 text-danger hover:bg-red-50",
+    dark: "bg-ink text-white shadow-sm hover:bg-steel-2",
+    danger: "bg-white border border-red-300 text-danger shadow-sm hover:bg-red-50 hover:border-red-400",
   };
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`ui-btn inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 disabled:shadow-none ${variants[variant]} ${className}`}
       style={style}
       {...props}
     >
@@ -246,34 +247,64 @@ export function Stat({
   );
 }
 
-export function Input({ placeholder, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  const ph = typeof placeholder === "string" ? formatUiText(placeholder) : placeholder;
+/** Wrap a control in a visible label (placeholder-only forms are hard to read once filled). */
+function Labelled({
+  label,
+  hint,
+  className = "",
+  children,
+}: {
+  label?: ReactNode;
+  hint?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  if (!label) return <>{children}</>;
   return (
-    <input
-      {...props}
-      placeholder={ph}
-      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
-    />
+    <label className={`ui-field ${className}`}>
+      <span className="ui-field__label">{typeof label === "string" ? formatUiText(label) : label}</span>
+      {children}
+      {hint ? <span className="ui-field__hint">{hint}</span> : null}
+    </label>
   );
 }
 
-export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+type FieldExtras = { label?: ReactNode; hint?: ReactNode; fieldClassName?: string };
+
+export function Input({ placeholder, label, hint, fieldClassName, ...props }: React.InputHTMLAttributes<HTMLInputElement> & FieldExtras) {
+  const ph = typeof placeholder === "string" ? formatUiText(placeholder) : placeholder;
   return (
-    <select
-      {...props}
-      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
-    />
+    <Labelled label={label} hint={hint} className={fieldClassName}>
+      <input
+        {...props}
+        placeholder={ph}
+        className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      />
+    </Labelled>
   );
 }
 
-export function TextArea({ placeholder, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Select({ label, hint, fieldClassName, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & FieldExtras) {
+  return (
+    <Labelled label={label} hint={hint} className={fieldClassName}>
+      <select
+        {...props}
+        className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      />
+    </Labelled>
+  );
+}
+
+export function TextArea({ placeholder, label, hint, fieldClassName, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & FieldExtras) {
   const ph = typeof placeholder === "string" ? formatUiText(placeholder) : placeholder;
   return (
-    <textarea
-      {...props}
-      placeholder={ph}
-      className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
-    />
+    <Labelled label={label} hint={hint} className={fieldClassName}>
+      <textarea
+        {...props}
+        placeholder={ph}
+        className={`w-full rounded border border-line bg-paper text-ink px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 ${props.className || ""}`}
+      />
+    </Labelled>
   );
 }
 

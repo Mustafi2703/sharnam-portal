@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api, apiBase } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
+import { StatusNote } from "./StatusNote";
 
 type ShapeMaster = {
   id: string;
@@ -177,7 +178,7 @@ export function BbsShapeMasterPanel({ token, mode = "full" }: Props) {
         </div>
       </div>
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canEdit && (
       <form className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end" onSubmit={onAdd}>

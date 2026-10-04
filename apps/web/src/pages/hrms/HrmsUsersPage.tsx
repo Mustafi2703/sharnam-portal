@@ -401,21 +401,6 @@ export default function HrmsUsersPage() {
           {canEdit ? (
             <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
           ) : null}
-          {canEdit && canOfficeDesk ? (
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeUatLogins()}>
-              Remove demo &amp; test logins
-            </Button>
-          ) : null}
-          {canEdit && canOfficeDesk ? (
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void purgeHrmsSeed()}>
-              Clear HRMS for UAT
-            </Button>
-          ) : null}
-          {isAdmin ? (
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void clearAllAssignments()}>
-              Clear seeded assignments
-            </Button>
-          ) : null}
           {canOfficeDesk ? (
             <Link to="/roles" className="text-sm font-semibold text-brand self-center px-2">
               Access · all users ↗
@@ -623,6 +608,31 @@ export default function HrmsUsersPage() {
           </Select>
         </div>
       </RegisterEntryModal>
+      {(canEdit && canOfficeDesk) || isAdmin ? (
+        <details className="danger-zone">
+          <summary>Danger zone — demo &amp; UAT cleanup</summary>
+          <div className="danger-zone__body">
+            <p>One-time cleanup used before go-live. These remove test data and cannot be undone.</p>
+            <div className="flex flex-wrap gap-2">
+              {canEdit && canOfficeDesk ? (
+                <Button type="button" variant="danger" disabled={busy} onClick={() => purgeUatLogins()}>
+                  Remove demo &amp; test logins
+                </Button>
+              ) : null}
+              {canEdit && canOfficeDesk ? (
+                <Button type="button" variant="danger" disabled={busy} onClick={() => purgeHrmsSeed()}>
+                  Clear HRMS for UAT
+                </Button>
+              ) : null}
+              {isAdmin ? (
+                <Button type="button" variant="danger" disabled={busy} onClick={() => clearAllAssignments()}>
+                  Clear seeded assignments
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

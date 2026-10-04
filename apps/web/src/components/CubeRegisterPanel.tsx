@@ -13,6 +13,7 @@ import { RegisterBrandHeader } from "./RegisterBrandHeader";
 import type { RegisterBrandProject } from "./RegisterBrandHeader";
 import { useAuth } from "../auth";
 import { canLoadSheetTemplates } from "../lib/productionUi";
+import { StatusNote } from "./StatusNote";
 
 export type { CubeRow };
 
@@ -293,7 +294,7 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
       {patchErr && <p className="text-sm text-danger bg-red-50 rounded-lg px-3 py-2 shrink-0">{patchErr}</p>}
 
       {canEdit && (

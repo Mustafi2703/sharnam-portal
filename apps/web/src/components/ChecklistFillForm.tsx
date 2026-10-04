@@ -3,6 +3,7 @@ import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { FilePickButton } from "./FilePickButton";
 import { SignaturePad } from "./SignaturePad";
 import { StandaloneFormHeader } from "./StandaloneFormHeader";
+import { StatusNote } from "./StatusNote";
 
 export type ChecklistFillItem = {
   id: string;
@@ -256,7 +257,7 @@ export function ChecklistFillForm({
           </div>
         </div>
 
-        {msg ? <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p> : null}
+        <StatusNote msg={msg} />
 
         {pickerOn && (
           <Card className="!p-5">

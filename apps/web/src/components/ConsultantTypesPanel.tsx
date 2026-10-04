@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { useConsultantTypes } from "../lib/consultantTypes";
 import { SearchableSelect } from "./SearchableSelect";
 import { Button, Input } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 /** Office/admin — add, rename, or remove consultant type labels. */
 export function ConsultantTypesPanel({ token, canEdit = false }: { token: string | null; canEdit?: boolean }) {
@@ -103,7 +104,7 @@ export function ConsultantTypesPanel({ token, canEdit = false }: { token: string
               Add type
             </Button>
           </form>
-          {msg ? <p className="text-[11px] text-steel-muted">{msg}</p> : null}
+          <StatusNote msg={msg} compact />
         </div>
       ) : null}
     </div>

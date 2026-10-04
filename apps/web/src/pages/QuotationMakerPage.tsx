@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { SPDC_OFFICE_ADDRESS } from "@sharnam/shared";
 import { Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { StatusNote } from "../components/StatusNote";
 
 const STATUSES = ["Draft", "Editing", "Sent to client", "Done"] as const;
 
@@ -330,7 +331,7 @@ export default function QuotationMakerPage() {
         )}
       </div>
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {saved && canWrite && (
         <Card className="!p-4 space-y-3">

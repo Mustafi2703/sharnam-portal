@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { canLoadSheetTemplates } from "../lib/productionUi";
 import { UploadModal } from "./UploadModal";
 import { Button, Card, Input } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 export type CostStructureRow = {
   packageName: string;
@@ -255,7 +256,7 @@ export function CostStructureSetupPanel({
           </div>
         </details>
 
-        {message && <p className="text-sm text-brand-dark bg-brand-soft px-4 py-2 shrink-0">{message}</p>}
+        <StatusNote msg={message} className="shrink-0" />
 
         <div className="sheet-register__scroll register-sheet-viewport min-h-[14rem]">
           <table className="sheet-register__table min-w-[56rem]">

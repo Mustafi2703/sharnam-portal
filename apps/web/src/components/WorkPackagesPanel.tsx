@@ -4,6 +4,7 @@ import { api } from "../api";
 import { Button, Card, Input } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../lib/workPackages";
+import { StatusNote } from "./StatusNote";
 
 const FALLBACK_PACKAGES = ["Civil", "PEB", "MEP", "Fire Fighting", "Electrical", "Plumbing", "HVAC", "Landscape"];
 
@@ -174,7 +175,7 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
         </p>
       </div>
 
-      {msg && <p className="text-xs rounded px-2 py-1.5 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} compact />
 
       {pick ? (
         <div className="flex flex-wrap gap-2">

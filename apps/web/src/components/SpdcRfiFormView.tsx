@@ -12,6 +12,7 @@ import { checklistFamilyForRfiKind } from "../lib/rfiModuleScope";
 import PdfMarkup from "./PdfMarkup";
 import { drawingFileKind, resolveDrawingFileUrl } from "../lib/drawingPreview";
 import { uploadDrawingMarkupPages, type MarkupPageDraft } from "../lib/drawingMarkup";
+import { StatusNote } from "./StatusNote";
 
 type ProjectLite = {
   name?: string;
@@ -426,7 +427,7 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
         </p>
       )}
 
-      {msg && <p className="text-sm text-brand">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {markupOpen && markupFile && markupRevisionId
         ? createPortal(

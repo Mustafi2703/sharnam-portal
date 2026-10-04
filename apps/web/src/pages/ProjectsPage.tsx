@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
 import { ProjectManageActions } from "../components/ProjectManageActions";
+import { StatusNote } from "../components/StatusNote";
 
 type Project = {
   id: string;
@@ -43,7 +44,7 @@ export default function ProjectsPage() {
         Only office and admin can add, edit, or delete a project. Type the project code to confirm a delete.
       </p>
 
-      {msg && <p className="text-sm text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canManage && (
         <Card>

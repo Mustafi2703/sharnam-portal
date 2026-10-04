@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
+import { StatusNote } from "../components/StatusNote";
 
 type LeaveType = { id: string; code: string; name: string; daysPerYear: number };
 type Balance = { id: string; entitled: number; used: number; balance: number; leaveType: LeaveType };
@@ -125,7 +126,7 @@ export default function HrmsLeavePage() {
 
   return (
     <div className="space-y-5">
-      {msg && <p className="text-sm text-ok">{msg}</p>}
+      <StatusNote msg={msg} />
       <p className="text-xs text-steel-muted max-w-2xl">
         SPDC defaults on setup: CL 12 · <strong>PL 12</strong> · Sick 6 · Emergency 3 · Short 24 (per year). Employees see{" "}
         <span className="font-mono">remaining / entitled</span> below when they apply.
@@ -250,21 +251,6 @@ export default function HrmsLeavePage() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
             <h3 className="font-semibold">{canManage ? "Leave register" : "My requests"}</h3>
-            {canManage && (
-              <Button
-                type="button"
-                variant="danger"
-                className="!px-2.5 !py-1.5 !text-xs !rounded-lg"
-                onClick={() => {
-                  if (!window.confirm("Delete every leave request? Balances and staff stay.")) return;
-                  void api("/api/hrm/registers/clear-ops", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR", which: "leave" }) })
-                    .then(() => { setMsg("Leave requests deleted."); return load(); })
-                    .catch((err) => setMsg(err instanceof Error ? err.message : "Could not delete leave"));
-                }}
-              >
-                Delete all
-              </Button>
-            )}
           </div>
           {canManage ? (
             <p className="text-xs text-steel-muted mb-2">Status only. Approve or reject in Leave approval below — that step is separate from raising a request.</p>
@@ -289,6 +275,26 @@ export default function HrmsLeavePage() {
             ))}
             {!shownLeave.length && <li className="text-steel-muted">No requests yet.</li>}
           </ul>
+          {canManage && (
+            <details className="danger-zone !mt-4">
+              <summary>Danger zone — delete all leave requests</summary>
+              <div className="danger-zone__body">
+                <p>Deletes every leave request for every employee. Balances and staff are kept. This cannot be undone.</p>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => {
+                    if (!window.confirm("Delete every leave request? Balances and staff stay.")) return;
+                    return api("/api/hrm/registers/clear-ops", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR", which: "leave" }) })
+                      .then(() => { setMsg("Leave requests deleted."); return load(); })
+                      .catch((err) => setMsg(err instanceof Error ? err.message : "Could not delete leave"));
+                  }}
+                >
+                  Delete all leave requests
+                </Button>
+              </div>
+            </details>
+          )}
         </Card>
       </div>
 

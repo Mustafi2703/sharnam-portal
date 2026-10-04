@@ -17,6 +17,7 @@ import {
   marketStatusTone,
 } from "../lib/crmLeadUtils";
 import { openModuleToolWindow, withToolWindowParam } from "../lib/moduleToolWindow";
+import { StatusNote } from "../components/StatusNote";
 
 function openCrmSetup(projectId: string) {
   const href = `/crm/setup?projectId=${projectId}&step=project`;
@@ -178,7 +179,7 @@ export default function CrmPage() {
 
   return (
     <div className="space-y-6 pb-4">
-      {msg && <p className="text-sm text-ok shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {section === "proposals" && (
         <>

@@ -10,6 +10,7 @@ import {
   revisionPreviewFromRecord,
 } from "../../lib/drawingPreview";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
+import { StatusNote } from "../../components/StatusNote";
 
 export function CoordinationPage() {
   const { id } = useParams();
@@ -189,7 +190,7 @@ export function CoordinationPage() {
         }
       />
 
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <Card className="!p-4 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">

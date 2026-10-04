@@ -17,6 +17,7 @@ import { QualityChecklistSummaryPanel } from "../../components/QualityChecklistS
 import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { CHECKLIST_FILLED_MESSAGE } from "../../lib/inPageOverlay";
+import { StatusNote } from "../../components/StatusNote";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
 const QUALITY_REGISTER_SHEETS = new Set<QualitySheetKey>([
@@ -270,7 +271,7 @@ export default function InspectionsPage() {
       </div>
       )}
 
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {sheetKey === "" && dash && (
         <div className="space-y-4">
@@ -879,7 +880,7 @@ export default function InspectionsPage() {
               Create draft inspection
             </Button>
           </form>
-          {msg && <p className="text-sm mt-2 text-steel-muted">{msg}</p>}
+          <StatusNote msg={msg} className="mt-2" />
         </Card>
       )}
 

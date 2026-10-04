@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Button, Card, Input, Select } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type MasterKind = "mb" | "bbs";
 
@@ -140,7 +141,7 @@ export function MasterLinePicker({
           {open ? "Close picker" : `Pick ${KIND_LABEL[kind]} lines`}
         </Button>
       </div>
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      <StatusNote msg={msg} />
       {open && (
         <div className="space-y-3 border-t border-line pt-3">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">

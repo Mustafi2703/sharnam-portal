@@ -13,6 +13,7 @@ import { SignaturePad } from "../components/SignaturePad";
 import { PhotoCapture } from "../components/PhotoCapture";
 import ImageMarkup from "../components/ImageMarkup";
 import PdfMarkup from "../components/PdfMarkup";
+import { StatusNote } from "../components/StatusNote";
 
 type SavedItem = { kind: "photo" | "signature" | "note"; path?: string; url?: string; provider?: string };
 
@@ -98,7 +99,7 @@ export default function SitePilotPage() {
         }
       />
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <Card>
         <h3 className="font-semibold text-sm mb-2">1 · Site photo</h3>

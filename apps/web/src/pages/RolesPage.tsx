@@ -17,6 +17,7 @@ import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared"
 import { Badge, Button, Card, Input, PageHero } from "../components/ui";
 import { isHiddenPortalListUser } from "../lib/portalUserLists";
 import { WORKSPACES } from "../workspaces";
+import { StatusNote } from "../components/StatusNote";
 
 const ACTIONS: PermissionAction[] = ["view", "create", "edit", "approve"];
 
@@ -237,7 +238,7 @@ export default function RolesPage() {
         }
       />
 
-      {msg && <p className="text-sm text-ok bg-sand border border-line px-3 py-2 rounded-lg">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

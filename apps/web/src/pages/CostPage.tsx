@@ -18,6 +18,7 @@ import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
+import { StatusNote } from "../components/StatusNote";
 
 type CostTab = "budget" | "monitoring" | "cashflow" | "rates" | "boq" | "bills" | "mb" | "bbs" | "bbs-master";
 const COST_TABS: CostTab[] = ["budget", "monitoring", "cashflow", "rates", "boq", "bills", "mb", "bbs", "bbs-master"];
@@ -729,7 +730,7 @@ export default function CostPage() {
       </div>
 
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       {verify && canEdit && !siteBoqMode && (!isRegisterView || !verify.ok) && (
         <details

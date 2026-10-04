@@ -10,6 +10,7 @@ import { WprSignOffPanel } from "../components/WprSignOffPanel";
 import { MakerRecentPanel, fileNameFromPublishedPath } from "../components/MakerRecentPanel";
 import { SharePointStatusBanner } from "../components/SharePointStatusBanner";
 import { mergeWprCharts } from "../lib/wprChartFallback";
+import { StatusNote } from "../components/StatusNote";
 
 /**
  * WPR Maker — editable weekly progress report per project × weekEnding.
@@ -577,7 +578,7 @@ export default function WprMakerPage() {
           </button>
         </div>
 
-        {msg && <p className="text-xs text-brand-dark bg-brand-soft rounded px-2 py-1">{msg}</p>}
+        <StatusNote msg={msg} compact />
         {(pack.publishedUrl || pack.publishedPath) && (
           <p className="text-xs text-steel-muted">
             {pack.publishedUrl ? (

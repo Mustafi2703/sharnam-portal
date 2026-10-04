@@ -7,6 +7,7 @@ import { BrandMark } from "./Brand";
 import { AttendanceCalendar } from "./AttendanceCalendar";
 import { AttendancePunchPanel } from "./AttendancePunchPanel";
 import { Button, Card, Input, PageHeader, Select } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type LeaveType = { id: string; code: string; name: string };
 
@@ -243,7 +244,7 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
         ))}
       </div>
 
-      {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {desk === "attendance" && <AttendancePunchPanel variant="full" showRoster={false} />}
 

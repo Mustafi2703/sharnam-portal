@@ -4,6 +4,7 @@ import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { ReferenceSheetToolbar } from "./ReferenceSheetToolbar";
 import { ToolLink } from "./ToolLink";
+import { StatusNote } from "./StatusNote";
 
 type Tab = "value" | "procurement" | "pr" | "invoice" | "materials" | "quality";
 
@@ -405,7 +406,7 @@ export function WprTrackerRegisters({
           <Badge tone="neutral">{inv.length} invoices</Badge>
           <Badge tone="neutral">{va.length} VE</Badge>
         </div>
-        {msg && <p className="text-xs text-brand mt-2">{msg}</p>}
+        <StatusNote msg={msg} className="mt-2" compact />
       </Card>
 
       <ReferenceSheetToolbar

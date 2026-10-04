@@ -11,6 +11,7 @@ import {
 import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 import { FilePickButton } from "../../components/FilePickButton";
+import { StatusNote } from "../../components/StatusNote";
 
 const FAMILIES = [
   { value: "DrawingCheck", label: "Drawing check · RFI (SPDC RFI form)" },
@@ -381,7 +382,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         </p>
       )}
 
-      {msg && <p className="text-sm rounded-xl px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canEdit && (
         <Card className="space-y-3">

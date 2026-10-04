@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { SignaturePad } from "./SignaturePad";
 import { Badge, Button, Card } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type Slot = {
   key: string;
@@ -134,7 +135,7 @@ export function DirectoryMySignaturePanel({ projectId, token, compact }: Props) 
         </Link>
       </div>
 
-      {msg && <p className="text-xs text-brand bg-brand-soft px-3 py-2 rounded-lg mb-3">{msg}</p>}
+      <StatusNote msg={msg} className="mb-3" compact />
 
       <ul className="space-y-3">
         {slots.map((s) => (

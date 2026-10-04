@@ -21,6 +21,7 @@ import {
   type PortalAccountForm,
   type PortalAccountKind,
 } from "../../lib/portalAccounts";
+import { StatusNote } from "../../components/StatusNote";
 
 const USER_TOOLS: {
   key: string;
@@ -199,7 +200,7 @@ export default function DirectoryPage() {
         }
       />
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-xl">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canEdit && id && (
         <WorkPackagesPanel token={token} projectId={id} onSaved={() => setMsg("Work packages saved for this project.")} />

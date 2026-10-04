@@ -3,6 +3,7 @@ import { formatIstPunchTime } from "@sharnam/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 /** One-tap office attendance — no selfie or GPS. Auto clock-out at 18:00 IST. */
 export function OfficeClockInCard() {
@@ -61,7 +62,7 @@ export function OfficeClockInCard() {
               Out {formatIstPunchTime(row?.checkOut)}
             </Badge>
           </div>
-          {msg && <p className="text-xs mt-2 text-brand-dark">{msg}</p>}
+          <StatusNote msg={msg} className="mt-2" compact />
         </div>
         <div className="flex gap-2">
           <Button type="button" disabled={busy || checkedIn} onClick={() => void punch("in")}>

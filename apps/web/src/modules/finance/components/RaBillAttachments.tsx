@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
+import { StatusNote } from "../../../components/StatusNote";
 
 type Attachment = {
   id: string;
@@ -107,7 +108,7 @@ export function RaBillAttachments({
           </>
         )}
       </div>
-      {msg && <span className="text-[10px] text-steel-muted">{msg}</span>}
+      <StatusNote msg={msg} compact />
       {open && (
         <div className="mt-1 border border-line rounded bg-white shadow-sm w-80 max-h-52 overflow-auto text-[11px] p-2">
           <div className="font-semibold mb-1">

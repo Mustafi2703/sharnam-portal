@@ -16,6 +16,7 @@ import {
   formatVendorBidDisciplines,
   parseVendorBidDisciplines,
 } from "../lib/crmBidDisciplines";
+import { StatusNote } from "../components/StatusNote";
 
 type VendorRow = VendorFormState & {
   id: string;
@@ -134,7 +135,7 @@ export default function GlobalVendorsPage() {
         }
       />
 
-      {msg && <p className="text-sm bg-brand-soft text-brand-dark rounded-lg px-3 py-2">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <div className="flex flex-wrap gap-2">
         {(["All", ...VENDOR_PARTY_TYPES.map((p) => p.value)] as const).map((t) => (

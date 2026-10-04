@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../components/ui";
+import { StatusNote } from "../components/StatusNote";
 
 /** Per-project email distribution (used on drawing publish & checklist submit) */
 export default function ProjectEmailSettingsPage() {
@@ -192,7 +193,7 @@ export default function ProjectEmailSettingsPage() {
             </label>
           ))}
           {canEdit && <Button type="submit">Save settings</Button>}
-          {msg && <p className="text-sm text-steel-muted">{msg}</p>}
+          <StatusNote msg={msg} />
         </form>
       </Card>
 

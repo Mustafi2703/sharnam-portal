@@ -4,6 +4,7 @@ import { api } from "../api";
 import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
 import { BarChart, PieChart } from "./PieChart";
 import { Badge, Button, Card } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type CatalogRow = {
   srNo: number;
@@ -107,7 +108,7 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
 
   return (
     <div className="flex flex-col gap-2 min-w-0">
-      {msg && <p className="text-sm text-brand-dark bg-brand-soft rounded-lg px-3 py-2 shrink-0">{msg}</p>}
+      <StatusNote msg={msg} className="shrink-0" />
 
       <div className="shrink-0 space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">

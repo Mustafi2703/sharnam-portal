@@ -17,6 +17,7 @@ import {
   SPDC_HIRING_DEPARTMENTS,
   SPDC_HIRING_ROLES,
 } from "@sharnam/shared";
+import { StatusNote } from "../components/StatusNote";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -32,6 +33,14 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+const TAB_HINTS: Record<TabId, string> = {
+  requisitions: "Raise the role request",
+  candidates: "Add resumes, book interviews",
+  compare: "Rank people on one role",
+  interviews: "Score each interview round",
+  offers: "CTC + offer letter",
+};
 
 const OFFER_STAGES = ["Draft", "Approved", "Sent", "Accepted", "Declined", "Withdrawn", "Joined"] as const;
 const INTERVIEW_STAGES = ["Scheduled", "Completed", "No-Show", "Cancelled"] as const;
@@ -106,46 +115,47 @@ export default function RecruitmentPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="!p-4 bg-brand-soft/20 border-brand/20">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-        <p className="text-sm text-ink font-semibold">Hiring steps</p>
-        <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          Requisition, then resumes, then the scorecard. Compare ranks the people on one requisition. Onboard opens their checklist. Portal login is added from that checklist.
-        </p>
-          </div>
-          {canManage && (
-            <Button type="button" variant="secondary" onClick={() => void deleteAllRecruitment()}>
-              Delete all
-            </Button>
-          )}
-        </div>
-      </Card>
-      <nav className="hrms-subnav mb-2" aria-label="Recruitment steps">
-        {TABS.map((t) => (
+      <nav className="hr-steps" aria-label="Recruitment steps">
+        {TABS.map((t, i) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSp({ tab: t.id })}
-            className={`hrms-subnav__tab${tab === t.id ? " is-on" : ""}`}
+            className={`hr-steps__btn${tab === t.id ? " is-on" : ""}`}
+            aria-current={tab === t.id ? "step" : undefined}
           >
-            {t.label}
+            <span className="hr-steps__num">{i + 1}</span>
+            <span className="min-w-0">
+              <span className="hr-steps__label">{t.label}</span>
+              <span className="hr-steps__hint">{TAB_HINTS[t.id]}</span>
+            </span>
           </button>
         ))}
       </nav>
 
-      {loadError ? (
-        <p className="text-sm rounded-lg px-3 py-2 bg-[color-mix(in_srgb,var(--color-danger)_12%,var(--color-paper))] text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)]">
-          {loadError}
-        </p>
-      ) : null}
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={loadError} tone="danger" />
+      <StatusNote msg={msg} onClose={() => setMsg("")} />
 
       {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "candidates" && <CandidatesTab reqs={reqs} candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "compare" && <CompareTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OffersTab candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+
+      {canManage ? (
+        <details className="danger-zone">
+          <summary>Danger zone — reset recruitment data</summary>
+          <div className="danger-zone__body">
+            <p>
+              Permanently deletes every requisition, resume, interview, offer and recruitment letter. Staff logins and
+              projects are kept. This cannot be undone.
+            </p>
+            <Button type="button" variant="danger" onClick={() => deleteAllRecruitment()}>
+              Delete all recruitment data
+            </Button>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -195,36 +205,37 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
       {canManage && (
         <Card>
           <h3 className="font-semibold text-sm mb-2">Raise a manpower requisition</h3>
-          <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
-            <Input placeholder="Req No (auto)" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
+          <form onSubmit={add} className="grid md:grid-cols-4 gap-x-3 gap-y-3">
+            <Input label="Requisition no." hint="Leave blank to auto-number" placeholder="Auto" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
             <Select
+              label="Department *"
               value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value, designation: "" })}
               required
             >
-              <option value="">Department</option>
+              <option value="">Select department</option>
               {SPDC_HIRING_DEPARTMENTS.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </Select>
-            <Select value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required>
-              <option value="">{form.department ? "Designation" : "Pick a department first"}</option>
+            <Select label="Designation *" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required disabled={!form.department}>
+              <option value="">{form.department ? "Select designation" : "Choose department first"}</option>
               {designationOptions.map((row) => (
                 <option key={row.title} value={row.title}>{row.title}</option>
               ))}
             </Select>
-            <Input placeholder="Head count" type="number" value={form.count} onChange={(e) => setForm({ ...form, count: Number(e.target.value) })} />
-            <Select value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
+            <Input label="Head count" placeholder="1" type="number" min={1} value={form.count} onChange={(e) => setForm({ ...form, count: Number(e.target.value) })} />
+            <Select label="Employment type" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
               {["Permanent", "Contract", "Consultant", "Intern"].map((v) => <option key={v}>{v}</option>)}
             </Select>
-            <Input placeholder="Reporting manager" value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
-            <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <Select value={form.urgency} onChange={(e) => setForm({ ...form, urgency: e.target.value })}>
+            <Input label="Reporting manager" placeholder="Name" value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
+            <Input label="Location" placeholder="Office / site" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <Select label="Urgency" value={form.urgency} onChange={(e) => setForm({ ...form, urgency: e.target.value })}>
               {["Normal", "Priority", "Critical"].map((v) => <option key={v}>{v}</option>)}
             </Select>
-            <Input placeholder="CTC min (₹/yr)" type="number" value={form.ctcRangeMin} onChange={(e) => setForm({ ...form, ctcRangeMin: e.target.value })} />
-            <Input placeholder="CTC max (₹/yr)" type="number" value={form.ctcRangeMax} onChange={(e) => setForm({ ...form, ctcRangeMax: e.target.value })} />
-            <TextArea rows={2} placeholder="Job description" value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} className="md:col-span-4" />
+            <Input label="CTC min (₹ / year)" placeholder="e.g. 600000" type="number" value={form.ctcRangeMin} onChange={(e) => setForm({ ...form, ctcRangeMin: e.target.value })} />
+            <Input label="CTC max (₹ / year)" placeholder="e.g. 900000" type="number" value={form.ctcRangeMax} onChange={(e) => setForm({ ...form, ctcRangeMax: e.target.value })} />
+            <TextArea label="Job description / justification" fieldClassName="md:col-span-4" rows={2} placeholder="Why the role is needed, key responsibilities" value={form.justification} onChange={(e) => setForm({ ...form, justification: e.target.value })} />
             <div className="md:col-span-4 flex gap-2">
               <Button type="submit">{editId ? "Save requisition" : "Submit requisition"}</Button>
               {editId ? (
@@ -613,9 +624,6 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
           <>
             <Button type="button" variant="secondary" onClick={() => void removeDuplicates()}>
               Remove duplicates
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => void clearRegisters()}>
-              Delete all
             </Button>
           </>
         )}

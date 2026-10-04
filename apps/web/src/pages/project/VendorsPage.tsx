@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { VendorManageActions } from "../../components/VendorManageActions";
 import { formatPartyType, isVendorOrContractor } from "../../lib/vendorTypes";
+import { StatusNote } from "../../components/StatusNote";
 
 export default function VendorsPage() {
   const { id } = useParams();
@@ -69,7 +70,7 @@ export default function VendorsPage() {
         }
       />
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-xl">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {canEdit && (
         <Card className="!p-4">

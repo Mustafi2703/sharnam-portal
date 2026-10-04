@@ -73,18 +73,21 @@ export type OfferRow = {
   onboard?: { userId?: string | null };
 };
 
-export const KIND_OPTIONS: { key: DocKind; label: string; hint: string }[] = [
-  { key: "Appointment", label: "Appointment letter", hint: "17-clause SPDC letter of appointment + Annexures I–III" },
-  { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date" },
-  { key: "Relieving", label: "Relieving letter", hint: "Issued on last working day after clearance" },
-  { key: "Exit", label: "Exit letter", hint: "Formal separation intimation & exit checklist trigger" },
-  { key: "AssetReturn", label: "Asset submission letter", hint: "IT + admin asset return acknowledgement" },
-  { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services" },
-  { key: "Promotion", label: "Letter of promotion", hint: "SPDC branded promotion with revised CTC" },
-  { key: "Warning", label: "Warning / concern letter", hint: "Notice of concern with corrective actions" },
-  { key: "Experience", label: "Experience certificate", hint: "Tenure and role certificate on request" },
-  { key: "NdaJoining", label: "NDA at joining", hint: "Confidentiality undertaking signed on appointment" },
-  { key: "NdaPostEmployment", label: "NDA post-employment", hint: "Post-exit confidentiality reminder" },
+export type LetterStage = "Joining" | "During employment" | "Exit";
+
+/** Ordered by when HR issues them — the letter list is grouped by stage. */
+export const KIND_OPTIONS: { key: DocKind; label: string; hint: string; stage: LetterStage }[] = [
+  { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date", stage: "Joining" },
+  { key: "Appointment", label: "Appointment letter", hint: "17-clause SPDC letter of appointment + Annexures I–III", stage: "Joining" },
+  { key: "NdaJoining", label: "NDA at joining", hint: "Confidentiality undertaking signed on appointment", stage: "Joining" },
+  { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services", stage: "During employment" },
+  { key: "Promotion", label: "Letter of promotion", hint: "SPDC branded promotion with revised CTC", stage: "During employment" },
+  { key: "Warning", label: "Warning / concern letter", hint: "Notice of concern with corrective actions", stage: "During employment" },
+  { key: "AssetReturn", label: "Asset submission letter", hint: "IT + admin asset return acknowledgement", stage: "Exit" },
+  { key: "Exit", label: "Exit letter", hint: "Formal separation intimation & exit checklist trigger", stage: "Exit" },
+  { key: "Relieving", label: "Relieving letter", hint: "Issued on last working day after clearance", stage: "Exit" },
+  { key: "Experience", label: "Experience certificate", hint: "Tenure and role certificate on request", stage: "Exit" },
+  { key: "NdaPostEmployment", label: "NDA post-employment", hint: "Post-exit confidentiality reminder", stage: "Exit" },
 ];
 
 /** Standard pack after offer accept / pre-join. */

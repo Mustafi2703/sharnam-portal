@@ -7,6 +7,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, apiBase } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 type IndexRow = {
   id: string;
@@ -166,7 +167,7 @@ export function SiteFinalIndexPanel({ token }: Props) {
         </div>
       </div>
 
-      {msg && <p className="text-sm text-brand bg-brand-soft px-3 py-2 rounded-sm">{msg}</p>}
+      <StatusNote msg={msg} />
 
       <form className="grid sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end" onSubmit={addRow}>
         <Input

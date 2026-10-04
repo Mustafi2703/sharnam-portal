@@ -8,6 +8,7 @@ import { ReferenceSheetToolbar } from "../components/ReferenceSheetToolbar";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { UploadModal } from "../components/UploadModal";
 import { isToolWindow } from "../lib/moduleToolWindow";
+import { StatusNote } from "../components/StatusNote";
 
 type Tab = "matrix" | "agenda" | "mom" | "followup" | "log";
 
@@ -341,7 +342,7 @@ export default function CommsPage() {
         ))}
       </div>
 
-      {msg && <p className="text-sm rounded-lg px-3 py-2 bg-brand-soft text-brand-dark">{msg}</p>}
+      <StatusNote msg={msg} />
 
       {tab === "matrix" && id && (
         <CommsMatrixPanel

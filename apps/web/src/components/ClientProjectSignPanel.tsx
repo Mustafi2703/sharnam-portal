@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, apiBase } from "../api";
 import { WprSignOffPanel } from "./WprSignOffPanel";
 import { Card } from "./ui";
+import { StatusNote } from "./StatusNote";
 
 function weekEndingIso(d = new Date()) {
   const x = new Date(d);
@@ -82,7 +83,7 @@ export function ClientProjectSignPanel({
         onRemove={() => undefined}
         resolveUrl={(ref) => (ref.startsWith("http") ? ref : `${apiBase()}${ref.startsWith("/") ? ref : `/uploads/${ref}`}`)}
       />
-      {msg ? <p className="text-xs text-brand font-medium">{msg}</p> : null}
+      <StatusNote msg={msg} compact />
     </Card>
   );
 }
