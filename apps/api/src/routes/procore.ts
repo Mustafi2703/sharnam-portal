@@ -1716,10 +1716,61 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
       ccOverride: cc.join(", "),
     }).catch(() => undefined);
   }
+  publishCoordinationRegisterInBackground(req.params.projectId);
   res.status(201).json(row);
 });
 
+directoryRouter.get("/project/:projectId/coordination/register.xlsx", async (req, res) => {
+  const { buildDesignCoordinationRegisterXlsx } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildDesignCoordinationRegisterXlsx(req.params.projectId);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Design-Coordination-Register-${req.params.projectId}.xlsx"`);
+  res.send(buf);
+});
+
+directoryRouter.get("/project/:projectId/coordination/register.pdf", async (req, res) => {
+  const { buildDesignCoordinationRegisterPdf } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildDesignCoordinationRegisterPdf(req.params.projectId);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Design-Coordination-Register-${req.params.projectId}.pdf"`);
+  res.send(buf);
+});
+
+const coordImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+
+/** Office: import a Design Coordination Register Excel (no emails are sent for imported rows). */
+directoryRouter.post(
+  "/project/:projectId/coordination/import",
+  requireRoles("admin", "office"),
+  coordImportUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "Choose the register Excel file to import" });
+    try {
+      const { importCoordinationRegister } = await import("../services/coordinationRegisterImport.js");
+      const out = await importCoordinationRegister(req.params.projectId, req.file.buffer);
+      await audit("coordination.import", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: req.params.projectId,
+        meta: { created: out.created, updated: out.updated },
+      });
+      publishCoordinationRegisterInBackground(req.params.projectId);
+      res.json(out);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+    }
+  },
+);
+
+function publishCoordinationRegisterInBackground(projectId: string) {
+  void import("../services/drawingRegisterDrive.js")
+    .then(({ publishCoordinationRegisterToDrive }) => publishCoordinationRegisterToDrive(projectId))
+    .catch((err) => console.warn("[coordination] SharePoint register:", err instanceof Error ? err.message : err));
+}
+
 directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const before = await prisma.designCoordinationIssue.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "Not found" });
   const row = await prisma.designCoordinationIssue.update({
     where: { id: req.params.id },
     data: {
@@ -1737,6 +1788,32 @@ directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "empl
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
     },
   });
+  // Re-assigned to someone new → they get the same email the first assignee got.
+  const newEmail = String(row.assignedToEmail || "").trim().toLowerCase();
+  const oldEmail = String(before.assignedToEmail || "").trim().toLowerCase();
+  if (newEmail && newEmail !== oldEmail) {
+    const { queueProjectEmail } = await import("../services/email.js");
+    await queueProjectEmail({
+      projectId: row.projectId,
+      subject: `Design coordination assigned to you — ${row.title}`,
+      body: [
+        `A design coordination issue has been assigned to you. Please review and take action.`,
+        ``,
+        `Issue: ${row.title}`,
+        row.discipline ? `Drawing type: ${row.discipline}` : "",
+        row.description ? `Details: ${row.description}` : "",
+        row.dueDate ? `Due: ${row.dueDate.toISOString().slice(0, 10)}` : "",
+        before.assignedToName ? `Previously with: ${before.assignedToName}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      context: "coordination.reassigned",
+      createdById: req.user!.id,
+      toOverride: newEmail,
+      ccOverride: oldEmail || undefined,
+    }).catch(() => undefined);
+  }
+  publishCoordinationRegisterInBackground(row.projectId);
   res.json(row);
 });
 
@@ -1759,6 +1836,7 @@ directoryRouter.post(
         entityId: issue.id,
         meta: { followUpCount: result.issue.followUpCount, autoEscalated: result.autoEscalated },
       });
+      publishCoordinationRegisterInBackground(issue.projectId);
       res.json({ ...result, maxFollowUps: MAX_FOLLOW_UPS });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Follow-up failed" });
@@ -1775,8 +1853,10 @@ directoryRouter.post(
     if (issue.status === "Closed") return res.status(400).json({ error: "Issue is closed" });
     try {
       const { createRfiFromCoordinationIssue, MAX_FOLLOW_UPS } = await import("../services/coordinationEscalation.js");
-      if (issue.followUpCount >= MAX_FOLLOW_UPS && issue.escalatedRfiId) {
-        return res.status(400).json({ error: "Already escalated" });
+      void MAX_FOLLOW_UPS;
+      // Escalation is allowed at any time (before or after 5 follow-ups), but only once.
+      if (issue.escalatedRfiId) {
+        return res.status(400).json({ error: "Already escalated to an RFI" });
       }
       const rfi = await createRfiFromCoordinationIssue({
         issueId: issue.id,
@@ -1789,6 +1869,7 @@ directoryRouter.post(
         entityId: issue.id,
         meta: { rfiId: rfi.id, number: rfi.number },
       });
+      publishCoordinationRegisterInBackground(issue.projectId);
       res.status(201).json({ rfi, issue: await prisma.designCoordinationIssue.findUnique({ where: { id: issue.id } }) });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Escalation failed" });

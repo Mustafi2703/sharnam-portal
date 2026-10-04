@@ -596,7 +596,8 @@ export default function DrawingsPage() {
     setRevDwg(null);
     setFormError("");
     setPrecheckOpen(false);
-    setPlannedDate(new Date().toISOString().slice(0, 10));
+    // Blank planned date → the server keeps the planned date PMC set on the master register.
+    setPlannedDate("");
     setActualDate(new Date().toISOString().slice(0, 10));
     setExpandedId(d.id);
     const next = gfcNextRevisionNumber(d.revisions || []);
@@ -680,63 +681,6 @@ export default function DrawingsPage() {
               >
                 Master register →
               </Link>
-              <label className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-2 text-xs font-semibold text-ink hover:bg-sand/60 cursor-pointer">
-                {dumpBusy ? "Importing…" : "Import GFC log"}
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="sr-only"
-                  disabled={dumpBusy || clearBusy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (!f || !id) return;
-                    setDumpBusy(true);
-                    setMsg("Importing Approval & GFC Drawing Log… revision dates load; upload PDF/DWG with Upload rev after.");
-                    const fd = new FormData();
-                    fd.append("file", f);
-                    void api<{ drawings: number; revisions: number; source: string }>(
-                      `/api/drawings/project/${id}/gfc-log/import`,
-                      { method: "POST", token, body: fd, timeoutMs: 180_000 },
-                    )
-                      .then(async (out) => {
-                        setMsg(
-                          `GFC log imported — ${out.drawings} drawings, ${out.revisions} revision dates from ${out.source}. Use Upload rev / Update files for PDF/DWG.`,
-                        );
-                        await load();
-                      })
-                      .catch((err) => setMsg(err instanceof Error ? err.message : "GFC import failed"))
-                      .finally(() => setDumpBusy(false));
-                  }}
-                />
-              </label>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={dumpBusy || clearBusy}
-                onClick={() => {
-                  if (!id) return;
-                  setDumpBusy(true);
-                  setMsg("Loading bundled Approval & GFC Drawing Log for UAT…");
-                  void api<{ drawings: number; revisions: number; source: string }>(
-                    `/api/drawings/project/${id}/gfc-log/import-bundled`,
-                    { method: "POST", token, timeoutMs: 180_000 },
-                  )
-                    .then(async (out) => {
-                      setMsg(
-                        `UAT GFC loaded — ${out.drawings} drawings, ${out.revisions} revisions (${out.source}). Delete all rows when finished.`,
-                      );
-                      await load();
-                    })
-                    .catch((err) => setMsg(err instanceof Error ? err.message : "Bundled GFC import failed"))
-                    .finally(() => setDumpBusy(false));
-                }}
-              >
-                Load UAT GFC workbook
-              </Button>
-              <Button type="button" className="!bg-sky-600 !font-medium" disabled={dumpBusy} onClick={() => void syncRegistersToDrive()}>
-                {dumpBusy ? "Syncing…" : "Sync now"}
-              </Button>
               <Button type="button" variant="secondary" onClick={() => {
                 setAddRowForm((f) => ({
                   ...f,
@@ -745,38 +689,6 @@ export default function DrawingsPage() {
                 setAddRowOpen(true);
               }}>
                 + Add row
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={clearBusy}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      "Delete all GFC register rows and drawings on this project? You can start the register fresh. SharePoint files are not deleted.",
-                    )
-                  ) {
-                    return;
-                  }
-                  void (async () => {
-                    setClearBusy(true);
-                    setMsg("Clearing register… this can take up to a minute on large projects. Please wait.");
-                    try {
-                      const r = await api<{ removedDrawings: number; removedLines: number }>(
-                        `/api/drawings/project/${id}/clear-gfc-register`,
-                        { method: "POST", token, timeoutMs: 180_000 },
-                      );
-                      setMsg(`GFC register cleared — ${r.removedLines} lines, ${r.removedDrawings} drawings removed.`);
-                      await load();
-                    } catch (err) {
-                      setMsg(err instanceof Error ? err.message : "Could not clear the GFC register");
-                    } finally {
-                      setClearBusy(false);
-                    }
-                  })();
-                }}
-              >
-                {clearBusy ? "Clearing…" : "Delete all rows"}
               </Button>
               <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
                 Upload GFC
@@ -827,10 +739,24 @@ export default function DrawingsPage() {
             >
               Download GFC Excel
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full !justify-start !text-sm !py-2"
+              onClick={(e) => {
+                (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                return downloadAuthFile(`/api/drawings/project/${id}/gfc-log/export.pdf`, token, "Approval-GFC-Drawing-Log.pdf").catch(
+                  (err) => setMsg(err instanceof Error ? err.message : "Could not download the PDF"),
+                );
+              }}
+            >
+              Download GFC PDF
+            </Button>
             {canUpload && (
               <>
+                {user?.role === "admin" || user?.role === "office" ? (
                 <label className="flex w-full cursor-pointer items-center rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-sand/60">
-                  {dumpBusy ? "Working…" : "Upload GFC Excel"}
+                  {dumpBusy ? "Working…" : "Import GFC Excel"}
                   <input
                     type="file"
                     accept=".xlsx,.xls"
@@ -860,6 +786,7 @@ export default function DrawingsPage() {
                     }}
                   />
                 </label>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
@@ -870,7 +797,7 @@ export default function DrawingsPage() {
                     (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
                   }}
                 >
-                  {dumpBusy ? "Syncing…" : "Sync now"}
+                  {dumpBusy ? "Syncing…" : "Sync to SharePoint"}
                 </Button>
               </>
             )}
@@ -942,7 +869,7 @@ export default function DrawingsPage() {
         <UploadModal
           open={showRegister && !!unlockToken}
           title="Upload drawing"
-          context={`Project · GFC register · check complete · ${form.discipline}`}
+          context={`Project · Approval & GFC log · checklist complete · ${form.discipline}`}
           file={registerPdf || registerDwg}
           onFile={() => undefined}
           canSubmit={!!registerPdf || !!registerDwg || extraPdfs.length > 0}
@@ -1014,18 +941,18 @@ export default function DrawingsPage() {
             {
               kind: "text",
               name: "plannedDate",
-              label: "Planned date",
+              label: "Planned submission date (optional — master register date is used if blank)",
               value: plannedDate,
               onChange: setPlannedDate,
-              placeholder: "YYYY-MM-DD",
+              inputType: "date",
             },
             {
               kind: "text",
               name: "actualDate",
-              label: "Actual date",
+              label: "Revision / receipt date",
               value: actualDate,
               onChange: setActualDate,
-              placeholder: "YYYY-MM-DD",
+              inputType: "date",
             },
             {
               kind: "checkbox",
@@ -1375,9 +1302,39 @@ export default function DrawingsPage() {
                 <p><span className="text-steel-muted">Title</span> {uploadTarget.title || "—"}</p>
                 <p><span className="text-steel-muted">Drawing type</span> {uploadTarget.discipline || "—"}</p>
                 <p><span className="text-steel-muted">Building</span> {uploadTarget.buildingArea || uploadTarget.building || "—"}</p>
-                <p><span className="text-steel-muted">Revision</span> {revForm.revisionNumber || "—"}</p>
-                <p><span className="text-steel-muted">Planned date</span> {plannedDate || "—"}</p>
-                <p><span className="text-steel-muted">Revision date</span> {actualDate || "—"}</p>
+                <div className="grid sm:grid-cols-3 gap-2 pt-2">
+                  <Select
+                    label="Revision"
+                    hint={`Suggested: ${gfcNextRevisionNumber(uploadTarget.revisions || [])}`}
+                    value={revForm.revisionNumber}
+                    onChange={(e) =>
+                      setRevForm({
+                        ...revForm,
+                        revisionNumber: e.target.value,
+                        revisionLabel: `${e.target.value} — ${new Date(actualDate || Date.now()).toLocaleDateString()}`,
+                      })
+                    }
+                  >
+                    {[...new Set([revForm.revisionNumber, ...GFC_REVISION_CHOICES].filter(Boolean))].map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </Select>
+                  <Input
+                    label="Revision date"
+                    type="date"
+                    value={actualDate}
+                    onChange={(e) => setActualDate(e.target.value)}
+                  />
+                  <Input
+                    label="Planned date"
+                    hint="Blank = master register date"
+                    type="date"
+                    value={plannedDate}
+                    onChange={(e) => setPlannedDate(e.target.value)}
+                  />
+                </div>
                 <p className="text-xs text-steel-muted pt-1">
                   Confirm opens the checklist on this page. Save a draft if it is not finished — confirm again to continue that draft, then sign and upload the PDF and DWG.
                 </p>

@@ -13,6 +13,7 @@ import {
 } from "../../themes";
 import HrmsSideNav from "./HrmsSideNav";
 import { HRMS_ACCENT, HRMS_SOFT, HRMS_TOOLS } from "./hrmsNav";
+import { formatUiText } from "../../lib/formatUiText";
 
 /** Standalone HRMS portal — same app-frame + collapsible nav as the office desk. */
 export default function HrmsShell({ children }: { children?: ReactNode }) {
@@ -109,7 +110,7 @@ export default function HrmsShell({ children }: { children?: ReactNode }) {
             <div className="app-topbar__meta">
               <span className="app-topbar__role-badge">HR desk</span>
               <div className="app-topbar__title truncate">
-                {activeTool?.label === "Home" ? "Human Resources" : activeTool?.label || "HRMS"}
+                {activeTool?.label === "Home" ? "Human Resources" : formatUiText(activeTool?.label || "HRMS")}
               </div>
             </div>
 

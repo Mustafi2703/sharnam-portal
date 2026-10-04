@@ -256,3 +256,67 @@ export function ModuleIcon({ name, className = "", size = 20 }: { name: ModuleIc
   const Comp = MAP[name] || IconModules;
   return <Comp className={className} size={size} />;
 }
+
+/* ── Small utility icons (replace emoji in UI) ── */
+
+export function IconFolder(p: IconProps) {
+  return (
+    <Svg {...p} size={p.size ?? 16}>
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+    </Svg>
+  );
+}
+
+export function IconFolderOpen(p: IconProps) {
+  return (
+    <Svg {...p} size={p.size ?? 16}>
+      <path d="M3 17.5V7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h7.5A1.5 1.5 0 0 1 20 9.5V11" />
+      <path d="M3 17.5 5.6 11.8A1.5 1.5 0 0 1 7 11h13.2a1 1 0 0 1 .93 1.37l-2.3 5.7a1.5 1.5 0 0 1-1.4.93H4.5A1.5 1.5 0 0 1 3 17.5z" />
+    </Svg>
+  );
+}
+
+export function IconFile(p: IconProps) {
+  return (
+    <Svg {...p} size={p.size ?? 16}>
+      <path d="M14 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21h9a1.5 1.5 0 0 0 1.5-1.5V7z" />
+      <path d="M14 3v4h4M9 12h6M9 16h6" />
+    </Svg>
+  );
+}
+
+export function IconCamera(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </Svg>
+  );
+}
+
+export function IconImage(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m20.5 15.5-4.5-4.5-8 8" />
+    </Svg>
+  );
+}
+
+export function IconClipboard(p: IconProps) {
+  return (
+    <Svg {...p} size={p.size ?? 16}>
+      <rect x="6" y="4.5" width="12" height="16" rx="1.5" />
+      <path d="M9.5 4.5V3.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8v.7M9 10h6M9 14h6" />
+    </Svg>
+  );
+}
+
+export function IconCheck(p: IconProps) {
+  return (
+    <Svg {...p} size={p.size ?? 14}>
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </Svg>
+  );
+}

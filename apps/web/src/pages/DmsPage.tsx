@@ -7,6 +7,7 @@ import { UploadModal } from "../components/UploadModal";
 import { DrawingFileViewer } from "../components/DrawingFileViewer";
 import { drawingFileKind, type DrawingPreview } from "../lib/drawingPreview";
 import { StatusNote } from "../components/StatusNote";
+import { IconFile, IconFolder, IconFolderOpen } from "../components/icons";
 
 type DriveItem = {
   name: string;
@@ -582,7 +583,7 @@ export default function DmsPage({
                 className={`dms-tree__link w-full text-left ${path === (rootPrefix || "") ? "dms-tree__link--active" : ""}`}
                 onClick={() => setPath(rootPrefix || "")}
               >
-                📂 {isDrawings ? "Design & Engineering" : "Project root"}
+                <span className="inline-flex items-center gap-1.5"><IconFolderOpen size={14} /> {isDrawings ? "Design & Engineering" : "Project root"}</span>
               </button>
             </li>
             {filteredTree.map((node) => (
@@ -594,7 +595,7 @@ export default function DmsPage({
                   onClick={() => setPath(node.path)}
                   title={node.path}
                 >
-                  {node.depth === 0 ? "📁" : "📂"} {node.label}
+                  <span className="inline-flex items-center gap-1.5">{node.depth === 0 ? <IconFolder size={14} /> : <IconFolderOpen size={14} />} {node.label}</span>
                 </button>
               </li>
             ))}
@@ -633,7 +634,7 @@ export default function DmsPage({
               <tbody className="divide-y divide-line">
                 {folders.map((c) => (
                   <tr key={c.path} className="hover:bg-sand/50 cursor-pointer" onClick={() => openItem(c)}>
-                    <td className="px-4 py-2.5 font-medium text-brand">📁 {c.name}</td>
+                    <td className="px-4 py-2.5 font-medium text-brand"><span className="inline-flex items-center gap-2"><IconFolder size={15} /> {c.name}</span></td>
                     <td className="px-2 py-2.5 text-steel-muted">Folder</td>
                     <td className="px-2 py-2.5 text-steel-muted">—</td>
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatDate(c.modifiedAt)}</td>
@@ -650,7 +651,7 @@ export default function DmsPage({
                   const acc = fileAccess(c);
                   return (
                   <tr key={c.path} className="hover:bg-sand/50">
-                    <td className="px-4 py-2.5 font-medium">📄 {c.name}</td>
+                    <td className="px-4 py-2.5 font-medium"><span className="inline-flex items-center gap-2"><span className="text-steel-muted inline-flex"><IconFile size={15} /></span> {c.name}</span></td>
                     <td className="px-2 py-2.5 text-steel-muted uppercase text-[10px]">{c.name.split(".").pop() || "file"}</td>
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatBytes(c.size)}</td>
                     <td className="px-2 py-2.5 text-steel-muted text-xs">{formatDate(c.modifiedAt)}</td>

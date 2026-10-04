@@ -62,9 +62,9 @@ export default function SharePointStatusPanel({ token }: Props) {
       );
       if (r.health) setStatus(r.health);
       if (r.ok) {
-        setMsg(`✓ SharePoint online — ${r.children?.length ?? 0} items at the site root.`);
+        setMsg(`SharePoint online — ${r.children?.length ?? 0} items at the site root.`);
       } else {
-        setMsg(`✗ ${r.error || r.message || "SharePoint test failed"}`);
+        setMsg(`SharePoint error: ${r.error || r.message || "SharePoint test failed"}`);
       }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Test failed");

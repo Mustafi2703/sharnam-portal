@@ -3,6 +3,7 @@
  * Camera opens native lens on phone. Gallery is optional (off for attendance).
  */
 import { useRef, useState } from "react";
+import { IconCamera, IconImage } from "./icons";
 
 type Props = {
   onChange: (files: File[]) => void;
@@ -54,7 +55,7 @@ export function PhotoCapture({
           className={`photo-capture__btn photo-capture__btn--camera ${sizeCls}`}
           onClick={() => cameraRef.current?.click()}
         >
-          <span className="photo-capture__icon" aria-hidden>📷</span>
+          <span className="photo-capture__icon" aria-hidden><IconCamera size={18} /></span>
           <span>Camera</span>
         </button>
         {allowGallery && (
@@ -63,7 +64,7 @@ export function PhotoCapture({
             className={`photo-capture__btn photo-capture__btn--gallery ${sizeCls}`}
             onClick={() => galleryRef.current?.click()}
           >
-            <span className="photo-capture__icon" aria-hidden>🖼</span>
+            <span className="photo-capture__icon" aria-hidden><IconImage size={18} /></span>
             <span>Gallery</span>
           </button>
         )}

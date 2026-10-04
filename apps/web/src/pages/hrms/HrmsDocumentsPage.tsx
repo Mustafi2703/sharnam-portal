@@ -35,6 +35,8 @@ import {
   LETTER_VARIABLES,
 } from "./hrmsLetterDesk";
 import { StatusNote } from "../../components/StatusNote";
+import { IconCheck } from "../../components/icons";
+import { formatUiText } from "../../lib/formatUiText";
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
@@ -465,7 +467,7 @@ export default function HrmsDocumentsPage() {
                         <li key={k.key}>
                           {newStage ? (
                             <div className="px-3 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-steel-muted bg-sand/40">
-                              {k.stage}
+                              {formatUiText(k.stage)}
                             </div>
                           ) : null}
                           <button
@@ -479,10 +481,10 @@ export default function HrmsDocumentsPage() {
                             <div className="text-[10px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div>
                             {existing ? (
                               <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700">
-                                ✓ Filed · <span className="font-mono">{existing.refNo}</span>
+                                <IconCheck size={12} /> Filed · <span className="font-mono">{existing.refNo}</span>
                               </span>
                             ) : (
-                              <span className="inline-block mt-1 text-[10px] text-steel-muted">Not generated yet</span>
+                              <span className="inline-block mt-1 text-[10px] text-steel-muted">{formatUiText("Not generated yet")}</span>
                             )}
                           </button>
                         </li>

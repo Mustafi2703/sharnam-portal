@@ -18,6 +18,7 @@ import {
   SPDC_HIRING_ROLES,
 } from "@sharnam/shared";
 import { StatusNote } from "../components/StatusNote";
+import { formatUiText } from "../lib/formatUiText";
 
 /**
  * Recruitment & Interview Management — one page, six tabs walking through the flow.
@@ -126,8 +127,8 @@ export default function RecruitmentPage() {
           >
             <span className="hr-steps__num">{i + 1}</span>
             <span className="min-w-0">
-              <span className="hr-steps__label">{t.label}</span>
-              <span className="hr-steps__hint">{TAB_HINTS[t.id]}</span>
+              <span className="hr-steps__label">{formatUiText(t.label)}</span>
+              <span className="hr-steps__hint">{formatUiText(TAB_HINTS[t.id])}</span>
             </span>
           </button>
         ))}
@@ -144,11 +145,12 @@ export default function RecruitmentPage() {
 
       {canManage ? (
         <details className="danger-zone">
-          <summary>Danger zone — reset recruitment data</summary>
+          <summary>{formatUiText("Danger zone — reset recruitment data")}</summary>
           <div className="danger-zone__body">
             <p>
-              Permanently deletes every requisition, resume, interview, offer and recruitment letter. Staff logins and
-              projects are kept. This cannot be undone.
+              {formatUiText(
+                "Permanently deletes every requisition, resume, interview, offer and recruitment letter. Staff logins and projects are kept. This cannot be undone.",
+              )}
             </p>
             <Button type="button" variant="danger" onClick={() => deleteAllRecruitment()}>
               Delete all recruitment data
@@ -206,20 +208,20 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
         <Card>
           <h3 className="font-semibold text-sm mb-2">Raise a manpower requisition</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-x-3 gap-y-3">
-            <Input label="Requisition no." hint="Leave blank to auto-number" placeholder="Auto" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
+            <Input label="Requisition no." hint={formatUiText("Leave blank to auto-number")} placeholder="Auto" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
             <Select
               label="Department *"
               value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value, designation: "" })}
               required
             >
-              <option value="">Select department</option>
+              <option value="">{formatUiText("Select department")}</option>
               {SPDC_HIRING_DEPARTMENTS.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </Select>
             <Select label="Designation *" value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} required disabled={!form.department}>
-              <option value="">{form.department ? "Select designation" : "Choose department first"}</option>
+              <option value="">{formatUiText(form.department ? "Select designation" : "Choose department first")}</option>
               {designationOptions.map((row) => (
                 <option key={row.title} value={row.title}>{row.title}</option>
               ))}

@@ -213,10 +213,16 @@ async function syncMasterRegisterFromRevision(opts: {
       where: { projectId: opts.projectId },
       _max: { srNo: true },
     });
+    const createDelay =
+      opts.plannedDate && opts.actualDate
+        ? Math.round((opts.actualDate.getTime() - opts.plannedDate.getTime()) / 86400000)
+        : null;
     line = await prisma.drawingRegisterLine.create({
       data: {
         projectId: opts.projectId,
         srNo: (maxSr._max.srNo ?? 0) + 1,
+        submissionDelayDays: createDelay,
+        revisionDescription: opts.revisionLabel || null,
         drawingNumber: opts.drawingNumber,
         drawingTitle: opts.title || opts.drawingNumber,
         discipline: opts.discipline || "Architecture",
@@ -234,13 +240,14 @@ async function syncMasterRegisterFromRevision(opts: {
         remarks: opts.issueRemarks,
       },
     });
+    publishDrawingRegistersInBackground(opts.projectId);
     return;
   }
   const planned = line.plannedSubmissionDate ?? opts.plannedDate ?? null;
   const actual = opts.actualDate ?? line.actualSubmissionDate;
   let submissionDelayDays = line.submissionDelayDays;
   if (planned && actual) {
-    submissionDelayDays = Math.ceil((actual.getTime() - planned.getTime()) / 86400000);
+    submissionDelayDays = Math.round((actual.getTime() - planned.getTime()) / 86400000);
   }
   await prisma.drawingRegisterLine.update({
     where: { id: line.id },
@@ -260,11 +267,34 @@ async function syncMasterRegisterFromRevision(opts: {
       building: opts.buildingArea || line.building,
     },
   });
-  const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
-  await publishDrawingRegistersToDrive(opts.projectId).catch((err) =>
-    console.warn("[drawings] SharePoint register:", err instanceof Error ? err.message : err),
-  );
+  publishDrawingRegistersInBackground(opts.projectId);
 }
+
+/** Rewrite the SharePoint register files without holding up the HTTP response. */
+function publishDrawingRegistersInBackground(projectId: string) {
+  void import("../services/drawingRegisterDrive.js")
+    .then(({ publishDrawingRegistersToDrive }) => publishDrawingRegistersToDrive(projectId))
+    .catch((err) => console.warn("[drawings] SharePoint register:", err instanceof Error ? err.message : err));
+}
+
+/** Master-register columns PMC may edit (never projectId / drawingId / ids). */
+const REGISTER_LINE_TEXT_FIELDS = [
+  "projectPackage",
+  "building",
+  "discipline",
+  "drawingNumber",
+  "drawingTitle",
+  "drawingType",
+  "consultantName",
+  "revisionNumber",
+  "revisionDescription",
+  "latestRevision",
+  "delayResponsibility",
+  "issuedTo",
+  "criticalDrawing",
+  "remarks",
+] as const;
+const REGISTER_LINE_DATE_FIELDS = ["revisionDate", "plannedSubmissionDate", "actualSubmissionDate", "issueDate"] as const;
 
 function primaryRevisionFile(rev: {
   pdfFileUrl?: string | null;
@@ -2055,6 +2085,22 @@ drawingsRouter.get("/project/:projectId/register/dashboard.pdf", async (req, res
   res.send(buf);
 });
 
+drawingsRouter.get("/project/:projectId/register/master.pdf", async (req, res) => {
+  const { buildMasterRegisterPdf } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildMasterRegisterPdf(req.params.projectId);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Master-Drawing-Register-${req.params.projectId}.pdf"`);
+  res.send(buf);
+});
+
+drawingsRouter.get("/project/:projectId/gfc-log/export.pdf", async (req, res) => {
+  const { buildApprovalGfcLogPdf } = await import("../services/drawingRegisterExport.js");
+  const buf = await buildApprovalGfcLogPdf(req.params.projectId);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Approval-GFC-Drawing-Log-${req.params.projectId}.pdf"`);
+  res.send(buf);
+});
+
 drawingsRouter.get("/project/:projectId/gfc-log/export.xlsx", async (req, res) => {
   const { buildApprovalGfcLogXlsx } = await import("../services/drawingRegisterExport.js");
   const buf = await buildApprovalGfcLogXlsx(req.params.projectId);
@@ -2086,7 +2132,7 @@ drawingsRouter.post(
 /** Upload DRAWING REGISTER - 01.xlsx → upsert Master Drawing Register lines. */
 drawingsRouter.post(
   "/project/:projectId/register/import",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload an .xlsx file (DRAWING REGISTER - 01)" });
@@ -2116,7 +2162,7 @@ drawingsRouter.post(
 /** Upload Approval & GFC Drawing Log.xlsx → upsert GFC drawings + revision dates. */
 drawingsRouter.post(
   "/project/:projectId/gfc-log/import",
-  requireRoles("admin", "office", "employee", "site_employee"),
+  requireRoles("admin", "office"),
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file?.buffer?.length) {
@@ -2401,8 +2447,7 @@ drawingsRouter.post(
         remarks: body.remarks,
       },
     });
-    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
-    await publishDrawingRegistersToDrive(req.params.projectId).catch(() => undefined);
+    publishDrawingRegistersInBackground(req.params.projectId);
     res.status(201).json(row);
   }
 );
@@ -2412,21 +2457,38 @@ drawingsRouter.patch(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
-    const data: Record<string, unknown> = { ...body };
-    for (const d of [
-      "revisionDate",
-      "plannedSubmissionDate",
-      "actualSubmissionDate",
-      "issueDate",
-    ] as const) {
-      if (body[d] !== undefined) data[d] = body[d] ? new Date(body[d]) : null;
+    const data: Record<string, unknown> = {};
+    for (const f of REGISTER_LINE_TEXT_FIELDS) {
+      if (body[f] !== undefined) data[f] = body[f] === "" ? null : body[f];
+    }
+    if (data.drawingNumber === null || data.drawingTitle === null) {
+      return res.status(400).json({ error: "Drawing number and title cannot be empty" });
+    }
+    for (const d of REGISTER_LINE_DATE_FIELDS) {
+      if (body[d] === undefined) continue;
+      if (!body[d]) {
+        data[d] = null;
+        continue;
+      }
+      const dt = new Date(body[d]);
+      if (Number.isNaN(dt.getTime())) return res.status(400).json({ error: `Invalid date for ${d}` });
+      data[d] = dt;
+    }
+    if (body.srNo !== undefined) data.srNo = body.srNo === "" || body.srNo == null ? null : Number(body.srNo);
+    if (body.copiesCount !== undefined) data.copiesCount = body.copiesCount === "" || body.copiesCount == null ? null : Number(body.copiesCount);
+    if (body.submissionDelayDays !== undefined) {
+      data.submissionDelayDays = body.submissionDelayDays === "" || body.submissionDelayDays == null ? null : Number(body.submissionDelayDays);
     }
     if (data.plannedSubmissionDate !== undefined || data.actualSubmissionDate !== undefined) {
       const current = await prisma.drawingRegisterLine.findUnique({ where: { id: req.params.id } });
-      const planned = data.plannedSubmissionDate !== undefined ? data.plannedSubmissionDate : current?.plannedSubmissionDate;
-      const actual = data.actualSubmissionDate !== undefined ? data.actualSubmissionDate : current?.actualSubmissionDate;
+      if (!current) return res.status(404).json({ error: "Register line not found" });
+      const planned = data.plannedSubmissionDate !== undefined ? data.plannedSubmissionDate : current.plannedSubmissionDate;
+      const actual = data.actualSubmissionDate !== undefined ? data.actualSubmissionDate : current.actualSubmissionDate;
       if (planned instanceof Date && actual instanceof Date) {
-        data.submissionDelayDays = Math.ceil((actual.getTime() - planned.getTime()) / 86400000);
+        data.submissionDelayDays = Math.round((actual.getTime() - planned.getTime()) / 86400000);
+      } else if (!actual) {
+        // Not submitted yet: the running delay is computed on read from the planned date.
+        data.submissionDelayDays = null;
       }
     }
     const row = await prisma.drawingRegisterLine.update({
@@ -2449,8 +2511,7 @@ drawingsRouter.patch(
         });
       }
     }
-    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
-    await publishDrawingRegistersToDrive(row.projectId).catch(() => undefined);
+    publishDrawingRegistersInBackground(row.projectId);
     res.json(row);
   }
 );

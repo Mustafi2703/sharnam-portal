@@ -12,6 +12,7 @@ import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../l
 import { isHiddenPortalListUser } from "../../lib/portalUserLists";
 import { canManageHrms, canManageAllPortalUsers, isSpdcStaffAccount, kindForAccount } from "../../lib/portalAccounts";
 import { spdcCompanyRoleOptions, suggestedLoginRoleForCompanyRole } from "@sharnam/shared";
+import { formatUiText } from "../../lib/formatUiText";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -610,9 +611,9 @@ export default function HrmsUsersPage() {
       </RegisterEntryModal>
       {(canEdit && canOfficeDesk) || isAdmin ? (
         <details className="danger-zone">
-          <summary>Danger zone — demo &amp; UAT cleanup</summary>
+          <summary>{formatUiText("Danger zone — demo & UAT cleanup")}</summary>
           <div className="danger-zone__body">
-            <p>One-time cleanup used before go-live. These remove test data and cannot be undone.</p>
+            <p>{formatUiText("One-time cleanup used before go-live. These remove test data and cannot be undone.")}</p>
             <div className="flex flex-wrap gap-2">
               {canEdit && canOfficeDesk ? (
                 <Button type="button" variant="danger" disabled={busy} onClick={() => purgeUatLogins()}>

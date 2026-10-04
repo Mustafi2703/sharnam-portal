@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Button, Card, Input } from "./ui";
 import { StatusNote } from "./StatusNote";
+import { formatUiText } from "../lib/formatUiText";
 
 /**
  * Team muster roll — every SPDC staff member × every day of the month.
@@ -72,6 +73,8 @@ function leaveDayKeys(l: LeaveRow): string[] {
   }
   return out;
 }
+
+const T = formatUiText;
 
 export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: string) => void }) {
   const { token } = useAuth();
@@ -207,9 +210,9 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
     <Card className="muster" padding={false}>
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-4 border-b border-line">
         <div>
-          <h2 className="font-semibold text-ink">Team attendance &amp; leave calendar</h2>
+          <h2 className="font-semibold text-ink">{T("Team attendance & leave calendar")}</h2>
           <p className="text-xs text-steel-muted mt-0.5">
-            Every SPDC team member for the month. Select a name to open their personal calendar.
+            {T("Every SPDC team member for the month. Select a name to open their personal calendar.")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -234,7 +237,7 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
         {(["P", "L", "LP", "HD", "H", "WO", "A"] as const).map((c) => (
           <span key={c} className="inline-flex items-center gap-1.5">
             <span className={`muster__chip muster__chip--${c}`}>{CODE_SHORT[c]}</span>
-            {CODE_LABEL[c]}
+            {T(CODE_LABEL[c])}
           </span>
         ))}
       </div>
@@ -245,7 +248,7 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
         <table className="muster__table">
           <thead>
             <tr>
-              <th className="muster__name-col">Team member</th>
+              <th className="muster__name-col">{T("Team member")}</th>
               {days.map((day) => (
                 <th
                   key={day.key}
@@ -260,23 +263,23 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
                   {day.d}
                 </th>
               ))}
-              <th className="muster__total-head" title="Present days">P</th>
-              <th className="muster__total-head" title="Leave days (approved)">L</th>
-              <th className="muster__total-head" title="Absent working days">A</th>
+              <th className="muster__total-head" title={T("Present days")}>P</th>
+              <th className="muster__total-head" title={T("Leave days (approved)")}>L</th>
+              <th className="muster__total-head" title={T("Absent working days")}>A</th>
             </tr>
           </thead>
           <tbody>
             {loading && !rows.length ? (
               <tr>
                 <td colSpan={days.length + 4} className="px-4 py-8 text-center text-sm text-steel-muted">
-                  Loading team calendar…
+                  {T("Loading team calendar")}…
                 </td>
               </tr>
             ) : null}
             {!loading && !rows.length ? (
               <tr>
                 <td colSpan={days.length + 4} className="px-4 py-8 text-center text-sm text-steel-muted">
-                  No team members match.
+                  {T("No team members match.")}
                 </td>
               </tr>
             ) : null}
@@ -298,7 +301,7 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
                   <td
                     key={days[i].key}
                     className={`muster__cell${days[i].key === todayKey ? " is-today" : ""}`}
-                    title={`${s.fullName} · ${days[i].key}${c.title ? ` — ${c.title}` : ""}`}
+                    title={`${s.fullName} · ${days[i].key}${c.title ? ` — ${T(c.title)}` : ""}`}
                   >
                     {c.code ? <span className={`muster__chip muster__chip--${c.code}`}>{CODE_SHORT[c.code]}</span> : null}
                   </td>
@@ -306,7 +309,7 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
                 <td className="muster__total">{totals.P}</td>
                 <td className="muster__total">
                   {totals.L}
-                  {totals.LP ? <span className="muster__pending" title="Pending leave days">+{totals.LP}?</span> : null}
+                  {totals.LP ? <span className="muster__pending" title={T("Pending leave days")}>+{totals.LP}?</span> : null}
                 </td>
                 <td className={`muster__total${totals.A ? " is-absent" : ""}`}>{totals.A}</td>
               </tr>

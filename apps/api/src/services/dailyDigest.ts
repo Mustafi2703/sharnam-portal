@@ -115,7 +115,8 @@ export async function sendDailyDigest(opts?: {
   const subject = `[SPDC Portal] Morning summary — ${fmtDate(new Date())}`;
   const cfg = graphConfig();
 
-  if (opts?.preview || !cfg.configured || process.env.GRAPH_MAIL_ENABLED === "false") {
+  // Held like every other portal email until Hostinger sets PORTAL_MAIL_LIVE=true.
+  if (opts?.preview || !cfg.configured || process.env.GRAPH_MAIL_ENABLED === "false" || process.env.PORTAL_MAIL_LIVE !== "true") {
     return { preview: true as const, subject, html, recipients, sent: false };
   }
 

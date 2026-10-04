@@ -3,7 +3,7 @@ import { Button, FileField, Input, Select } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 
 type Field =
-  | { kind: "text"; name: string; label: string; required?: boolean; placeholder?: string; value: string; onChange: (v: string) => void }
+  | { kind: "text"; name: string; label: string; required?: boolean; placeholder?: string; value: string; onChange: (v: string) => void; inputType?: "text" | "date" }
   | { kind: "select"; name: string; label: string; value: string; onChange: (v: string) => void; options: string[] }
   | { kind: "checkbox"; name: string; label: string; checked: boolean; onChange: (v: boolean) => void }
   | { kind: "custom"; node: ReactNode };
@@ -127,6 +127,7 @@ export function UploadModal({
                 <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">{formatUiText(f.label)}</span>
                 <Input
                   className="mt-1.5"
+                  type={f.inputType || "text"}
                   required={f.required}
                   placeholder={f.placeholder}
                   value={f.value}

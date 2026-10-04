@@ -37,18 +37,23 @@ export type ModuleToolItem = {
 /** Sub-tools for hub cards + horizontal strip (no left rail) — one card per sheet/tool */
 export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   drawings: [
-    { to: "drawings", label: "GFC register", blurb: "Sheets, revisions R0–R5, publish.", sheet: "Drawing & GFC Drawing Log" },
     {
-      to: "drawings/register",
-      label: "Register dashboard",
-      blurb: "DRAWING REGISTER - 01.xlsx Dashboard — week, discipline, type, critical, and file-link charts.",
-      sheet: "Dashboard",
+      to: "drawings",
+      label: "Approval & GFC log",
+      blurb: "Upload drawings (checklist first, then revision and date). R0–R5 dates per drawing. Excel + PDF.",
+      sheet: "Approval & GFC Drawing Log",
     },
     {
       to: "drawings/register/master",
       label: "Master register",
-      blurb: "Master Drawing Register — planned dates, drawing types, edit and delete. Separate from the dashboard.",
+      blurb: "Updated by every GFC upload. Set planned dates and criticality; delays tracked. Dashboard, Excel + PDF.",
       sheet: "Master Drawing Register",
+    },
+    {
+      to: "drawings/coordination",
+      label: "Design coordination",
+      blurb: "Assign an issue — the assignee is emailed. Follow up up to 5 times; escalate to RFI any time.",
+      sheet: "Design coordination register",
     },
     {
       to: "drawings/library",
@@ -67,12 +72,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "drawings/checklist-logs",
       label: "Checklist fill log",
       blurb: "Assigned people fill from this log — drafts and signed fills. Branded download with Sharnam logo.",
-    },
-    {
-      to: "drawings/coordination",
-      label: "Design coordination",
-      blurb: "Clash / design issues — discipline, linked drawing, ball-in-court. Markup the attached drawing on the RFI, not here.",
-      sheet: "Design coordination register",
     },
     {
       to: "rfis",

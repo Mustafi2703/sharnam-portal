@@ -7,6 +7,7 @@ import { CrmBidBoqRegister } from "./CrmBidBoqRegister";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
 import { BidManageActions } from "./BidManageActions";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { IconClipboard } from "./icons";
 
 const BID_FLOW_STEPS = ["Project", "Bid package", "Open & invite", "Vendor BOQs", "Comparative", "Award"] as const;
 
@@ -558,8 +559,8 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
         ) : (
           <div className="crm-bid-desk__empty flex-1">
             <BidFlowBar step={workflowStep} />
-            <div className="text-4xl mt-4" aria-hidden>
-              📋
+            <div className="mt-4 text-steel-muted" aria-hidden>
+              <IconClipboard size={40} />
             </div>
             <p className="font-semibold text-ink text-sm">Bid management desk</p>
             <p className="text-xs text-steel-muted max-w-md">

@@ -11,7 +11,6 @@ export type DrawingsNavItem = {
 export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
   { key: "hub", label: "Module hub", to: "hub/drawings" },
   { key: "gfc", label: "Approval & GFC log", to: "drawings" },
-  { key: "register", label: "Register dashboard", to: "drawings/register" },
   { key: "register-master", label: "Master register", to: "drawings/register/master" },
   { key: "coordination", label: "Design coordination", to: "drawings/coordination" },
   { key: "library", label: "Drawing files", to: "drawings/library" },
@@ -53,7 +52,7 @@ export function drawingsNavActive(key: string, pathname: string, search: string)
     case "register":
       return rest === "drawings/register";
     case "register-master":
-      return rest === "drawings/register/master";
+      return rest === "drawings/register/master" || rest === "drawings/register";
     case "coordination":
       return rest === "drawings/coordination" || rest === "coordination";
     case "library":

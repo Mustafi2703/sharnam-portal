@@ -4,6 +4,7 @@ import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { canManageHrms } from "../lib/portalAccounts";
 import { StatusNote } from "../components/StatusNote";
+import { formatUiText } from "../lib/formatUiText";
 
 type LeaveType = { id: string; code: string; name: string; daysPerYear: number };
 type Balance = { id: string; entitled: number; used: number; balance: number; leaveType: LeaveType };
@@ -277,9 +278,9 @@ export default function HrmsLeavePage() {
           </ul>
           {canManage && (
             <details className="danger-zone !mt-4">
-              <summary>Danger zone — delete all leave requests</summary>
+              <summary>{formatUiText("Danger zone — delete all leave requests")}</summary>
               <div className="danger-zone__body">
-                <p>Deletes every leave request for every employee. Balances and staff are kept. This cannot be undone.</p>
+                <p>{formatUiText("Deletes every leave request for every employee. Balances and staff are kept. This cannot be undone.")}</p>
                 <Button
                   type="button"
                   variant="danger"

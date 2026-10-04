@@ -84,11 +84,44 @@ async function fileLinkCounts(projectId: string) {
   ].filter((r) => r.value > 0);
 }
 
+const DAY_MS = 86_400_000;
+
+function startOfUtcDay(d: Date) {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/**
+ * Submission delay in days.
+ * - Submitted: actual − planned (negative = early).
+ * - Not submitted and past the planned date: running delay, today − planned.
+ * - Otherwise: whatever was stored (imported sheets), or null.
+ */
+export function effectiveDelayDays(
+  planned: Date | null | undefined,
+  actual: Date | null | undefined,
+  stored?: number | null,
+  today = new Date(),
+): { days: number | null; running: boolean } {
+  if (planned && actual) {
+    return { days: Math.round((startOfUtcDay(actual) - startOfUtcDay(planned)) / DAY_MS), running: false };
+  }
+  if (planned && !actual) {
+    const days = Math.round((startOfUtcDay(today) - startOfUtcDay(planned)) / DAY_MS);
+    return days > 0 ? { days, running: true } : { days: stored ?? null, running: false };
+  }
+  return { days: stored ?? null, running: false };
+}
+
 async function loadRegisterLines(projectId: string) {
-  return prisma.drawingRegisterLine.findMany({
+  const rows = await prisma.drawingRegisterLine.findMany({
     where: { projectId },
     orderBy: [{ srNo: "asc" }, { drawingNumber: "asc" }],
     include: { drawing: { select: { id: true, isPublished: true, currentRev: true } } },
+  });
+  const today = new Date();
+  return rows.map((line) => {
+    const delay = effectiveDelayDays(line.plannedSubmissionDate, line.actualSubmissionDate, line.submissionDelayDays, today);
+    return { ...line, submissionDelayDays: delay.days, delayRunning: delay.running };
   });
 }
 
@@ -310,7 +343,7 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
     where: { projectId },
     orderBy: { createdAt: "asc" },
   });
-  const issueSheet = wb.addWorksheet("Drawing issues");
+  const issueSheet = wb.addWorksheet("Design Coordination");
   stampWorkbookBrand(issueSheet, "Design coordination issues", bundle.project.name);
   const issueHeaders = ["Issue", "Drawing type", "Status", "Assignee", "Follow-ups", "Last follow-up", "RFI", "Opened"];
   issueHeaders.forEach((h, i) => {
@@ -392,10 +425,30 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
       line.remarks ?? "",
     ];
     cells.forEach((v, ci) => {
-      row.getCell(ci + 1).value = v;
-      row.getCell(ci + 1).border = BOX;
+      const cell = row.getCell(ci + 1);
+      cell.value = v;
+      cell.border = BOX;
+      cell.alignment = { vertical: "middle", wrapText: ci === 5 || ci === 10 || ci === 20 };
+      if (idx % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F0E6" } };
     });
+    // Delay (col 15): red when late, with a "running" note while still not submitted.
+    const delayCell = row.getCell(15);
+    if ((line.submissionDelayDays ?? 0) > 0) {
+      delayCell.font = { bold: true, color: { argb: "FFB91C1C" } };
+      delayCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+      if (line.delayRunning) delayCell.note = "Not yet submitted — delay is counting from the planned date.";
+    }
+    // Critical (col 20): amber highlight.
+    if (/yes/i.test(line.criticalDrawing || "")) {
+      const c = row.getCell(20);
+      c.font = { bold: true, color: { argb: "FF92400E" } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+    }
   });
+  [6, 10, 12, 14, 18, 36, 24, 26, 12, 13, 30, 10, 14, 14, 12, 18, 18, 13, 10, 10, 30].forEach((w, i) => {
+    master.getColumn(i + 1).width = w;
+  });
+  master.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: masterHeaders.length } };
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
@@ -577,5 +630,355 @@ export async function buildDrawingRegisterDashboardPdf(projectId: string): Promi
     drawBarChart(doc, 420, y, 360, "Drawings submitted by org", bundle.pivots.byConsultant);
 
     doc.end();
+  });
+}
+
+
+/* ───────────── Branded table PDFs (Master register · GFC log · Design coordination) ───────────── */
+
+type PdfColumn = { header: string; width: number; align?: "left" | "center" | "right" };
+type PdfCellStyle = { color?: string; fill?: string; bold?: boolean };
+
+/** A3-landscape SPDC table: logo + title band, header repeated on every page, zebra rows, page footer. */
+function renderBrandedTablePdf(opts: {
+  title: string;
+  subtitle: string;
+  columns: PdfColumn[];
+  rows: string[][];
+  cellStyle?: (rowIdx: number, colIdx: number) => PdfCellStyle | undefined;
+  legend?: string;
+}): Promise<Buffer> {
+  const logo = sharnamLogoPath();
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A3", layout: "landscape", margin: 28, bufferPages: true });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const left = 28;
+    const pageW = doc.page.width - 56;
+    const totalW = opts.columns.reduce((a, c) => a + c.width, 0);
+    const scale = pageW / totalW;
+    const cols = opts.columns.map((c) => ({ ...c, w: c.width * scale }));
+    const bottom = doc.page.height - 40;
+    const fontSize = 7.5;
+    const pad = 3;
+
+    const drawBand = () => {
+      if (logo) {
+        try {
+          doc.image(logo, left, 22, { fit: [96, 46] });
+        } catch {
+          /* optional */
+        }
+      }
+      doc.font("Helvetica-Bold").fontSize(15).fillColor("#1e3a5f").text(opts.title, left + 110, 26, { width: pageW - 110 });
+      doc.font("Helvetica").fontSize(9).fillColor("#64748b").text(opts.subtitle, left + 110, 46, { width: pageW - 110 });
+      doc.moveTo(left, 74).lineTo(left + pageW, 74).lineWidth(2).strokeColor("#1e3a5f").stroke();
+      return 82;
+    };
+
+    const drawHeader = (y: number) => {
+      const h = 26;
+      let x = left;
+      doc.rect(left, y, pageW, h).fill("#1e3a5f");
+      for (const c of cols) {
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(fontSize)
+          .fillColor("#ffffff")
+          .text(c.header, x + pad, y + 5, { width: c.w - pad * 2, align: c.align || "left", height: h - 6, ellipsis: true });
+        x += c.w;
+      }
+      return y + h;
+    };
+
+    let y = drawBand();
+    if (opts.legend) {
+      doc.font("Helvetica").fontSize(8).fillColor("#334155").text(opts.legend, left, y, { width: pageW });
+      y += 14;
+    }
+    y = drawHeader(y);
+
+    if (!opts.rows.length) {
+      doc.font("Helvetica").fontSize(10).fillColor("#64748b").text("No rows yet.", left, y + 10);
+    }
+
+    opts.rows.forEach((row, ri) => {
+      doc.font("Helvetica").fontSize(fontSize);
+      const rowH =
+        Math.max(
+          ...row.map((v, ci) => doc.heightOfString(v || "", { width: cols[ci].w - pad * 2 })),
+          fontSize + 2,
+        ) +
+        pad * 2;
+      if (y + rowH > bottom) {
+        doc.addPage();
+        y = drawHeader(drawBand());
+      }
+      if (ri % 2 === 1) doc.rect(left, y, pageW, rowH).fill("#f4f0e6");
+      let x = left;
+      row.forEach((v, ci) => {
+        const st = opts.cellStyle?.(ri, ci);
+        if (st?.fill) doc.rect(x, y, cols[ci].w, rowH).fill(st.fill);
+        doc
+          .font(st?.bold ? "Helvetica-Bold" : "Helvetica")
+          .fontSize(fontSize)
+          .fillColor(st?.color || "#0f172a")
+          .text(v || "", x + pad, y + pad, { width: cols[ci].w - pad * 2, align: cols[ci].align || "left" });
+        x += cols[ci].w;
+      });
+      doc.rect(left, y, pageW, rowH).lineWidth(0.4).strokeColor("#94a3b8").stroke();
+      y += rowH;
+    });
+
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      // Writing below the bottom margin makes PDFKit add a blank page — lift the margin for the footer.
+      const savedBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      doc
+        .font("Helvetica-Oblique")
+        .fontSize(7.5)
+        .fillColor("#64748b")
+        .text(
+          `PROJECT MANAGEMENT CONSULTANTS : ${SPDC_PMC_NAME} · ${SPDC_OFFICE_FOOTER}    ·    Page ${i - range.start + 1} of ${range.count}    ·    Generated ${day(new Date())}`,
+          left,
+          doc.page.height - 30,
+          { width: pageW, align: "center", lineBreak: false },
+        );
+      doc.page.margins.bottom = savedBottom;
+    }
+    doc.end();
+  });
+}
+
+/** Master Drawing Register PDF — same 21 columns as the Excel, delays red, critical amber. */
+export async function buildMasterRegisterPdf(projectId: string): Promise<Buffer> {
+  const bundle = await loadRegisterPivotBundle(projectId);
+  const columns: PdfColumn[] = [
+    { header: "Sr #", width: 5, align: "center" },
+    { header: "Package", width: 9 },
+    { header: "Building", width: 10 },
+    { header: "Discipline", width: 10 },
+    { header: "Drawing No.", width: 13 },
+    { header: "Drawing Title", width: 26 },
+    { header: "Type", width: 12 },
+    { header: "Consultant", width: 12 },
+    { header: "Rev", width: 5, align: "center" },
+    { header: "Rev Date", width: 9 },
+    { header: "Rev Description", width: 16 },
+    { header: "Latest", width: 6, align: "center" },
+    { header: "Planned Sub.", width: 9 },
+    { header: "Actual Sub.", width: 9 },
+    { header: "Delay (days)", width: 7, align: "center" },
+    { header: "Delay Resp.", width: 10 },
+    { header: "Issued To", width: 11 },
+    { header: "Issue Date", width: 9 },
+    { header: "Copies", width: 6, align: "center" },
+    { header: "Critical", width: 7, align: "center" },
+    { header: "Remarks", width: 18 },
+  ];
+  const lines = bundle.lines;
+  const rows = lines.map((l) => [
+    String(l.srNo ?? ""),
+    l.projectPackage ?? "",
+    l.building ?? "",
+    l.discipline ?? "",
+    l.drawingNumber,
+    l.drawingTitle,
+    l.drawingType ?? "",
+    l.consultantName ?? "",
+    l.revisionNumber ?? "",
+    day(l.revisionDate),
+    l.revisionDescription ?? "",
+    l.latestRevision ?? "",
+    day(l.plannedSubmissionDate),
+    day(l.actualSubmissionDate),
+    l.submissionDelayDays == null ? "" : `${l.submissionDelayDays}${l.delayRunning ? " *" : ""}`,
+    l.delayResponsibility ?? "",
+    l.issuedTo ?? "",
+    day(l.issueDate),
+    l.copiesCount == null ? "" : String(l.copiesCount),
+    l.criticalDrawing ?? "",
+    l.remarks ?? "",
+  ]);
+  return renderBrandedTablePdf({
+    title: "Master Drawing Register",
+    subtitle: `${bundle.project.name} (${bundle.project.code}) · ${bundle.weekLabel} · ${bundle.totals.lines} drawings · ${bundle.totals.critical} critical · ${bundle.totals.delayed} delayed`,
+    legend: "Delay in red = late.  * = not yet submitted, delay still counting from the planned date.  Critical drawings in amber.",
+    columns,
+    rows,
+    cellStyle: (ri, ci) => {
+      const l = lines[ri];
+      if (ci === 14 && (l.submissionDelayDays ?? 0) > 0) return { color: "#b91c1c", fill: "#fee2e2", bold: true };
+      if (ci === 19 && /yes/i.test(l.criticalDrawing || "")) return { color: "#92400e", fill: "#fef3c7", bold: true };
+      return undefined;
+    },
+  });
+}
+
+/** Approval & GFC Drawing Log PDF — discipline, area, TL, DWG, title, R0–Rn dates, total. */
+export async function buildApprovalGfcLogPdf(projectId: string): Promise<Buffer> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { code: true, name: true, location: true },
+  });
+  if (!project) throw new Error("Project not found");
+  const drawings = await prisma.drawing.findMany({
+    where: { projectId },
+    include: { revisions: { orderBy: { createdAt: "asc" } } },
+    orderBy: [{ discipline: "asc" }, { drawingNumber: "asc" }],
+  });
+  const maxSlot = drawings.reduce(
+    (max, d) => Math.max(max, ...d.revisions.map((r) => revNumIndex(r.revisionNumber)), 5),
+    5,
+  );
+  const slotCount = Math.min(Math.max(maxSlot + 1, 6), 8);
+  const columns: PdfColumn[] = [
+    { header: "Discipline", width: 12 },
+    { header: "Building / Area", width: 14 },
+    { header: "TL No", width: 9 },
+    { header: "DWG No.", width: 13 },
+    { header: "Title", width: 32 },
+    { header: "Current Rev", width: 7, align: "center" },
+    ...Array.from({ length: slotCount }, (_, i) => ({ header: `R${i}`, width: 8, align: "center" as const })),
+    { header: "Total", width: 6, align: "center" },
+  ];
+  const rows = drawings.map((d) => {
+    let total = 0;
+    const slots = Array.from({ length: slotCount }, (_, slot) => {
+      const dt = revDateValue(revisionForSlot(d.revisions, slot));
+      if (dt) total += 1;
+      return dt ? day(dt) : "";
+    });
+    return [
+      d.discipline || "",
+      d.buildingArea || "",
+      d.tlNo || "",
+      d.drawingNumber,
+      d.title,
+      d.currentRev || "",
+      ...slots,
+      String(total),
+    ];
+  });
+  return renderBrandedTablePdf({
+    title: `${(project.location || project.name).toUpperCase()} : APPROVAL & GFC DRAWING LOG`,
+    subtitle: `${project.name} (${project.code}) · ${isoWeekLabel()} · ${drawings.length} drawings`,
+    columns,
+    rows,
+  });
+}
+
+async function loadCoordinationRows(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true, name: true } });
+  if (!project) throw new Error("Project not found");
+  const issues = await prisma.designCoordinationIssue.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "asc" },
+  });
+  const drawingIds = [...new Set(issues.map((i) => i.linkedDrawingId).filter(Boolean))] as string[];
+  const rfiIds = [...new Set(issues.map((i) => i.escalatedRfiId).filter(Boolean))] as string[];
+  const [drawings, rfis] = await Promise.all([
+    drawingIds.length
+      ? prisma.drawing.findMany({ where: { id: { in: drawingIds } }, select: { id: true, drawingNumber: true, currentRev: true } })
+      : [],
+    rfiIds.length ? prisma.rfi.findMany({ where: { id: { in: rfiIds } }, select: { id: true, number: true } }) : [],
+  ]);
+  const dwg = new Map(drawings.map((d) => [d.id, d]));
+  const rfi = new Map(rfis.map((r) => [r.id, r]));
+  const rows = issues.map((i, idx) => {
+    const d = i.linkedDrawingId ? dwg.get(i.linkedDrawingId) : undefined;
+    return [
+      String(idx + 1),
+      day(i.createdAt),
+      i.title,
+      i.description || "",
+      i.discipline || "",
+      d ? `${d.drawingNumber}${d.currentRev ? ` (${d.currentRev})` : ""}` : "",
+      i.priority || "",
+      i.assignedToName || i.assignedToEmail || "",
+      i.ballInCourt || "",
+      day(i.dueDate),
+      `${i.followUpCount}/5`,
+      day(i.lastFollowUpAt),
+      i.status,
+      i.escalatedRfiId ? rfi.get(i.escalatedRfiId)?.number || "Yes" : "",
+    ];
+  });
+  return { project, rows };
+}
+
+const COORDINATION_HEADERS = [
+  "Sr #",
+  "Date Raised",
+  "Issue",
+  "Description",
+  "Drawing Type",
+  "Linked Drawing",
+  "Priority",
+  "Assigned To",
+  "Ball In Court",
+  "Due Date",
+  "Follow-ups",
+  "Last Follow-up",
+  "Status",
+  "Escalated RFI",
+];
+
+/** Design Coordination Register — Sharnam-branded Excel. */
+export async function buildDesignCoordinationRegisterXlsx(projectId: string): Promise<Buffer> {
+  const { project, rows } = await loadCoordinationRows(projectId);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = SPDC_PMC_NAME;
+  const sheet = wb.addWorksheet("Design Coordination", { views: [{ state: "frozen", ySplit: 5 }] });
+  stampWorkbookBrand(sheet, "Design Coordination Register", project.name, COORDINATION_HEADERS.length);
+  COORDINATION_HEADERS.forEach((h, i) => {
+    sheet.getCell(5, i + 1).value = h;
+  });
+  styleHeaderRow(sheet.getRow(5));
+  rows.forEach((cells, idx) => {
+    const row = sheet.getRow(6 + idx);
+    cells.forEach((v, ci) => {
+      const cell = row.getCell(ci + 1);
+      cell.value = v;
+      cell.border = BOX;
+      cell.alignment = { vertical: "middle", wrapText: ci === 2 || ci === 3 };
+      if (idx % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F0E6" } };
+    });
+    const status = row.getCell(13);
+    if (/escalated/i.test(String(status.value))) status.font = { bold: true, color: { argb: "FFB91C1C" } };
+    else if (/closed/i.test(String(status.value))) status.font = { bold: true, color: { argb: "FF047857" } };
+  });
+  [6, 12, 28, 40, 14, 18, 10, 20, 14, 12, 10, 13, 12, 13].forEach((w, i) => {
+    sheet.getColumn(i + 1).width = w;
+  });
+  sheet.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: COORDINATION_HEADERS.length } };
+  const foot = sheet.getRow(7 + rows.length);
+  foot.getCell(1).value = `PROJECT MANAGEMENT CONSULTANTS : ${SPDC_PMC_NAME} · ${SPDC_OFFICE_FOOTER}`;
+  foot.getCell(1).font = { italic: true, size: 9, color: { argb: SLATE } };
+  const buf = await wb.xlsx.writeBuffer();
+  return Buffer.from(buf);
+}
+
+/** Design Coordination Register — Sharnam-branded PDF. */
+export async function buildDesignCoordinationRegisterPdf(projectId: string): Promise<Buffer> {
+  const { project, rows } = await loadCoordinationRows(projectId);
+  const widths = [4, 8, 18, 30, 10, 12, 7, 14, 10, 8, 7, 9, 9, 9];
+  return renderBrandedTablePdf({
+    title: "Design Coordination Register",
+    subtitle: `${project.name} (${project.code}) · ${isoWeekLabel()} · ${rows.length} issues`,
+    columns: COORDINATION_HEADERS.map((header, i) => ({ header, width: widths[i] })),
+    rows,
+    cellStyle: (ri, ci) => {
+      if (ci !== 12) return undefined;
+      const st = rows[ri][12];
+      if (/escalated/i.test(st)) return { color: "#b91c1c", bold: true };
+      if (/closed/i.test(st)) return { color: "#047857", bold: true };
+      return undefined;
+    },
   });
 }

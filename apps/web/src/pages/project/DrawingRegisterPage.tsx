@@ -133,6 +133,8 @@ export default function DrawingRegisterPage() {
   const [importBusy, setImportBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
+  /** Import (bulk overwrite from Excel) is an office task; everyone who can view can export. */
+  const isOffice = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
     const res = await api(`/api/drawings/project/${id}/register-dashboard`, { token });
@@ -231,13 +233,41 @@ export default function DrawingRegisterPage() {
         title={sheetView.label}
         subtitle={
           sheetKey === "master"
-            ? "Master Drawing Register from the Excel. Revision date follows the GFC upload. PMC edits planned submission date and criticality here; delay days feed the dashboard."
+            ? "Every GFC upload updates its line here. Set the planned submission date and criticality — delay counts from the planned date until the drawing is submitted (red = late). Download as Sharnam-branded Excel or PDF; the same files are kept on SharePoint."
             : "DRAWING REGISTER - 01.xlsx Dashboard. Charts fill from GFC uploads and the master register. Pick a week or dates. Each week is filed for the WPR and DPR."
         }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="brand">{data?.totals?.lines ?? 0} lines</Badge>
             <Badge tone="ok">{data?.totals?.gfc ?? 0} GFC</Badge>
+            {sheetKey === "master" && id && (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={() =>
+                    downloadAuthFile(`/api/drawings/project/${id}/register/export.xlsx`, token, "Master-Drawing-Register.xlsx").catch(
+                      (err) => setMsg(err instanceof Error ? err.message : "Could not download the Excel"),
+                    )
+                  }
+                >
+                  Download Excel
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  onClick={() =>
+                    downloadAuthFile(`/api/drawings/project/${id}/register/master.pdf`, token, "Master-Drawing-Register.pdf").catch(
+                      (err) => setMsg(err instanceof Error ? err.message : "Could not download the PDF"),
+                    )
+                  }
+                >
+                  Download PDF
+                </Button>
+              </>
+            )}
             {sheetKey === "" && id && (
               <>
                 <Button
@@ -272,8 +302,9 @@ export default function DrawingRegisterPage() {
             )}
             {canEdit && id && (
               <>
+                {isOffice ? (
                 <label className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60 cursor-pointer">
-                  {importBusy ? "Importing…" : "Upload Excel"}
+                  {importBusy ? "Importing…" : "Import Excel"}
                   <input
                     type="file"
                     accept=".xlsx,.xls"
@@ -286,6 +317,7 @@ export default function DrawingRegisterPage() {
                     }}
                   />
                 </label>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
@@ -300,7 +332,7 @@ export default function DrawingRegisterPage() {
                       .finally(() => setPublishBusy(false));
                   }}
                 >
-                  {publishBusy ? "Syncing…" : "Sync now"}
+                  {publishBusy ? "Syncing…" : "Sync to SharePoint"}
                 </Button>
               </>
             )}

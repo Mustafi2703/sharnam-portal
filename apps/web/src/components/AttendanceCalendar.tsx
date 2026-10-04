@@ -391,7 +391,7 @@ export function AttendanceCalendar({
                 <span className="attendance-cal__tag attendance-cal__tag--leave">
                   {leave.leaveType?.code || leave.leaveType?.name || "Leave"}
                   {leave.halfDay ? " ½" : ""}
-                  {leave.status === "Pending" ? " · pending" : ""}
+                  {leave.status === "Pending" ? " · Pending" : ""}
                 </span>
               ) : null}
               {primary?.checkIn ? (
@@ -421,14 +421,14 @@ export function AttendanceCalendar({
             <p className="text-sm mb-2">
               <span className="attendance-cal__tag attendance-cal__tag--holiday">Holiday</span>{" "}
               {holidayByDate.get(selectedDate)!.name}
-              {holidayByDate.get(selectedDate)!.isOptional ? " (optional)" : ""}
+              {holidayByDate.get(selectedDate)!.isOptional ? " (Optional)" : ""}
             </p>
           ) : null}
           {leaveByDate.get(selectedDate) ? (
             <p className="text-sm mb-2">
               <span className="attendance-cal__tag attendance-cal__tag--leave">Leave</span>{" "}
               {leaveByDate.get(selectedDate)!.leaveType?.name || "Leave"} — {leaveByDate.get(selectedDate)!.status}
-              {leaveByDate.get(selectedDate)!.halfDay ? " (half day)" : ""}
+              {leaveByDate.get(selectedDate)!.halfDay ? " (Half Day)" : ""}
             </p>
           ) : null}
           {!selectedRows.length ? (

@@ -222,8 +222,12 @@ export function MasterDrawingRegisterTable({
                   )}
                 </td>
                 <td className="text-xs whitespace-nowrap">{fmtDay(r.actualSubmissionDate)}</td>
-                <td className={`text-xs font-mono ${delayClass(r.submissionDelayDays)}`}>
+                <td
+                  className={`text-xs font-mono ${delayClass(r.submissionDelayDays)}`}
+                  title={r.delayRunning ? "Not submitted yet — delay is counting from the planned date" : undefined}
+                >
                   {r.submissionDelayDays != null ? r.submissionDelayDays : "—"}
+                  {r.delayRunning ? " ▲" : ""}
                 </td>
                 <td className="max-w-[8rem] text-xs">{r.delayResponsibility || "—"}</td>
                 <td className="max-w-[8rem] text-xs">{r.issuedTo || "—"}</td>

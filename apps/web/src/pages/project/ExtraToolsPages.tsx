@@ -11,6 +11,7 @@ import {
 } from "../../lib/drawingPreview";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { StatusNote } from "../../components/StatusNote";
+import { downloadAuthFile } from "../../lib/downloadReport";
 
 export function CoordinationPage() {
   const { id } = useParams();
@@ -140,7 +141,7 @@ export function CoordinationPage() {
       );
       setMsg(
         (r as { needsRfi?: boolean }).needsRfi || (r.issue.followUpCount ?? 0) >= 5
-          ? `Follow-up ${r.issue.followUpCount}/5 sent to the assignee. No close yet — you can update this to Ask PMC RFI.`
+          ? `Follow-up ${r.issue.followUpCount}/5 sent to the assignee. That was the last follow-up — escalate to RFI if there is still no action.`
           : `Follow-up ${r.issue.followUpCount}/5 emailed to the assignee`
       );
       await load();
@@ -159,7 +160,7 @@ export function CoordinationPage() {
         method: "POST",
         token,
       });
-      setMsg(`Updated to Ask PMC RFI ${r.rfi.number} — it is on the RFI log`);
+      setMsg(`Escalated to RFI ${r.rfi.number} — it is on the RFI register and the RFI form is filed on SharePoint.`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Escalation failed");
@@ -181,11 +182,65 @@ export function CoordinationPage() {
       <PageHeader
         eyebrow="Drawings module"
         title="Design coordination"
-        subtitle="Log the issue, pick the drawing type and drawing, assign someone from the communication matrix, then follow up. After five follow-ups with no action, update it to Ask PMC RFI."
+        subtitle="Log the issue against a drawing and assign someone from the communication matrix — they are emailed. Send up to five follow-ups; escalate to an RFI at any point (or after the fifth follow-up). The register is kept on SharePoint."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{openCount} open</Badge>
             <Badge tone="ok">{rows.length - openCount} closed</Badge>
+            {user?.role === "admin" || user?.role === "office" ? (
+              <label className="inline-flex items-center rounded-xl border border-line bg-paper px-3 py-2 text-xs font-semibold text-ink shadow-sm hover:border-[var(--wd-accent,var(--color-brand))] cursor-pointer">
+                Import Excel
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f || !id) return;
+                    const fd = new FormData();
+                    fd.append("file", f);
+                    setMsg("Importing the design coordination register…");
+                    void api<{ created: number; updated: number; unmatchedDrawings: string[] }>(
+                      `/api/directory/project/${id}/coordination/import`,
+                      { method: "POST", token, body: fd, timeoutMs: 120_000 },
+                    )
+                      .then(async (out) => {
+                        setMsg(
+                          `Imported — ${out.created} new, ${out.updated} updated. No emails were sent.` +
+                            (out.unmatchedDrawings.length ? ` Drawing numbers not found: ${out.unmatchedDrawings.join(", ")}.` : ""),
+                        );
+                        await load();
+                      })
+                      .catch((err) => setMsg(err instanceof Error ? err.message : "Import failed"));
+                  }}
+                />
+              </label>
+            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs"
+              onClick={() =>
+                downloadAuthFile(`/api/directory/project/${id}/coordination/register.xlsx`, token, "Design-Coordination-Register.xlsx").catch(
+                  (err) => setMsg(err instanceof Error ? err.message : "Could not download the register"),
+                )
+              }
+            >
+              Register Excel
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs"
+              onClick={() =>
+                downloadAuthFile(`/api/directory/project/${id}/coordination/register.pdf`, token, "Design-Coordination-Register.pdf").catch(
+                  (err) => setMsg(err instanceof Error ? err.message : "Could not download the register"),
+                )
+              }
+            >
+              Register PDF
+            </Button>
           </div>
         }
       />
@@ -264,7 +319,7 @@ export function CoordinationPage() {
           <li>Logging the issue emails the assignee and the matrix To and Cc.</li>
           <li>Use <strong>Send follow-up</strong> on the logged issue. It goes to the assignee.</li>
           <li>
-            <strong>Close</strong> when resolved. After five follow-ups with no action, use <strong>Update to Ask PMC RFI</strong>.
+            <strong>Close</strong> when resolved. Use <strong>Escalate to RFI</strong> at any time — or after the fifth follow-up with no action.
           </li>
         </ol>
       </Card>
@@ -513,22 +568,56 @@ export function CoordinationPage() {
                       >
                         Send follow-up ({selected.followUpCount ?? 0}/5)
                       </Button>
-                      {(selected.followUpCount ?? 0) >= 5 && (
-                        <>
-                          <Button
-                            type="button"
-                            variant="primary"
-                            className="!text-xs !bg-amber-600 !font-medium"
-                            disabled={followBusy}
-                            onClick={() => void escalateToRfiApi(selected.id)}
-                          >
-                            Update to Ask PMC RFI
-                          </Button>
-                          <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
-                            Open RFI form
-                          </Button>
-                        </>
-                      )}
+                      <Button
+                        type="button"
+                        variant="primary"
+                        className="!text-xs !bg-amber-600 !font-medium"
+                        disabled={followBusy}
+                        onClick={() => {
+                          const n = selected.followUpCount ?? 0;
+                          if (
+                            n < 5 &&
+                            !window.confirm(
+                              `Only ${n} of 5 follow-ups sent. Escalate this issue to an RFI now? The assignee and matrix are notified.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          return escalateToRfiApi(selected.id);
+                        }}
+                      >
+                        Escalate to RFI
+                      </Button>
+                      <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
+                        Open RFI form
+                      </Button>
+                      <Select
+                        aria-label="Reassign issue"
+                        className="!text-xs !py-1.5 !w-56"
+                        value=""
+                        disabled={followBusy}
+                        onChange={(e) => {
+                          const email = e.target.value;
+                          if (!email) return;
+                          const person = matrixPeople.find((c) => (c.email || "") === email);
+                          const name = person?.personName || email;
+                          if (!window.confirm(`Reassign "${selected.title}" to ${name}? They will be emailed.`)) return;
+                          setFollowBusy(true);
+                          return patchIssue(selected.id, { assignedToEmail: email, assignedToName: name })
+                            .then(() => setMsg(`Reassigned to ${name} — email sent.`))
+                            .catch((err) => setMsg(err instanceof Error ? err.message : "Could not reassign"))
+                            .finally(() => setFollowBusy(false));
+                        }}
+                      >
+                        <option value="">Reassign to…</option>
+                        {matrixPeople
+                          .filter((c) => c.email && c.email !== selected.assignedToEmail)
+                          .map((c) => (
+                            <option key={c.id || c.email} value={c.email}>
+                              {c.personName || c.email} · {c.orgName || c.company || c.orgSection || ""}
+                            </option>
+                          ))}
+                      </Select>
                       <Button type="button" variant="secondary" className="!text-xs" onClick={() => docRef.current?.click()}>
                         Attach DMS file
                       </Button>

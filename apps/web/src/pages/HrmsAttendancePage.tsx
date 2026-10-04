@@ -6,6 +6,7 @@ import { TeamMusterCalendar } from "../components/TeamMusterCalendar";
 import { PageHeader } from "../components/ui";
 import { useAuth } from "../auth";
 import { canManageHrms } from "../lib/portalAccounts";
+import { formatUiText } from "../lib/formatUiText";
 
 type View = "team" | "person" | "punch";
 
@@ -54,8 +55,8 @@ export default function HrmsAttendancePage() {
             className={`segmented__btn${view === t.id ? " is-on" : ""}`}
             onClick={() => go(t.id)}
           >
-            <span className="segmented__label">{t.label}</span>
-            <span className="segmented__hint">{t.hint}</span>
+            <span className="segmented__label">{formatUiText(t.label)}</span>
+            <span className="segmented__hint">{formatUiText(t.hint)}</span>
           </button>
         ))}
       </div>

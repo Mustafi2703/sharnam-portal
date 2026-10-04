@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth";
 import { canManageHrms } from "../../lib/portalAccounts";
 import { HRMS_ACCENT, HRMS_SECTIONS, type HrmsSection } from "./hrmsNav";
+import { formatUiText } from "../../lib/formatUiText";
 
 function toolPath(to: string) {
   return to ? `/hrm/${to}` : "/hrm";
@@ -55,7 +56,7 @@ export default function HrmsToolNav() {
                     style={on ? { background: HRMS_ACCENT, borderColor: HRMS_ACCENT } : undefined}
                     title={t.subtitle}
                   >
-                    {t.label}
+                    {formatUiText(t.label)}
                   </NavLink>
                 );
               })}

@@ -2,9 +2,13 @@ import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
 import {
+  buildApprovalGfcLogPdf,
   buildApprovalGfcLogXlsx,
+  buildDesignCoordinationRegisterPdf,
+  buildDesignCoordinationRegisterXlsx,
   buildDrawingRegisterDashboardPdf,
   buildDrawingRegisterWorkbookXlsx,
+  buildMasterRegisterPdf,
 } from "./drawingRegisterExport.js";
 
 function csvCell(value: unknown) {
@@ -33,11 +37,17 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
   if (!project) return;
   const folder = MODULE_TO_ISO_FOLDER.drawings;
 
-  const [registerXlsx, gfcXlsx, dashboardPdf] = await Promise.all([
+  const [registerXlsx, gfcXlsx, dashboardPdf, masterPdf, gfcPdf] = await Promise.all([
     buildDrawingRegisterWorkbookXlsx(projectId),
     buildApprovalGfcLogXlsx(projectId),
     buildDrawingRegisterDashboardPdf(projectId),
+    buildMasterRegisterPdf(projectId),
+    buildApprovalGfcLogPdf(projectId),
   ]);
+
+  await mockOneDrive.upload(project.code, folder, "Master-Drawing-Register.pdf", masterPdf, PDF_MIME, { replace: true });
+  await mockOneDrive.upload(project.code, folder, "Approval-GFC-Drawing-Log.pdf", gfcPdf, PDF_MIME, { replace: true });
+  await publishCoordinationRegisterToDrive(projectId);
 
   await mockOneDrive.upload(project.code, folder, "DRAWING-REGISTER-01.xlsx", registerXlsx, XLSX_MIME, {
     replace: true,
@@ -126,6 +136,8 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
   await mockOneDrive.upload(project.code, weekFolder, "Approval-GFC-Drawing-Log.xlsx", gfcXlsx, XLSX_MIME, {
     replace: true,
   });
+  await mockOneDrive.upload(project.code, weekFolder, "Master-Drawing-Register.pdf", masterPdf, PDF_MIME, { replace: true });
+  await mockOneDrive.upload(project.code, weekFolder, "Approval-GFC-Drawing-Log.pdf", gfcPdf, PDF_MIME, { replace: true });
 }
 
 export function drawingRegisterWeekStamp(d = new Date()) {
@@ -135,4 +147,18 @@ export function drawingRegisterWeekStamp(d = new Date()) {
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+
+/** Design Coordination Register (Excel + PDF) — live copy in the drawings folder. */
+export async function publishCoordinationRegisterToDrive(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+  if (!project) return;
+  const folder = MODULE_TO_ISO_FOLDER.drawings;
+  const [xlsx, pdf] = await Promise.all([
+    buildDesignCoordinationRegisterXlsx(projectId),
+    buildDesignCoordinationRegisterPdf(projectId),
+  ]);
+  await mockOneDrive.upload(project.code, folder, "Design-Coordination-Register.xlsx", xlsx, XLSX_MIME, { replace: true });
+  await mockOneDrive.upload(project.code, folder, "Design-Coordination-Register.pdf", pdf, PDF_MIME, { replace: true });
 }

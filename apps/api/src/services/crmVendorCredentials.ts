@@ -514,8 +514,21 @@ export async function syncClientVendorToLinkedProjects(vendor: {
   return projectIds.length;
 }
 
-/** Update or create the portal login tied to a CRM directory company. */
-export async function syncDirectoryPortalLogin(opts: {
+/**
+ * Update or create the portal login tied to a CRM directory company, then give that login
+ * every project the company is already linked to (one client / vendor / consultant → many projects).
+ */
+export async function syncDirectoryPortalLogin(
+  opts: Parameters<typeof syncDirectoryPortalLoginOnly>[0],
+): Promise<DirectoryLoginSyncResult> {
+  const result = await syncDirectoryPortalLoginOnly(opts);
+  if (result && !("error" in result) && result.userId) {
+    await grantRepresentativeToLinkedProjects(opts.vendor.id, result.userId).catch(() => undefined);
+  }
+  return result;
+}
+
+async function syncDirectoryPortalLoginOnly(opts: {
   vendor: {
     id: string;
     name: string;
@@ -666,6 +679,7 @@ export async function provisionCompanyAccess(opts: {
       email: opts.vendor.email,
       name,
       businessPhone: opts.vendor.businessPhone,
+      vendorId: opts.vendor.id,
     });
   } else if (role === "employee") {
     login = await ensureStakeholderPortalLogin({
@@ -693,6 +707,8 @@ export async function provisionCompanyAccess(opts: {
     assignedVia: opts.assignedVia || "Project setup",
     memberRole: role === "client" ? "client" : role === "employee" ? "consultant" : "vendor",
   });
+  // Same company on another project → all of its representatives' logins see it too.
+  await syncAllPortalUsersForCompanyOnProject(opts.projectId, opts.vendor.id).catch(() => 0);
   return login;
 }
 

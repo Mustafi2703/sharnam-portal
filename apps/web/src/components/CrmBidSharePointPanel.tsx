@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { Button, Card } from "./ui";
 import { StatusNote } from "./StatusNote";
+import { IconFile, IconFolder } from "./icons";
 
 type Node = {
   name: string;
@@ -23,7 +24,7 @@ function TreeBranch({ node, depth = 0 }: { node: Node; depth?: number }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 py-1 text-xs" style={{ paddingLeft: pad }}>
-        <span aria-hidden>{isFile ? "📄" : "📁"}</span>
+        <span aria-hidden className="text-steel-muted inline-flex">{isFile ? <IconFile size={14} /> : <IconFolder size={14} />}</span>
         <span className={isFile ? "font-mono text-ink" : "font-semibold text-ink"}>{node.name}</span>
         {node.url && (
           <a

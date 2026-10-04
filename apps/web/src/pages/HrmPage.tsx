@@ -5,6 +5,7 @@ import { useAuth } from "../auth";
 import { canManageHrms } from "../lib/portalAccounts";
 import { Card } from "../components/ui";
 import { StatusNote } from "../components/StatusNote";
+import { formatUiText } from "../lib/formatUiText";
 import { HRMS_ACCENT } from "./hrms/hrmsNav";
 
 type Dashboard = {
@@ -19,7 +20,7 @@ type Dashboard = {
 };
 
 /** The employee journey, in the order HR actually works it. */
-const JOURNEY: {
+const JOURNEY_RAW: {
   n: number;
   title: string;
   what: string;
@@ -84,7 +85,7 @@ const JOURNEY: {
   },
 ];
 
-const QUICK: { label: string; to: string }[] = [
+const QUICK_RAW: { label: string; to: string }[] = [
   { label: "Team attendance calendar", to: "/hrm/attendance?view=team" },
   { label: "Approve leave", to: "/hrm/leave" },
   { label: "Generate a letter", to: "/hrm/documents" },
@@ -92,6 +93,17 @@ const QUICK: { label: string; to: string }[] = [
   { label: "Employee files", to: "/hrm/files" },
   { label: "Holidays & leave types", to: "/hrm/masters" },
 ];
+
+// HRMS copy is Title Case everywhere (every word capitalised).
+const JOURNEY = JOURNEY_RAW.map((j) => ({
+  ...j,
+  title: formatUiText(j.title),
+  what: formatUiText(j.what),
+  cta: formatUiText(j.cta),
+  metricLabel: formatUiText(j.metricLabel),
+}));
+const QUICK = QUICK_RAW.map((q) => ({ ...q, label: formatUiText(q.label) }));
+const T = formatUiText;
 
 /** HRMS home — the hiring-to-exit journey with live counts and what needs attention today. */
 export default function HrmPage() {
@@ -139,21 +151,21 @@ export default function HrmPage() {
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
         <div>
           <p className="text-xs font-semibold" style={{ color: HRMS_ACCENT }}>
-            HR desk · {user?.fullName}
+            {T("HR desk")} · {user?.fullName}
           </p>
           <h1 className="font-display text-2xl sm:text-3xl text-ink font-semibold tracking-tight">Human Resources</h1>
           <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-            Follow the steps left to right — every hire moves from requisition to employee. Click a step to work on it.
+            {T("Follow the steps left to right — every hire moves from requisition to employee. Click a step to work on it.")}
           </p>
         </div>
         <div className="flex gap-3 text-sm">
           <div className="hr-home__kpi">
             <span className="hr-home__kpi-value">{num("headcount")}</span>
-            <span className="hr-home__kpi-label">Staff</span>
+            <span className="hr-home__kpi-label">{T("Staff")}</span>
           </div>
           <div className="hr-home__kpi">
             <span className="hr-home__kpi-value">{num("punchesToday")}</span>
-            <span className="hr-home__kpi-label">Checked in today</span>
+            <span className="hr-home__kpi-label">{T("Checked in today")}</span>
           </div>
         </div>
       </div>
@@ -180,19 +192,19 @@ export default function HrmPage() {
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2" padding={false}>
-          <div className="px-4 py-3 border-b border-line font-semibold">Needs your attention</div>
+          <div className="px-4 py-3 border-b border-line font-semibold">{T("Needs your attention")}</div>
           {loading ? (
-            <p className="px-4 py-5 text-sm text-steel-muted">Loading…</p>
+            <p className="px-4 py-5 text-sm text-steel-muted">{T("Loading")}…</p>
           ) : attention.length === 0 ? (
-            <p className="px-4 py-5 text-sm text-steel-muted">Nothing waiting right now. 🎉</p>
+            <p className="px-4 py-5 text-sm text-steel-muted">{T("Nothing waiting right now.")}</p>
           ) : (
             <ul className="divide-y divide-line">
               {attention.map((a) => (
                 <li key={a.label}>
                   <Link to={a.to} className="hr-attention__row">
                     <span className="hr-attention__count">{a.n}</span>
-                    <span className="flex-1">{a.label}</span>
-                    <span className="hr-attention__go">Open →</span>
+                    <span className="flex-1">{T(a.label)}</span>
+                    <span className="hr-attention__go">{T("Open")} →</span>
                   </Link>
                 </li>
               ))}
@@ -201,7 +213,7 @@ export default function HrmPage() {
         </Card>
 
         <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line font-semibold">Quick actions</div>
+          <div className="px-4 py-3 border-b border-line font-semibold">{T("Quick actions")}</div>
           <div className="p-3 grid gap-2">
             {QUICK.map((q) => (
               <Link key={q.to} to={q.to} className="hr-quick__btn">
@@ -215,23 +227,23 @@ export default function HrmPage() {
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b border-line font-semibold flex items-center justify-between">
-          <span>Team ({employees.length})</span>
+          <span>{T("Team")} ({employees.length})</span>
           {canManage ? (
             <Link to="/hrm/users" className="text-sm font-semibold" style={{ color: HRMS_ACCENT }}>
-              Manage users →
+              {T("Manage users")} →
             </Link>
           ) : null}
         </div>
         <ul className="divide-y divide-line max-h-[360px] overflow-y-auto">
           {!loading && employees.length === 0 ? (
-            <li className="px-4 py-6 text-sm text-steel-muted">No staff logins yet. Convert a candidate in Onboarding to add one.</li>
+            <li className="px-4 py-6 text-sm text-steel-muted">{T("No staff logins yet. Convert a candidate in Onboarding to add one.")}</li>
           ) : null}
           {employees.slice(0, 15).map((e) => (
             <li key={e.id}>
               <Link
                 to={`/hrm/attendance?view=person&user=${encodeURIComponent(e.id)}`}
                 className="px-4 py-2.5 text-sm flex items-center justify-between gap-3 hover:bg-sand/50"
-                title="Open attendance & leave calendar"
+                title={T("Open attendance & leave calendar")}
               >
                 <div className="min-w-0">
                   <div className="font-medium truncate">{e.fullName}</div>
@@ -241,7 +253,7 @@ export default function HrmPage() {
                       .join(" · ")}
                   </div>
                 </div>
-                <span className="text-xs text-steel-muted shrink-0">Calendar →</span>
+                <span className="text-xs text-steel-muted shrink-0">{T("Calendar")} →</span>
               </Link>
             </li>
           ))}
