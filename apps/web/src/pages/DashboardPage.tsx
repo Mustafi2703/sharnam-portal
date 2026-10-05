@@ -1,378 +1,405 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { OfficeClockInCard } from "../components/OfficeClockInCard";
-import { Badge, Button, Card, PageHero } from "../components/ui";
-import { DashboardListModal, DashboardListModalFoot } from "../components/DashboardListModal";
-import { PieChart } from "../components/PieChart";
+import { Badge, Card } from "../components/ui";
 import { ReportExportButtons } from "../components/ReportExportButtons";
 import { ModuleIcon, type ModuleIconKey } from "../components/icons";
-import { WORKSPACE_PROJECT_KEY, resolveStoredProjectId } from "../workspaces";
+import { WORKSPACE_PROJECT_KEY } from "../workspaces";
 
-type Project = { id: string; code: string; name: string; status: string };
-type Tab = "rfis" | "comms" | "logs" | "safety" | "analytics";
+type PortfolioProject = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  location?: string | null;
+  clientName?: string | null;
+  openInfoRfis: number;
+  openInspections: number;
+  openFillRequests: number;
+  upcomingMeetings: number;
+  nextMeeting: { title: string; at: string } | null;
+  openNcrs: number;
+  openSafety: number;
+  drawingsTotal: number;
+  drawingsGfc: number;
+};
 
-const TABS: { id: Tab; label: string; icon: ModuleIconKey }[] = [
-  { id: "analytics", label: "Analytics", icon: "reports" },
-  { id: "rfis", label: "RFIs", icon: "comms" },
-  { id: "comms", label: "Comms", icon: "comms" },
-  { id: "logs", label: "Checklist logs", icon: "quality" },
-  { id: "safety", label: "Safety", icon: "safety" },
-];
+const INFO_KINDS = ["RequestForInformation", "Manual", "ClientConcern"];
+const INSPECTION_KINDS = ["QualityIR", "SafetyIR", "ActivityInspection"];
+const DONE = ["Closed", "Approved", "Rejected", "Cancelled", "Withdrawn"];
 
-/** Workday-style analytics desk + action tabs; branded Excel/PDF exports */
+/** Where each dashboard number opens. */
+const LINKS = {
+  info: (id: string) => `/projects/${id}/rfis?kind=RequestForInformation`,
+  infoOne: (id: string, rfi: string) => `/projects/${id}/rfis?kind=RequestForInformation&rfi=${rfi}`,
+  inspections: (id: string) => `/projects/${id}/inspection-register`,
+  inspectionOne: (id: string, kind: string) =>
+    `/projects/${id}/inspection-register?tab=${kind === "SafetyIR" ? "safety-ir" : kind === "ActivityInspection" ? "activity" : "quality-ir"}`,
+  fills: (id: string) => `/projects/${id}/rfis`,
+  meetings: (id: string) => `/projects/${id}/comms?tab=agenda`,
+  ncr: (id: string) => `/projects/${id}/inspections?sheet=car-register`,
+  safety: (id: string) => `/projects/${id}/safety`,
+  drawings: (id: string) => `/projects/${id}/drawings/register`,
+  project: (id: string) => `/projects/${id}`,
+};
+
+const fmtDate = (d?: string | Date | null) =>
+  d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—";
+const fmtDateTime = (d?: string | Date | null) =>
+  d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+const daysOpen = (d?: string) => (d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000)) : 0);
+
+function CountLink({ to, value, tone = "neutral" }: { to: string; value: number; tone?: "warn" | "danger" | "ok" | "neutral" }) {
+  const cls =
+    value === 0
+      ? "text-steel-muted"
+      : tone === "danger"
+        ? "text-red-700 bg-red-50 border-red-200"
+        : tone === "warn"
+          ? "text-amber-800 bg-amber-50 border-amber-200"
+          : tone === "ok"
+            ? "text-emerald-800 bg-emerald-50 border-emerald-200"
+            : "text-ink bg-sand/50 border-line";
+  return (
+    <Link to={to} className={`inline-flex min-w-[2.25rem] justify-center rounded-md border px-2 py-0.5 font-semibold tabular-nums hover:ring-2 hover:ring-brand/30 ${value === 0 ? "border-transparent" : cls}`}>
+      {value}
+    </Link>
+  );
+}
+
+function Tile({ label, value, hint, icon, to }: { label: string; value: number | string; hint: string; icon: ModuleIconKey; to?: string }) {
+  const body = (
+    <div className="stat-tile w-full text-left h-full">
+      <div className="stat-tile__icon bg-[#1E3A5F]">
+        <ModuleIcon name={icon} size={18} className="text-white" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-steel-muted leading-snug">{label}</p>
+        <p className="text-2xl font-bold text-ink tabular-nums leading-tight">{value}</p>
+        <p className="text-[11px] text-steel-muted leading-snug">{hint}</p>
+      </div>
+    </div>
+  );
+  return to ? (
+    <Link to={to} className="block">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
+}
+
+/**
+ * Portal dashboard: every project the person can open, with the numbers that need action
+ * (information RFIs and inspections kept separate), then the selected project's lists.
+ */
 export default function DashboardPage() {
   const { user, token } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = (searchParams.get("tab") as Tab) || "analytics";
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState(
-    () => (typeof window !== "undefined" ? localStorage.getItem(WORKSPACE_PROJECT_KEY) || "" : "")
-  );
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [openRfis, setOpenRfis] = useState<any[]>([]);
-  const [meetings, setMeetings] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
-  const [safetyOpen, setSafetyOpen] = useState(0);
-  const [busy, setBusy] = useState(true);
-  const [rfiModalOpen, setRfiModalOpen] = useState(false);
-  const [dues, setDues] = useState<{ overdue: number; dueSoon: number; items: { id: string; kind: string; title: string; due: string; status: string; href: string }[] } | null>(null);
-
-  const selected = projects.find((p) => p.id === projectId) || projects[0];
-  const pid = selected?.id;
+  const [portfolio, setPortfolio] = useState<PortfolioProject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [projectId, setProjectId] = useState(() => {
+    try {
+      return localStorage.getItem(WORKSPACE_PROJECT_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
+  const [detail, setDetail] = useState<{ rfis: any[]; meetings: any[]; dues: any } | null>(null);
+  const [detailBusy, setDetailBusy] = useState(false);
   const firstName = user?.fullName?.split(" ")[0] || "there";
-  const kpis = analytics?.kpis;
+  const readOnly = user?.role === "client";
 
   useEffect(() => {
-    api<Project[]>("/api/projects", { token })
-      .then((list) => {
-        setProjects(list);
-        setProjectId(resolveStoredProjectId(list));
+    setLoading(true);
+    api<{ projects: PortfolioProject[] }>("/api/reports/portfolio", { token })
+      .then((out) => {
+        setPortfolio(out.projects);
+        setProjectId((cur) => (out.projects.some((p) => p.id === cur) ? cur : out.projects[0]?.id || ""));
       })
-      .catch((err) => {
-        console.error(err);
-        setProjects([]);
-        setBusy(false);
-      });
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load your projects"))
+      .finally(() => setLoading(false));
   }, [token]);
 
-  useEffect(() => {
-    if (!pid) {
-      setBusy(false);
-      return;
-    }
-    setBusy(true);
-    localStorage.setItem(WORKSPACE_PROJECT_KEY, pid);
-    Promise.all([
-      api<any>(`/api/reports/analytics/${pid}/pack`, { token }).catch(() => null),
-      api<{ rfis: any[] } | any[]>(`/api/rfis/project/${pid}`, { token }).catch(() => ({ rfis: [] })),
-      api(`/api/comms/meetings/${pid}`, { token }).catch(() => []),
-      api<any[]>(`/api/checklist/project/${pid}/submissions`, { token }).catch(() => []),
-      api<{ stats?: { open?: number } }>(`/api/safety/project/${pid}`, { token }).catch(() => null),
-      api<{ overdue: number; dueSoon: number; items: any[] }>(`/api/reports/${pid}/due-dates`, { token }).catch(() => null),
-    ])
-      .then(([a, r, m, l, s, d]) => {
-        setAnalytics(a);
-        const list = Array.isArray(r) ? r : (r as any)?.rfis || [];
-        setOpenRfis(list.filter((x: any) => x.status === "Open" || x.status === "Draft"));
-        setMeetings(Array.isArray(m) ? m.slice(0, 20) : []);
-        setLogs(Array.isArray(l) ? l.slice(0, 20) : []);
-        setSafetyOpen(s?.stats?.open ?? a?.kpis?.openSafety ?? 0);
-        setDues(d);
-      })
-      .finally(() => setBusy(false));
-  }, [pid, token]);
+  const selected = portfolio.find((p) => p.id === projectId);
 
-  const stats = [
-    { label: "Open RFIs", value: kpis?.openRfis ?? openRfis.length, color: "bg-[#C45C26]", tab: "rfis" as Tab, icon: "comms" as ModuleIconKey },
-    { label: "Meetings", value: kpis?.meetings ?? meetings.length, color: "bg-[#3D4450]", tab: "comms" as Tab, icon: "comms" as ModuleIconKey },
-    { label: "Checklist fills", value: kpis?.checklistFills ?? logs.length, color: "bg-[#1c222b]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
-    { label: "Safety open", value: kpis?.openSafety ?? safetyOpen, color: "bg-[#9A3412]", tab: "safety" as Tab, icon: "safety" as ModuleIconKey },
-    { label: "Published GFC", value: kpis?.publishedDrawings ?? 0, color: "bg-[#252b36]", tab: "analytics" as Tab, icon: "drawings" as ModuleIconKey },
-    { label: "Delayed MS", value: kpis?.delayedMilestones ?? 0, color: "bg-[#B45309]", tab: "analytics" as Tab, icon: "progress" as ModuleIconKey },
-    { label: "Open NCR", value: kpis?.openNcrs ?? 0, color: "bg-[#DC2626]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
-    { label: "Cube tests", value: kpis?.cubeTests ?? 0, color: "bg-[#0B6A78]", tab: "logs" as Tab, icon: "quality" as ModuleIconKey },
-  ];
+  useEffect(() => {
+    if (!projectId) return;
+    try {
+      localStorage.setItem(WORKSPACE_PROJECT_KEY, projectId);
+    } catch {
+      /* ignore */
+    }
+    setDetailBusy(true);
+    Promise.all([
+      api<{ rfis: any[] } | any[]>(`/api/rfis/project/${projectId}`, { token }).catch(() => []),
+      api<any[]>(`/api/comms/meetings/${projectId}`, { token }).catch(() => []),
+      api<any>(`/api/reports/${projectId}/due-dates`, { token }).catch(() => null),
+    ])
+      .then(([r, m, d]) => {
+        const list = Array.isArray(r) ? r : r?.rfis || [];
+        setDetail({ rfis: list, meetings: Array.isArray(m) ? m : [], dues: d });
+      })
+      .finally(() => setDetailBusy(false));
+  }, [projectId, token]);
+
+  const totals = useMemo(
+    () =>
+      portfolio.reduce(
+        (t, p) => ({
+          info: t.info + p.openInfoRfis,
+          insp: t.insp + p.openInspections,
+          fills: t.fills + p.openFillRequests,
+          meet: t.meet + p.upcomingMeetings,
+          ncr: t.ncr + p.openNcrs,
+          safety: t.safety + p.openSafety,
+        }),
+        { info: 0, insp: 0, fills: 0, meet: 0, ncr: 0, safety: 0 },
+      ),
+    [portfolio],
+  );
+
+  const openInfo = (detail?.rfis || []).filter((r) => INFO_KINDS.includes(r.rfiKind || "RequestForInformation") && !DONE.includes(r.status));
+  const openInsp = (detail?.rfis || []).filter((r) => INSPECTION_KINDS.includes(r.rfiKind) && !DONE.includes(r.status));
+  const upcoming = (detail?.meetings || [])
+    .filter((m) => m.meetingDate && new Date(m.meetingDate).getTime() >= Date.now() - 12 * 3600_000 && m.status !== "Cancelled")
+    .sort((a, b) => new Date(a.meetingDate).getTime() - new Date(b.meetingDate).getTime());
+  const recentMeetings = (detail?.meetings || [])
+    .filter((m) => m.meetingDate && new Date(m.meetingDate).getTime() < Date.now() - 12 * 3600_000)
+    .sort((a, b) => new Date(b.meetingDate).getTime() - new Date(a.meetingDate).getTime())
+    .slice(0, 3);
 
   if (user?.role === "vendor") return <Navigate to="/vendor-desk" replace />;
 
   return (
     <div className="space-y-5">
-      <OfficeClockInCard />
-      {dues && (dues.overdue > 0 || dues.dueSoon > 0 || dues.items.length > 0) && (
-        <Card className="!p-4 border-amber-200 bg-amber-50/60">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-            <h3 className="font-semibold text-sm">Due dates</h3>
-            <p className="text-xs text-steel-muted">
-              <span className="text-danger font-semibold">{dues.overdue} overdue</span>
-              {" · "}
-              {dues.dueSoon} in the next 21 days
-            </p>
-          </div>
-          <ul className="space-y-1.5 max-h-48 overflow-y-auto text-sm">
-            {dues.items.slice(0, 12).map((item) => {
-              const overdue = item.due && new Date(item.due) < new Date();
-              return (
-                <li key={`${item.kind}-${item.id}`} className="flex justify-between gap-3">
-                  <Link to={item.href} className="min-w-0 truncate">
-                    <span className="font-mono text-[10px] text-brand mr-1">{item.kind}</span>
-                    {item.title}
-                  </Link>
-                  <span className={`shrink-0 text-[11px] tabular-nums ${overdue ? "text-danger font-semibold" : "text-steel-muted"}`}>
-                    {item.due ? new Date(item.due).toLocaleDateString("en-IN") : "—"}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
-      <PageHero
-        accent="graphite"
-        title={`Analytics · ${firstName}`}
-        subtitle="Project KPIs with live referenced data. Download branded Excel or PDF packs for clients."
-        icon={<ModuleIcon name="dashboard" size={20} className="text-white" />}
-        actions={
-          <div className="flex flex-wrap gap-2 items-center">
-            <ReportExportButtons projectId={pid} kind="analytics" label="Full pack" />
-            <Link to="/workspace">
-              <Button type="button" variant="secondary" className="!bg-white/12 !text-white !border-white/25">
-                Modules →
-              </Button>
-            </Link>
-          </div>
-        }
-      />
+      {!readOnly && <OfficeClockInCard />}
 
-      <Card className="!p-4 flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
-        <div className="flex-1 min-w-0">
-          <label className="text-xs font-semibold uppercase tracking-wider text-steel-muted block mb-2">Project</label>
-          <select
-            className="w-full max-w-md rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
-            value={pid || ""}
-            onChange={(e) => setProjectId(e.target.value)}
-          >
-            {!projects.length && <option value="">No projects</option>}
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code} — {p.name}
-              </option>
-            ))}
-          </select>
+      <div className="rounded-2xl bg-[linear-gradient(120deg,#1E3A5F,#0F766E)] text-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em] opacity-80">Sharnam portal · {portfolio.length} project{portfolio.length === 1 ? "" : "s"}</p>
+            <h1 className="font-display text-2xl mt-1">Hello {firstName}</h1>
+            <p className="text-sm opacity-85 mt-1">What needs attention across your projects. Every number opens the register behind it.</p>
+          </div>
+          {selected && !readOnly ? <ReportExportButtons projectId={selected.id} kind="analytics" label={`${selected.code} pack`} /> : null}
         </div>
-        <p className="text-xs text-steel-muted max-w-sm">
-          Shareable client packs include the Sharnam logo. PDF = open HTML → Print → Save as PDF.
-        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <Tile label="Open RFIs — information" value={totals.info} hint="Questions awaiting an answer" icon="comms" to={selected ? LINKS.info(selected.id) : undefined} />
+        <Tile label="Open inspections" value={totals.insp} hint="Quality / safety / activity IR" icon="quality" to={selected ? LINKS.inspections(selected.id) : undefined} />
+        <Tile label="Checklist requests" value={totals.fills} hint="Fills asked for, not done" icon="quality" to={selected ? LINKS.fills(selected.id) : undefined} />
+        <Tile label="Upcoming meetings" value={totals.meet} hint="Scheduled from today" icon="comms" to={selected ? LINKS.meetings(selected.id) : undefined} />
+        <Tile label="Open NCR / CAR" value={totals.ncr} hint="Non-conformances open" icon="quality" to={selected ? LINKS.ncr(selected.id) : undefined} />
+        <Tile label="Open safety items" value={totals.safety} hint="Observations / incidents open" icon="safety" to={selected ? LINKS.safety(selected.id) : undefined} />
+      </div>
+
+      <Card padding={false}>
+        <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-sm">All Projects</span>
+          <span className="text-[11px] text-steel-muted">Click a project to see its lists below · click a number to open the register</span>
+        </div>
+        {error ? <p className="p-4 text-sm text-red-700">{error}</p> : null}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[980px]">
+            <thead className="text-left text-[11px] uppercase tracking-wider text-steel-muted">
+              <tr>
+                <th className="p-3">Project</th>
+                <th className="text-center">RFIs (info)</th>
+                <th className="text-center">Inspections</th>
+                <th className="text-center">Checklist requests</th>
+                <th>Next meeting</th>
+                <th className="text-center">NCR / CAR</th>
+                <th className="text-center">Safety</th>
+                <th className="text-center">GFC drawings</th>
+                <th className="pr-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {portfolio.map((p) => {
+                const on = p.id === projectId;
+                return (
+                  <tr
+                    key={p.id}
+                    className={`border-t border-line cursor-pointer ${on ? "bg-brand-soft/60" : "hover:bg-sand/30"}`}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest("a")) return;
+                      setProjectId(p.id);
+                    }}
+                  >
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${on ? "bg-brand" : "bg-line"}`} />
+                        <span className="font-mono text-xs text-brand">{p.code}</span>
+                        <span className="font-semibold">{p.name}</span>
+                      </div>
+                      <div className="text-[11px] text-steel-muted ml-4">
+                        {[p.clientName, p.location].filter(Boolean).join(" · ") || "—"} · <Badge tone="neutral">{p.status}</Badge>
+                      </div>
+                    </td>
+                    <td className="text-center"><CountLink to={LINKS.info(p.id)} value={p.openInfoRfis} tone="warn" /></td>
+                    <td className="text-center"><CountLink to={LINKS.inspections(p.id)} value={p.openInspections} tone="warn" /></td>
+                    <td className="text-center"><CountLink to={LINKS.fills(p.id)} value={p.openFillRequests} /></td>
+                    <td>
+                      {p.nextMeeting ? (
+                        <Link to={LINKS.meetings(p.id)} className="text-xs hover:underline">
+                          <span className="font-semibold">{fmtDateTime(p.nextMeeting.at)}</span>
+                          <span className="block text-steel-muted truncate max-w-[200px]">{p.nextMeeting.title}</span>
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-steel-muted">None scheduled</span>
+                      )}
+                    </td>
+                    <td className="text-center"><CountLink to={LINKS.ncr(p.id)} value={p.openNcrs} tone="danger" /></td>
+                    <td className="text-center"><CountLink to={LINKS.safety(p.id)} value={p.openSafety} tone="danger" /></td>
+                    <td className="text-center text-xs">
+                      <Link to={LINKS.drawings(p.id)} className="hover:underline">
+                        <span className="font-semibold">{p.drawingsGfc}</span>
+                        <span className="text-steel-muted"> / {p.drawingsTotal}</span>
+                      </Link>
+                    </td>
+                    <td className="pr-3 text-right">
+                      <Link to={LINKS.project(p.id)} className="text-xs font-semibold text-brand whitespace-nowrap">
+                        Open project →
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!portfolio.length && (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-steel-muted">
+                    {loading ? "Loading your projects…" : "You are not on any project yet. Ask the Sharnam office to add you."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {stats.map((s) => (
-          <button key={s.label} type="button" className="stat-tile w-full text-left" onClick={() => setSearchParams({ tab: s.tab })}>
-            <div className={`stat-tile__icon ${s.color}`}>
-              <ModuleIcon name={s.icon} size={18} className="text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm text-steel-muted truncate">{s.label}</p>
-              <p className="text-xl font-bold text-ink tabular-nums">{s.value}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2 items-center justify-between">
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setSearchParams({ tab: t.id })}
-              className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold border transition ${
-                tab === t.id
-                  ? "bg-brand text-white border-brand"
-                  : "bg-paper border-line text-steel-muted hover:border-brand/50"
-              }`}
-            >
-              <ModuleIcon name={t.icon} size={16} />
-              {t.label}
-            </button>
-          ))}
-        </div>
-        {tab === "rfis" && <ReportExportButtons projectId={pid} kind="rfis" compact />}
-        {tab === "comms" && <ReportExportButtons projectId={pid} kind="comms" compact />}
-        {tab === "logs" && <ReportExportButtons projectId={pid} kind="quality" compact />}
-        {tab === "safety" && <ReportExportButtons projectId={pid} kind="safety" compact />}
-      </div>
-
-      {busy && <p className="text-sm text-steel-muted">Loading…</p>}
-
-      {tab === "analytics" && (
-        <div className="space-y-4">
-          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3 min-w-0">
-            <PieChart title="RFIs by status" items={analytics?.charts?.rfiByStatus || []} size={150} />
-            <PieChart title="Safety by status" items={analytics?.charts?.safetyByStatus || []} size={150} />
-            <PieChart title="Drawings publish" items={analytics?.charts?.drawingPublish || []} size={150} />
-            <PieChart title="Milestones" items={analytics?.charts?.milestoneStatus || []} size={150} />
-            <PieChart title="NCR / CAR" items={analytics?.charts?.ncrByStatus || []} size={150} />
+      {selected && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg">
+              <span className="font-mono text-sm text-brand mr-2">{selected.code}</span>
+              {selected.name}
+            </h2>
+            {detailBusy ? <span className="text-xs text-steel-muted">Refreshing…</span> : null}
           </div>
-          <Card className="!p-4">
-            <div className="flex flex-wrap justify-between gap-3 items-start">
-              <div>
-                <h3 className="font-display text-lg text-ink">Client-ready analytics</h3>
-                <p className="text-sm text-steel-muted mt-1 max-w-xl">
-                  Full workbook includes Cover, KPIs, RFIs, Meetings, Checklist fills, Safety, Drawings, Milestones, and
-                  Hindrances — all live referenced data with Sharnam branding.
-                </p>
+          <div className="grid lg:grid-cols-3 gap-4 items-start">
+            <Card padding={false}>
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <span className="font-semibold text-sm">Open RFIs — Information</span>
+                <Link to={LINKS.info(selected.id)} className="text-xs font-semibold text-brand">Register →</Link>
               </div>
-              <ReportExportButtons projectId={pid} kind="analytics" label="Download" />
-            </div>
-          </Card>
-        </div>
-      )}
+              <ul className="divide-y divide-line max-h-80 overflow-y-auto">
+                {openInfo.slice(0, 12).map((r) => (
+                  <li key={r.id}>
+                    <Link to={LINKS.infoOne(selected.id, r.id)} className="block px-4 py-2.5 hover:bg-sand/30">
+                      <div className="flex justify-between gap-2 text-xs">
+                        <span className="font-mono text-brand">{r.number}</span>
+                        <span className={daysOpen(r.createdAt) > 7 ? "text-red-700 font-semibold" : "text-steel-muted"}>{daysOpen(r.createdAt)} days open</span>
+                      </div>
+                      <div className="text-sm font-medium truncate">{r.subject}</div>
+                      <div className="text-[11px] text-steel-muted">
+                        With: {r.ballInCourt || "—"}
+                        {r.assignedTo?.fullName ? ` · ${r.assignedTo.fullName}` : ""}
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+                {!openInfo.length && <li className="px-4 py-4 text-sm text-steel-muted">No open information RFIs.</li>}
+              </ul>
+            </Card>
 
-      {tab === "rfis" && (
-        <Card className="!p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-sm">Open RFIs</p>
-              <p className="text-xs text-steel-muted mt-1">
-                {openRfis.length} open — view the full list in a scrollable panel without locking this page.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={() => setRfiModalOpen(true)} disabled={!openRfis.length}>
-                View all ({openRfis.length})
-              </Button>
-              {pid && (
-                <Link to={`/projects/${pid}/rfis`}>
-                  <Button type="button">Open RFI module →</Button>
-                </Link>
-              )}
-            </div>
+            <Card padding={false}>
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <span className="font-semibold text-sm">Open Inspection Requests</span>
+                <Link to={LINKS.inspections(selected.id)} className="text-xs font-semibold text-brand">Register →</Link>
+              </div>
+              <ul className="divide-y divide-line max-h-80 overflow-y-auto">
+                {openInsp.slice(0, 12).map((r) => (
+                  <li key={r.id}>
+                    <Link to={LINKS.inspectionOne(selected.id, r.rfiKind)} className="block px-4 py-2.5 hover:bg-sand/30">
+                      <div className="flex justify-between gap-2 text-xs">
+                        <span className="font-mono text-brand">{r.number}</span>
+                        <Badge tone="neutral">{r.rfiKind === "SafetyIR" ? "Safety" : r.rfiKind === "ActivityInspection" ? "Activity" : "Quality"}</Badge>
+                      </div>
+                      <div className="text-sm font-medium truncate">{r.subject}</div>
+                      <div className="text-[11px] text-steel-muted">
+                        {r.status} · raised {fmtDate(r.createdAt)}
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+                {!openInsp.length && <li className="px-4 py-4 text-sm text-steel-muted">No open inspection requests.</li>}
+              </ul>
+            </Card>
+
+            <Card padding={false}>
+              <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+                <span className="font-semibold text-sm">Meetings</span>
+                <Link to={LINKS.meetings(selected.id)} className="text-xs font-semibold text-brand">All meetings →</Link>
+              </div>
+              <ul className="divide-y divide-line max-h-80 overflow-y-auto">
+                {upcoming.slice(0, 6).map((m) => (
+                  <li key={m.id} className="px-4 py-2.5">
+                    <div className="text-xs font-semibold text-brand">{fmtDateTime(m.meetingDate)}</div>
+                    <div className="text-sm font-medium truncate">{m.title}</div>
+                    <div className="text-[11px] text-steel-muted">
+                      {m.location || "Location not set"} · {m.status}
+                      {m.teamsJoinUrl ? (
+                        <a href={m.teamsJoinUrl} target="_blank" rel="noreferrer" className="ml-2 text-brand font-semibold">
+                          Join
+                        </a>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+                {!upcoming.length && <li className="px-4 py-3 text-sm text-steel-muted">No meetings scheduled.</li>}
+                {recentMeetings.length ? (
+                  <li className="px-4 py-2 bg-sand/30 text-[10px] uppercase tracking-wider text-steel-muted">Recent</li>
+                ) : null}
+                {recentMeetings.map((m) => (
+                  <li key={m.id} className="px-4 py-2 text-xs">
+                    <span className="text-steel-muted">{fmtDate(m.meetingDate)}</span> · {m.title}
+                    {m.momFileUrl ? <span className="ml-1 text-emerald-700 font-semibold">MoM filed</span> : <span className="ml-1 text-amber-700">MoM pending</span>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
           </div>
-          {openRfis.length > 0 && (
-            <ul className="mt-4 divide-y divide-line text-sm border border-line rounded-lg overflow-hidden">
-              {openRfis.slice(0, 5).map((r) => (
-                <li key={r.id} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 bg-paper">
-                  <div className="min-w-0">
-                    <span className="font-mono text-xs text-brand mr-2">{r.number}</span>
-                    <span className="text-ink truncate">{r.subject || r.title || "—"}</span>
-                  </div>
-                  <Badge tone="danger">{r.status}</Badge>
-                </li>
-              ))}
-              {openRfis.length > 5 && (
-                <li className="px-3 py-2 text-xs text-steel-muted bg-sand/30">
-                  +{openRfis.length - 5} more — open the list modal
-                </li>
-              )}
-            </ul>
-          )}
-          {!openRfis.length && !busy && <p className="text-sm text-steel-muted mt-3">No open RFIs.</p>}
-        </Card>
-      )}
 
-      <DashboardListModal
-        open={rfiModalOpen}
-        title="Open RFIs"
-        subtitle={selected ? `${selected.code} — ${openRfis.length} open` : undefined}
-        onClose={() => setRfiModalOpen(false)}
-        footer={
-          <DashboardListModalFoot
-            onClose={() => setRfiModalOpen(false)}
-            href={pid ? `/projects/${pid}/rfis` : undefined}
-            hrefLabel="Open in module"
-          />
-        }
-      >
-        <ul className="divide-y divide-line text-sm">
-          {openRfis.map((r) => (
-            <li key={r.id} className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-sand/30">
-              <div className="min-w-0">
-                <span className="font-mono text-xs text-brand mr-2">{r.number}</span>
-                <span className="text-ink">{r.subject || r.title || "—"}</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge tone="danger">{r.status}</Badge>
-                {pid && (
-                  <Link to={`/projects/${pid}/rfis`} onClick={() => setRfiModalOpen(false)}>
-                    <Button type="button" variant="secondary" className="!text-xs !py-1.5">
-                      Open
-                    </Button>
-                  </Link>
-                )}
-              </div>
-            </li>
-          ))}
-          {!openRfis.length && <li className="px-4 py-8 text-center text-steel-muted">No open RFIs.</li>}
-        </ul>
-      </DashboardListModal>
-
-      {tab === "comms" && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-slate-50 flex justify-between items-center">
-            <span className="font-semibold text-sm">Meetings / MoM</span>
-            {pid && (
-              <Link to={`/projects/${pid}/comms`} className="text-sm font-semibold text-brand">
-                Open Comms →
-              </Link>
-            )}
-          </div>
-          <ul className="divide-y divide-slate-100 text-sm">
-            {meetings.map((m: any) => (
-              <li key={m.id} className="px-4 py-3 flex justify-between gap-2 hover:bg-slate-50/80">
-                <span>{m.title || m.subject || "Meeting"}</span>
-                <span className="text-steel-muted text-xs">
-                  {m.meetingDate ? new Date(m.meetingDate).toLocaleDateString() : m.status || "—"}
+          {detail?.dues && detail.dues.items?.length ? (
+            <Card padding={false}>
+              <div className="px-4 py-3 border-b border-line flex flex-wrap items-baseline justify-between gap-2">
+                <span className="font-semibold text-sm">Due Dates</span>
+                <span className="text-xs">
+                  <span className="text-red-700 font-semibold">{detail.dues.overdue} overdue</span>
+                  <span className="text-steel-muted"> · {detail.dues.dueSoon} in the next 21 days</span>
                 </span>
-              </li>
-            ))}
-            {!meetings.length && !busy && <li className="px-4 py-8 text-center text-steel-muted">No meetings yet.</li>}
-          </ul>
-        </Card>
-      )}
-
-      {tab === "logs" && (
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-slate-50 flex justify-between items-center">
-            <span className="font-semibold text-sm">Recent checklist fills</span>
-            {pid && (
-              <Link to={`/projects/${pid}/checklist-logs`} className="text-sm font-semibold text-brand">
-                Full log →
-              </Link>
-            )}
-          </div>
-          <ul className="divide-y divide-slate-100 text-sm">
-            {logs.map((s: any) => (
-              <li key={s.id} className="px-4 py-3 flex flex-wrap justify-between gap-2 hover:bg-slate-50/80">
-                <div>
-                  <div className="font-medium">{s.assignment?.template?.name || "Checklist"}</div>
-                  <div className="text-xs text-steel-muted">
-                    {s.assignment?.template?.checklistType} · {s.submittedBy?.fullName || "—"}
-                  </div>
-                </div>
-                <span className="text-xs text-steel-muted">{new Date(s.createdAt).toLocaleString()}</span>
-              </li>
-            ))}
-            {!logs.length && !busy && <li className="px-4 py-8 text-center text-steel-muted">No fills logged yet.</li>}
-          </ul>
-        </Card>
-      )}
-
-      {tab === "safety" && (
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-steel-muted">Open safety items</div>
-              <div className="text-3xl font-bold text-ink mt-1 tabular-nums">{safetyOpen}</div>
-            </div>
-            {pid && (
-              <Link to={`/projects/${pid}/safety`}>
-                <Button type="button">Open Safety module</Button>
-              </Link>
-            )}
-          </div>
-        </Card>
+              </div>
+              <ul className="grid md:grid-cols-2 divide-y md:divide-y-0 divide-line text-sm">
+                {detail.dues.items.slice(0, 10).map((item: any) => {
+                  const overdue = item.due && new Date(item.due) < new Date();
+                  return (
+                    <li key={`${item.kind}-${item.id}`} className="px-4 py-2 flex justify-between gap-3 border-b border-line">
+                      <Link to={item.href} className="min-w-0 truncate hover:underline">
+                        <span className="font-mono text-[10px] text-brand mr-1">{item.kind}</span>
+                        {item.title}
+                      </Link>
+                      <span className={`shrink-0 text-[11px] tabular-nums ${overdue ? "text-red-700 font-semibold" : "text-steel-muted"}`}>{fmtDate(item.due)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          ) : null}
+        </div>
       )}
     </div>
   );

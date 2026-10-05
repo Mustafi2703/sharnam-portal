@@ -6,7 +6,7 @@ import { Router } from "express";
 import { guardProjectParam } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
-import { requireAuth, type AuthedRequest } from "../auth.js";
+import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { graphConfig } from "../services/graph.js";
@@ -44,6 +44,7 @@ siteTestRouter.get("/:projectId/list", async (req, res) => {
  */
 siteTestRouter.post(
   "/:projectId/upload",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
   upload.fields([
     { name: "photos", maxCount: 12 },
     { name: "signature", maxCount: 1 },

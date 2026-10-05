@@ -163,6 +163,56 @@ const MODULE_KEYS: ModuleExportKey[] = [
   "cost",
 ];
 
+/** RFI kind groups used on dashboards. */
+const RFI_INFO_KINDS = ["RequestForInformation", "Manual", "ClientConcern"];
+const RFI_INSPECTION_KINDS = ["QualityIR", "SafetyIR", "ActivityInspection"];
+const RFI_FILL_KINDS = ["DrawingChecklist", "QualityInspection", "SafetyChecklist", "SiteExecution"];
+const RFI_DONE = ["Closed", "Approved", "Rejected", "Cancelled", "Withdrawn"];
+
+/** Every project the person can open, with live counts for the dashboard (each number links to its register). */
+reportsRouter.get("/portfolio", async (req: AuthedRequest, res) => {
+  const { userCanAccessProject } = await import("../modules/_shared/projectAccess.js");
+  const all = await prisma.project.findMany({
+    select: { id: true, code: true, name: true, status: true, location: true, clientName: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  const projects = [];
+  for (const p of all) if (await userCanAccessProject(req, p.id)) projects.push(p);
+  const ids = projects.map((p) => p.id);
+  if (!ids.length) return res.json({ projects: [] });
+  const now = new Date();
+  const [rfis, meetings, ncrs, safety, drawings] = await Promise.all([
+    prisma.rfi.groupBy({ by: ["projectId", "rfiKind"], where: { projectId: { in: ids }, status: { notIn: RFI_DONE } }, _count: { _all: true } }),
+    prisma.meeting.findMany({
+      where: { projectId: { in: ids }, meetingDate: { gte: new Date(now.getTime() - 12 * 3600_000) }, status: { notIn: ["Cancelled"] } },
+      select: { projectId: true, meetingDate: true, title: true },
+      orderBy: { meetingDate: "asc" },
+    }),
+    prisma.qualityNcr.groupBy({ by: ["projectId"], where: { projectId: { in: ids }, NOT: { status: { in: ["Closed", "Close", "Completed"] } } }, _count: { _all: true } }),
+    prisma.safetyRecord.groupBy({ by: ["projectId"], where: { projectId: { in: ids }, status: "Open" }, _count: { _all: true } }),
+    prisma.drawing.groupBy({ by: ["projectId", "isPublished"], where: { projectId: { in: ids } }, _count: { _all: true } }),
+  ]);
+  const sumRfi = (pid: string, kinds: string[]) =>
+    rfis.filter((r) => r.projectId === pid && kinds.includes(r.rfiKind)).reduce((n, r) => n + r._count._all, 0);
+  res.json({
+    projects: projects.map((p) => {
+      const upcoming = meetings.filter((m) => m.projectId === p.id);
+      return {
+        ...p,
+        openInfoRfis: sumRfi(p.id, RFI_INFO_KINDS),
+        openInspections: sumRfi(p.id, RFI_INSPECTION_KINDS),
+        openFillRequests: sumRfi(p.id, RFI_FILL_KINDS),
+        upcomingMeetings: upcoming.length,
+        nextMeeting: upcoming[0] ? { title: upcoming[0].title, at: upcoming[0].meetingDate } : null,
+        openNcrs: ncrs.find((n) => n.projectId === p.id)?._count._all || 0,
+        openSafety: safety.find((n) => n.projectId === p.id)?._count._all || 0,
+        drawingsTotal: drawings.filter((d) => d.projectId === p.id).reduce((n, d) => n + d._count._all, 0),
+        drawingsGfc: drawings.find((d) => d.projectId === p.id && d.isPublished)?._count._all || 0,
+      };
+    }),
+  });
+});
+
 reportsRouter.get("/daily/:projectId", async (req, res) => {
   const pack = await buildDprPack(req.params.projectId, req.query.date ? String(req.query.date) : undefined);
   res.json({

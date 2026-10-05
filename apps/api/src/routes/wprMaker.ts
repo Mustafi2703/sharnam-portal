@@ -17,7 +17,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
-import { requireAuth, type AuthedRequest } from "../auth.js";
+import { requireRoles, requireAuth, type AuthedRequest } from "../auth.js";
 import { userCanAccessProject } from "../modules/_shared/projectAccess.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "../services/graph.js";
@@ -257,7 +257,7 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
 });
 
 /** Re-build all WPR sections from live portal data for the selected date window. */
-wprMakerRouter.post("/:projectId/refresh", rejectClientWprEditor, async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/refresh", requireRoles("admin", "office", "employee", "site_employee"), rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -320,7 +320,7 @@ wprMakerRouter.post("/:projectId/refresh", rejectClientWprEditor, async (req: Au
 });
 
 /** Load the client 23–29 July WPR + budget / PR / materials workbooks into this project week. */
-wprMakerRouter.post("/:projectId/import-july", rejectClientWprEditor, async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/import-july", requireRoles("admin", "office", "employee", "site_employee"), rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -361,7 +361,7 @@ wprMakerRouter.post("/:projectId/import-july", rejectClientWprEditor, async (req
   });
 });
 
-wprMakerRouter.post("/:projectId/save", rejectClientWprEditor, async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/save", requireRoles("admin", "office", "employee", "site_employee"), rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -467,7 +467,7 @@ wprMakerRouter.get("/:projectId/export-status", async (req, res) => {
   });
 });
 
-wprMakerRouter.post("/:projectId/publish", rejectClientWprEditor, async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "employee", "site_employee"), rejectClientWprEditor, async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const range = parseWprDateRange({
     end: req.body.weekEnding ?? req.body.end,
@@ -589,7 +589,7 @@ wprMakerRouter.get("/:projectId/recent", async (req, res) => {
  *
  * Multipart field: `photo`. Extra fields: `weekEnding`, `sectionKey`, `caption`.
  */
-wprMakerRouter.post("/:projectId/photo", rejectClientWprEditor, upload.single("photo"), async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/photo", requireRoles("admin", "office", "employee", "site_employee"), rejectClientWprEditor, upload.single("photo"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -629,7 +629,7 @@ wprMakerRouter.post("/:projectId/photo", rejectClientWprEditor, upload.single("p
  * safety pack. Lands under wpr/attachments/ so the pack export can list it.
  * Multipart field: `file`. Extra fields: `weekEnding`, `caption`.
  */
-wprMakerRouter.post("/:projectId/attachment", rejectClientWprEditor, upload.single("file"), async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/attachment", requireRoles("admin", "office", "employee", "site_employee"), rejectClientWprEditor, upload.single("file"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -658,7 +658,7 @@ wprMakerRouter.post("/:projectId/attachment", rejectClientWprEditor, upload.sing
  * contractor). Saved under wpr/signatures/ for the weekly sign-off block.
  * Multipart field: `signature`. Extra fields: `weekEnding`, `role`.
  */
-wprMakerRouter.post("/:projectId/signature", upload.single("signature"), async (req: AuthedRequest, res) => {
+wprMakerRouter.post("/:projectId/signature", requireRoles("admin", "office", "employee", "site_employee", "client"), upload.single("signature"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });

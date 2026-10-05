@@ -322,7 +322,7 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
 
 // ═══════════════════════ POST recalc S-curve from schedule + BOQ ═══════════════════════
 
-dprMakerRouter.post("/:projectId/recalc-scurve", async (req: AuthedRequest, res) => {
+dprMakerRouter.post("/:projectId/recalc-scurve", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -353,7 +353,7 @@ dprMakerRouter.post("/:projectId/recalc-scurve", async (req: AuthedRequest, res)
 
 // ═══════════════════════════════ POST save ═══════════════════════════════
 
-dprMakerRouter.post("/:projectId/save", async (req: AuthedRequest, res) => {
+dprMakerRouter.post("/:projectId/save", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -432,7 +432,7 @@ function stampedName(base: string, prefix?: string): string {
  * Photo upload — regular site photos, camera evidence.
  * Folder: 07.02_Daily_Site_Records/<DISCIPLINE>/photos/
  */
-dprMakerRouter.post("/:projectId/photo", upload.single("photo"), async (req: AuthedRequest, res) => {
+dprMakerRouter.post("/:projectId/photo", requireRoles("admin", "office", "employee", "site_employee"), upload.single("photo"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -460,7 +460,7 @@ dprMakerRouter.post("/:projectId/photo", upload.single("photo"), async (req: Aut
  * PDF attachment upload — signed docs, checklists, RA bills etc.
  * Folder: 07.02_Daily_Site_Records/<DISCIPLINE>/attachments/
  */
-dprMakerRouter.post("/:projectId/attachment", upload.single("file"), async (req: AuthedRequest, res) => {
+dprMakerRouter.post("/:projectId/attachment", requireRoles("admin", "office", "employee", "site_employee"), upload.single("file"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -488,7 +488,7 @@ dprMakerRouter.post("/:projectId/attachment", upload.single("file"), async (req:
  * Signature upload — a canvas signature PNG blob.
  * Folder: 07.02_Daily_Site_Records/<DISCIPLINE>/signatures/
  */
-dprMakerRouter.post("/:projectId/signature", upload.single("signature"), async (req: AuthedRequest, res) => {
+dprMakerRouter.post("/:projectId/signature", requireRoles("admin", "office", "employee", "site_employee", "client"), upload.single("signature"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
@@ -656,7 +656,7 @@ dprMakerRouter.post(
 
 // ═══════════════════════════════ POST publish ═══════════════════════════════
 
-dprMakerRouter.post("/:projectId/publish", async (req: AuthedRequest, res) => {
+dprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });

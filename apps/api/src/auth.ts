@@ -35,11 +35,52 @@ function tokenFromRequest(req: Request): string | null {
   return null;
 }
 
+/** Client portal is read-only: the only writes are raising / answering RFIs and their own account. */
+const CLIENT_WRITE_ALLOW: RegExp[] = [
+  /^\/api\/rfis\/project\/[^/]+\/?$/, // raise an RFI / client concern
+  /^\/api\/rfis\/[^/]+\/respond\/?$/, // answer an RFI where the client is on the matrix
+  /^\/api\/auth\/(impersonate\/stop|logout)\/?$/,
+  /^\/api\/users\/me(\/|$)/, // own profile / password
+  /^\/api\/directory\/project\/[^/]+\/members\/[^/]+\/signature\/?$/, // own signature
+  /^\/api\/notifications(\/|$)/,
+  /^\/api\/checklist\/assignments\/[^/]+\/client-signature\/?$/, // sign a checklist SPDC sent
+  /^\/api\/closure\/project\/[^/]+\/client-sign(off)?\/?/, // closure sign-off
+  /^\/api\/(wpr|dpr)-maker\/[^/]+\/signature\/?$/, // sign the weekly / daily report pack
+];
+
+/** External consultants / stakeholders (employee login linked to a party): RFIs, design coordination, drawing review, meeting actions. */
+const STAKEHOLDER_WRITE_ALLOW: RegExp[] = [
+  ...CLIENT_WRITE_ALLOW,
+  /^\/api\/rfis\/[^/]+\/?$/, // update / close an RFI on their matrix
+  /^\/api\/directory\/project\/[^/]+\/coordination\/?$/,
+  /^\/api\/directory\/coordination\/[^/]+(\/follow-up)?\/?$/,
+  /^\/api\/drawings\/revision\/[^/]+\/markup-pages\/?$/,
+  /^\/api\/comms\/meetings\/[^/]+\/items\/?$/,
+];
+
+function stakeholderWriteAllowed(method: string, url: string): boolean {
+  if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) return true;
+  const path = url.split("?")[0];
+  return STAKEHOLDER_WRITE_ALLOW.some((re) => re.test(path));
+}
+
+function clientWriteAllowed(method: string, url: string): boolean {
+  if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) return true;
+  const path = url.split("?")[0];
+  return CLIENT_WRITE_ALLOW.some((re) => re.test(path));
+}
+
 export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const raw = tokenFromRequest(req);
   if (!raw) return res.status(401).json({ error: "Unauthorized" });
   try {
     req.user = jwt.verify(raw, jwtSecret()) as AuthUser;
+    if (req.user.role === "client" && !clientWriteAllowed(req.method, req.originalUrl)) {
+      return res.status(403).json({ error: "Client logins are read-only. Raise an RFI or concern, or ask the Sharnam office to make the change." });
+    }
+    if (req.user.role === "employee" && req.user.vendorId && !stakeholderWriteAllowed(req.method, req.originalUrl)) {
+      return res.status(403).json({ error: "Consultant logins can raise and answer RFIs, work on design coordination and review drawings. Ask the Sharnam office for other changes." });
+    }
     if (isHrDeskOnly(req.user.email, req.user.role) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
       return res.status(403).json({ error: "This login is HR portal only — people management." });
     }

@@ -1616,7 +1616,7 @@ dmsRouter.get("/access-inbox", requireRoles("admin", "office"), async (_req, res
   res.json(await listOfficeAccessInbox());
 });
 
-dmsRouter.post("/:projectId/sync", async (req: AuthedRequest, res) => {
+dmsRouter.post("/:projectId/sync", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const result = await mockOneDrive.sync(req.params.projectId);
   await audit("dms.sync", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId });
   res.json({
