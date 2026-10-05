@@ -560,14 +560,37 @@ export async function seedWprSections(
     inductions: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("induct")).length,
     other: safetyPrev.length,
   };
+  // Daily safety log (Safety module) + records: this week, previous week and project-to-date.
+  const { safetyDays, safetyCumulative, keyFromDate: sKey } = await import("./safetyWeek.js");
+  const istKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  const cwFrom = istKey(weekStart);
+  const cwTo = istKey(weekEnd);
+  const pwTo = sKey(new Date(new Date(`${cwFrom}T00:00:00.000Z`).getTime() - 86400000));
+  const pwFrom = sKey(new Date(new Date(`${cwFrom}T00:00:00.000Z`).getTime() - 7 * 86400000));
+  const [cwDays, pwDays, cumToDate] = await Promise.all([
+    safetyDays(projectId, cwFrom, cwTo),
+    safetyDays(projectId, pwFrom, pwTo),
+    safetyCumulative(projectId, cwTo),
+  ]);
+  const sumDays = (arr: { [k: string]: unknown }[], k: string) => arr.reduce((n, d) => n + (Number(d[k]) || 0), 0);
+  const allSafetyToDate = await prisma.safetyRecord.findMany({
+    where: { projectId, occurredAt: { lte: weekEnd } },
+    select: { recordType: true },
+  });
+  const cumIncidents = allSafetyToDate.filter((s) => /incident|lti/i.test(s.recordType)).length;
+  const cumTbtRecords = allSafetyToDate.filter((s) => /tool/i.test(s.recordType)).length;
   const safetySec: WprSection = {
     title: DEFAULT_WPR_TITLES.safety,
     headers: ["HSE indicator", "Previous week (PW)", "Current week (CW)", "Cumulative"],
     rows: [
-      ["Toolbox Talk", safetyPrevIndicators.tbt, safetyIndicators.tbt, safetyIndicators.tbt],
-      ["HSE Inductions", safetyPrevIndicators.inductions, safetyIndicators.inductions, safetyIndicators.inductions],
-      ["Incidents / Accidents", safetyPrevIndicators.incidents, safetyIndicators.incidents, safetyIndicators.incidents],
-      ["Total safety events", safetyPrevIndicators.other, safetyIndicators.other, safetyIndicators.other],
+      ["Safe man-hours", sumDays(pwDays, "safeManHours"), sumDays(cwDays, "safeManHours"), cumToDate.safeManHours],
+      ["Average manpower / day", avgLogged(pwDays), avgLogged(cwDays), cumToDate.daysLogged ? Math.round(cumToDate.manDays / cumToDate.daysLogged) : 0],
+      ["Toolbox Talk", sumDays(pwDays, "toolboxTalks") + safetyPrevIndicators.tbt, sumDays(cwDays, "toolboxTalks") + safetyIndicators.tbt, cumToDate.toolboxTalks + cumTbtRecords],
+      ["HSE Inductions", sumDays(pwDays, "inductions") + safetyPrevIndicators.inductions, sumDays(cwDays, "inductions") + safetyIndicators.inductions, cumToDate.inductions],
+      ["Permits to work issued", sumDays(pwDays, "permitsIssued"), sumDays(cwDays, "permitsIssued"), cumToDate.permitsIssued],
+      ["Incidents / Accidents", safetyPrevIndicators.incidents, safetyIndicators.incidents, cumIncidents],
+      ["Days without LTI", "", "", cumToDate.daysWithoutLti],
+      ["Total safety events", safetyPrevIndicators.other, safetyIndicators.other, allSafetyToDate.length],
       ["Safety checklists filled", 0, fillCounts.safety, fillCounts.safety],
     ],
     notes: ncrs.length
@@ -853,4 +876,9 @@ export function overlayChecklistFillKpis(
     ? { ...sections.drawingRegister, notes: [sections.drawingRegister.notes, fills.drawing ? `${fills.drawing} Drawing Check fill(s).` : ""].filter(Boolean).join(" ") }
     : undefined;
   return { ...sections, projectDashboard: dashboard, quality, safety, drawingRegister };
+}
+
+function avgLogged(days: { manpower: number; logged: boolean }[]): number {
+  const logged = days.filter((d) => d.logged);
+  return logged.length ? Math.round(logged.reduce((n, d) => n + d.manpower, 0) / logged.length) : 0;
 }

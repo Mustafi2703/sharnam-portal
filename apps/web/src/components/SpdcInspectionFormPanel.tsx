@@ -113,9 +113,19 @@ export function SpdcInspectionFormPanel({
                       </option>
                     ))}
                   </Select>
+                ) : f.options ? (
+                  <Select className="mt-0.5 !py-1 !text-xs" value={draft[f.key] || ""} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}>
+                    <option value="">{f.placeholder}</option>
+                    {f.options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </Select>
                 ) : (
                   <Input
                     className="!py-1 !text-xs mt-0.5"
+                    type={f.inputType || "text"}
                     placeholder={f.placeholder}
                     value={draft[f.key] || ""}
                     onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}

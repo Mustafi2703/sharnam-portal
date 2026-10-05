@@ -2886,3 +2886,29 @@ model ProjectClosureReport {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
+
+/// One row per project per day — feeds Safety dashboard (safe hours, TBT, inductions), DPR safety block and WPR HSE indicators.
+model SafetyDailyLog {
+  id               String   @id @default(cuid())
+  projectId        String
+  date             DateTime
+  manpower         Int      @default(0)
+  hoursPerHead     Float    @default(8)
+  /// manpower × hours unless overridden (e.g. lost-time injury)
+  safeManHours     Float    @default(0)
+  toolboxTalks     Int      @default(0)
+  tbtTopics        String?  @db.Text
+  inductions       Int      @default(0)
+  permitsIssued    Int      @default(0)
+  ppeCompliancePct Float?
+  lostTimeInjury   Boolean  @default(false)
+  majorIncident    String?  @db.Text
+  remarks          String?  @db.Text
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([projectId, date])
+  @@index([projectId, date])
+}

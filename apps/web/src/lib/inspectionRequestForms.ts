@@ -30,7 +30,18 @@ export const QAP_LEGENDS: [string, string][] = [
   ["TPC", "Third Party Confirmation"],
 ];
 
-export type SpdcFormField = { key: string; label: string; placeholder: string; section?: string; wide?: boolean };
+export type SpdcFormField = { key: string; label: string; placeholder: string; section?: string; wide?: boolean; options?: string[]; inputType?: string };
+
+/** F-01 clearance result codes (Procedure & Legend sheet). */
+export const SAFETY_CLEARANCE_CODES = ["S1 — Cleared: commence", "S2 — Cleared with conditions", "S3 — Not cleared: rectify and re-offer", "S4 — Stop work"];
+
+/** A cleared Safety IR whose "valid up to" time has passed. */
+export function clearanceExpired(form: Record<string, string | undefined>, status?: string): boolean {
+  if (!/^S[12]/.test(form.clearanceResult || "")) return false;
+  if (/clos/i.test(status || "")) return false;
+  const t = Date.parse(form.validUpTo || "");
+  return Number.isFinite(t) && t < Date.now();
+}
 
 export type InspectionFormRef = {
   docNo: string;
@@ -145,10 +156,10 @@ export const SAFETY_IR_FORM: InspectionFormRef = {
     { key: "highRiskType", label: "High-risk activity type", placeholder: "Work at height / scaffold handover", section: "2. Activity offered" },
     { key: "activityDescription", label: "Description of work", placeholder: "Purlin fixing at 9 m", section: "2. Activity offered", wide: true },
     { key: "location", label: "Exact location / grid / level", placeholder: "Zone 2 / Shed roof", section: "2. Activity offered", wide: true },
-    { key: "clearanceSoughtFrom", label: "Clearance sought from", placeholder: "Date / shift", section: "2. Activity offered" },
-    { key: "validUpTo", label: "Valid up to", placeholder: "End of shift", section: "2. Activity offered" },
-    { key: "riskRating", label: "Risk rating", placeholder: "High / Medium / Low", section: "Clearance" },
-    { key: "clearanceResult", label: "Result code (S1–S4)", placeholder: "S1 — Cleared", section: "Clearance" },
+    { key: "clearanceSoughtFrom", label: "Clearance sought from", placeholder: "Date / shift", section: "2. Activity offered", inputType: "datetime-local" },
+    { key: "validUpTo", label: "Valid up to", placeholder: "End of shift", section: "2. Activity offered", inputType: "datetime-local" },
+    { key: "riskRating", label: "Risk rating", placeholder: "High / Medium / Low", section: "Clearance", options: ["High", "Medium", "Low"] },
+    { key: "clearanceResult", label: "Result code (S1–S4)", placeholder: "Set by PMC after inspection", section: "Clearance", options: ["S1 — Cleared: commence", "S2 — Cleared with conditions", "S3 — Not cleared: rectify and re-offer", "S4 — Stop work"] },
     { key: "actionRequired", label: "Action required / conditions", placeholder: "Horizontal lifeline to be certified", section: "Clearance", wide: true },
   ],
   subjectHint: "Safety IR — clearance: [activity]",

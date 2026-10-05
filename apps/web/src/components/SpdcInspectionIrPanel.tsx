@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
-import { Badge, Button } from "./ui";
+import { Badge, Button, Input, Select } from "./ui";
+import { api } from "../api";
+import { useAuth } from "../auth";
 import { downloadAuthFile } from "../lib/downloadReport";
 import {
+  SAFETY_CLEARANCE_CODES,
+  clearanceExpired,
   inspectionFormForKind,
   resolveInspectionFormData,
   type InspectionFormRef,
@@ -34,6 +38,7 @@ type Props = {
   checklistFamily: string;
   checklistName?: string;
   token: string | null;
+  onUpdated?: () => void | Promise<void>;
 };
 
 function Field({ label, value }: { label: string; value?: string | null }) {
@@ -67,8 +72,14 @@ export function SpdcInspectionIrPanel({
   checklistFamily,
   checklistName,
   token,
+  onUpdated,
 }: Props) {
   const [busy, setBusy] = useState<"xlsx" | "html" | null>(null);
+  const { user } = useAuth();
+  const canClear = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
+  const [clr, setClr] = useState({ clearanceResult: "", validUpTo: "", actionRequired: "" });
+  const [clrBusy, setClrBusy] = useState(false);
+  const [clrMsg, setClrMsg] = useState("");
   const ref = inspectionFormForKind(rfi.rfiKind);
   const form = useMemo(() => resolveInspectionFormData(rfi, project || undefined), [rfi, project]);
   const sections = useMemo(() => (ref ? sectionsFromRef(ref) : []), [ref]);
@@ -92,6 +103,59 @@ export function SpdcInspectionIrPanel({
           <span className="font-mono text-xs text-steel-muted">{rfi.number}</span>
         </div>
       </div>
+
+      {rfi.rfiKind === "SafetyIR" && (
+        <div className={`rounded-lg border p-3 space-y-2 ${clearanceExpired(form, rfi.status) ? "border-red-300 bg-red-50" : "border-line bg-sand/30"}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-steel-muted">Clearance (PMC at the work front)</span>
+            {form.clearanceResult ? (
+              <Badge tone={/^S[12]/.test(form.clearanceResult) ? (clearanceExpired(form, rfi.status) ? "danger" : "ok") : "danger"}>
+                {form.clearanceResult}
+                {clearanceExpired(form, rfi.status) ? " · EXPIRED — re-offer before continuing" : ""}
+              </Badge>
+            ) : (
+              <Badge tone="warn">Awaiting inspection</Badge>
+            )}
+          </div>
+          {form.validUpTo ? <p className="text-[11px] text-steel-muted">Valid up to {new Date(form.validUpTo).toLocaleString("en-GB")}{form.inspectedBy ? ` · inspected by ${form.inspectedBy}` : ""}</p> : null}
+          {canClear && (
+            <div className="grid sm:grid-cols-3 gap-2 items-end">
+              <Select label="Result" value={clr.clearanceResult} onChange={(e) => setClr({ ...clr, clearanceResult: e.target.value })}>
+                <option value="">Select S1–S4</option>
+                {SAFETY_CLEARANCE_CODES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+              <Input label="Valid up to" type="datetime-local" value={clr.validUpTo} onChange={(e) => setClr({ ...clr, validUpTo: e.target.value })} />
+              <Input label="Conditions / action required" value={clr.actionRequired} onChange={(e) => setClr({ ...clr, actionRequired: e.target.value })} />
+              <div className="sm:col-span-3 flex items-center gap-2">
+                <Button
+                  type="button"
+                  className="!text-xs"
+                  disabled={clrBusy || !clr.clearanceResult || (/^S[12]/.test(clr.clearanceResult) && !clr.validUpTo)}
+                  onClick={async () => {
+                    setClrBusy(true);
+                    setClrMsg("");
+                    try {
+                      await api(`/api/rfis/${rfi.id}`, { method: "PATCH", token, body: JSON.stringify({ formPatch: { ...clr, inspectedBy: user?.fullName || "" } }) });
+                      setClrMsg(`Recorded ${clr.clearanceResult.slice(0, 2)}.`);
+                      setClr({ clearanceResult: "", validUpTo: "", actionRequired: "" });
+                      await onUpdated?.();
+                    } catch (err) {
+                      setClrMsg(err instanceof Error ? err.message : "Could not record the result");
+                    } finally {
+                      setClrBusy(false);
+                    }
+                  }}
+                >
+                  {clrBusy ? "Saving…" : "Record clearance"}
+                </Button>
+                <span className="text-[11px] text-steel-muted">{clrMsg || "S1/S2 need a validity time; clearance lapses after it, on scope change, weather, PTW expiry or any incident."}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Button

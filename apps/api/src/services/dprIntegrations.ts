@@ -379,12 +379,23 @@ export async function buildDprAutoFill(
   const firstAid = safetyToday.filter((s) => /first aid/i.test(s.recordType)).length;
   const observationsRaised = safetyToday.filter((s) => /observation/i.test(s.recordType)).length;
   const observationsClosed = safetyToday.filter((s) => s.status === "Closed").length;
-  const safeManHoursToday = manpower.reduce((s, m) => s + Number(m.actual || 0) * Number(m.hoursWorked || 8), 0);
+  // The Safety module's daily log is the source when it has been filled for this day.
+  const { safetyDays, safetyCumulative, keyFromDate } = await import("./safetyWeek.js");
+  const istKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(logDate);
+  const [safetyLog] = await safetyDays(projectId, istKey, istKey);
+  const prevKey = keyFromDate(new Date(new Date(`${istKey}T00:00:00.000Z`).getTime() - 86400000));
+  const safetyCum = await safetyCumulative(projectId, prevKey);
+  const safeManHoursToday = safetyLog?.logged
+    ? safetyLog.safeManHours
+    : manpower.reduce((s, m) => s + Number(m.actual || 0) * Number(m.hoursWorked || 8), 0);
+  if (safetyCum.daysLogged > 0) prev.cumSafeHours = safetyCum.safeManHours;
 
   const safety: Partial<DprSafety> = {
     safeManHoursToday,
-    safeManDaysToday: sumManDays(manpower),
-    toolboxTalks: safetyToday.filter((s) => /toolbox|tbt/i.test(s.title + s.recordType)).length,
+    safeManDaysToday: safetyLog?.logged ? safetyLog.manpower : sumManDays(manpower),
+    toolboxTalks: (safetyLog?.toolboxTalks || 0) + safetyToday.filter((s) => /toolbox|tbt/i.test(s.title + s.recordType)).length,
+    permits: safetyLog?.permitsIssued || 0,
+    ...(safetyLog?.ppeCompliancePct != null ? { ppeCompliancePct: safetyLog.ppeCompliancePct } : {}),
     nearMiss,
     firstAid,
     observationsRaised,
@@ -502,9 +513,10 @@ export async function buildDprAutoFill(
   const cumSafe = prev.cumSafeHours + safeManHoursToday;
   const safetyRows: DprSafetyRow[] = [
     { parameter: "Safe man-hours – today / cumulative", figure: `${safeManHoursToday} / ${cumSafe}` },
-    { parameter: "Days without LTI", figure: "—" },
-    { parameter: "Toolbox talks conducted", figure: String(safety.toolboxTalks ?? 0) },
-    { parameter: "Permits to work issued", figure: "—" },
+    { parameter: "Days without LTI", figure: safetyCum.daysLogged ? String(safetyCum.daysWithoutLti + (safetyLog?.lostTimeInjury ? 0 : 1)) : "—" },
+    { parameter: "Toolbox talks conducted", figure: `${safety.toolboxTalks ?? 0}${safetyLog?.tbtTopics ? ` (${safetyLog.tbtTopics.slice(0, 80)})` : ""}` },
+    { parameter: "Permits to work issued", figure: safetyLog?.logged ? String(safetyLog.permitsIssued) : "—" },
+    { parameter: "HSE inductions", figure: safetyLog?.logged ? String(safetyLog.inductions) : "—" },
     {
       parameter: "Safety observations raised / closed",
       figure: `${observationsRaised} / ${observationsClosed}`,

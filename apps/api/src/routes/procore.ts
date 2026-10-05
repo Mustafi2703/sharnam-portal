@@ -1077,12 +1077,34 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       error: "Only Communication Matrix parties (or Sharnam office) can close / update this RFI.",
     });
   }
+  // Safety IR (F-01) clearance: PMC records S1–S4, validity and conditions on the request.
+  let formDataJson: string | undefined;
+  let clearanceStatus: string | undefined;
+  if (req.body.formPatch && typeof req.body.formPatch === "object") {
+    const allowed = ["clearanceResult", "validUpTo", "actionRequired", "riskRating", "clearanceSoughtFrom", "inspectedBy", "inspectedAt"];
+    let form: Record<string, unknown> = {};
+    try {
+      form = existing.formDataJson ? JSON.parse(existing.formDataJson) : {};
+    } catch {
+      form = {};
+    }
+    for (const k of allowed) {
+      if (req.body.formPatch[k] !== undefined) form[k] = String(req.body.formPatch[k] ?? "").slice(0, 500);
+    }
+    if (form.clearanceResult) {
+      form.inspectedBy = form.inspectedBy || req.user!.fullName || req.user!.email;
+      form.inspectedAt = form.inspectedAt || new Date().toISOString();
+      clearanceStatus = /^S[12]/.test(String(form.clearanceResult)) ? "Approved" : "Rejected";
+    }
+    formDataJson = JSON.stringify(form);
+  }
   const rfi = await prisma.rfi.update({
     where: { id: req.params.id },
     data: {
-      status: req.body.status,
-      ballInCourt: req.body.ballInCourt,
+      status: req.body.status ?? clearanceStatus,
+      ballInCourt: req.body.ballInCourt ?? (clearanceStatus ? "Contractor" : undefined),
       assignedToId: req.body.assignedToId,
+      ...(formDataJson ? { formDataJson } : {}),
       closedAt: req.body.status === "Closed" ? new Date() : undefined,
     },
   });
@@ -2074,6 +2096,78 @@ safetyRouter.post(
     res.status(201).json(row);
   }
 );
+
+/* ---------- Daily safety log (safe hours, TBT, inductions, permits) + weekly dashboard ---------- */
+
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+safetyRouter.get("/project/:projectId/daily", async (req: AuthedRequest, res) => {
+  const { safetyDays, istDayKey } = await import("../services/safetyWeek.js");
+  const to = DAY_KEY.test(String(req.query.to || "")) ? String(req.query.to) : istDayKey();
+  const from = DAY_KEY.test(String(req.query.from || "")) ? String(req.query.from) : to;
+  res.json(await safetyDays(req.params.projectId, from, to));
+});
+
+safetyRouter.put(
+  "/project/:projectId/daily/:date",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  async (req: AuthedRequest, res) => {
+    const key = String(req.params.date);
+    if (!DAY_KEY.test(key)) return res.status(400).json({ error: "Date must be YYYY-MM-DD" });
+    const { dayFromKey, istDayKey } = await import("../services/safetyWeek.js");
+    if (key > istDayKey()) return res.status(400).json({ error: "You can't log a day that hasn't happened yet." });
+    const b = req.body || {};
+    const int = (v: unknown) => Math.max(0, Math.round(Number(v) || 0));
+    const manpower = int(b.manpower);
+    const hoursPerHead = Math.min(24, Math.max(0, Number(b.hoursPerHead) || 8));
+    const lostTimeInjury = !!b.lostTimeInjury;
+    // Safe man-hours: everyone's hours on a day without a lost-time injury (override allowed).
+    const safeManHours =
+      b.safeManHours !== undefined && b.safeManHours !== "" && b.safeManHours !== null
+        ? Math.max(0, Number(b.safeManHours) || 0)
+        : lostTimeInjury
+          ? 0
+          : Math.round(manpower * hoursPerHead * 10) / 10;
+    const data = {
+      manpower,
+      hoursPerHead,
+      safeManHours,
+      toolboxTalks: int(b.toolboxTalks),
+      tbtTopics: b.tbtTopics ? String(b.tbtTopics).slice(0, 2000) : null,
+      inductions: int(b.inductions),
+      permitsIssued: int(b.permitsIssued),
+      ppeCompliancePct: b.ppeCompliancePct === "" || b.ppeCompliancePct == null ? null : Math.min(100, Math.max(0, Number(b.ppeCompliancePct) || 0)),
+      lostTimeInjury,
+      majorIncident: b.majorIncident ? String(b.majorIncident).slice(0, 2000) : null,
+      remarks: b.remarks ? String(b.remarks).slice(0, 2000) : null,
+      updatedById: req.user!.id,
+    };
+    const row = await prisma.safetyDailyLog.upsert({
+      where: { projectId_date: { projectId: req.params.projectId, date: dayFromKey(key) } },
+      create: { projectId: req.params.projectId, date: dayFromKey(key), createdById: req.user!.id, ...data },
+      update: data,
+    });
+    await audit("safety.daily_log", { userId: req.user!.id, entity: "SafetyDailyLog", entityId: row.id, meta: { date: key, manpower, safeManHours, toolboxTalks: data.toolboxTalks } });
+    res.json(row);
+  },
+);
+
+safetyRouter.delete("/project/:projectId/daily/:date", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { dayFromKey } = await import("../services/safetyWeek.js");
+  const key = String(req.params.date);
+  if (!DAY_KEY.test(key)) return res.status(400).json({ error: "Date must be YYYY-MM-DD" });
+  await prisma.safetyDailyLog.deleteMany({ where: { projectId: req.params.projectId, date: dayFromKey(key) } });
+  await audit("safety.daily_log.delete", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { date: key } });
+  res.json({ ok: true });
+});
+
+/** Safety Dashboard — Week N (One Pager): week picker via ?from=YYYY-MM-DD (Monday) &to=. */
+safetyRouter.get("/project/:projectId/weekly", async (req: AuthedRequest, res) => {
+  const { safetyWeekReport } = await import("../services/safetyWeek.js");
+  const from = DAY_KEY.test(String(req.query.from || "")) ? String(req.query.from) : undefined;
+  const to = DAY_KEY.test(String(req.query.to || "")) ? String(req.query.to) : undefined;
+  res.json(await safetyWeekReport(req.params.projectId, from, to));
+});
 
 safetyRouter.get("/:id", async (req, res) => {
   const row = await prisma.safetyRecord.findUnique({

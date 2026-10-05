@@ -2202,12 +2202,17 @@ checklistRouter.get("/project/:projectId/safety-dashboard", async (req, res) => 
   const dbUnsafeActs = allRecords.filter((r) => r.recordType === "Observation").length;
   const dbNcrs = allRecords.filter(isNcr).length;
   const dbSiteInstructions = allRecords.filter((r) => r.recordType === "Site Instruction").length;
+  const { safetyCumulative, istDayKey } = await import("../services/safetyWeek.js");
+  const cum = await safetyCumulative(projectId, istDayKey());
+  const tbtRecords = allRecords.filter((r) => /toolbox|tbt/i.test(`${r.recordType} ${r.title}`)).length;
   const onePager = {
     totalIncidents: dbIncidents,
     totalUnsafeActs: dbUnsafeActs,
     totalNcrs: dbNcrs,
-    safeManHours: 0,
-    toolboxTalks: 0,
+    safeManHours: cum.safeManHours,
+    toolboxTalks: cum.toolboxTalks + tbtRecords,
+    inductions: cum.inductions,
+    daysWithoutLti: cum.daysWithoutLti,
     siteInstructions: dbSiteInstructions,
     source: "database",
   };

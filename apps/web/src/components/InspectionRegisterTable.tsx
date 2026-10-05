@@ -1,4 +1,5 @@
 import { Badge } from "./ui";
+import { clearanceExpired } from "../lib/inspectionRequestForms";
 import {
   HSE_REGISTER_REF,
   inspectionFormForKind,
@@ -72,7 +73,7 @@ function cell(row: Row, key: string, form: Record<string, string>) {
     case "Risk rating":
       return form.riskRating || "—";
     case "Clearance result":
-      return form.clearanceResult || "—";
+      return form.clearanceResult ? `${form.clearanceResult.slice(0, 2)}${clearanceExpired(form, row.status) ? " · EXPIRED" : ""}` : "—";
     case "Action required":
       return form.actionRequired || "—";
     case "Status":

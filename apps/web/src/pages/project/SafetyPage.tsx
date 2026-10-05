@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { SafetyWeekDesk } from "../../components/SafetyWeekDesk";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -15,7 +16,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { HiraRegisterTable } from "../../components/HiraRegisterTable";
 import { StatusNote } from "../../components/StatusNote";
 
-const TYPES = ["Observation", "Near Miss", "Incident", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
+const TYPES = ["Observation", "Near Miss", "First Aid", "Incident", "LTI", "Toolbox Talk", "JHA", "NCR", "Site Instruction"];
 const SEVERITIES = ["Low", "Medium", "High", "Critical"];
 const NCR_CATEGORIES = [
   "Working at height",
@@ -198,63 +199,15 @@ export default function SafetyPage() {
       </div>
       </div>
 
-      {sheetView.kpiOnly && dash?.onePager && (
-        <Card>
-          <h3 className="font-semibold mb-3">Safety Hours — HSE indicators</h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {[
-              ["Safe man-hours (cumulative)", dash.onePager.safeManHours],
-              ["Toolbox talks", dash.onePager.toolboxTalks],
-              ["Site safety instructions", dash.onePager.siteInstructions],
-              ["Incidents (one pager)", dash.onePager.totalIncidents],
-              ["Unsafe acts (one pager)", dash.onePager.totalUnsafeActs],
-              ["NCRs (one pager)", dash.onePager.totalNcrs],
-            ].map(([l, v]) => (
-              <div key={l as string} className="rounded-lg border border-line p-3">
-                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                <div className="text-xl font-display mt-1">{v as number}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {sheetView.kpiOnly && id ? <SafetyWeekDesk projectId={id} /> : null}
 
       {!sheetView.kpiOnly && sheetKey === "" && dash && (
         <div className="space-y-4">
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-            {[
-              ["Incidents (sheet)", dash.onePager?.totalIncidents ?? dash.totals.incidents],
-              ["Unsafe acts (sheet)", dash.onePager?.totalUnsafeActs ?? dash.totals.unsafeActs],
-              ["NCRs (sheet)", dash.onePager?.totalNcrs ?? dash.totals.ncrLike],
-              ["Safe man-hours", dash.onePager?.safeManHours ?? 0],
-              ["Toolbox talks", dash.onePager?.toolboxTalks ?? 0],
-              ["Site instructions", dash.onePager?.siteInstructions ?? dash.totals.siteInstructions],
-            ].map(([l, v]) => (
-              <Card key={l as string} className="!p-4 border-brand/20">
-                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                <div className="text-2xl font-display mt-1">{v as number}</div>
-              </Card>
-            ))}
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-            {[
-              ["Total records", dash.totals.records],
-              ["Open", dash.totals.open],
-              ["NCR / NC", dash.totals.ncrLike],
-              ["Unsafe acts", dash.totals.unsafeActs],
-              ["Site instructions", dash.totals.siteInstructions],
-              ["Checklist fills", dash.totals.checklistFills],
-            ].map(([l, v]) => (
-              <Card key={l as string} className="!p-4">
-                <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
-                <div className="text-2xl font-display mt-1">{v as number}</div>
-              </Card>
-            ))}
-          </div>
+          {id ? <SafetyWeekDesk projectId={id} /> : null}
           <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
-              Safety Dashboard.xlsx — one pager breakdown
+              All-time breakdown
             </p>
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
               <PieChart title="By record type" items={dash.charts?.byType || []} />
