@@ -297,20 +297,29 @@ export async function loadWprChartPack(
       actual: Number(a.weeklyActual || a.executedQty || 0),
     }));
 
-  const qapStatus = new Map<string, number>();
-  for (const q of qap) {
-    const st = (q.status || "Pending").trim();
-    qapStatus.set(st, (qapStatus.get(st) || 0) + 1);
+  // Cube register stores one row per specimen; a set is 3 specimens (Sr, Sr-2, Sr-3).
+  const cubeSets = new Set(
+    cubes.map((c) => `${String(c.srNo || "").replace(/-([23])$/, "")}|${c.castDate ? iso(c.castDate) : ""}|${c.description || ""}`)
+  ).size;
+
+  // Same figures as the Quality Statistic table (SO / SI / NCR totals); QAP status only as fallback.
+  const qualityByLabel = new Map<string, number>();
+  if (sorStats.length) {
+    for (const s of sorStats) {
+      const label = (s.observation || "Observation").trim().slice(0, 28);
+      qualityByLabel.set(label, (qualityByLabel.get(label) || 0) + Number(s.total ?? 0));
+    }
+  } else {
+    for (const q of qap) {
+      const st = (q.status || "Pending").trim();
+      qualityByLabel.set(st, (qualityByLabel.get(st) || 0) + 1);
+    }
   }
-  let quality: WprPiePoint[] = [...qapStatus.entries()].map(([label, value]) => ({ label, value }));
-  if (!quality.length && sorStats.length) {
-    quality = sorStats.map((s) => ({
-      label: (s.observation || "Observation").slice(0, 28),
-      value: Number(s.closedCount || s.total || 0),
-    }));
-  }
-  if (cubes.length) {
-    quality.push({ label: "Cube tests (period)", value: cubes.length });
+  const quality: WprPiePoint[] = [...qualityByLabel.entries()]
+    .filter(([, value]) => value > 0)
+    .map(([label, value]) => ({ label, value }));
+  if (cubeSets) {
+    quality.push({ label: "Cube sets cast (period)", value: cubeSets });
   }
 
   const countSafety = (rows: typeof safetyCurrent, needle: string) =>
@@ -364,7 +373,7 @@ export async function loadWprChartPack(
     ["Milestones on track", milestones.length ? `${onTrack}/${milestones.length}` : "—"],
     ["Drawings registered", registerLines.length || "—"],
     ["Safety events (period)", safetyCurrent.length],
-    ["Cube tests (period)", cubes.length],
+    ["Cube sets cast (period)", cubeSets],
   ];
 
   return {

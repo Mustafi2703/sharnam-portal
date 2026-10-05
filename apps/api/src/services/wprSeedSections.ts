@@ -5,8 +5,11 @@ import type { PrismaClient } from "@prisma/client";
 import { DEFAULT_WPR_TITLES, type WprSection, type WprSections } from "./wprXlsx.js";
 import { applyWprArvindDemoFill } from "./wprArvindDemoFill.js";
 
+/** Local calendar date — toISOString() would print the previous day for local-midnight dates east of UTC (IST). */
 function isoDate(d: Date | null | undefined): string {
-  return d ? new Date(d).toISOString().slice(0, 10) : "";
+  if (!d) return "";
+  const x = new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
 }
 
 export async function seedWprSections(
@@ -33,7 +36,7 @@ export async function seedWprSections(
     cashflow,
     progressManpower,
     activityLines,
-    photos,
+    allPhotos,
     qap,
     cubes,
     safety,
@@ -93,9 +96,9 @@ export async function seedWprSections(
     prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 40 }),
     prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 200 }),
     prisma.projectPhoto.findMany({
-      where: { projectId },
+      where: { projectId, isPrivate: false },
       orderBy: { createdAt: "desc" },
-      take: 24,
+      take: 40,
     }),
     prisma.qapActivity.findMany({
       where: { projectId },
@@ -158,6 +161,11 @@ export async function seedWprSections(
     }),
   ]);
 
+  // Only real image files can be embedded in the PPTX (placeholder .txt rows and PDFs render as empty boxes).
+  const photos = allPhotos.filter((p: { fileUrl?: string | null }) =>
+    /\.(jpe?g|png|gif)(\?|$)/i.test(String(p.fileUrl || "").trim())
+  );
+
   const fillCounts = {
     qi: checklistFills.filter((s) => s.assignment.template.checklistType === "QualityInspection").length,
     safety: checklistFills.filter((s) => s.assignment.template.checklistType === "Safety").length,
@@ -199,20 +207,34 @@ export async function seedWprSections(
     ]),
   };
 
-  const communicationMatrix: WprSection = {
-    title: DEFAULT_WPR_TITLES.communicationMatrix,
-    headers: ["Communication Type", "From role", "To role", "Channel", "SLA"],
-    rows: [
-      ...matrix.map((r: any) => [r.communicationType, r.fromRole, r.toRole, r.channel, r.slaDays ?? ""]),
-      ...matrixContacts.map((r: any) => [
-        r.orgSection || "Contact",
-        r.personName || "",
-        r.mailRole || "CC",
-        "Email",
-        r.email || "",
-      ]),
-    ],
-  };
+  // Client format: one row per contact (Organisation · Name · Designation · Mobile · Email · TO/CC);
+  // fall back to the routing rules when no contacts are set up yet.
+  const communicationMatrix: WprSection = matrixContacts.length
+    ? {
+        title: DEFAULT_WPR_TITLES.communicationMatrix,
+        headers: ["Sr", "Organisation", "Name", "Designation", "Mobile", "Email", "TO / CC"],
+        rows: matrixContacts.map((r: any, i: number) => [
+          i + 1,
+          [r.orgSection, r.orgName || r.company].filter(Boolean).join(" · "),
+          r.personName || "",
+          r.designation || r.spoc || "",
+          r.mobile || "",
+          r.email || "",
+          r.mailRole || "CC",
+        ]),
+      }
+    : {
+        title: DEFAULT_WPR_TITLES.communicationMatrix,
+        headers: ["Sr", "Communication type", "From", "To", "Frequency", "Channel"],
+        rows: matrix.map((r: any, i: number) => [
+          i + 1,
+          r.communicationType,
+          r.fromRole,
+          r.toRole,
+          r.frequency || "",
+          r.channel || "Email",
+        ]),
+      };
 
   const capexSec: WprSection = {
     title: DEFAULT_WPR_TITLES.capex,
@@ -770,16 +792,16 @@ export async function seedWprSections(
     headers: ["KPI", "Value"],
     rows: [
       ["Reporting window", `${isoDate(weekStart)} → ${isoDate(weekEnd)}`],
-      ["Planned progress %", plannedPct || "Import Progress → Planned vs Actual"],
+      ["Planned progress %", plannedPct || "—"],
       ["Actual progress %", actualPct || "—"],
       ["SPI / variance", plannedPct && actualPct ? `${actualPct} vs ${plannedPct}` : "—"],
-      ["DPR days logged", dprDayCount || "No DPR in window — fill DPR Maker"],
+      ["DPR days logged", dprDayCount],
       ["Open NCRs", openNcrs],
       ["Open RFIs / hindrances", `${hindrance.filter((h: { status?: string }) => h.status === "Open").length} hindrance · ${risk.filter((r: { status?: string }) => r.status === "Open").length} risk`],
       ["QAP activities (project)", qap.length],
-      ["Cube tests (window)", cubes.length],
+      ["Cube sets cast (window)", cubeGroups.size],
       ["Safety events (window)", safety.length],
-      ["QI / Safety / Drawing fills (week)", `${fillCounts.qi} / ${fillCounts.safety} / ${fillCounts.drawing}`],
+      ["Inspections / safety checks / drawing checks (week)", `${fillCounts.qi} / ${fillCounts.safety} / ${fillCounts.drawing}`],
       ["Milestones on track", milestones.length ? `${onTrack} / ${milestones.length}` : "—"],
       ["Drawings in register", registerLines.length || drawings.length],
       ["COP certified (₹ payable)", certifiedCopTotal ? certifiedCopTotal.toLocaleString("en-IN") : `${cops.length} COP(s)`],

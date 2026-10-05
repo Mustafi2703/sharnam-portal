@@ -30,7 +30,7 @@ import {
   type WprSection,
   type WprSections,
 } from "../services/wprXlsx.js";
-import { buildWprPptx } from "../services/wprPptx.js";
+import { buildWprPptx, wprTemplateFillEnabled } from "../services/wprPptx.js";
 import { seedWprSections } from "../services/wprSeedSections.js";
 import { snapWeekEnding } from "../services/wprDemoSeed.js";
 import { loadWprChartPack } from "../services/wprCharts.js";
@@ -94,8 +94,8 @@ function parseEnd(v: unknown): Date {
 /** Resolve reporting window from download/publish query (respects preset + start). */
 function rangeFromQuery(query: Record<string, unknown>): WprDateRange {
   return parseWprDateRange({
-    end: query.end,
-    start: query.start,
+    end: query.end ?? query.weekEnding,
+    start: query.start ?? query.weekStart,
     preset: query.preset,
   });
 }
@@ -196,11 +196,7 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
-  const range = parseWprDateRange({
-    end: req.query.end,
-    start: req.query.start,
-    preset: req.query.preset,
-  });
+  const range = rangeFromQuery(req.query as Record<string, unknown>);
   const { start: weekStart, end: weekEnd } = range;
 
   const existing = await prisma.wprSnapshot.findUnique({
@@ -422,7 +418,7 @@ wprMakerRouter.get("/:projectId/download.pptx", async (req, res) => {
   const fname = `WPR-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.pptx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
-  res.setHeader("X-Wpr-Export", process.env.WPR_PPTX_LEGACY === "1" ? "generated" : "template");
+  res.setHeader("X-Wpr-Export", wprTemplateFillEnabled() ? "template" : "generated");
   res.send(buf);
 });
 
@@ -459,10 +455,10 @@ wprMakerRouter.get("/:projectId/export-status", async (req, res) => {
   const { pdfEngineAvailable, pdfEngineHint } = await import("../services/wprPdf.js");
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
   res.json({
-    templatePptx: wprTemplateAvailable(),
+    templatePptx: wprTemplateFillEnabled() && wprTemplateAvailable(),
     pdfEngine: await pdfEngineAvailable(project?.code),
     pdfEngineKind: pdfEngineHint(),
-    legacyPptx: process.env.WPR_PPTX_LEGACY === "1",
+    legacyPptx: !wprTemplateFillEnabled(),
     hosting: "hostinger-node",
   });
 });
