@@ -4,8 +4,13 @@
 import type { PrismaClient } from "@prisma/client";
 import { DEFAULT_WPR_TITLES, type WprSection, type WprSections } from "./wprXlsx.js";
 import { applyWprArvindDemoFill } from "./wprArvindDemoFill.js";
+import { activityWeekRollup, normActivity, nextReportNumber, qualityWeekStats } from "./wprWeekRollup.js";
 
 /** Local calendar date — toISOString() would print the previous day for local-midnight dates east of UTC (IST). */
+function round3(n: number) {
+  return Math.round(n * 1000) / 1000;
+}
+
 function isoDate(d: Date | null | undefined): string {
   if (!d) return "";
   const x = new Date(d);
@@ -518,12 +523,25 @@ export async function seedWprSections(
     rows: cashflowRows,
   };
 
+  const liveQuality = await qualityWeekStats(prisma, projectId, weekStart, weekEnd);
   const quality: WprSection = {
     title: DEFAULT_WPR_TITLES.quality,
-    headers: sorStats.length
+    headers: liveQuality.length
+      ? ["Sr", "Observation", "Raised this week", "Total", "Open", "Closed", "Closure %"]
+      : sorStats.length
       ? ["Sr", "Observation", "Total", "Open", "Closed"]
       : ["Week", "Activity", "Discipline", "Contractor", "PMC", "Client", "Status"],
-    rows: sorStats.length
+    rows: liveQuality.length
+      ? liveQuality.map((q, i) => [
+          i + 1,
+          q.label,
+          q.raisedThisWeek,
+          q.total,
+          q.open,
+          q.closed,
+          q.total ? `${Math.round((q.closed / q.total) * 100)}%` : "",
+        ])
+      : sorStats.length
       ? sorStats.map((s: any, i: number) => [i + 1, s.observation || "", s.total ?? 0, s.openCount ?? 0, s.closedCount ?? 0])
       : qap.map((q: any) => [
           q.weekLabel || "",
@@ -534,7 +552,7 @@ export async function seedWprSections(
           q.clientOk ? "Yes" : "No",
           q.status || "",
         ]),
-    notes: `${sorStats.length ? "Quality statistics — Site Observation / NCR counts (WPR client format)." : "QAP weekly sign-off rows."} ${fillNote}`,
+    notes: `${liveQuality.length ? "Site observations, site instructions and NCRs — cumulative to week end." : sorStats.length ? "Quality statistics — Site Observation / NCR counts (WPR client format)." : "QAP weekly sign-off rows."} ${fillNote}`,
   };
 
   const cubeGroups = new Map<string, typeof cubes>();
@@ -570,50 +588,55 @@ export async function seedWprSections(
     }),
   };
 
-  const safetyIndicators = {
-    tbt: safety.filter((s: any) => (s.recordType || "").toLowerCase().includes("tool")).length,
-    incidents: safety.filter((s: any) => (s.recordType || "").toLowerCase().includes("incident")).length,
-    inductions: safety.filter((s: any) => (s.recordType || "").toLowerCase().includes("induct")).length,
-    other: safety.length,
-  };
-  const safetyPrevIndicators = {
-    tbt: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("tool")).length,
-    incidents: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("incident")).length,
-    inductions: safetyPrev.filter((s: any) => (s.recordType || "").toLowerCase().includes("induct")).length,
-    other: safetyPrev.length,
-  };
   // Daily safety log (Safety module) + records: this week, previous week and project-to-date.
   const { safetyDays, safetyCumulative, keyFromDate: sKey } = await import("./safetyWeek.js");
-  const istKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-  const cwFrom = istKey(weekStart);
-  const cwTo = istKey(weekEnd);
+  // Same calendar days the week was built on (local 00:00 → 23:59); converting 23:59 to IST on a UTC
+  // server would pull the next Monday's log into this week.
+  const cwFrom = isoDate(weekStart);
+  const cwTo = isoDate(weekEnd);
   const pwTo = sKey(new Date(new Date(`${cwFrom}T00:00:00.000Z`).getTime() - 86400000));
-  const pwFrom = sKey(new Date(new Date(`${cwFrom}T00:00:00.000Z`).getTime() - 7 * 86400000));
-  const [cwDays, pwDays, cumToDate] = await Promise.all([
+  const [cwDays, cumPrev, cumToDate] = await Promise.all([
     safetyDays(projectId, cwFrom, cwTo),
-    safetyDays(projectId, pwFrom, pwTo),
+    safetyCumulative(projectId, pwTo),
     safetyCumulative(projectId, cwTo),
   ]);
   const sumDays = (arr: { [k: string]: unknown }[], k: string) => arr.reduce((n, d) => n + (Number(d[k]) || 0), 0);
+  // Client HSE format: Up to previous week (PW) + Current week (CW) = Cumulative, all from dated records.
   const allSafetyToDate = await prisma.safetyRecord.findMany({
     where: { projectId, occurredAt: { lte: weekEnd } },
-    select: { recordType: true },
+    select: { recordType: true, occurredAt: true },
   });
-  const cumIncidents = allSafetyToDate.filter((s) => /incident|lti/i.test(s.recordType)).length;
-  const cumTbtRecords = allSafetyToDate.filter((s) => /tool/i.test(s.recordType)).length;
+  const recCount = (re: RegExp, before?: Date) =>
+    allSafetyToDate.filter((r) => re.test(r.recordType || "") && (!before || r.occurredAt < before)).length;
+  const tbtPrev = recCount(/tool/i, weekStart);
+  const tbtCum = recCount(/tool/i);
+  const indPrev = recCount(/induct/i, weekStart);
+  const indCum = recCount(/induct/i);
+  const incPrev = recCount(/incident|lti/i, weekStart);
+  const incCum = recCount(/incident|lti/i);
+  const evPrev = recCount(/./, weekStart);
+  const evCum = allSafetyToDate.length;
+  const safetyFillsToDate = await prisma.checklistSubmission.count({
+    where: {
+      assignment: { projectId, template: { checklistType: "Safety" } },
+      status: { in: ["Submitted", "Approved"] },
+      createdAt: { lte: weekEnd },
+    },
+  });
+  const avgPerDay = (manDays: number, days: number) => (days ? Math.round(manDays / days) : 0);
   const safetySec: WprSection = {
     title: DEFAULT_WPR_TITLES.safety,
-    headers: ["HSE indicator", "Previous week (PW)", "Current week (CW)", "Cumulative"],
+    headers: ["HSE indicator", "Up to previous week (PW)", "Current week (CW)", "Cumulative"],
     rows: [
-      ["Safe man-hours", sumDays(pwDays, "safeManHours"), sumDays(cwDays, "safeManHours"), cumToDate.safeManHours],
-      ["Average manpower / day", avgLogged(pwDays), avgLogged(cwDays), cumToDate.daysLogged ? Math.round(cumToDate.manDays / cumToDate.daysLogged) : 0],
-      ["Toolbox Talk", sumDays(pwDays, "toolboxTalks") + safetyPrevIndicators.tbt, sumDays(cwDays, "toolboxTalks") + safetyIndicators.tbt, cumToDate.toolboxTalks + cumTbtRecords],
-      ["HSE Inductions", sumDays(pwDays, "inductions") + safetyPrevIndicators.inductions, sumDays(cwDays, "inductions") + safetyIndicators.inductions, cumToDate.inductions],
-      ["Permits to work issued", sumDays(pwDays, "permitsIssued"), sumDays(cwDays, "permitsIssued"), cumToDate.permitsIssued],
-      ["Incidents / Accidents", safetyPrevIndicators.incidents, safetyIndicators.incidents, cumIncidents],
-      ["Days without LTI", "", "", cumToDate.daysWithoutLti],
-      ["Total safety events", safetyPrevIndicators.other, safetyIndicators.other, allSafetyToDate.length],
-      ["Safety checklists filled", 0, fillCounts.safety, fillCounts.safety],
+      ["Safe man-hours", cumPrev.safeManHours, sumDays(cwDays, "safeManHours"), cumToDate.safeManHours],
+      ["Average manpower / day", avgPerDay(cumPrev.manDays, cumPrev.daysLogged), avgLogged(cwDays), avgPerDay(cumToDate.manDays, cumToDate.daysLogged)],
+      ["Toolbox Talk", cumPrev.toolboxTalks + tbtPrev, sumDays(cwDays, "toolboxTalks") + (tbtCum - tbtPrev), cumToDate.toolboxTalks + tbtCum],
+      ["HSE Inductions", cumPrev.inductions + indPrev, sumDays(cwDays, "inductions") + (indCum - indPrev), cumToDate.inductions + indCum],
+      ["Permits to work issued", cumPrev.permitsIssued, sumDays(cwDays, "permitsIssued"), cumToDate.permitsIssued],
+      ["Incidents / Accidents", incPrev, incCum - incPrev, incCum],
+      ["Days without LTI", cumPrev.daysWithoutLti, "", cumToDate.daysWithoutLti],
+      ["Total safety events", evPrev, evCum - evPrev, evCum],
+      ["Safety checklists filled", safetyFillsToDate - fillCounts.safety, fillCounts.safety, safetyFillsToDate],
     ],
     notes: ncrs.length
       ? `${ncrs.length} NCR/CAR items open — please review. ${fillNote}`
@@ -635,28 +658,51 @@ export async function seedWprSections(
     r.plannedAmount || 0,
     r.actualAmount || 0,
   ]);
-  const pvaActivityRows = activityLines.map((a: any) => [
-    a.srNo || "",
-    a.tower || "",
-    a.activity || "",
-    a.unit || "",
-    a.boqQty || 0,
-    a.gfcQty || 0,
-    a.executedQty || 0,
-    a.weeklyPlanned || 0,
-    a.weeklyActual || 0,
-    a.pctComplete != null ? `${Math.round((a.pctComplete || 0) * 100)}%` : a.status || "",
-  ]);
+  // Once DPRs are being filled, quantities run from them week to week (till previous week → this week → till date);
+  // before go-live the imported register values are shown as they are.
+  const pvaRollup = await activityWeekRollup(prisma, projectId, weekStart, weekEnd);
+  const pctOf = (done: number, scope: number) => (scope > 0 ? `${Math.round((done / scope) * 100)}%` : "");
+  const pvaActivityRows: (string | number)[][] = activityLines.map((a: any) => {
+    const scope = Number(a.gfcQty || a.boqQty || 0);
+    const dpr = pvaRollup?.get(normActivity(a.activity));
+    const tillDate = dpr ? dpr.tillDate : Number(a.executedQty || 0);
+    const wkAct = pvaRollup ? dpr?.weekQty ?? 0 : Number(a.weeklyActual || 0);
+    return [
+      a.srNo || "",
+      a.tower || "",
+      a.activity || "",
+      a.unit || "",
+      a.boqQty || 0,
+      a.gfcQty || 0,
+      round3(tillDate - wkAct),
+      a.weeklyPlanned || 0,
+      wkAct,
+      tillDate,
+      scope > 0 ? round3(Math.max(0, scope - tillDate)) : "",
+      pctOf(tillDate, scope) || a.status || "",
+    ];
+  });
+  // Activities reported in DPRs that are not in the register yet still count.
+  if (pvaRollup) {
+    const known = new Set(activityLines.map((a: any) => normActivity(a.activity)));
+    let sr = activityLines.length;
+    for (const [key, r] of pvaRollup) {
+      if (known.has(key) || (!r.weekQty && !r.tillDate)) continue;
+      pvaActivityRows.push([++sr, "", r.description, r.unit || "", "", "", round3(r.tillDate - r.weekQty), "", r.weekQty, r.tillDate, "", ""]);
+    }
+  }
 
   const plannedVsActualSec: WprSection = {
     title: DEFAULT_WPR_TITLES.plannedVsActual,
     notes:
       pvaActivityRows.length > 0
-        ? "Weekly physical qty by activity — Progress PvA register (not cashflow ₹ or S-curve %)."
+        ? pvaRollup
+          ? "Weekly physical quantities by activity from the daily progress reports — cumulative to week end."
+          : "Weekly physical qty by activity — Progress PvA register (not cashflow ₹ or S-curve %)."
         : "Import Planned Vs. Actual Dashboard.xlsx under Progress → Planned vs Actual.",
     headers:
       pvaActivityRows.length > 0
-        ? ["Sr", "Tower", "Activity", "Unit", "BOQ", "GFC", "Executed", "Wk plan", "Wk act", "% / Status"]
+        ? ["Sr", "Tower", "Activity", "Unit", "BOQ", "GFC", "Executed till prev week", "Wk plan", "Wk act", "Executed till date", "Balance", "% complete"]
         : ["Period", "Package", "Planned %", "Actual %", "Variance %", "Planned ₹", "Actual ₹"],
     rows: pvaActivityRows.length > 0 ? pvaActivityRows : pvaCashRows,
   };

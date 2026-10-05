@@ -6,6 +6,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { computeDpr, type DprLine, type DprSnapshot } from "./dprXlsx.js";
 import { MS_PROJECT_SCURVE_PACKAGE } from "./msProjectSchedule.js";
+import { activityWeekRollup, normActivity, qualityWeekStats } from "./wprWeekRollup.js";
 
 export type WprBarPoint = { label: string; planned: number; actual: number };
 export type WprScurvePoint = { date: string; label: string; planned: number; actual: number };
@@ -288,23 +289,30 @@ export async function loadWprChartPack(
     .slice(0, 8)
     .map(([label, value]) => ({ label, value }));
 
+  // Weekly plan from the register vs this week's actual from the DPRs (register value before DPRs start).
+  const pvaRollup = await activityWeekRollup(prisma, projectId, start, end);
   const plannedVsActual: WprBarPoint[] = activityLines
-    .filter((a) => a.activity && (a.weeklyPlanned || a.weeklyActual || a.executedQty))
-    .slice(0, 12)
     .map((a) => ({
       label: (a.activity || "").slice(0, 28),
       planned: Number(a.weeklyPlanned || 0),
-      actual: Number(a.weeklyActual || a.executedQty || 0),
-    }));
+      actual: pvaRollup
+        ? pvaRollup.get(normActivity(a.activity))?.weekQty ?? 0
+        : Number(a.weeklyActual || a.executedQty || 0),
+    }))
+    .filter((p) => p.label && (p.planned || p.actual))
+    .slice(0, 12);
 
   // Cube register stores one row per specimen; a set is 3 specimens (Sr, Sr-2, Sr-3).
   const cubeSets = new Set(
     cubes.map((c) => `${String(c.srNo || "").replace(/-([23])$/, "")}|${c.castDate ? iso(c.castDate) : ""}|${c.description || ""}`)
   ).size;
 
-  // Same figures as the Quality Statistic table (SO / SI / NCR totals); QAP status only as fallback.
+  // Same figures as the Quality Statistic table: live SO / SI / NCR to week end, else the imported stats, else QAP status.
   const qualityByLabel = new Map<string, number>();
-  if (sorStats.length) {
+  const liveQuality = await qualityWeekStats(prisma, projectId, start, end);
+  if (liveQuality.length) {
+    for (const q of liveQuality) qualityByLabel.set(q.label, q.total);
+  } else if (sorStats.length) {
     for (const s of sorStats) {
       const label = (s.observation || "Observation").trim().slice(0, 28);
       qualityByLabel.set(label, (qualityByLabel.get(label) || 0) + Number(s.total ?? 0));

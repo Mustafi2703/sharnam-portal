@@ -31,6 +31,7 @@ import {
   type WprSections,
 } from "../services/wprXlsx.js";
 import { buildWprPptx, wprTemplateFillEnabled } from "../services/wprPptx.js";
+import { nextReportNumber } from "../services/wprWeekRollup.js";
 import { seedWprSections } from "../services/wprSeedSections.js";
 import { snapWeekEnding } from "../services/wprDemoSeed.js";
 import { loadWprChartPack } from "../services/wprCharts.js";
@@ -114,7 +115,7 @@ async function buildWprExportPack(
   const header: WprHeader = {
     projectName: project.name,
     projectCode: project.code,
-    reportNumber: existing?.reportNumber || undefined,
+    reportNumber: existing?.reportNumber || (await nextReportNumber(prisma, projectId, weekEnd)),
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     clientName: project.clientName || "",
@@ -159,7 +160,7 @@ async function upsertWprDraft(
     create: {
       projectId,
       weekEnding: weekEnd,
-      reportNumber: reportNumber ?? null,
+      reportNumber: reportNumber ?? (await nextReportNumber(prisma, projectId, weekEnd)) ?? null,
       sectionsJson: JSON.stringify(sections),
       status: "Draft",
       createdById: userId,
@@ -206,7 +207,7 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
   const header: WprHeader = {
     projectName: project.name,
     projectCode: project.code,
-    reportNumber: existing?.reportNumber || undefined,
+    reportNumber: existing?.reportNumber || (await nextReportNumber(prisma, projectId, weekEnd)),
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     clientName: project.clientName || "",
@@ -240,7 +241,7 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     rangePreset: range.preset,
-    reportNumber: existing?.reportNumber,
+    reportNumber: header.reportNumber,
     header,
     sections,
     packExtras,
@@ -279,7 +280,7 @@ wprMakerRouter.post("/:projectId/refresh", requireRoles("admin", "office", "empl
     create: {
       projectId,
       weekEnding: weekEnd,
-      reportNumber: reportNumber ?? null,
+      reportNumber: reportNumber ?? (await nextReportNumber(prisma, projectId, weekEnd)) ?? null,
       sectionsJson: JSON.stringify(sections),
       status: "Draft",
       createdById: req.user!.id,
