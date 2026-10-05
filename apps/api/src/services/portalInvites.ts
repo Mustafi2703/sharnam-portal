@@ -86,7 +86,8 @@ export async function sendProjectPortalInvites(
   projectId: string,
   createdById: string,
   extra?: { email: string; fullName: string; role: RoleKey }[],
-  memberIds?: string[]
+  memberIds?: string[],
+  opts: { skipEmail?: boolean } = {},
 ) {
   const sharePassword = process.env.SEED_PASSWORD || "Demo@1234";
   const sent: Array<{ email: string; role: string; password: string }> = [];
@@ -109,18 +110,21 @@ export async function sendProjectPortalInvites(
       create: { projectId, userId: login.userId, role: person.role === "admin" ? "office" : person.role },
       update: {},
     });
-    await emailPortalCredentials({
-      projectId,
-      createdById,
-      email: login.email,
-      fullName: person.fullName,
-      role: person.role,
-      password: login.tempPassword || sharePassword,
-    });
+    if (!opts.skipEmail) {
+      await emailPortalCredentials({
+        projectId,
+        createdById,
+        email: login.email,
+        fullName: person.fullName,
+        role: person.role,
+        password: login.tempPassword || sharePassword,
+      });
+    }
     sent.push({ email: login.email, role: person.role, password: login.tempPassword || sharePassword });
   }
 
   for (const m of members) {
+    if (opts.skipEmail) break;
     await emailPortalCredentials({
       projectId,
       createdById,

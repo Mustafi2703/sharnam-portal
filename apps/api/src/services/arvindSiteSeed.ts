@@ -187,7 +187,7 @@ async function saveWprSnapshot(
   });
 }
 
-export async function seedArvindSitePack(db: PrismaClient) {
+export async function seedArvindSitePack(db: PrismaClient, opts: { skipInviteEmails?: boolean } = {}) {
   const office =
     (await db.user.findFirst({ where: { email: "office@sharnam.demo" } })) ||
     (await db.user.findFirst({ where: { role: { in: ["admin", "office"] } } }));
@@ -422,8 +422,9 @@ export async function seedArvindSitePack(db: PrismaClient) {
   try {
     const { LIVE_TEAM } = await import("./spdcLiveTeamSeed.js");
     const { sendProjectPortalInvites } = await import("./portalInvites.js");
-    const dormInvites = await sendProjectPortalInvites(dorm.id, office.id, LIVE_TEAM);
-    await sendProjectPortalInvites(ntx.id, office.id, LIVE_TEAM.filter((t) => t.role === "site_employee" || t.role === "office"));
+    const inviteOpts = { skipEmail: !!opts.skipInviteEmails };
+    const dormInvites = await sendProjectPortalInvites(dorm.id, office.id, LIVE_TEAM, undefined, inviteOpts);
+    await sendProjectPortalInvites(ntx.id, office.id, LIVE_TEAM.filter((t) => t.role === "site_employee" || t.role === "office"), undefined, inviteOpts);
     portalInvites = { sent: dormInvites.sent.length, password: dormInvites.sharePassword };
   } catch (err) {
     console.warn("Arvind portal invites:", err instanceof Error ? err.message : err);

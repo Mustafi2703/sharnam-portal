@@ -9,6 +9,7 @@ import DashboardPage from "./pages/DashboardPage";
 import ChecklistPage from "./pages/ChecklistPage";
 import ChecklistFillPage from "./pages/ChecklistFillPage";
 import WorkspacePage from "./pages/WorkspacePage";
+import UatDataPage from "./pages/UatDataPage";
 import ProjectEmailSettingsPage from "./pages/ProjectEmailSettingsPage";
 import DiaryPage from "./pages/DiaryPage";
 import CommsPage from "./pages/CommsPage";
@@ -330,6 +331,7 @@ export default function App() {
                 <Route path="/quotations/new" element={<Navigate to="/crm/proposals/new" replace />} />
                 <Route path="/quotations/:id" element={<RedirectCrmQuotation />} />
                 <Route path="/custom-sheets" element={<CustomSheetsPage />} />
+                <Route path="/uat-data" element={<UatDataPage />} />
                 <Route path="/custom-sheets/:id" element={<CustomSheetEditorPage />} />
                 <Route path="/stakeholder" element={<StakeholderDeskPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />

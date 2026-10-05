@@ -31,6 +31,7 @@ import { wprMakerRouter } from "./routes/wprMaker.js";
 import { closureRouter } from "./routes/closure.js";
 import { auditKpiRouter } from "./routes/auditKpi.js";
 import { siteIndexRouter } from "./routes/siteIndex.js";
+import { uatDataRouter } from "./routes/uatData.js";
 import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
 import { errorDetail, pushRuntimeLog } from "./services/runtimeLog.js";
 import { audit } from "./services/audit.js";
@@ -220,6 +221,7 @@ app.use("/api/wpr-maker", wprMakerRouter);
 app.use("/api/closure", closureRouter);
 app.use("/api/audit-kpi", auditKpiRouter);
 app.use("/api/master/site-index", siteIndexRouter);
+app.use("/api/uat-data", uatDataRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {

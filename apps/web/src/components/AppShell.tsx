@@ -114,6 +114,7 @@ const officeAdminNav: { to: string; label: string; icon: ModuleIconKey; end?: bo
   { to: "/custom-sheets", label: "Custom sheets", icon: "reports" },
   { to: "/roles", label: "Access · Users", icon: "master" },
   { to: "/audit", label: "Audit trail", icon: "reports" },
+  { to: "/uat-data", label: "UAT data", icon: "master" },
 ];
 
 type Proj = { id: string; code: string; name: string };
