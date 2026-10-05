@@ -2108,6 +2108,65 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         }, {})
       ).map(([label, value]) => ({ label, value })),
     },
+    weekCharts: (() => {
+      // Week picker: ?from=YYYY-MM-DD&to=YYYY-MM-DD (defaults to the current Mon–Sun week).
+      const parse = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00`) : null);
+      const today = new Date();
+      const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+      const from = parse(req.query.from) || monday;
+      const toDay = parse(req.query.to) || new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6);
+      const to = new Date(toDay.getFullYear(), toDay.getMonth(), toDay.getDate(), 23, 59, 59);
+      const inRange = (d?: Date | null) => !!d && d >= from && d <= to;
+      const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const closed = (st?: string | null) => /clos|complete|done|resolved/i.test(st || "");
+      // Observations raised in the week, open vs closed, per type (Site Observation / Site Instruction / NCR / CAR)
+      const sorRows: Record<string, { label: string; open: number; closed: number }> = {};
+      const bump = (label: string, isClosed: boolean) => {
+        const r = (sorRows[label] ||= { label, open: 0, closed: 0 });
+        if (isClosed) r.closed++;
+        else r.open++;
+      };
+      for (const r of siteRecords) if (inRange(r.occurredAt)) bump(r.recordType || "Site Observation", closed(r.status));
+      for (const n of ncrs) if (inRange(n.issueDate || n.createdAt)) bump(n.ncrType ? n.ncrType.toUpperCase() : "NCR", closed(n.status));
+      const days: { label: string; value: number }[] = [];
+      for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+        const k = key(d);
+        days.push({ label: d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit" }), value: allQiFills.filter((f) => key(new Date(f.createdAt)) === k).length });
+      }
+      const weekFills = allQiFills.filter((f) => inRange(new Date(f.createdAt)));
+      const disc: Record<string, number> = {};
+      for (const f of weekFills) {
+        const c = f.assignment.template.category || f.assignment.template.checklistType || "Other";
+        disc[c] = (disc[c] || 0) + 1;
+      }
+      const weekCubes = cubes.filter((c) => inRange(c.castDate));
+      const cubeSeries = (weekCubes.length ? weekCubes : cubes.slice(-12)).map((c, i) => ({
+        label: c.srNo ? `#${c.srNo}` : `S${i + 1}`,
+        strength: Number(c.avgStrength ?? c.strength ?? 0) || 0,
+        // IS 456: 7-day target about 65% of grade (e.g. M25 -> 16.25); grade number from "M25"
+        limit: (() => {
+          const g = Number(String(c.grade || "").replace(/[^\d.]/g, ""));
+          return g ? Math.round(g * 0.67 * 10) / 10 : 17;
+        })(),
+        grade: c.grade || "",
+      }));
+      return {
+        from: key(from),
+        to: key(new Date(to)),
+        kpis: {
+          fills: weekFills.length,
+          samples: weekCubes.length,
+          samplesPass: weekCubes.filter((c) => /pass/i.test(c.result || "")).length,
+          observations: Object.values(sorRows).reduce((n, r) => n + r.open + r.closed, 0),
+          openNcrs: ncrs.filter((n) => !closed(n.status)).length,
+        },
+        sorOpenClosed: Object.values(sorRows),
+        fillsByDay: days,
+        fillsByDiscipline: Object.entries(disc).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
+        ncrByStatus: groupCount(ncrs.filter((n) => inRange(n.issueDate || n.createdAt)), "status"),
+        cubeSeries,
+      };
+    })(),
     /** Progress Reports: QI fills → Quality section; SiteExecution → DPR site checklists */
     reportMapping: {
       QualityInspection: "WPR / DPR Quality section",

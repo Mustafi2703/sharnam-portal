@@ -73,11 +73,19 @@ export type OfferRow = {
   onboard?: { userId?: string | null };
 };
 
-export type LetterStage = "Joining" | "During employment" | "Exit";
+export type LetterStage = "Pre-joining" | "Joining" | "During employment" | "Exit";
+
+/** Stages shown as tabs on the letters desk, in the order a person moves through them. */
+export const LETTER_STAGES: { key: LetterStage; label: string; hint: string; accent: string }[] = [
+  { key: "Pre-joining", label: "Pre-joining", hint: "Offer before the person joins", accent: "#2563EB" },
+  { key: "Joining", label: "On joining", hint: "Appointment and joining NDA", accent: "#0F766E" },
+  { key: "During employment", label: "During employment", hint: "Confirmation, promotion, warnings", accent: "#B45309" },
+  { key: "Exit", label: "Exit", hint: "Assets, exit, relieving, experience", accent: "#9F1239" },
+];
 
 /** Ordered by when HR issues them — the letter list is grouped by stage. */
 export const KIND_OPTIONS: { key: DocKind; label: string; hint: string; stage: LetterStage }[] = [
-  { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date", stage: "Joining" },
+  { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date", stage: "Pre-joining" },
   { key: "Appointment", label: "Appointment letter", hint: "17-clause SPDC letter of appointment + Annexures I–III", stage: "Joining" },
   { key: "NdaJoining", label: "NDA at joining", hint: "Confidentiality undertaking signed on appointment", stage: "Joining" },
   { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services", stage: "During employment" },

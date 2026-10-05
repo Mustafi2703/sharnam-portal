@@ -40,6 +40,14 @@ export function AttendanceMonthReview() {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<{ id: string; employee: string; date: string; checkIn: string; checkOut: string; note: string } | null>(null);
+  const [staff, setStaff] = useState<{ id: string; fullName: string }[]>([]);
+  const [sites, setSites] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [manual, setManual] = useState({ userId: "", date: new Date().toISOString().slice(0, 10), checkIn: "09:30", checkOut: "18:30", projectId: "", note: "" });
+  useEffect(() => {
+    api<any[]>("/api/hrm/employees", { token }).then((rows) => setStaff(rows.map((r) => ({ id: r.id, fullName: r.fullName })))).catch(() => setStaff([]));
+    api<any[]>("/api/hrm/attendance/sites", { token }).then(setSites).catch(() => setSites([]));
+  }, [token]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +97,26 @@ export function AttendanceMonthReview() {
 
   const needsReview = lines.filter((l) => l.reviewStatus === "Needs review").length;
 
+  function saveEdit() {
+    if (!editing) return;
+    const e = editing;
+    void run(
+      e.id,
+      "edit",
+      async () => {
+        await api(`/api/hrm/attendance/${e.id}/edit`, { method: "PATCH", token, body: JSON.stringify({ checkIn: e.checkIn, checkOut: e.checkOut, note: e.note }) });
+        setEditing(null);
+      },
+      `${e.employee} · ${e.date} updated.`,
+    );
+  }
+
+  function addManual() {
+    if (!manual.userId) return setMsg({ tone: "err", text: "Pick the employee." });
+    const who = staff.find((p) => p.id === manual.userId)?.fullName || "Employee";
+    void run("manual", "add", () => api("/api/hrm/attendance/manual", { method: "POST", token, body: JSON.stringify(manual) }), `${who} · ${manual.date} added.`);
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -115,6 +143,57 @@ export function AttendanceMonthReview() {
             {msg.text}
           </p>
         ) : null}
+      </Card>
+
+      {editing && (
+        <Card className="border-brand/40">
+          <h4 className="font-semibold text-sm mb-2">
+            Edit {editing.employee} · {editing.date}
+          </h4>
+          <div className="grid sm:grid-cols-4 gap-3 items-end">
+            <Input label="Clock-in" type="time" value={editing.checkIn} onChange={(e) => setEditing({ ...editing, checkIn: e.target.value })} />
+            <Input label="Clock-out" type="time" value={editing.checkOut} onChange={(e) => setEditing({ ...editing, checkOut: e.target.value })} />
+            <Input label="Reason (kept in the log)" value={editing.note} onChange={(e) => setEditing({ ...editing, note: e.target.value })} />
+            <div className="flex gap-2">
+              <Button type="button" disabled={busy === `${editing.id}:edit`} onClick={saveEdit}>
+                {busy === `${editing.id}:edit` ? "Saving…" : "Save"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <Card>
+        <h4 className="font-semibold text-sm mb-1">Add A Missed Day</h4>
+        <p className="text-[11px] text-steel-muted mb-2">For an employee who forgot to check in. Saved as verified by HR with your reason.</p>
+        <div className="grid sm:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
+          <Select label="Employee" value={manual.userId} onChange={(e) => setManual({ ...manual, userId: e.target.value })}>
+            <option value="">Select</option>
+            {staff.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName}
+              </option>
+            ))}
+          </Select>
+          <Input label="Date" type="date" value={manual.date} onChange={(e) => setManual({ ...manual, date: e.target.value })} />
+          <Input label="Clock-in" type="time" value={manual.checkIn} onChange={(e) => setManual({ ...manual, checkIn: e.target.value })} />
+          <Input label="Clock-out" type="time" value={manual.checkOut} onChange={(e) => setManual({ ...manual, checkOut: e.target.value })} />
+          <Select label="Site" value={manual.projectId} onChange={(e) => setManual({ ...manual, projectId: e.target.value })}>
+            <option value="">Office</option>
+            {sites.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} · {p.name}
+              </option>
+            ))}
+          </Select>
+          <Input label="Reason" value={manual.note} onChange={(e) => setManual({ ...manual, note: e.target.value })} />
+          <Button type="button" disabled={busy === "manual:add"} onClick={addManual}>
+            {busy === "manual:add" ? "Adding…" : "Add day"}
+          </Button>
+        </div>
       </Card>
 
       <Card padding={false}>
@@ -241,6 +320,14 @@ export function AttendanceMonthReview() {
                             Reject
                           </Button>
                         )}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!text-[11px] !py-1 !px-2"
+                          onClick={() => setEditing({ id: l.id, employee: l.employee, date: l.date, checkIn: l.checkIn || "", checkOut: l.checkOut || "", note: "" })}
+                        >
+                          Edit times
+                        </Button>
                         {l.checkOut && (
                           <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={b("del-out")} onClick={() => remove(l, "out")}>
                             Delete clock-out

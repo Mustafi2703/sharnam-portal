@@ -130,11 +130,19 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
   });
   const [editId, setEditId] = useState<string | null>(null);
   const [edit, setEdit] = useState({ basic: "", hra: "", specialAllow: "", incomeTax: "", pfEmployee: "" });
+  const [fromAttendance, setFromAttendance] = useState(true);
+  const [attDays, setAttDays] = useState<any[]>([]);
+  useEffect(() => {
+    if (!canWrite) return;
+    api<any[]>(`/api/hrm/payslips/attendance-days?year=${year}&month=${month}`, { token })
+      .then(setAttDays)
+      .catch(() => setAttDays([]));
+  }, [year, month, token, canWrite]);
 
   async function generate(e: FormEvent) {
     e.preventDefault();
     try {
-      const body: Record<string, unknown> = { userId: form.userId, year, month, workingDays: form.workingDays, lopDays: form.lopDays, incomeTax: form.incomeTax };
+      const body: Record<string, unknown> = { userId: form.userId, year, month, workingDays: form.workingDays, lopDays: form.lopDays, incomeTax: form.incomeTax, fromAttendance };
       for (const key of ["basic", "hra", "conveyance", "medicalAllow", "specialAllow", "otherEarnings", "pfEmployee", "professionalTax"] as const) {
         if (form[key] !== "") body[key] = Number(form[key]);
       }
@@ -177,9 +185,13 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
       const out = await api<{ created: any[]; skipped: any[] }>("/api/hrm/payslips/generate-month", {
         method: "POST",
         token,
-        body: JSON.stringify({ year, month, workingDays: form.workingDays, lopDays: form.lopDays, incomeTax: form.incomeTax }),
+        body: JSON.stringify({ year, month, workingDays: form.workingDays, lopDays: form.lopDays, incomeTax: form.incomeTax, fromAttendance }),
       });
-      setMsg(`Generated ${out.created.length} slip(s). Skipped ${out.skipped.length} (no CTC or not staff).`);
+      const flagged = out.created.filter((c: any) => c.note).length;
+      setMsg(
+        `Generated ${out.created.length} slip(s) and filed each in the employee's SharePoint folder. Skipped ${out.skipped.length} (no CTC or not staff).` +
+          (flagged ? ` ${flagged} need a look (no check-ins or locations still to review).` : ""),
+      );
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Month generate failed");
@@ -280,6 +292,11 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                 ))}
               </Select>
             </label>
+            <label className="text-xs font-semibold text-steel-muted sm:col-span-2 lg:col-span-4 flex items-center gap-2">
+              <input type="checkbox" checked={fromAttendance} onChange={(e) => setFromAttendance(e.target.checked)} />
+              Take paid days from attendance (check-ins, approved leave, Sundays and holidays). Untick to enter days by hand.
+            </label>
+            {!fromAttendance && (<>
             <label className="text-xs font-semibold text-steel-muted">
               Working days
               <Input className="mt-1" type="number" value={form.workingDays} onChange={(e) => setForm({ ...form, workingDays: Number(e.target.value) })} />
@@ -290,6 +307,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
               <Input className="mt-1" type="number" value={form.lopDays} onChange={(e) => setForm({ ...form, lopDays: Number(e.target.value) })} />
               <span className="mt-1 block text-[10px] font-normal">Unpaid leave. Put 0 if none.</span>
             </label>
+            </>)}
             <label className="text-xs font-semibold text-steel-muted">
               TDS (₹)
               <Input className="mt-1" type="number" value={form.incomeTax} onChange={(e) => setForm({ ...form, incomeTax: Number(e.target.value) })} />
@@ -317,6 +335,64 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
               </Button>
             </div>
           </form>
+        </Card>
+      )}
+
+      {canWrite && fromAttendance && (
+        <Card padding={false}>
+          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">
+            Attendance Used For {MONTHS[month - 1]} {year}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[760px]">
+              <thead className="text-left text-steel-muted">
+                <tr>
+                  <th className="p-2">Employee</th>
+                  <th className="text-right">Present</th>
+                  <th className="text-right">Paid leave</th>
+                  <th className="text-right">Sundays / holidays</th>
+                  <th className="text-right">Paid days</th>
+                  <th className="text-right">Loss of pay</th>
+                  <th className="pr-3">Check</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attDays.map((a) => (
+                  <tr key={a.userId} className="border-t border-line">
+                    <td className="p-2">
+                      {a.employee} <span className="text-steel-muted">{a.empCode}</span>
+                    </td>
+                    <td className="text-right">{a.presentDays}</td>
+                    <td className="text-right">{a.paidLeaveDays}</td>
+                    <td className="text-right">{a.offDays}</td>
+                    <td className="text-right font-semibold">
+                      {a.paidDays} / {a.daysInMonth}
+                    </td>
+                    <td className="text-right">{a.lopDays}</td>
+                    <td className="pr-3">
+                      {a.futureDays ? <span className="block text-amber-700">Month not finished — {a.futureDays} day(s) to come counted as paid</span> : null}
+                      {!a.hasAttendance ? (
+                        <span className="text-amber-700">No check-ins — full month will be paid</span>
+                      ) : a.needsReview ? (
+                        <Link to="/hrm/attendance?view=review" className="text-brand font-semibold">
+                          {a.needsReview} day(s) to review
+                        </Link>
+                      ) : (
+                        <span className="text-emerald-700">Ready</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!attDays.length && (
+                  <tr>
+                    <td colSpan={7} className="p-3 text-center text-steel-muted">
+                      No staff with a profile yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

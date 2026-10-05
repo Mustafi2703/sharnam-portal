@@ -2608,6 +2608,80 @@ async function computeAndUpsertPayslip(
   });
 }
 
+/**
+ * Paid days for one person in a month from attendance + leave + holidays.
+ * Present (not rejected) days, approved paid leave, Sundays and holidays are paid; the rest is loss of pay.
+ * With no punches at all in the month the person is paid the full month and flagged for HR review.
+ */
+async function attendanceDaysForMonth(userId: string, year: number, month: number) {
+  const first = new Date(year, month - 1, 1);
+  const last = new Date(year, month, 0);
+  const daysInMonth = last.getDate();
+  const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [att, leaves, holidays] = await Promise.all([
+    prisma.attendance.findMany({ where: { userId, date: { gte: first, lte: new Date(year, month - 1, daysInMonth, 23, 59, 59) } } }),
+    prisma.leaveRequest.findMany({ where: { userId, status: "Approved", fromDate: { lte: last }, toDate: { gte: first } } }),
+    prisma.holiday.findMany({ where: { date: { gte: first, lte: new Date(year, month - 1, daysInMonth, 23, 59, 59) }, isOptional: false } }),
+  ]);
+  const leaveTypes = await prisma.leaveType.findMany({ select: { id: true, isPaid: true } });
+  const paidType = new Map(leaveTypes.map((t) => [t.id, t.isPaid]));
+  const holidaySet = new Set(holidays.map((h) => key(h.date)));
+  const present = new Set(att.filter((a) => a.checkIn && a.reviewStatus !== "Rejected").map((a) => key(a.date)));
+  const leaveDay = new Map<string, number>(); // day → paid fraction (1 / 0.5) or -1 for unpaid
+  for (const l of leaves) {
+    for (let d = new Date(Math.max(l.fromDate.getTime(), first.getTime())); d <= l.toDate && d <= last; d.setDate(d.getDate() + 1)) {
+      const k = key(d);
+      const paid = l.leaveTypeId ? paidType.get(l.leaveTypeId) !== false : true;
+      leaveDay.set(k, paid ? (l.halfDay ? 0.5 : 1) : -1);
+    }
+  }
+  let paid = 0;
+  let presentDays = 0;
+  let paidLeaveDays = 0;
+  let offDays = 0;
+  const today = new Date();
+  const todayKey = key(today);
+  let futureDays = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(year, month - 1, day);
+    const k = key(d);
+    if (k > todayKey) {
+      // Month not finished: days still to come are not loss of pay.
+      paid += 1;
+      futureDays += 1;
+      continue;
+    }
+    if (d.getDay() === 0 || holidaySet.has(k)) {
+      paid += 1;
+      offDays += 1;
+      continue;
+    }
+    if (present.has(k)) {
+      paid += 1;
+      presentDays += 1;
+      continue;
+    }
+    const lv = leaveDay.get(k);
+    if (lv && lv > 0) {
+      paid += lv;
+      paidLeaveDays += lv;
+    }
+  }
+  const hasAttendance = att.length > 0;
+  const paidDays = hasAttendance ? Math.min(daysInMonth, paid) : daysInMonth;
+  return {
+    daysInMonth,
+    presentDays,
+    paidLeaveDays,
+    offDays,
+    paidDays,
+    lopDays: Math.max(0, Math.round((daysInMonth - paidDays) * 2) / 2),
+    hasAttendance,
+    futureDays,
+    needsReview: att.filter((a) => a.reviewStatus === "Needs review").length,
+  };
+}
+
 async function filePayslipToDrive(row: { id: string; userId: string; year: number; month: number }) {
   const full = await prisma.payslip.findUniqueOrThrow({ where: { id: row.id } });
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
@@ -2624,9 +2698,14 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
     pdf,
     "application/pdf"
   );
+  // Same PDF in the employee's own file (06_Records_Employee_Files/<emp>/06_Payslips).
+  const { employeeRecordRoot } = await import("../services/spdcLibraryFolders.js");
+  const own = await mockOneDrive
+    .upload(HR_DRIVE, `${employeeRecordRoot(profile?.empCode, user.fullName)}/06_Payslips`, `Payslip-${ym}.pdf`, pdf, "application/pdf", { replace: true })
+    .catch(() => null);
   return prisma.payslip.update({
     where: { id: row.id },
-    data: { fileUrl: saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}` },
+    data: { fileUrl: own?.sharePointUrl || saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}` },
   }).then(async (updated) => {
     const url = updated.fileUrl;
     if (!url) return updated;
@@ -2650,6 +2729,23 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
   });
 }
 
+/** Attendance summary per staff member for a payroll month (what the payslip run will use). */
+hrmRecruitmentRouter.get("/payslips/attendance-days", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const year = Number(req.query.year);
+  const month = Number(req.query.month);
+  if (!year || !month) return res.status(400).json({ error: "year and month required" });
+  const profiles = await prisma.employeeProfile.findMany({ select: { userId: true, empCode: true } });
+  const users = await prisma.user.findMany({
+    where: { id: { in: profiles.map((p) => p.userId) }, isActive: true, role: { notIn: ["vendor", "client"] } },
+    select: { id: true, fullName: true },
+  });
+  const out = [];
+  for (const u of users) {
+    out.push({ userId: u.id, employee: u.fullName, empCode: profiles.find((p) => p.userId === u.id)?.empCode || "", ...(await attendanceDaysForMonth(u.id, year, month)) });
+  }
+  res.json(out.sort((a, b) => a.employee.localeCompare(b.employee)));
+});
+
 hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const userId = String(req.body.userId || "");
   const year = Number(req.body.year);
@@ -2660,13 +2756,15 @@ hrmRecruitmentRouter.post("/payslips/generate", requireRoles("admin", "office", 
     for (const key of ["basic", "hra", "conveyance", "medicalAllow", "specialAllow", "otherEarnings", "pfEmployee", "esicEmployee", "professionalTax", "incomeTax", "otherDeduction"] as const) {
       if (req.body[key] !== undefined && req.body[key] !== "") overrides[key] = Number(req.body[key]);
     }
+    const fromAttendance = req.body.fromAttendance === true || req.body.fromAttendance === "true";
+    const days = fromAttendance ? await attendanceDaysForMonth(userId, year, month) : null;
     const row = await computeAndUpsertPayslip(
       req.user!.id,
       userId,
       year,
       month,
-      Number(req.body.workingDays || 30),
-      Number(req.body.lopDays || 0),
+      days ? days.daysInMonth : Number(req.body.workingDays || 30),
+      days ? days.lopDays : Number(req.body.lopDays || 0),
       Number(req.body.incomeTax || 0),
       overrides
     );
@@ -2709,8 +2807,24 @@ hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "off
       continue;
     }
     try {
-      const row = await computeAndUpsertPayslip(req.user!.id, profile.userId, year, month, workingDays, lopDays, incomeTax);
-      created.push(await filePayslipToDrive(row));
+      const useAttendance = req.body.fromAttendance !== false && req.body.fromAttendance !== "false";
+      const days = useAttendance ? await attendanceDaysForMonth(profile.userId, year, month) : null;
+      const row = await computeAndUpsertPayslip(
+        req.user!.id,
+        profile.userId,
+        year,
+        month,
+        days ? days.daysInMonth : workingDays,
+        days ? days.lopDays : lopDays,
+        incomeTax,
+      );
+      const filed = await filePayslipToDrive(row);
+      created.push({
+        ...filed,
+        employee: user.fullName,
+        attendance: days,
+        note: days && !days.hasAttendance ? "No check-ins this month — full month paid. Review before sharing." : days?.needsReview ? `${days.needsReview} day(s) still need location review.` : null,
+      });
     } catch (err) {
       skipped.push({ userId: profile.userId, reason: err instanceof Error ? err.message : "failed" });
     }

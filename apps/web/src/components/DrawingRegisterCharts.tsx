@@ -1,6 +1,7 @@
 /** Drawing register dashboard — same chart cards as the quality dashboard. */
 
-import { BarChart, PieChart } from "./PieChart";
+import { PieChart } from "./PieChart";
+import { ColumnChart } from "./ColumnChart";
 
 export type RegisterDashLine = {
   building?: string | null;
@@ -72,50 +73,58 @@ function countBy(lines: RegisterDashLine[], pick: (line: RegisterDashLine) => st
     .sort((a, b) => b.value - a.value);
 }
 
+const DISCIPLINE_COLORS = ["#1E3A5F", "#C45C26", "#0F766E", "#2563EB", "#7C3AED", "#B45309", "#9F1239", "#059669"];
+
 export function DrawingRegisterCharts({ lines }: { lines: RegisterDashLine[] }) {
-  const location = (() => {
-    const acc: Record<string, number> = {};
-    for (const line of lines) {
-      const building = (line.building || "—").trim() || "—";
-      const discipline = (line.discipline || "Other").trim() || "Other";
-      const label = `${building} · ${discipline}`;
-      acc[label] = (acc[label] || 0) + 1;
+  const sub = lines.filter((l) => stamp(l.actualSubmissionDate));
+  // Location wise (building) × discipline, as in DRAWING REGISTER Dashboard chart 1
+  const disciplines = [...new Set(lines.map((l) => (l.discipline || "Other").trim() || "Other"))];
+  const buildings = [...new Set(lines.map((l) => (l.building || "—").trim() || "—"))];
+  const locationRows = buildings.map((b) => {
+    const row: Record<string, unknown> = { label: b };
+    for (const d of disciplines) {
+      row[d] = sub.filter((l) => ((l.building || "—").trim() || "—") === b && ((l.discipline || "Other").trim() || "Other") === d).length;
     }
-    return Object.entries(acc)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value);
-  })();
-  const byDiscipline = countBy(lines, (l) => l.discipline || "Other");
+    return row;
+  });
+  const discSeries = disciplines.map((d, i) => ({ key: d, label: d, color: DISCIPLINE_COLORS[i % DISCIPLINE_COLORS.length] }));
+  const byDiscipline = countBy(sub, (l) => l.discipline || "Other");
   const byType = countBy(lines, (l) => l.drawingType || "Other");
-  const byOrg = countBy(lines, (l) => (l.consultantName || "").trim() || "Unassigned");
-  const critical = countBy(lines, (l) => (/yes/i.test(l.criticalDrawing || "") ? "Yes" : "No"));
-  const submitted = lines.filter((l) => stamp(l.actualSubmissionDate)).length;
-  const pending = Math.max(0, lines.length - submitted);
-  const delay = (() => {
+  const byOrg = countBy(sub, (l) => (l.consultantName || "").trim() || "Unassigned");
+  const critical = countBy(lines, (l) => (/yes/i.test(l.criticalDrawing || "") ? "Critical" : "Not critical"));
+  const pending = Math.max(0, lines.length - sub.length);
+  const delayByDiscipline = disciplines
+    .map((d) => ({
+      label: d,
+      value: lines.filter((l) => ((l.discipline || "Other").trim() || "Other") === d).reduce((n, l) => n + Math.max(0, l.submissionDelayDays ?? 0), 0),
+    }))
+    .filter((r) => r.value > 0);
+  const delayByResp = (() => {
     const acc: Record<string, number> = {};
     for (const line of lines) {
       const days = line.submissionDelayDays ?? 0;
-      if (!days) continue;
+      if (days <= 0) continue;
       const label = (line.delayResponsibility || "").trim() || "Unassigned";
       acc[label] = (acc[label] || 0) + days;
     }
-    return Object.entries(acc)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value);
+    return Object.entries(acc).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
   })();
 
   return (
     <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-      <BarChart title="Location wise drawings submitted" items={location} maxBars={8} />
+      <div className="md:col-span-2">
+        <ColumnChart title="Location wise drawings submitted" subtitle="Building / area by discipline" items={locationRows} series={discSeries} yLabel="Drawings" />
+      </div>
       <PieChart title="Total drawings submitted" items={byDiscipline} />
       <PieChart title="Total critical drawings" items={critical} />
-      <BarChart title="Submission delay in days" items={delay} maxBars={8} />
-      <BarChart title="Drawings submitted by org" items={byOrg} maxBars={8} />
+      <ColumnChart title="Submission delay in days" subtitle="Days late against the planned date, by discipline" items={delayByDiscipline} series={[{ key: "value", label: "Delay (days)", color: "#B91C1C" }]} yLabel="Days" emptyText="No delays in this period." />
+      <ColumnChart title="Drawings submitted by org" subtitle="Consultant / organisation" items={byOrg} series={[{ key: "value", label: "Drawings", color: "#0F766E" }]} yLabel="Drawings" />
+      <ColumnChart title="Delay by responsibility" subtitle="Who the delay days sit with" items={delayByResp} series={[{ key: "value", label: "Delay (days)", color: "#C45C26" }]} yLabel="Days" emptyText="No delays in this period." />
       <PieChart title="Drawing type" items={byType} />
       <PieChart
         title="Submitted at this point"
         items={[
-          { label: "Submitted", value: submitted },
+          { label: "Submitted", value: sub.length },
           { label: "Not yet submitted", value: pending },
         ]}
       />

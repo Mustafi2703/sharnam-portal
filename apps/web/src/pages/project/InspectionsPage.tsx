@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
+import { CHART_COLORS, ColumnChart, LineChart } from "../../components/ColumnChart";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea, WorkflowStrip } from "../../components/ui";
 import { QUALITY_SHEET_VIEWS, qualityLegacyQapRedirect, qualitySheetFromParams, type QualitySheetKey } from "../../lib/qualitySheetViews";
 import { QualitySiteRegister } from "../../components/QualitySiteRegister";
@@ -85,6 +86,35 @@ export default function InspectionsPage() {
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
   const isOfficeAdmin = user?.role === "admin" || user?.role === "office";
 
+  const [weekStart, setWeekStart] = useState(() => {
+    const t = new Date();
+    const m = new Date(t.getFullYear(), t.getMonth(), t.getDate() - ((t.getDay() + 6) % 7));
+    return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-${String(m.getDate()).padStart(2, "0")}`;
+  });
+  const weekEnd = (() => {
+    const d = new Date(`${weekStart}T00:00:00`);
+    d.setDate(d.getDate() + 6);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  const weekNo = (() => {
+    const d = new Date(`${weekStart}T00:00:00`);
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    return Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+  })();
+  function shiftWeek(n: number) {
+    const d = new Date(`${weekStart}T00:00:00`);
+    d.setDate(d.getDate() + 7 * n);
+    setWeekStart(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  useEffect(() => {
+    if (!id) return;
+    api(`/api/checklist/project/${id}/quality-dashboard?from=${weekStart}&to=${weekEnd}`, { token })
+      .then((d) => setDash(d))
+      .catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart]);
+
   const load = async () => {
     const [insp, d, u, t, dashRes, projRes, packRes, vendorsRes] = await Promise.all([
       api<{ inspections: any[]; canInspect: boolean; publishedDrawings: number }>(`/api/inspections/project/${id}`, {
@@ -93,7 +123,7 @@ export default function InspectionsPage() {
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<any[]>("/api/users", { token }).catch(() => []),
       api<any[]>("/api/checklist/templates?type=QualityInspection", { token }).catch(() => []),
-      api(`/api/checklist/project/${id}/quality-dashboard`, { token }).catch(() => null),
+      api(`/api/checklist/project/${id}/quality-dashboard?from=${weekStart}&to=${weekEnd}`, { token }).catch(() => null),
       api<QapProjectMeta>(`/api/projects/${id}`, { token }).catch(() => null),
       api(`/api/projects/${id}/sheet-pack`, { token }).catch(() => null),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
@@ -326,19 +356,106 @@ export default function InspectionsPage() {
               )
             )}
           </div>
-          <div className="rounded-sm border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted mb-3">
-              Quality Dashboard.xlsx — breakdown
-            </p>
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              <PieChart title="NCR / CAR status" items={dash.charts?.byNcrStatus || []} />
-              <PieChart title="SOR register by type" items={dash.charts?.sorByType || []} />
-              <PieChart title="SOR register by status" items={dash.charts?.sorByStatus || []} />
-              <PieChart title="Cube test results" items={dash.charts?.byCubeResult || []} />
-              <PieChart title="QAP status" items={dash.charts?.byQapStatus || []} />
-              <PieChart title="Checklist fills by discipline" items={dash.charts?.fillsByDiscipline || []} />
-              <PieChart title="QI fills (last 14 days)" items={dash.charts?.fillsByDay || []} />
+          <div className="rounded-lg border border-line bg-gradient-to-br from-[#F7F8FA] to-white p-4 space-y-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">Quality Dashboard.xlsx</p>
+                <h3 className="font-display text-lg text-ink">
+                  Quality Performance Report — Week {weekNo}
+                  <span className="text-sm text-steel-muted font-sans"> · {new Date(`${weekStart}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} to {new Date(`${weekEnd}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                </h3>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => shiftWeek(-1)}>
+                  ← Previous week
+                </Button>
+                <label className="text-xs text-steel-muted">
+                  Week starting
+                  <input
+                    type="date"
+                    className="mt-1 block rounded-lg border border-line bg-white px-2 py-1 text-sm text-ink"
+                    value={weekStart}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      const d = new Date(`${e.target.value}T00:00:00`);
+                      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+                      setWeekStart(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+                    }}
+                  />
+                </label>
+                <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => shiftWeek(1)}>
+                  Next week →
+                </Button>
+              </div>
             </div>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {[
+                ["Checklist fills", dash.weekCharts?.kpis?.fills ?? 0],
+                ["Cube samples", dash.weekCharts?.kpis?.samples ?? 0],
+                ["Samples passed", `${dash.weekCharts?.kpis?.samplesPass ?? 0} / ${dash.weekCharts?.kpis?.samples ?? 0}`],
+                ["Observations raised", dash.weekCharts?.kpis?.observations ?? 0],
+                ["Open NCRs (all)", dash.weekCharts?.kpis?.openNcrs ?? 0],
+              ].map(([l, v]) => (
+                <Card key={l as string} className="!p-3">
+                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                  <div className="text-xl font-display mt-1">{v as string | number}</div>
+                </Card>
+              ))}
+            </div>
+            <div className="grid md:grid-cols-2 gap-4 items-start">
+              <ColumnChart
+                title="Observations this week — open vs closed"
+                subtitle="SOR log: site observations, instructions, NCR / CAR"
+                items={dash.weekCharts?.sorOpenClosed || []}
+                series={[
+                  { key: "open", label: "Open", color: CHART_COLORS.red },
+                  { key: "closed", label: "Closed", color: CHART_COLORS.green },
+                ]}
+                yLabel="Count"
+                emptyText="No observations raised this week."
+              />
+              <LineChart
+                title="Cube compressive strength (7 days)"
+                subtitle="N/mm² against the IS lower limit"
+                items={dash.weekCharts?.cubeSeries || []}
+                series={[
+                  { key: "strength", label: "Compressive strength", color: CHART_COLORS.navy },
+                  { key: "limit", label: "IS code lower limit", color: CHART_COLORS.orange },
+                ]}
+                yLabel="N/mm²"
+                emptyText="No cube results yet."
+              />
+              <ColumnChart
+                title="Checklist fills by day"
+                items={dash.weekCharts?.fillsByDay || []}
+                series={[{ key: "value", label: "Fills", color: CHART_COLORS.teal }]}
+                yLabel="Fills"
+                emptyText="No checklist fills this week."
+              />
+              <ColumnChart
+                title="Checklist fills by discipline"
+                items={dash.weekCharts?.fillsByDiscipline || []}
+                series={[{ key: "value", label: "Fills", color: CHART_COLORS.blue }]}
+                yLabel="Fills"
+                emptyText="No checklist fills this week."
+              />
+              <ColumnChart
+                title="NCR / CAR raised this week by status"
+                items={dash.weekCharts?.ncrByStatus || []}
+                series={[{ key: "value", label: "NCR / CAR", color: CHART_COLORS.orange }]}
+                yLabel="Count"
+                emptyText="No NCR / CAR raised this week."
+              />
+              <PieChart title="QAP status (latest week sheet)" items={dash.charts?.byQapStatus || []} />
+            </div>
+            <details className="rounded-lg border border-line bg-white p-3">
+              <summary className="text-xs font-semibold text-steel-muted cursor-pointer">All-time totals</summary>
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 mt-3">
+                <PieChart title="NCR / CAR status" items={dash.charts?.byNcrStatus || []} />
+                <PieChart title="SOR register by status" items={dash.charts?.sorByStatus || []} />
+                <PieChart title="Cube test results" items={dash.charts?.byCubeResult || []} />
+              </div>
+            </details>
           </div>
           {dash.reportMapping && (
             <Card className="text-xs text-steel-muted">

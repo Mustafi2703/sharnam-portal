@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { StatusNote } from "../../components/StatusNote";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -68,6 +69,28 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
   }
 
   const [deletingId, setDeletingId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  async function deleteSelected() {
+    const n = selectedIds.length;
+    if (!n || !window.confirm(`Delete ${n} fill${n === 1 ? "" : "s"} from the log with their photos? This cannot be undone. SharePoint copies stay until you delete them manually.`)) return;
+    setBulkBusy(true);
+    let done = 0;
+    const failed: string[] = [];
+    for (const id of selectedIds) {
+      try {
+        await api(`/api/checklist/submissions/${id}`, { method: "DELETE", token });
+        done++;
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : id);
+      }
+    }
+    setRows((prev) => prev.filter((r) => !selectedIds.includes(r.id) || failed.length > 0));
+    setSelectedIds([]);
+    setBulkBusy(false);
+    setMsg(failed.length ? `Deleted ${done}; ${failed.length} could not be deleted (${failed[0]}).` : `Deleted ${done} fill${done === 1 ? "" : "s"} from the log.`);
+    if (failed.length) await load();
+  }
   async function deleteFill(s: any) {
     const name = s.assignment?.template?.name || "this fill";
     const when = s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "";
@@ -331,14 +354,30 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
         )}
       </div>
 
-      {msg && <p className="text-sm text-danger">{msg}</p>}
+      <StatusNote msg={msg} onClose={() => setMsg("")} />
       {busy && <p className="text-sm text-steel-muted">Loading fill log…</p>}
 
       <Card padding={false}>
+        {canReview && rows.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-line bg-sand/40 text-xs">
+            <span className="text-steel-muted">
+              {selectedIds.length ? `${selectedIds.length} selected` : "Tick fills to delete them in one go (UAT clean-up)."}
+            </span>
+            <span className="flex gap-2">
+              <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => setSelectedIds(selectedIds.length === rows.length ? [] : rows.map((r) => r.id))}>
+                {selectedIds.length === rows.length ? "Clear selection" : "Select all"}
+              </Button>
+              <Button type="button" variant="danger" className="!text-xs !py-1" disabled={!selectedIds.length || bulkBusy} onClick={() => void deleteSelected()}>
+                {bulkBusy ? "Deleting…" : `Delete selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+              </Button>
+            </span>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm sheet-register__table">
             <thead>
               <tr>
+                {canReview && <th className="w-8"></th>}
                 <th>When</th>
                 <th>Family</th>
                 <th>Checklist</th>
@@ -352,6 +391,21 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
             <tbody>
               {rows.map((s) => (
                 <tr key={s.id}>
+                  {canReview && (
+                    <td className="text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <input
+                          type="checkbox"
+                          aria-label="Select fill"
+                          checked={selectedIds.includes(s.id)}
+                          onChange={(e) => setSelectedIds((prev) => (e.target.checked ? [...prev, s.id] : prev.filter((x) => x !== s.id)))}
+                        />
+                        <button type="button" className="text-[10px] font-semibold text-danger cursor-pointer disabled:opacity-50" disabled={deletingId === s.id} onClick={() => void deleteFill(s)}>
+                          {deletingId === s.id ? "…" : "Delete"}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                   <td className="whitespace-nowrap">{new Date(s.createdAt).toLocaleString()}</td>
                   <td>
                     <Badge tone="neutral">{s.assignment?.template?.checklistType || "—"}</Badge>
@@ -403,17 +457,6 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                         }
                       >
                         {s.status === "Draft" ? "Resume fill" : "Open fill"}
-                      </Button>
-                    )}
-                    {canReview && (
-                      <Button
-                        type="button"
-                        variant="danger"
-                        className="!text-xs !py-1.5 mr-1"
-                        disabled={deletingId === s.id}
-                        onClick={() => void deleteFill(s)}
-                      >
-                        {deletingId === s.id ? "Deleting…" : "Delete"}
                       </Button>
                     )}
                     {s.status !== "Draft" && (
@@ -498,7 +541,7 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
               ))}
               {!rows.length && !busy && (
                 <tr>
-                  <td colSpan={8} className="empty">
+                  <td colSpan={canReview ? 9 : 8} className="empty">
                     No fills logged yet for this filter.
                   </td>
                 </tr>

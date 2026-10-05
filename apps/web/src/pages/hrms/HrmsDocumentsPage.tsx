@@ -9,6 +9,8 @@ import HrmsDocxPreview from "../../components/HrmsDocxPreview";
 import HrmsPageHero from "./HrmsPageHero";
 import {
   KIND_OPTIONS,
+  LETTER_STAGES,
+  type LetterStage,
   ONBOARDING_LETTER_PACK,
   type DocKind,
   type DocRow,
@@ -127,6 +129,12 @@ export default function HrmsDocumentsPage() {
     clearPreview();
     setForm((f) => applyPriorLetters(applySubjectKey(key, staff, offers, f), rows));
   }
+
+  const [activeStage, setActiveStage] = useState<LetterStage>("Pre-joining");
+  useEffect(() => {
+    const st = KIND_OPTIONS.find((k) => k.key === form.kind)?.stage;
+    if (st) setActiveStage(st);
+  }, [form.kind]);
 
   function selectKind(kind: DocKind) {
     const existing = subjectRows.find((r) => r.kind === kind && r.status !== "Cancelled");
@@ -453,44 +461,63 @@ export default function HrmsDocumentsPage() {
             {!subjectKey && !editingId ? (
               <p className="text-sm text-steel-muted">Select a person to fill letter variables and generate documents.</p>
             ) : (
-              <div ref={formPanelRef} className="grid lg:grid-cols-[minmax(200px,240px)_1fr] gap-4 min-h-0 scroll-mt-24">
-                <div className="rounded-lg border border-line bg-white flex flex-col min-h-0 max-h-[min(520px,55vh)]">
-                  <div className="px-3 py-2 border-b border-line text-[10px] font-mono uppercase text-steel-muted shrink-0">
-                    Letter types
-                  </div>
-                  <ul className="overflow-y-auto overscroll-contain divide-y divide-line flex-1">
-                    {KIND_OPTIONS.map((k, i) => {
-                      const existing = subjectRows.find((r) => r.kind === k.key && r.status !== "Cancelled");
-                      const active = form.kind === k.key;
-                      const newStage = i === 0 || KIND_OPTIONS[i - 1].stage !== k.stage;
+              <div ref={formPanelRef} className="space-y-4 min-h-0 scroll-mt-24">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="tablist" aria-label="Letter stage">
+                    {LETTER_STAGES.map((st, i) => {
+                      const kinds = KIND_OPTIONS.filter((k) => k.stage === st.key);
+                      const filed = kinds.filter((k) => subjectRows.some((r) => r.kind === k.key && r.status !== "Cancelled")).length;
+                      const on = activeStage === st.key;
                       return (
-                        <li key={k.key}>
-                          {newStage ? (
-                            <div className="px-3 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-steel-muted bg-sand/40">
-                              {formatUiText(k.stage)}
-                            </div>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => selectKind(k.key)}
-                            className={`w-full text-left px-3 py-2.5 text-xs transition-colors ${
-                              active ? "bg-brand-soft border-l-2 border-l-brand" : "hover:bg-sand/40"
-                            }`}
-                          >
-                            <div className="font-semibold text-ink">{k.label}</div>
-                            <div className="text-[10px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div>
-                            {existing ? (
-                              <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700">
-                                <IconCheck size={12} /> Filed · <span className="font-mono">{existing.refNo}</span>
-                              </span>
-                            ) : (
-                              <span className="inline-block mt-1 text-[10px] text-steel-muted">{formatUiText("Not generated yet")}</span>
-                            )}
-                          </button>
-                        </li>
+                        <button
+                          key={st.key}
+                          type="button"
+                          role="tab"
+                          aria-selected={on}
+                          onClick={() => setActiveStage(st.key)}
+                          className={`text-left rounded-xl border-2 px-3 py-2.5 transition cursor-pointer ${on ? "shadow-sm" : "border-line bg-paper hover:bg-sand/40"}`}
+                          style={on ? { borderColor: st.accent, background: `${st.accent}12` } : undefined}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 rounded-full grid place-items-center text-[11px] font-bold text-white" style={{ background: st.accent }}>
+                              {i + 1}
+                            </span>
+                            <span className="font-semibold text-sm text-ink">{st.label}</span>
+                          </div>
+                          <div className="text-[11px] text-steel-muted mt-1">{st.hint}</div>
+                          <div className="text-[11px] font-semibold mt-1" style={{ color: st.accent }}>
+                            {filed} of {kinds.length} filed
+                          </div>
+                        </button>
                       );
                     })}
-                  </ul>
+                  </div>
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                    {KIND_OPTIONS.filter((k) => k.stage === activeStage).map((k) => {
+                      const existing = subjectRows.find((r) => r.kind === k.key && r.status !== "Cancelled");
+                      const active = form.kind === k.key;
+                      const accent = LETTER_STAGES.find((st) => st.key === k.stage)?.accent || "#0F766E";
+                      return (
+                        <button
+                          key={k.key}
+                          type="button"
+                          onClick={() => selectKind(k.key)}
+                          className={`text-left rounded-lg border px-3 py-2.5 transition cursor-pointer ${active ? "bg-white shadow-sm" : "border-line bg-paper hover:bg-sand/40"}`}
+                          style={active ? { borderColor: accent, boxShadow: `inset 3px 0 0 ${accent}` } : undefined}
+                        >
+                          <div className="font-semibold text-sm text-ink">{k.label}</div>
+                          <div className="text-[11px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div>
+                          {existing ? (
+                            <span className="inline-flex items-center gap-1 mt-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                              <IconCheck size={12} /> Filed · <span className="font-mono">{existing.refNo}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-block mt-1.5 rounded-full border border-line px-2 py-0.5 text-[10px] text-steel-muted">{formatUiText("Not generated yet")}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="space-y-4 min-w-0">
@@ -833,10 +860,18 @@ export default function HrmsDocumentsPage() {
 
       {previewDocxBlob && previewExpanded
         ? createPortal(
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50" role="dialog" aria-modal="true">
-              <div className="bg-paper rounded-xl shadow-xl w-full max-w-5xl h-[92vh] flex flex-col min-h-0">
-                <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-line shrink-0">
-                  <div className="font-semibold text-sm">{previewTitle || "Letter preview"}</div>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true">
+              <div className="bg-paper rounded-2xl shadow-2xl w-full max-w-5xl h-[92vh] flex flex-col min-h-0 overflow-hidden ring-1 ring-black/10">
+                <div
+                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 shrink-0 text-white"
+                  style={{ background: `linear-gradient(90deg, #1E3A5F, ${LETTER_STAGES.find((st) => st.key === activeKindMeta.stage)?.accent || "#0F766E"})` }}
+                >
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-[0.14em] opacity-80">
+                      SPDC HR letter · {LETTER_STAGES.find((st) => st.key === activeKindMeta.stage)?.label}
+                    </div>
+                    <div className="font-semibold text-base truncate">{previewTitle || "Letter preview"}</div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {filedSharePoint ? (
                       <a href={filedSharePoint} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-line bg-paper px-2.5 py-1 text-xs font-semibold text-brand">

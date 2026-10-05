@@ -44,6 +44,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Approval & GFC Drawing Log",
     },
     {
+      to: "drawings/register",
+      label: "Dashboard",
+      blurb: "DRAWING REGISTER Dashboard charts — location wise, critical, delay, by org. Pick a week. Branded PDF.",
+      sheet: "DRAWING REGISTER · Dashboard",
+    },
+    {
       to: "drawings/register/master",
       label: "Master register",
       blurb: "Updated by every GFC upload. Set planned dates and criticality; delays tracked. Dashboard, Excel + PDF.",

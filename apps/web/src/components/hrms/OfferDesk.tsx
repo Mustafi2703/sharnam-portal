@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../../api";
+import { api, apiBase } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { rolesForDepartment, useHrmOrg, withCurrentOption } from "../../lib/hrmOrg";
 import { Badge, Button, Card, Input, Select, TextArea } from "../ui";
@@ -97,6 +97,63 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
   const [saving, setSaving] = useState(false);
   const [rowBusy, setRowBusy] = useState("");
   const [loginNote, setLoginNote] = useState<{ email: string; password: string | null; created: boolean } | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+
+  /** Same data the saved offer will print — rendered by the server without saving anything. */
+  async function previewLetter() {
+    if (!person) return setMsg("Pick the candidate first to preview the letter.");
+    setPreviewBusy(true);
+    try {
+      const fmt = (d: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "");
+      const data = {
+        ...ctc,
+        ...letter,
+        candidateName: person.fullName,
+        designation: form.designation,
+        department: form.department,
+        candidateEmail: person.email || "",
+        candidateAddress: letter.address,
+        location: form.location,
+        reportingManager: form.reportingManager,
+        joinDate: fmt(form.joiningDate),
+        effectiveDate: fmt(form.joiningDate),
+        probationMonths: Number(form.probationMonths) || 6,
+        fixedCtcAnnual: ctc.fixedCtcAnnual,
+        ctcAnnual: ctc.fixedCtcAnnual,
+        applicationDate: person.createdAt ? new Date(person.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
+        interviewDates: "____________",
+      };
+      const res = await fetch(`${apiBase()}/api/hrm/hrms-documents/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          kind: "Offer",
+          employeeName: person.fullName,
+          candidateEmail: person.email || null,
+          designation: form.designation,
+          department: form.department,
+          effectiveDate: form.joiningDate || null,
+          data,
+        }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let m = text;
+        try {
+          m = JSON.parse(text).error || text;
+        } catch {
+          /* plain text */
+        }
+        throw new Error(m);
+      }
+      setPreviewHtml(text);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
 
   const eligible = useMemo(
     () => candidates.filter((c: any) => ELIGIBLE.includes(c.status) || c.id === form.candidateId),
@@ -378,10 +435,26 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
               </div>
             </section>
 
-            <Button type="submit" disabled={saving}>
-              {saving ? "Generating offer letter…" : editId ? "Save changes and regenerate letter" : "Save offer and generate letter"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" disabled={previewBusy || !form.candidateId} onClick={() => void previewLetter()}>
+                {previewBusy ? "Preparing preview…" : "Preview offer letter"}
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Generating offer letter…" : editId ? "Save changes and regenerate letter" : "Save offer and generate letter"}
+              </Button>
+            </div>
           </form>
+          {previewHtml && (
+            <div className="mt-4 rounded-lg border border-line overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-sand/40 border-b border-line text-xs">
+                <span className="font-semibold">Offer letter preview — nothing is saved until you click Save</span>
+                <button type="button" className="text-brand font-semibold cursor-pointer" onClick={() => setPreviewHtml(null)}>
+                  Close preview
+                </button>
+              </div>
+              <iframe title="Offer letter preview" srcDoc={previewHtml} className="w-full h-[720px] bg-white border-0" sandbox="" />
+            </div>
+          )}
         </Card>
       )}
 

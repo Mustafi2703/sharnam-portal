@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
-import { BarChart, PieChart } from "./PieChart";
+import { PieChart } from "./PieChart";
+import { ColumnChart } from "./ColumnChart";
 import { Badge, Button, Card } from "./ui";
 import { StatusNote } from "./StatusNote";
 
@@ -142,13 +143,13 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card>
-          <BarChart title="Filled — daily (feeds DPR)" items={dash?.fillTrends?.fillsByDay || dash?.charts?.fillsByDay || []} maxBars={14} />
+          <ColumnChart title="Filled — daily (feeds DPR)" items={dash?.fillTrends?.fillsByDay || dash?.charts?.fillsByDay || []} series={[{ key: "value", label: "Fills", color: "#0F766E" }]} yLabel="Fills" emptyText="No fills yet." />
         </Card>
         <Card>
-          <BarChart title="Filled — weekly (feeds WPR)" items={dash?.fillTrends?.fillsByWeek || dash?.charts?.fillsByWeek || []} maxBars={12} />
+          <ColumnChart title="Filled — weekly (feeds WPR)" items={dash?.fillTrends?.fillsByWeek || dash?.charts?.fillsByWeek || []} series={[{ key: "value", label: "Fills", color: "#0F766E" }]} yLabel="Fills" emptyText="No fills yet." />
         </Card>
         <Card>
-          <BarChart title="Filled — monthly" items={dash?.fillTrends?.fillsByMonth || dash?.charts?.fillsByMonth || []} maxBars={12} />
+          <ColumnChart title="Filled — monthly" items={dash?.fillTrends?.fillsByMonth || dash?.charts?.fillsByMonth || []} series={[{ key: "value", label: "Fills", color: "#0F766E" }]} yLabel="Fills" emptyText="No fills yet." />
         </Card>
       </div>
 

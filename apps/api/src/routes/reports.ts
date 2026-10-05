@@ -2229,6 +2229,72 @@ hrmRouter.patch("/attendance/:id/review", hrAttendanceDesk, async (req: AuthedRe
   res.json(row);
 });
 
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** HR / office correct a day's clock-in / clock-out times (and site). Marked as verified by HR. */
+hrmRouter.patch("/attendance/:id/edit", hrAttendanceDesk, async (req: AuthedRequest, res) => {
+  const row = await prisma.attendance.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Attendance record not found" });
+  const checkIn = req.body.checkIn !== undefined ? String(req.body.checkIn || "").trim() : row.checkIn || "";
+  const checkOut = req.body.checkOut !== undefined ? String(req.body.checkOut || "").trim() : row.checkOut || "";
+  if (checkIn && !HHMM.test(checkIn)) return res.status(400).json({ error: "Clock-in must be a time like 09:30" });
+  if (checkOut && !HHMM.test(checkOut)) return res.status(400).json({ error: "Clock-out must be a time like 18:15" });
+  if (!checkIn && checkOut) return res.status(400).json({ error: "Add the clock-in before the clock-out" });
+  const note = String(req.body.note || "").trim();
+  const updated = await prisma.attendance.update({
+    where: { id: row.id },
+    data: {
+      checkIn: checkIn || null,
+      checkOut: checkOut || null,
+      workedMinutes: attendanceSiteMinutes(checkIn || null, checkOut || null),
+      ...(req.body.projectId !== undefined ? { projectId: req.body.projectId ? String(req.body.projectId) : null } : {}),
+      reviewStatus: "Verified",
+      reviewNote: `Edited by HR${note ? `: ${note}` : ""}`.slice(0, 190),
+      reviewedById: req.user!.id,
+      reviewedAt: new Date(),
+    },
+  });
+  await audit("hrm.attendance.edit", {
+    userId: req.user!.id,
+    entity: "Attendance",
+    entityId: row.id,
+    meta: { from: { checkIn: row.checkIn, checkOut: row.checkOut }, to: { checkIn, checkOut }, note },
+  });
+  res.json(updated);
+});
+
+/** HR / office add a missed day for an employee (e.g. forgot to punch). Marked as verified by HR. */
+hrmRouter.post("/attendance/manual", hrAttendanceDesk, async (req: AuthedRequest, res) => {
+  const userId = String(req.body.userId || "");
+  const dateKey = String(req.body.date || "");
+  const checkIn = String(req.body.checkIn || "").trim();
+  const checkOut = String(req.body.checkOut || "").trim();
+  if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return res.status(400).json({ error: "Pick the employee and the date" });
+  if (!HHMM.test(checkIn)) return res.status(400).json({ error: "Clock-in must be a time like 09:30" });
+  if (checkOut && !HHMM.test(checkOut)) return res.status(400).json({ error: "Clock-out must be a time like 18:15" });
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const date = istStartOfDay(new Date(Date.UTC(y, m - 1, d, 6, 30)));
+  const note = String(req.body.note || "").trim();
+  const data = {
+    status: "Present",
+    checkIn,
+    checkOut: checkOut || null,
+    workedMinutes: attendanceSiteMinutes(checkIn, checkOut || null),
+    projectId: req.body.projectId ? String(req.body.projectId) : null,
+    reviewStatus: "Verified",
+    reviewNote: `Added by HR${note ? `: ${note}` : ""}`.slice(0, 190),
+    reviewedById: req.user!.id,
+    reviewedAt: new Date(),
+  };
+  const row = await prisma.attendance.upsert({
+    where: { userId_date: { userId, date } },
+    create: { userId, date, ...data },
+    update: data,
+  });
+  await audit("hrm.attendance.manual", { userId: req.user!.id, entity: "Attendance", entityId: row.id, meta: { employee: userId, date: dateKey, checkIn, checkOut, note } });
+  res.status(201).json(row);
+});
+
 /** Remove a clock-out only (`?part=out`) or the whole day's clock-in + clock-out. */
 hrmRouter.delete("/attendance/:id", hrAttendanceDesk, async (req: AuthedRequest, res) => {
   const row = await prisma.attendance.findUnique({ where: { id: req.params.id }, include: { user: { select: { fullName: true } } } });
