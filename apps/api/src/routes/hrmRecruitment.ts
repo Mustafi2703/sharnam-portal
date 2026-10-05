@@ -2729,19 +2729,120 @@ async function filePayslipToDrive(row: { id: string; userId: string; year: numbe
   });
 }
 
+/* ---------- Payroll-only staff (paid through HRMS, no portal login) ---------- */
+
+const PAYROLL_STAFF_FIELDS = [
+  "designation", "department", "panNumber", "uanNumber", "pfNumber", "esicNumber",
+  "bankName", "bankAccountNo", "bankIfsc", "workLocation", "personalPhone", "personalEmail", "gender",
+] as const;
+
+function payrollProfileData(body: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  for (const k of PAYROLL_STAFF_FIELDS) if (body[k] !== undefined) out[k] = String(body[k] ?? "").trim() || null;
+  if (body.joinDate !== undefined) out.joinDate = body.joinDate ? new Date(String(body.joinDate)) : null;
+  if (body.ctcAnnual !== undefined) out.ctcAnnual = Number(body.ctcAnnual) || null;
+  if (body.basicMonthly !== undefined) out.basicMonthly = body.basicMonthly === "" ? null : Number(body.basicMonthly) || null;
+  if (body.hraMonthly !== undefined) out.hraMonthly = body.hraMonthly === "" ? null : Number(body.hraMonthly) || null;
+  return out;
+}
+
+hrmRecruitmentRouter.get("/payroll-staff", requireRoles("admin", "office", "hr"), async (_req, res) => {
+  const profiles = await prisma.employeeProfile.findMany({ where: { payrollOnly: true }, orderBy: { empCode: "asc" } });
+  const users = await prisma.user.findMany({
+    where: { id: { in: profiles.map((p) => p.userId) } },
+    select: { id: true, fullName: true, email: true, role: true, isActive: true, phone: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u]));
+  res.json(
+    profiles
+      .filter((p) => byId.has(p.userId))
+      .map((p) => ({ ...byId.get(p.userId)!, payrollOnly: true, profile: p })),
+  );
+});
+
+/** Add someone to payroll who does not use the portal. Their login stays disabled. */
+hrmRecruitmentRouter.post("/payroll-staff", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const fullName = String(req.body.fullName || "").trim();
+  if (!fullName) return res.status(400).json({ error: "Name is required" });
+  const empCode = String(req.body.empCode || "").trim() || `PAY-${Date.now().toString().slice(-6)}`;
+  if (await prisma.employeeProfile.findFirst({ where: { empCode } })) return res.status(400).json({ error: `Emp code ${empCode} is already used` });
+  const given = String(req.body.email || "").trim().toLowerCase();
+  const email = given || `payroll.${empCode.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@no-login.spdc.in`;
+  if (await prisma.user.findUnique({ where: { email } })) {
+    return res.status(400).json({ error: "A login with that email already exists — use Generate one for that person instead." });
+  }
+  const bcrypt = await import("bcryptjs");
+  const { randomBytes } = await import("node:crypto");
+  const { portalForRole } = await import("@sharnam/shared");
+  const user = await prisma.user.create({
+    data: {
+      email,
+      fullName,
+      role: "employee",
+      portal: portalForRole("employee"),
+      phone: s(req.body.phone),
+      isActive: false,
+      passwordHash: await bcrypt.hash(randomBytes(24).toString("hex"), 10),
+    },
+  });
+  const profile = await prisma.employeeProfile.create({
+    data: { userId: user.id, empCode, payrollOnly: true, ...(payrollProfileData(req.body) as object) },
+  });
+  await audit("hrms.payroll_staff.create", { userId: req.user!.id, entity: "User", entityId: user.id, meta: { fullName, empCode } });
+  res.status(201).json({ ...user, payrollOnly: true, profile });
+});
+
+hrmRecruitmentRouter.put("/payroll-staff/:userId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const profile = await prisma.employeeProfile.findUnique({ where: { userId: req.params.userId } });
+  if (!profile?.payrollOnly) return res.status(404).json({ error: "Payroll-only staff record not found" });
+  if (req.body.fullName !== undefined || req.body.phone !== undefined) {
+    await prisma.user.update({
+      where: { id: profile.userId },
+      data: {
+        ...(req.body.fullName ? { fullName: String(req.body.fullName).trim() } : {}),
+        ...(req.body.phone !== undefined ? { phone: s(req.body.phone) } : {}),
+      },
+    });
+  }
+  const empCode = req.body.empCode ? String(req.body.empCode).trim() : profile.empCode;
+  if (empCode !== profile.empCode && (await prisma.employeeProfile.findFirst({ where: { empCode } }))) {
+    return res.status(400).json({ error: `Emp code ${empCode} is already used` });
+  }
+  const updated = await prisma.employeeProfile.update({ where: { userId: profile.userId }, data: { empCode, ...(payrollProfileData(req.body) as object) } });
+  await audit("hrms.payroll_staff.update", { userId: req.user!.id, entity: "User", entityId: profile.userId });
+  res.json(updated);
+});
+
+hrmRecruitmentRouter.delete("/payroll-staff/:userId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const profile = await prisma.employeeProfile.findUnique({ where: { userId: req.params.userId } });
+  if (!profile?.payrollOnly) return res.status(404).json({ error: "Payroll-only staff record not found" });
+  const slips = await prisma.payslip.count({ where: { userId: profile.userId } });
+  if (slips) return res.status(400).json({ error: `${slips} payslip(s) exist for this person. Delete those first, or keep the record.` });
+  await prisma.employeeProfile.delete({ where: { userId: profile.userId } });
+  await prisma.user.delete({ where: { id: profile.userId } }).catch(() => null);
+  await audit("hrms.payroll_staff.delete", { userId: req.user!.id, entity: "User", entityId: profile.userId });
+  res.json({ ok: true });
+});
+
 /** Attendance summary per staff member for a payroll month (what the payslip run will use). */
 hrmRecruitmentRouter.get("/payslips/attendance-days", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const year = Number(req.query.year);
   const month = Number(req.query.month);
   if (!year || !month) return res.status(400).json({ error: "year and month required" });
-  const profiles = await prisma.employeeProfile.findMany({ select: { userId: true, empCode: true } });
+  const profiles = await prisma.employeeProfile.findMany({ select: { userId: true, empCode: true, payrollOnly: true } });
+  const payrollOnlyIds = profiles.filter((p) => p.payrollOnly).map((p) => p.userId);
   const users = await prisma.user.findMany({
-    where: { id: { in: profiles.map((p) => p.userId) }, isActive: true, role: { notIn: ["vendor", "client"] } },
+    where: {
+      id: { in: profiles.map((p) => p.userId) },
+      role: { notIn: ["vendor", "client"] },
+      OR: [{ isActive: true }, { id: { in: payrollOnlyIds } }],
+    },
     select: { id: true, fullName: true },
   });
   const out = [];
   for (const u of users) {
-    out.push({ userId: u.id, employee: u.fullName, empCode: profiles.find((p) => p.userId === u.id)?.empCode || "", ...(await attendanceDaysForMonth(u.id, year, month)) });
+    const prof = profiles.find((p) => p.userId === u.id);
+    out.push({ userId: u.id, employee: u.fullName, empCode: prof?.empCode || "", payrollOnly: !!prof?.payrollOnly, ...(await attendanceDaysForMonth(u.id, year, month)) });
   }
   res.json(out.sort((a, b) => a.employee.localeCompare(b.employee)));
 });
@@ -2798,7 +2899,7 @@ hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "off
   const skipped: { userId: string; reason: string }[] = [];
   for (const profile of profiles) {
     const user = await prisma.user.findUnique({ where: { id: profile.userId } });
-    if (!user || !user.isActive || ["vendor", "client"].includes(user.role)) {
+    if (!user || (!user.isActive && !profile.payrollOnly) || ["vendor", "client"].includes(user.role)) {
       skipped.push({ userId: profile.userId, reason: "not active staff" });
       continue;
     }
@@ -2823,7 +2924,9 @@ hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "off
         ...filed,
         employee: user.fullName,
         attendance: days,
-        note: days && !days.hasAttendance ? "No check-ins this month — full month paid. Review before sharing." : days?.needsReview ? `${days.needsReview} day(s) still need location review.` : null,
+        note: profile.payrollOnly
+          ? "Payroll-only staff (no portal) — full month paid unless you edit the days."
+          : days && !days.hasAttendance ? "No check-ins this month — full month paid. Review before sharing." : days?.needsReview ? `${days.needsReview} day(s) still need location review.` : null,
       });
     } catch (err) {
       skipped.push({ userId: profile.userId, reason: err instanceof Error ? err.message : "failed" });
@@ -2880,6 +2983,36 @@ hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office", "hr"
   for (const key of ["basic", "hra", "conveyance", "medicalAllow", "specialAllow", "otherEarnings", "pfEmployee", "esicEmployee", "professionalTax", "incomeTax", "otherDeduction"] as const) {
     if (req.body[key] !== undefined) overrides[key] = Number(req.body[key]);
   }
+  const days: Record<string, number> = {};
+  for (const key of ["workingDays", "paidDays", "lopDays"] as const) {
+    if (req.body[key] !== undefined && req.body[key] !== "") days[key] = Number(req.body[key]) || 0;
+  }
+  if (days.workingDays != null && days.lopDays != null && days.paidDays == null) days.paidDays = Math.max(0, days.workingDays - days.lopDays);
+  const daysChanged =
+    (days.workingDays != null && days.workingDays !== before.workingDays) || (days.lopDays != null && days.lopDays !== before.lopDays);
+  const amountsChanged = Object.entries(overrides).some(([k, v]) => (before as Record<string, unknown>)[k] !== v);
+  if (daysChanged && !amountsChanged) {
+    // Only the days changed: prorate the salary again from the CTC (TDS kept).
+    const redone = await computeAndUpsertPayslip(
+      req.user!.id,
+      before.userId,
+      before.year,
+      before.month,
+      days.workingDays ?? before.workingDays,
+      days.lopDays ?? before.lopDays,
+      overrides.incomeTax ?? before.incomeTax,
+      // Manual one-offs (arrears, advances) stay as they were.
+      { otherEarnings: before.otherEarnings, otherDeduction: before.otherDeduction },
+    );
+    let filedAgain = redone;
+    try {
+      filedAgain = await filePayslipToDrive(redone);
+    } catch {
+      /* numbers saved even if the SharePoint copy fails */
+    }
+    await audit("hrms.payslip.update", { userId: req.user!.id, entity: "Payslip", entityId: redone.id, meta: { days } });
+    return res.json(filedAgain);
+  }
   const merged = { ...before, ...overrides };
   const gross = merged.basic + merged.hra + merged.conveyance + merged.medicalAllow + merged.specialAllow + merged.otherEarnings;
   const deductions = merged.pfEmployee + merged.esicEmployee + merged.professionalTax + merged.incomeTax + merged.otherDeduction;
@@ -2887,6 +3020,7 @@ hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office", "hr"
     where: { id: req.params.id },
     data: {
       ...overrides,
+      ...days,
       grossEarnings: gross,
       totalDeductions: deductions,
       netPay: gross - deductions,

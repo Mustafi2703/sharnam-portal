@@ -979,6 +979,8 @@ model EmployeeProfile {
   nomineeName           String?
   nomineeRelation       String?
   reportingManagerId    String?
+  /// Staff paid through HRMS payroll without a portal login (login stays disabled)
+  payrollOnly          Boolean   @default(false)
   ctcAnnual             Float?
   basicMonthly          Float?
   hraMonthly            Float?

@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { PayrollOnlyStaff } from "../components/hrms/PayrollOnlyStaff";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select } from "../components/ui";
 import { StatusNote } from "../components/StatusNote";
@@ -41,11 +42,12 @@ export default function PayrollPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const [emps, hs] = await Promise.all([
+        const [emps, hs, pstaff] = await Promise.all([
           api<any[]>("/api/hrm/employees", { token }),
           api<any[]>("/api/hrm/pay-hikes", { token }),
+          api<any[]>("/api/hrm/payroll-staff", { token }).catch(() => []),
         ]);
-        setEmployees(emps);
+        setEmployees([...emps, ...pstaff.filter((p) => !emps.some((e: any) => e.id === p.id))]);
         setHikes(hs);
         await loadPayslips();
       } catch (err) {
@@ -53,6 +55,14 @@ export default function PayrollPage() {
       }
     })();
   }, [token]);
+
+  async function reloadStaff() {
+    const [emps, pstaff] = await Promise.all([
+      api<any[]>("/api/hrm/employees", { token }),
+      api<any[]>("/api/hrm/payroll-staff", { token }).catch(() => []),
+    ]);
+    setEmployees([...emps, ...pstaff.filter((p) => !emps.some((e: any) => e.id === p.id))]);
+  }
 
   async function loadPayslips() {
     const params = new URLSearchParams();
@@ -97,6 +107,7 @@ export default function PayrollPage() {
           canWrite={canWrite}
           setMsg={setMsg}
           reload={loadPayslips}
+          reloadStaff={reloadStaff}
           token={token || ""}
         />
       ) : (
@@ -113,7 +124,7 @@ export default function PayrollPage() {
   );
 }
 
-function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, setMonth, setScopeUserId, canWrite, setMsg, reload, token }: any) {
+function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, setMonth, setScopeUserId, canWrite, setMsg, reload, reloadStaff, token }: any) {
   const [form, setForm] = useState({
     userId: "",
     workingDays: 30,
@@ -129,7 +140,23 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
     professionalTax: "",
   });
   const [editId, setEditId] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ basic: "", hra: "", specialAllow: "", incomeTax: "", pfEmployee: "" });
+  const EDIT_FIELDS: [string, string][] = [
+    ["workingDays", "Days in month"],
+    ["lopDays", "Loss of pay (days)"],
+    ["paidDays", "Paid days"],
+    ["basic", "Basic"],
+    ["hra", "HRA"],
+    ["conveyance", "Conveyance"],
+    ["medicalAllow", "Medical"],
+    ["specialAllow", "Special allowance"],
+    ["otherEarnings", "Other earnings / arrears"],
+    ["pfEmployee", "PF (employee)"],
+    ["esicEmployee", "ESIC (employee)"],
+    ["professionalTax", "Professional tax"],
+    ["incomeTax", "TDS"],
+    ["otherDeduction", "Other deduction / advance"],
+  ];
+  const [edit, setEdit] = useState<Record<string, string>>({});
   const [fromAttendance, setFromAttendance] = useState(true);
   const [attDays, setAttDays] = useState<any[]>([]);
   useEffect(() => {
@@ -203,9 +230,14 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
     for (const [k, v] of Object.entries(edit)) {
       if (v !== "") body[k] = Number(v);
     }
-    await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
-    setEditId(null);
-    await reload();
+    try {
+      await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
+      setEditId(null);
+      setMsg("Payslip updated and filed again.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update the payslip");
+    }
   }
   async function transition(id: string, status: string) {
     await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify({ status }) });
@@ -269,6 +301,16 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
           before Generate all. Each payslip is stored as a PDF.
         </p>
       </Card>
+
+      <PayrollOnlyStaff
+        staff={employees.filter((e: any) => e.payrollOnly)}
+        token={token}
+        canWrite={canWrite}
+        setMsg={setMsg}
+        onChanged={async () => {
+          await reloadStaff();
+        }}
+      />
 
       {canWrite && (
         <Card className="!p-4 space-y-3">
@@ -440,25 +482,18 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
               {payslips.map((p: any) => {
                 const who = staffName(p, employees);
                 return (
-                  <tr key={p.id} className="border-t border-line">
+                  <Fragment key={p.id}>
+                  <tr className="border-t border-line">
                     <td className="p-2">
                       <div className="font-medium text-ink">{who.name || "—"}</div>
                       {who.code ? <div className="text-[10px] text-steel-muted">{who.code}</div> : null}
                     </td>
                     <td>{p.paidDays}/{p.workingDays}{p.lopDays ? ` (LOP ${p.lopDays})` : ""}</td>
                     <td className="text-right">
-                      {editId === p.id ? (
-                        <input className="w-20 border border-line rounded px-1 text-right" value={edit.basic} onChange={(e) => setEdit({ ...edit, basic: e.target.value })} />
-                      ) : (
-                        money(p.basic)
-                      )}
+                      {money(p.basic)}
                     </td>
                     <td className="text-right">
-                      {editId === p.id ? (
-                        <input className="w-20 border border-line rounded px-1 text-right" value={edit.hra} onChange={(e) => setEdit({ ...edit, hra: e.target.value })} />
-                      ) : (
-                        money(p.hra)
-                      )}
+                      {money(p.hra)}
                     </td>
                     <td className="text-right">{money(p.conveyance + p.medicalAllow + p.specialAllow + p.otherEarnings)}</td>
                     <td className="text-right font-medium">{money(p.grossEarnings)}</td>
@@ -466,11 +501,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                     <td className="text-right">{money(p.esicEmployee)}</td>
                     <td className="text-right">{money(p.professionalTax)}</td>
                     <td className="text-right">
-                      {editId === p.id ? (
-                        <input className="w-20 border border-line rounded px-1 text-right" value={edit.incomeTax} onChange={(e) => setEdit({ ...edit, incomeTax: e.target.value })} />
-                      ) : (
-                        money(p.incomeTax)
-                      )}
+                      {money(p.incomeTax)}
                     </td>
                     <td className="text-right">{money(p.totalDeductions)}</td>
                     <td className="text-right font-semibold">{money(p.netPay)}</td>
@@ -489,8 +520,8 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                       {canWrite ? (
                         <>
                           {editId === p.id ? (
-                            <button type="button" className="text-xs font-semibold text-ok underline mr-2" onClick={() => void saveEdit(p.id)}>
-                              Save
+                            <button type="button" className="text-xs font-semibold text-steel-muted underline mr-2" onClick={() => setEditId(null)}>
+                              Close edit
                             </button>
                           ) : (
                             <button
@@ -498,13 +529,7 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                               className="text-xs font-semibold text-steel-muted underline mr-2"
                               onClick={() => {
                                 setEditId(p.id);
-                                setEdit({
-                                  basic: String(p.basic ?? ""),
-                                  hra: String(p.hra ?? ""),
-                                  specialAllow: String(p.specialAllow ?? ""),
-                                  incomeTax: String(p.incomeTax ?? ""),
-                                  pfEmployee: String(p.pfEmployee ?? ""),
-                                });
+                                setEdit(Object.fromEntries(EDIT_FIELDS.map(([k]) => [k, String(p[k] ?? "")])));
                               }}
                             >
                               Edit
@@ -525,6 +550,30 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
                       )}
                     </td>
                   </tr>
+                  {editId === p.id && (
+                    <tr className="bg-sand/30">
+                      <td colSpan={13} className="p-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                          {EDIT_FIELDS.map(([k, label]) => (
+                            <label key={k} className="text-[11px] font-semibold text-steel-muted">
+                              {label}
+                              <Input className="mt-1" type="number" value={edit[k] ?? ""} onChange={(e) => setEdit({ ...edit, [k]: e.target.value })} />
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          <Button type="button" className="!text-xs" onClick={() => void saveEdit(p.id)}>
+                            Save and refile payslip
+                          </Button>
+                          <Button type="button" variant="secondary" className="!text-xs" onClick={() => setEditId(null)}>
+                            Cancel
+                          </Button>
+                          <span className="text-[11px] text-steel-muted">Change only the days and the salary is prorated again from the CTC. Change amounts and they are used as typed. Gross, deductions and net pay recalculate, and the PDF is filed again on SharePoint.</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
               {!payslips.length && <tr><td colSpan={13} className="py-4 text-center text-steel-muted">No payslips for this month yet.</td></tr>}
