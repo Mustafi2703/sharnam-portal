@@ -305,7 +305,7 @@ export async function buildQapWorkbook(project: QapExportProject, rows: QapExpor
         q.pmcRole || "",
         q.clientRole || "",
         q.records || "",
-        q.remarks || (q.status === "Done" ? "Completed" : ""),
+        q.remarks || "",
         ...days.map((d) => (daily[d] ? "Yes" : "")),
       ];
       values.forEach((v, idx) => {
