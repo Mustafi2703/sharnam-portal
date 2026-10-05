@@ -315,7 +315,8 @@ function sanitizeDrawingSegment(value: string) {
 }
 
 function drawingIsoFolder(discipline?: string | null) {
-  return `${MODULE_TO_ISO_FOLDER.drawings}/${discipline || "Architecture"}`;
+  const folder = String(discipline || "Architecture").replace(/[\\/:*?"<>|#%]+/g, "-").replace(/\s*-\s*/g, "-").trim() || "Architecture";
+  return `${MODULE_TO_ISO_FOLDER.drawings}/${folder}`;
 }
 
 function revisionStorageBase(drawingNumber: string, revisionNumber: string, discipline?: string | null) {

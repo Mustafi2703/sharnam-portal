@@ -32,7 +32,7 @@ import {
   normalizeRevNumber,
   revisionUploadStatus,
 } from "../../lib/gfcRegister";
-import { MASTER_REGISTER_DISCIPLINES } from "../../lib/masterDrawingRegister";
+import { drawingDisciplineOptions } from "../../lib/masterDrawingRegister";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { StatusNote } from "../../components/StatusNote";
 
@@ -281,7 +281,6 @@ export default function DrawingsPage() {
       ...Array.from(
         new Set([
           ...GFC_DISCIPLINE_TABS,
-          ...MASTER_REGISTER_DISCIPLINES,
           ...drawings.map((d) => d.discipline).filter(Boolean),
         ])
       ),
@@ -842,7 +841,7 @@ export default function DrawingsPage() {
               value={addRowForm.discipline}
               onChange={(e) => setAddRowForm({ ...addRowForm, discipline: e.target.value })}
             >
-              {[...GFC_DISCIPLINE_TABS, ...MASTER_REGISTER_DISCIPLINES.filter((d) => !GFC_DISCIPLINE_TABS.includes(d as typeof GFC_DISCIPLINE_TABS[number]))].map((d) => (
+              {drawingDisciplineOptions(drawings.map((d) => d.discipline), addRowForm.discipline).map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </Select>
@@ -913,7 +912,7 @@ export default function DrawingsPage() {
               label: "Discipline",
               value: form.discipline,
               onChange: (v) => setForm({ ...form, discipline: v }),
-              options: ["Architecture", "Structural", "MEP", "Civil"],
+              options: drawingDisciplineOptions(drawings.map((d) => d.discipline), form.discipline),
             },
             {
               kind: "text",
@@ -1578,9 +1577,9 @@ export default function DrawingsPage() {
               <Input className="mt-1" value={editRow.title} onChange={(e) => setEditRow({ ...editRow, title: e.target.value })} required />
             </label>
             <label className="block text-xs text-steel-muted">
-              Drawing type
+              Discipline
               <Select className="mt-1" value={editRow.discipline} onChange={(e) => setEditRow({ ...editRow, discipline: e.target.value })}>
-                {MASTER_REGISTER_DISCIPLINES.map((d) => (
+                {drawingDisciplineOptions(drawings.map((d) => d.discipline), editRow.discipline).map((d) => (
                   <option key={d}>{d}</option>
                 ))}
               </Select>

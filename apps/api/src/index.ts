@@ -272,6 +272,8 @@ async function start() {
     .catch((err) => console.warn("SPDC library folders:", err instanceof Error ? err.message : err));
   const { startSharePointDayClose } = await import("./services/sharePointReconcile.js");
   startSharePointDayClose();
+  const { startSelfieRotation } = await import("./services/attendanceGeo.js");
+  startSelfieRotation();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

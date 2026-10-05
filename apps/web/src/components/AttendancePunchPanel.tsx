@@ -75,7 +75,7 @@ type Props = {
 
 /**
  * Mobile-first attendance punch — camera selfie + GPS required.
- * POST /api/hrm/attendance/punch (multipart) → SharePoint + Prisma.
+ * POST /api/hrm/attendance/punch (multipart) → geofence check against the site pin; selfie kept on the server for one day.
  */
 export function AttendancePunchPanel({ variant = "compact", showRoster = true }: Props) {
   const { token, user } = useAuth();
@@ -164,8 +164,9 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
         `${kind === "in" ? "Checked in" : "Checked out"} at ${formatIstPunchTime(punchTime)}` +
           ` · ${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}` +
           (kind === "out" && row.checkoutDistanceM != null ? ` · ${row.checkoutDistanceM} m from check-in` : "") +
-          (row.inGeofenceOk || row.outGeofenceOk ? " · site verified" : "") +
-          (row.provider === "sharepoint" ? " · SharePoint" : row.sharePointWarning ? ` · ${row.sharePointWarning}` : "")
+          (row.reviewStatus === "Auto-verified"
+            ? ` · location verified${(kind === "in" ? row.inDistanceM : row.outDistanceM) != null ? ` (${kind === "in" ? row.inDistanceM : row.outDistanceM} m from site)` : ""}`
+            : ` · sent to HR for location review${row.reviewNote ? ` (${row.reviewNote})` : ""}`)
       );
       setEarlyLeaveOffer(kind === "out" && Boolean(row.earlyLeaveSuggested));
       setSelfie([]);

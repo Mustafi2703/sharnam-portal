@@ -92,6 +92,10 @@ model Project {
   outlookConnected        Boolean   @default(false)
   outlookConnectedAt      DateTime?
   /// JSON array of enabled module keys (drawings, quality, safety, progress, …)
+  /// Attendance geofence: site map pin + radius (metres). No pin = site name only, punches need manual review.
+  siteLat                 Float?
+  siteLng                 Float?
+  siteRadiusM             Int?      @default(300)
   enabledModules          String    @default("[\"drawings\",\"dms\",\"quality\",\"safety\",\"inspection\",\"progress\",\"comms\",\"auditKpi\",\"cost\",\"finance\",\"reports\",\"closure\"]") @db.Text
   /// JSON array of work packages e.g. Civil, PEB, Electrical
   workPackages            String    @default("[]") @db.Text
@@ -1002,6 +1006,16 @@ model Attendance {
   outSiteName   String?
   inGeofenceOk  Boolean  @default(false)
   outGeofenceOk Boolean  @default(false)
+  /// Metres from the site pin at check-in / check-out (null when the site has no map pin)
+  inDistanceM   Int?
+  outDistanceM  Int?
+  /// Minutes between check-in and check-out
+  workedMinutes Int?
+  /// Auto-verified | Needs review | Verified | Rejected
+  reviewStatus  String   @default("Needs review")
+  reviewNote    String?
+  reviewedById  String?
+  reviewedAt    DateTime?
   projectId     String?
   notes         String?
   createdAt     DateTime @default(now())
@@ -1302,6 +1316,10 @@ model Offer {
   ctcInputsJson     String?   @db.Text
   /// URL of the generated Annexure I XLSX (Sharnam-branded, editable).
   annexureUrl       String?
+  /// Extra fields printed on the SPDC offer / appointment letters (gender, address, grade, notice periods…)
+  letterFieldsJson  String?   @db.Text
+  /// HrmsDocument id of the generated SPDC offer letter
+  offerLetterDocId  String?
   approvedById      String?
   approvedAt        DateTime?
   sentAt            DateTime?

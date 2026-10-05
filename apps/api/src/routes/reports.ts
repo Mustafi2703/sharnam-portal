@@ -1361,7 +1361,22 @@ hrmRouter.get("/attendance/:id/photo/:kind", requireAuth, async (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
 
   const storedUrl = kind === "in" ? row.inPhotoUrl : row.outPhotoUrl;
-  if (!storedUrl) return res.status(404).json({ error: "no photo" });
+  if (!storedUrl) return res.status(404).json({ error: "Selfies are kept for one day only" });
+  {
+    const authed = req as AuthedRequest;
+    const role = authed.user?.role;
+    if (row.userId !== authed.user?.id && !["admin", "office", "hr"].includes(String(role))) {
+      return res.status(404).json({ error: "not found" });
+    }
+    const { selfieLocalPath } = await import("../services/attendanceGeo.js");
+    const priv = selfieLocalPath(storedUrl);
+    if (priv) {
+      res.setHeader("Content-Type", "image/jpeg");
+      res.setHeader("Cache-Control", "private, max-age=600");
+      return res.sendFile(path.resolve(priv));
+    }
+    if (storedUrl.startsWith("selfie:")) return res.status(404).json({ error: "Selfies are kept for one day only" });
+  }
 
   let projectCode = "OFFICE";
   if (row.projectId) {
@@ -2192,6 +2207,168 @@ hrmRouter.get("/attendance/range", hrmStaff, async (req: AuthedRequest, res) => 
   });
 });
 
+/* ---------- HR attendance review: verify location, delete punches, monthly hours ---------- */
+
+const hrAttendanceDesk = requireRoles("admin", "office", "hr");
+
+/** HR / office mark a day's location as verified or rejected after checking the map. */
+hrmRouter.patch("/attendance/:id/review", hrAttendanceDesk, async (req: AuthedRequest, res) => {
+  const status = String(req.body.status || "");
+  if (!["Verified", "Rejected", "Needs review"].includes(status)) return res.status(400).json({ error: "status must be Verified, Rejected or Needs review" });
+  const row = await prisma.attendance.update({
+    where: { id: req.params.id },
+    data: {
+      reviewStatus: status,
+      reviewNote: req.body.note !== undefined ? String(req.body.note || "").slice(0, 190) || null : undefined,
+      reviewedById: req.user!.id,
+      reviewedAt: new Date(),
+    },
+  }).catch(() => null);
+  if (!row) return res.status(404).json({ error: "Attendance record not found" });
+  await audit("hrm.attendance.review", { userId: req.user!.id, entity: "Attendance", entityId: row.id, meta: { status, note: req.body.note || null } });
+  res.json(row);
+});
+
+/** Remove a clock-out only (`?part=out`) or the whole day's clock-in + clock-out. */
+hrmRouter.delete("/attendance/:id", hrAttendanceDesk, async (req: AuthedRequest, res) => {
+  const row = await prisma.attendance.findUnique({ where: { id: req.params.id }, include: { user: { select: { fullName: true } } } });
+  if (!row) return res.status(404).json({ error: "Attendance record not found" });
+  const part = String(req.query.part || "all");
+  if (part === "out") {
+    await prisma.attendance.update({
+      where: { id: row.id },
+      data: { checkOut: null, outLat: null, outLng: null, outAccuracy: null, outPhotoUrl: null, outSiteName: null, outGeofenceOk: false, outDistanceM: null, workedMinutes: null },
+    });
+  } else {
+    await prisma.attendance.delete({ where: { id: row.id } });
+  }
+  await audit("hrm.attendance.delete", {
+    userId: req.user!.id,
+    entity: "Attendance",
+    entityId: row.id,
+    meta: { part, employee: row.user.fullName, date: formatIstDateKey(row.date), checkIn: row.checkIn, checkOut: row.checkOut },
+  });
+  res.json({ ok: true, part });
+});
+
+/** Site pin for attendance geofencing (set from project setup). Clearing the pin = site name only, manual review. */
+hrmRouter.put("/attendance/site/:projectId", hrAttendanceDesk, async (req: AuthedRequest, res) => {
+  const lat = req.body.siteLat === null || req.body.siteLat === "" ? null : Number(req.body.siteLat);
+  const lng = req.body.siteLng === null || req.body.siteLng === "" ? null : Number(req.body.siteLng);
+  if ((lat == null) !== (lng == null)) return res.status(400).json({ error: "Give both latitude and longitude, or clear both" });
+  if (lat != null && (!(lat >= -90 && lat <= 90) || !(lng! >= -180 && lng! <= 180))) return res.status(400).json({ error: "That is not a valid map location" });
+  const radius = Math.min(5000, Math.max(30, Math.round(Number(req.body.siteRadiusM) || 300)));
+  const project = await prisma.project.update({
+    where: { id: req.params.projectId },
+    data: {
+      siteLat: lat,
+      siteLng: lng,
+      siteRadiusM: radius,
+      ...(req.body.location !== undefined ? { location: String(req.body.location || "").trim() || null } : {}),
+    },
+    select: { id: true, code: true, name: true, location: true, siteLat: true, siteLng: true, siteRadiusM: true },
+  }).catch(() => null);
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  await audit("hrm.attendance.site", { userId: req.user!.id, entity: "Project", entityId: project.id, meta: { lat, lng, radius } });
+  res.json(project);
+});
+
+hrmRouter.get("/attendance/sites", hrmStaff, async (_req, res) => {
+  const rows = await prisma.project.findMany({
+    where: { status: { notIn: ["Closed", "Archived"] } },
+    select: { id: true, code: true, name: true, location: true, siteLat: true, siteLng: true, siteRadiusM: true },
+    orderBy: { code: "asc" },
+  });
+  res.json(rows);
+});
+
+/** Month log for payslips: every punch with time, site, distance, verification and hours; totals per person. */
+async function attendanceMonthLog(month: string, userId?: string) {
+  const [y, m] = month.split("-").map(Number);
+  const from = new Date(y, m - 1, 1, 0, 0, 0, 0);
+  const to = new Date(y, m, 0, 23, 59, 59, 999);
+  const rows = await prisma.attendance.findMany({
+    where: { date: { gte: from, lte: to }, ...(userId ? { userId } : {}) },
+    include: { user: { select: { id: true, fullName: true, email: true, role: true } } },
+    orderBy: [{ date: "asc" }],
+  });
+  const profiles = await prisma.employeeProfile.findMany({
+    where: { userId: { in: [...new Set(rows.map((r) => r.userId))] } },
+    select: { userId: true, empCode: true, designation: true },
+  });
+  const profByUser = new Map(profiles.map((p) => [p.userId, p]));
+  const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
+  const projects = projectIds.length
+    ? await prisma.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, code: true, name: true } })
+    : [];
+  const pById = Object.fromEntries(projects.map((p) => [p.id, p]));
+  const lines = rows.map((r) => {
+    const minutes = r.workedMinutes ?? attendanceSiteMinutes(r.checkIn, r.checkOut);
+    return {
+      id: r.id,
+      userId: r.userId,
+      employee: r.user.fullName,
+      empCode: profByUser.get(r.userId)?.empCode || "",
+      designation: profByUser.get(r.userId)?.designation || "",
+      date: formatIstDateKey(r.date),
+      checkIn: r.checkIn,
+      checkOut: r.checkOut,
+      hours: minutes != null ? Math.round((minutes / 60) * 100) / 100 : null,
+      site: r.projectId ? `${pById[r.projectId]?.code || ""} ${pById[r.projectId]?.name || ""}`.trim() : r.inSiteName || "Office",
+      inDistanceM: r.inDistanceM,
+      outDistanceM: r.outDistanceM,
+      inMap: r.inLat != null && r.inLng != null ? `https://www.google.com/maps?q=${r.inLat},${r.inLng}` : null,
+      outMap: r.outLat != null && r.outLng != null ? `https://www.google.com/maps?q=${r.outLat},${r.outLng}` : null,
+      reviewStatus: r.reviewStatus,
+      reviewNote: r.reviewNote,
+      hasSelfie: !!(r.inPhotoUrl || r.outPhotoUrl),
+    };
+  });
+  const people = new Map<string, { userId: string; employee: string; empCode: string; days: number; hours: number; needsReview: number; rejected: number }>();
+  for (const l of lines) {
+    const p = people.get(l.userId) || { userId: l.userId, employee: l.employee, empCode: l.empCode, days: 0, hours: 0, needsReview: 0, rejected: 0 };
+    if (l.reviewStatus !== "Rejected" && l.checkIn) p.days++;
+    if (l.reviewStatus !== "Rejected") p.hours += l.hours || 0;
+    if (l.reviewStatus === "Needs review") p.needsReview++;
+    if (l.reviewStatus === "Rejected") p.rejected++;
+    people.set(l.userId, p);
+  }
+  const totals = [...people.values()].map((p) => ({ ...p, hours: Math.round(p.hours * 100) / 100 })).sort((a, b) => a.employee.localeCompare(b.employee));
+  return { month, lines, totals };
+}
+
+hrmRouter.get("/attendance/month-log", hrmStaff, async (req: AuthedRequest, res) => {
+  const role = req.user!.role;
+  const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? String(req.query.month) : new Date().toISOString().slice(0, 7);
+  const own = !["admin", "office", "hr"].includes(role);
+  res.json(await attendanceMonthLog(month, own ? req.user!.id : (req.query.userId ? String(req.query.userId) : undefined)));
+});
+
+hrmRouter.get("/attendance/month-log.xlsx", hrAttendanceDesk, async (req: AuthedRequest, res) => {
+  const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? String(req.query.month) : new Date().toISOString().slice(0, 7);
+  const log = await attendanceMonthLog(month);
+  const buf = await workbookBuffer(
+    [
+      {
+        name: "Hours Summary",
+        rows: [
+          ["Employee", "Emp code", "Days present", "Hours", "Needs review", "Rejected"],
+          ...log.totals.map((t) => [t.employee, t.empCode, t.days, t.hours, t.needsReview, t.rejected]),
+        ],
+      },
+      {
+        name: "Daily Log",
+        rows: [
+          ["Date", "Employee", "Emp code", "Site", "Check-in", "Check-out", "Hours", "In distance (m)", "Out distance (m)", "Verification", "Note", "Check-in map", "Check-out map"],
+          ...log.lines.map((l) => [l.date, l.employee, l.empCode, l.site, l.checkIn || "", l.checkOut || "", l.hours ?? "", l.inDistanceM ?? "", l.outDistanceM ?? "", l.reviewStatus, l.reviewNote || "", l.inMap || "", l.outMap || ""]),
+        ],
+      },
+    ],
+    { title: `Attendance Month Log ${month}`, projectCode: "SPDC-HR" },
+  );
+  await sendStampedXlsx(res, buf, `SPDC-Attendance-${month}.xlsx`);
+});
+
 /** Monthly attendance + leave register — Excel calendar (blue days) + daily GPS log for HR. */
 hrmRouter.get("/attendance/register.xlsx", hrmStaff, async (req: AuthedRequest, res) => {
   await applyAutoEodClockOut();
@@ -2318,30 +2495,34 @@ hrmRouter.post(
       return res.status(400).json({ error: "Already checked in today — use Check out when you leave" });
     }
 
-    let geofenceOk = false;
-    let matchedSite: string | undefined;
     let projectCode = "OFFICE";
     let checkoutDistanceM: number | null = null;
-    if (projectId) {
-      const proj = await prisma.project.findUnique({ where: { id: projectId } });
-      if (proj) {
-        projectCode = proj.code;
-        matchedSite = proj.location || proj.code;
-        geofenceOk = true;
-      }
-    }
+    const { checkAgainstSite, saveSelfie } = await import("../services/attendanceGeo.js");
+    const proj = projectId
+      ? await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { code: true, name: true, location: true, siteLat: true, siteLng: true, siteRadiusM: true },
+        })
+      : null;
+    if (proj) projectCode = proj.code;
+    // Office punches check against the project marked as the office (if any) via its pin; otherwise HR reviews.
+    const site = checkAgainstSite(proj, lat, lng, Number.isFinite(acc) ? acc : null);
+    const geofenceOk = site.ok;
+    const matchedSite: string | undefined = site.siteName ?? undefined;
     if (kind === "out" && existing?.inLat != null && existing?.inLng != null) {
       checkoutDistanceM = Math.round(haversineMeters(existing.inLat, existing.inLng, lat, lng));
-      geofenceOk = true;
     }
 
+    // Selfie stays on the server for one day only (rotated hourly) — never copied to SharePoint.
     const person = (req.user!.fullName || req.user!.email || "user").replace(/[^a-zA-Z0-9._-]/g, "_");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const folder = "03_SUPPORT_AND_RESOURCES/03.02_Resources_and_Productivity/Attendance";
     const fname = `${kind}-${person}-${stamp}.jpg`;
-    const saved = await mockOneDrive.upload(projectCode, folder, fname, req.file.buffer);
-    await mockOneDrive.upload(HR_DRIVE, attendanceRecordFolder(), fname, req.file.buffer, "image/jpeg", { replace: true });
-    const photoUrl = saved.url;
+    const photoUrl = saveSelfie(req.file.buffer, fname, formatIstDateKey(date));
+    const saved = { provider: "server-24h", path: photoUrl, sharePointPath: null as string | null, sharePointUrl: null as string | null };
+    const workedMinutes = kind === "out" ? attendanceSiteMinutes(existing?.checkIn, timeStr) : null;
+    const inOk = kind === "in" ? geofenceOk : !!existing?.inGeofenceOk;
+    const outOk = kind === "out" ? geofenceOk : false;
+    const reviewStatus = kind === "in" ? (geofenceOk ? "Auto-verified" : "Needs review") : inOk && outOk ? "Auto-verified" : "Needs review";
 
     const punchedAt = new Date().toISOString();
 
@@ -2365,6 +2546,10 @@ hrmRouter.post(
         outGeofenceOk: kind === "out" ? geofenceOk : false,
         inPhotoUrl: kind === "in" ? photoUrl : null,
         outPhotoUrl: kind === "out" ? photoUrl : null,
+        inDistanceM: kind === "in" ? site.distanceM : null,
+        outDistanceM: kind === "out" ? site.distanceM : null,
+        reviewStatus,
+        reviewNote: site.reason || null,
         projectId: projectId || null,
       },
       update:
@@ -2378,6 +2563,9 @@ hrmRouter.post(
               inSiteName: matchedSite ?? undefined,
               inGeofenceOk: geofenceOk,
               inPhotoUrl: photoUrl,
+              inDistanceM: site.distanceM,
+              reviewStatus,
+              reviewNote: site.reason || null,
               projectId: projectId || undefined,
             }
           : {
@@ -2388,6 +2576,10 @@ hrmRouter.post(
               outSiteName: matchedSite ?? undefined,
               outGeofenceOk: geofenceOk,
               outPhotoUrl: photoUrl,
+              outDistanceM: site.distanceM,
+              workedMinutes,
+              reviewStatus,
+              reviewNote: [existing?.reviewNote, site.reason].filter(Boolean).join(" · ") || null,
             },
     });
 
@@ -2435,10 +2627,6 @@ hrmRouter.post(
       photoPath: saved.path,
       sharePointPath: saved.sharePointPath ?? null,
       sharePointUrl: saved.sharePointUrl ?? null,
-      sharePointWarning:
-        process.env.MOCK_ONEDRIVE === "false" && saved.provider !== "sharepoint"
-          ? "Photo saved on server only — SharePoint upload failed. Ask IT to verify Render env vars and Graph permissions."
-          : undefined,
       earlyLeaveSuggested: earlyLeaveSuggested || undefined,
       siteMinutes: siteMins ?? undefined,
       checkoutDistanceM: checkoutDistanceM ?? undefined,
@@ -2461,13 +2649,20 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "hr", "site_employ
 
   let geofenceOk = false;
   let matchedSite: string | undefined = siteName;
-  if (projectId && typeof lat === "number" && typeof lng === "number") {
-    const proj = await prisma.project.findUnique({ where: { id: projectId } });
-    if (proj) {
-      matchedSite = matchedSite || proj.location || proj.code;
-      geofenceOk = true;
-    }
+  let distanceM: number | null = null;
+  let reason = "No GPS on this entry — HR to review";
+  if (typeof lat === "number" && typeof lng === "number") {
+    const { checkAgainstSite } = await import("../services/attendanceGeo.js");
+    const proj = projectId
+      ? await prisma.project.findUnique({ where: { id: projectId }, select: { code: true, name: true, location: true, siteLat: true, siteLng: true, siteRadiusM: true } })
+      : null;
+    const site = checkAgainstSite(proj, lat, lng, typeof acc === "number" ? acc : null);
+    geofenceOk = site.ok;
+    distanceM = site.distanceM;
+    reason = site.reason;
+    matchedSite = matchedSite || site.siteName || undefined;
   }
+  const reviewStatus = geofenceOk ? "Auto-verified" : "Needs review";
 
   const row = await prisma.attendance.upsert({
     where: { userId_date: { userId: req.user!.id, date } },
@@ -2487,10 +2682,12 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "hr", "site_employ
       outSiteName: kind === "out" ? matchedSite ?? null : null,
       inGeofenceOk: kind === "in" ? geofenceOk : false,
       outGeofenceOk: kind === "out" ? geofenceOk : false,
-      inPhotoUrl: kind === "in" ? req.body.photoUrl || null : null,
-      outPhotoUrl: kind === "out" ? req.body.photoUrl || null : null,
       projectId: projectId || null,
       notes: req.body.notes || null,
+      inDistanceM: kind === "in" ? distanceM : null,
+      outDistanceM: kind === "out" ? distanceM : null,
+      reviewStatus,
+      reviewNote: reason || null,
     },
     update:
       kind === "in"
@@ -2502,7 +2699,9 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "hr", "site_employ
             inAccuracy: acc ?? undefined,
             inSiteName: matchedSite ?? undefined,
             inGeofenceOk: geofenceOk,
-            inPhotoUrl: req.body.photoUrl || undefined,
+            inDistanceM: distanceM,
+            reviewStatus,
+            reviewNote: reason || null,
             projectId: projectId || undefined,
           }
         : {
@@ -2513,7 +2712,8 @@ hrmRouter.post("/attendance", requireRoles("admin", "office", "hr", "site_employ
             outAccuracy: acc ?? undefined,
             outSiteName: matchedSite ?? undefined,
             outGeofenceOk: geofenceOk,
-            outPhotoUrl: req.body.photoUrl || undefined,
+            outDistanceM: distanceM,
+            reviewStatus,
           },
   });
   res.json(row);

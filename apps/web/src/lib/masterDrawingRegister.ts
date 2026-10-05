@@ -25,7 +25,35 @@ export type MasterRegisterForm = {
 };
 
 /** DRAWING REGISTER - 01.xlsx · Input sheet. Package and building are typed per project — the workbook's Package A / Tower 1 rows are a sample, not a live list. */
-export const MASTER_REGISTER_DISCIPLINES = ["Architecture", "Structural", "MEPF"] as const;
+/** Every drawing discipline offered when uploading or adding a register row (first three match the client register). */
+export const MASTER_REGISTER_DISCIPLINES = [
+  "Architecture",
+  "Structural",
+  "MEPF",
+  "Civil",
+  "Electrical",
+  "Mechanical / HVAC",
+  "Plumbing",
+  "Fire Fighting",
+  "Fire Alarm & ELV",
+  "Interior",
+  "Landscape",
+  "Facade",
+  "Infrastructure / External Works",
+  "Roads & Drainage",
+  "Survey",
+  "Geotechnical",
+  "BIM / Coordination",
+  "Shop Drawings",
+] as const;
+
+/** The full list plus anything already used on this project (older or custom disciplines stay selectable). */
+export function drawingDisciplineOptions(used: (string | null | undefined)[] = [], current?: string | null): string[] {
+  const out = new Set<string>(MASTER_REGISTER_DISCIPLINES);
+  for (const u of used) if (u && u.trim()) out.add(u.trim());
+  if (current && current.trim()) out.add(current.trim());
+  return [...out];
+}
 
 export const MASTER_REGISTER_DRAWING_TYPES = [
   "Concept Drawings",

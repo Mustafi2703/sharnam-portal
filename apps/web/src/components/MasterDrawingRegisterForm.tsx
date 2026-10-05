@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button, Input, Select, TextArea } from "./ui";
 import {
   MASTER_REGISTER_DELAY_RESP,
-  MASTER_REGISTER_DISCIPLINES,
+  drawingDisciplineOptions,
   MASTER_REGISTER_DRAWING_TYPES,
   MASTER_REGISTER_ISSUED_TO,
   MASTER_REGISTER_LATEST,
@@ -115,7 +115,7 @@ export function MasterDrawingRegisterForm({
           </Field>
           <Field label="Discipline">
             <Select value={form.discipline} onChange={(e) => set({ discipline: e.target.value })}>
-              {MASTER_REGISTER_DISCIPLINES.map((d) => (
+              {drawingDisciplineOptions([], form.discipline).map((d) => (
                 <option key={d}>{d}</option>
               ))}
             </Select>

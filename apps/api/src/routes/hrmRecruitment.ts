@@ -1527,16 +1527,23 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
 /* ═════════════════════════════════════  OFFER LETTER  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/offers", async (_req, res) => {
-  await safeHrmList("offers", () =>
-    prisma.offer.findMany({
+  const { isPreJoinReadyForAppointmentLetter } = await import("../services/joiningPortal.js");
+  await safeHrmList("offers", async () => {
+    const rows = await prisma.offer.findMany({
       include: {
-        candidate: { select: { fullName: true, email: true, phone: true } },
+        candidate: { select: { fullName: true, email: true, phone: true, location: true } },
         onboard: { select: { userId: true } },
+        preJoin: true,
       },
       orderBy: { createdAt: "desc" },
-    }),
-    res
-  );
+    });
+    return rows.map(({ preJoin, ...o }) => ({
+      ...o,
+      appointmentReady: isPreJoinReadyForAppointmentLetter(preJoin),
+      appointmentLetterUrl: preJoin?.appointmentLetterUrl || null,
+      empCode: preJoin?.empCodeGenerated || null,
+    }));
+  }, res);
 });
 
 hrmRecruitmentRouter.get("/offers/:id", async (req: AuthedRequest, res) => {
@@ -1566,7 +1573,10 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
     });
   }
   const employeeName = offer.candidate.fullName;
-  const refNo = `SPDC/HR/OL/${String(new Date().getFullYear()).slice(-2)}-${String(Date.now()).slice(-4)}`;
+  const { hrLetterRefNo, loadOffer, offerLetterContext } = await import("../services/offerLetters.js");
+  const refNo = hrLetterRefNo("OL");
+  const full = await loadOffer(offer.id);
+  const offerLetter = offer.offerLetterDocId ? await prisma.hrmsDocument.findUnique({ where: { id: offer.offerLetterDocId } }) : null;
   const letter = await prisma.hrmsDocument.create({
     data: {
       kind: "Appointment",
@@ -1579,19 +1589,13 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
       effectiveDate: offer.joiningDate,
       status: "Draft",
       createdById: req.user!.id,
-      dataJson: JSON.stringify({
-        candidateName: employeeName,
-        joinDate: offer.joiningDate,
-        fixedCtcAnnual: offer.ctcAnnual,
-        ctcAnnual: offer.ctcAnnual,
-        location: offer.location || offer.candidate.location || "SPDC Corporate Office, Vadodara",
-        reportingManager: offer.reportingManager || "",
-        probationMonths: offer.probationMonths || 6,
-        empCode: offer.preJoin?.empCodeGenerated || "",
-        candidateEmail: offer.candidate.email || "",
-        phone: offer.candidate.phone || "",
-        offerId: offer.id,
-      }),
+      dataJson: JSON.stringify(
+        offerLetterContext(full!, {
+          appointmentRefNo: refNo,
+          offerRefNo: offerLetter?.refNo || offer.offerNo,
+          offerDate: offerLetter ? offerLetter.createdAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
+        }),
+      ),
     },
   });
   const { generateHrmsLetter } = await import("../services/hrmsLetter.js");
@@ -1759,7 +1763,12 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office", "hr"), uplo
   let derivedHraMonthly: number | null = n(req.body.hraMonthly);
   let derivedOtherMonthly: number | null = n(req.body.otherAllowMonthly);
   let derivedVarPct: number | null = n(req.body.variablePayPct);
-  const rawInputs = req.body.ctcInputsJson;
+  const { ctcInputsFrom, cleanLetterFields, generateOfferLetter } = await import("../services/offerLetters.js");
+  const rawInputs =
+    req.body.ctcInputsJson ||
+    (Number(req.body.ctcAnnual) > 0
+      ? JSON.stringify(ctcInputsFrom(null, { candidateName: candidate.fullName, designation: s(req.body.designation) || "Executive", fixedCtcAnnual: Number(req.body.ctcAnnual) }))
+      : null);
   if (rawInputs) {
     try {
       const parsed = typeof rawInputs === "string" ? JSON.parse(rawInputs) : rawInputs;
@@ -1824,13 +1833,24 @@ hrmRecruitmentRouter.post("/offers", requireRoles("admin", "office", "hr"), uplo
       offerLetterUrl,
       ctcInputsJson,
       annexureUrl,
+      letterFieldsJson: JSON.stringify(cleanLetterFields(req.body.letterFieldsJson)),
       notes: s(req.body.notes),
       status: "Draft",
     },
   });
   await prisma.candidate.update({ where: { id: candidateId }, data: { status: "Selected" } });
   await audit("hrms.offer.create", { userId: req.user!.id, entity: "Offer", entityId: row.id, meta: { candidateId, offerNo: row.offerNo, ctc: row.ctcAnnual } });
-  res.status(201).json(row);
+  // The SPDC offer letter is generated from what was just filled in (uploaded PDF, if any, stays as well).
+  let letterError: string | null = null;
+  if (!req.file) {
+    try {
+      await generateOfferLetter(row.id, req.user!.id);
+    } catch (err) {
+      letterError = err instanceof Error ? err.message : "Offer letter could not be generated";
+    }
+  }
+  const fresh = await prisma.offer.findUnique({ where: { id: row.id } });
+  res.status(201).json({ ...fresh, letterError });
 });
 
 /**
@@ -1899,6 +1919,70 @@ hrmRecruitmentRouter.get("/offers/:id/annexure.xlsx", async (req, res) => {
     `attachment; filename="Sharnam-Annexure-I-${out.breakdown.inputs.candidateName.replace(/[^\w.-]+/g, "_")}.xlsx"`
   );
   res.send(buf);
+});
+
+/** (Re)generate the SPDC Offer Letter from the offer row. */
+hrmRecruitmentRouter.post("/offers/:id/offer-letter", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const { generateOfferLetter } = await import("../services/offerLetters.js");
+  const letter = await generateOfferLetter(req.params.id, req.user!.id);
+  await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: letter.id, meta: { kind: "Offer", offerId: req.params.id } });
+  res.status(201).json(letter);
+});
+
+/** Edit a draft offer (terms, CTC inputs, letter fields); re-generates the letter. */
+hrmRecruitmentRouter.put("/offers/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const before = await prisma.offer.findUnique({ where: { id: req.params.id }, include: { candidate: true } });
+  if (!before) return res.status(404).json({ error: "not found" });
+  if (!["Draft", "Approved"].includes(before.status)) {
+    return res.status(400).json({ error: `This offer is ${before.status}. Only draft offers can be edited — withdraw it and draft a new one.` });
+  }
+  const { ctcInputsFrom, cleanLetterFields, generateOfferLetter } = await import("../services/offerLetters.js");
+  const { computeCtcBreakdown } = await import("../services/ctcAnnexure.js");
+  const designation = s(req.body.designation) || before.designation;
+  const inputs = ctcInputsFrom(req.body.ctcInputsJson ?? before.ctcInputsJson, {
+    candidateName: before.candidate.fullName,
+    designation,
+    fixedCtcAnnual: Number(req.body.ctcAnnual || before.ctcAnnual),
+  });
+  const b = inputs ? computeCtcBreakdown(inputs) : null;
+  await prisma.offer.update({
+    where: { id: before.id },
+    data: {
+      designation,
+      department: req.body.department !== undefined ? s(req.body.department) : before.department,
+      joiningDate: req.body.joiningDate ? new Date(req.body.joiningDate) : before.joiningDate,
+      probationMonths: req.body.probationMonths !== undefined ? Number(req.body.probationMonths) || 6 : before.probationMonths,
+      location: req.body.location !== undefined ? s(req.body.location) : before.location,
+      reportingManager: req.body.reportingManager !== undefined ? s(req.body.reportingManager) : before.reportingManager,
+      notes: req.body.notes !== undefined ? s(req.body.notes) : before.notes,
+      ...(inputs && b
+        ? {
+            ctcAnnual: inputs.fixedCtcAnnual,
+            ctcInputsJson: JSON.stringify(inputs),
+            basicMonthly: Number(b.partA.rows[0].perMonth),
+            hraMonthly: Number(b.partA.rows[1].perMonth),
+            variablePayPct: inputs.performancePayPct * 100,
+          }
+        : {}),
+      ...(req.body.letterFieldsJson !== undefined ? { letterFieldsJson: JSON.stringify(cleanLetterFields(req.body.letterFieldsJson)) } : {}),
+    },
+  });
+  let letterError: string | null = null;
+  try {
+    await generateOfferLetter(before.id, req.user!.id);
+  } catch (err) {
+    letterError = err instanceof Error ? err.message : "Offer letter could not be generated";
+  }
+  await audit("hrms.offer.update", { userId: req.user!.id, entity: "Offer", entityId: before.id });
+  res.json({ ...(await prisma.offer.findUnique({ where: { id: before.id } })), letterError });
+});
+
+/** Accepted offer → staff login managed from HRMS · Users (one-time password returned once). */
+hrmRecruitmentRouter.post("/offers/:id/portal-login", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const { createPortalLoginForOffer } = await import("../services/offerLetters.js");
+  const out = await createPortalLoginForOffer(req.params.id);
+  await audit("hrms.offer.portal_login", { userId: req.user!.id, entity: "User", entityId: out.userId, meta: { offerId: req.params.id, created: out.created } });
+  res.status(out.created ? 201 : 200).json(out);
 });
 
 hrmRecruitmentRouter.patch("/offers/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
