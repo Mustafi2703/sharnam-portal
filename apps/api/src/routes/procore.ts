@@ -2169,6 +2169,34 @@ safetyRouter.get("/project/:projectId/weekly", async (req: AuthedRequest, res) =
   res.json(await safetyWeekReport(req.params.projectId, from, to));
 });
 
+/** Safety Dashboard — Week N as branded Excel (download). */
+safetyRouter.get("/project/:projectId/weekly.xlsx", async (req: AuthedRequest, res) => {
+  const { safetyWeekWorkbook } = await import("../services/safetyWeek.js");
+  const from = DAY_KEY.test(String(req.query.from || "")) ? String(req.query.from) : undefined;
+  const to = DAY_KEY.test(String(req.query.to || "")) ? String(req.query.to) : undefined;
+  const wb = await safetyWeekWorkbook(req.params.projectId, from, to);
+  const { sendStampedXlsx } = await import("../services/brandedExport.js");
+  await sendStampedXlsx(res, wb.buffer, `Safety-Dashboard-${wb.projectCode}-${wb.from}.xlsx`);
+});
+
+/** File the week's safety pack to SharePoint (08 HSE / Weekly / week) for the WPR. */
+safetyRouter.post("/project/:projectId/weekly/publish", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const { safetyWeekWorkbook } = await import("../services/safetyWeek.js");
+  const from = DAY_KEY.test(String(req.body?.from || "")) ? String(req.body.from) : undefined;
+  const to = DAY_KEY.test(String(req.body?.to || "")) ? String(req.body.to) : undefined;
+  const wb = await safetyWeekWorkbook(req.params.projectId, from, to);
+  const saved = await mockOneDrive.upload(
+    wb.projectCode,
+    `${MODULE_TO_ISO_FOLDER.safety}/Weekly/${wb.from}_to_${wb.to}`,
+    `Safety-Dashboard-${wb.projectCode}-${wb.from}.xlsx`,
+    wb.buffer,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    { replace: true },
+  );
+  await audit("safety.weekly.publish", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { from: wb.from, path: saved.sharePointPath || saved.path } });
+  res.json({ ok: true, label: wb.label, path: saved.sharePointPath || saved.path, url: saved.sharePointUrl || saved.url });
+});
+
 safetyRouter.get("/:id", async (req, res) => {
   const row = await prisma.safetyRecord.findUnique({
     where: { id: req.params.id },

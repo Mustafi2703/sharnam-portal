@@ -1952,6 +1952,9 @@ model QualitySiteRecord {
   correctiveAction String?  @db.Text
   reportedById     String
   occurredAt       DateTime @default(now())
+  /// Evidence photos [{url, sharePointUrl, name}] — "bad quality practice" panel
+  photosJson       String?   @db.Text
+  closedAt         DateTime?
   source           String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

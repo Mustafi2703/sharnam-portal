@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
+import { downloadAuthFile } from "../lib/downloadReport";
 import { useAuth } from "../auth";
 import { CHART_COLORS, ColumnChart } from "./ColumnChart";
 import { PieChart } from "./PieChart";
@@ -143,6 +144,38 @@ export function SafetyWeekDesk({ projectId, showLog = true }: { projectId: strin
             <Button type="button" variant="secondary" className="!text-xs !py-1.5" disabled={weekStart >= mondayKey()} onClick={() => setWeekStart(addDays(weekStart, 7))}>
               Next week →
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs !py-1.5"
+              onClick={() =>
+                void downloadAuthFile(`/api/safety/project/${projectId}/weekly.xlsx?from=${weekStart}&to=${weekEnd}`, token, `Safety-Dashboard-${weekStart}.xlsx`).catch((e) =>
+                  setMsg({ tone: "err", text: e.message }),
+                )
+              }
+            >
+              Week Excel
+            </Button>
+            {canLog && user?.role !== "vendor" && (
+              <Button
+                type="button"
+                className="!text-xs !py-1.5"
+                disabled={busy === "publish"}
+                onClick={async () => {
+                  setBusy("publish");
+                  try {
+                    const out = await api<{ path: string }>(`/api/safety/project/${projectId}/weekly/publish`, { method: "POST", token, body: JSON.stringify({ from: weekStart, to: weekEnd }) });
+                    setMsg({ tone: "ok", text: `Week filed on SharePoint: ${out.path}` });
+                  } catch (err) {
+                    setMsg({ tone: "err", text: err instanceof Error ? err.message : "Could not file the week" });
+                  } finally {
+                    setBusy("");
+                  }
+                }}
+              >
+                {busy === "publish" ? "Filing…" : "File week to SharePoint"}
+              </Button>
+            )}
           </div>
         </div>
 

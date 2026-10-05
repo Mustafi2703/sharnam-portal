@@ -228,3 +228,92 @@ function sevRank(s?: string | null) {
 function dayLabel(key: string) {
   return dayFromKey(key).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", timeZone: "UTC" });
 }
+
+/** Branded Excel for one safety week: One Pager KPIs, daily safety log and that week's records. */
+export async function safetyWeekWorkbook(projectId: string, fromKey?: string, toKey?: string) {
+  const rep = await safetyWeekReport(projectId, fromKey, toKey);
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { code: true, name: true, clientName: true, contractorName: true } });
+  const start = dayFromKey(rep.from);
+  const end = new Date(dayFromKey(rep.to).getTime() + 86399999);
+  const records = await prisma.safetyRecord.findMany({
+    where: { projectId, occurredAt: { gte: start, lte: end } },
+    orderBy: { occurredAt: "asc" },
+    select: { recordType: true, title: true, location: true, severity: true, category: true, status: true, correctiveAction: true, responsibleParty: true, occurredAt: true, closedAt: true },
+  });
+  const k = rep.kpis;
+  const { workbookBuffer } = await import("./brandedExport.js");
+  const label = `Week ${isoWeekNo(rep.from)} (${rep.from} to ${rep.to})`;
+  const buffer = await workbookBuffer(
+    [
+      {
+        name: "One Pager",
+        rows: [
+          ["Safety Dashboard", label],
+          ["Project", `${project.code} — ${project.name}`],
+          ["Client", project.clientName || ""],
+          ["Contractor", project.contractorName || ""],
+          [],
+          ["Indicator", "This week", "Project to date"],
+          ["Incidents", k.incidentsWeek, k.totalIncidents],
+          ["Unsafe acts", k.unsafeActsWeek, k.totalUnsafeActs],
+          ["NCR", k.ncrWeek, k.totalNcrs],
+          ["Near miss", k.nearMissWeek, ""],
+          ["First aid", k.firstAidWeek, ""],
+          ["Site instructions", k.siteInstructionsWeek, ""],
+          ["Safe man-hours", k.weeklySafeHours, k.cumulativeSafeHours],
+          ["Toolbox talks", k.toolboxTalksWeek, rep.cumulative.toolboxTalks],
+          ["HSE inductions", k.inductionsWeek, rep.cumulative.inductions],
+          ["Permits to work", k.permitsWeek, rep.cumulative.permitsIssued],
+          ["Days without LTI", "", k.daysWithoutLti],
+          ["Major safety incident this week", k.majorIncident || "None reported", ""],
+        ],
+      },
+      {
+        name: "Daily Safety Log",
+        rows: [
+          ["Date", "Manpower", "Hours / head", "Safe man-hours", "Toolbox talks", "TBT topics", "Inductions", "Permits", "PPE %", "LTI", "Major incident", "Remarks"],
+          ...rep.days.map((d) => [
+            d.date,
+            d.logged ? d.manpower : "",
+            d.logged ? d.hoursPerHead : "",
+            d.logged ? d.safeManHours : "",
+            d.logged ? d.toolboxTalks : "",
+            d.tbtTopics || "",
+            d.logged ? d.inductions : "",
+            d.logged ? d.permitsIssued : "",
+            d.ppeCompliancePct ?? "",
+            d.lostTimeInjury ? "Yes" : d.logged ? "No" : "",
+            d.majorIncident || "",
+            d.remarks || (d.logged ? "" : "Not logged"),
+          ]),
+        ],
+      },
+      {
+        name: "Records This Week",
+        rows: [
+          ["Date", "Type", "Title", "Location", "Category", "Severity", "Status", "Corrective action", "Responsible", "Closed on"],
+          ...records.map((r) => [
+            keyFromDate(r.occurredAt),
+            r.recordType === "Observation" ? "Unsafe act" : r.recordType,
+            r.title,
+            r.location || "",
+            r.category || "",
+            r.severity || "",
+            r.status,
+            r.correctiveAction || "",
+            r.responsibleParty || "",
+            r.closedAt ? keyFromDate(r.closedAt) : "",
+          ]),
+        ],
+      },
+    ],
+    { title: `Safety Dashboard — ${label}`, projectCode: project.code },
+  );
+  return { buffer, label, from: rep.from, to: rep.to, projectCode: project.code };
+}
+
+function isoWeekNo(key: string) {
+  const t = dayFromKey(key);
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  return Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+}

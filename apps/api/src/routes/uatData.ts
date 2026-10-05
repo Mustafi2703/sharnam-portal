@@ -83,6 +83,40 @@ uatDataRouter.post("/load-arvind", async (req: AuthedRequest, res) => {
         }
         templates[`${p.code} safety+activity`] = hseAndActivity.length;
       }
+      // Placeholder rows from the DPR demo day are not SPDC data — remove them; recompute QAP status with the current rule.
+      const ids = arvindProjects.map((p) => p.id);
+      const demoSafety = await prisma.safetyRecord.deleteMany({ where: { projectId: { in: ids }, title: { startsWith: "[DPR-DEMO]" } } });
+      const demoCubes = await prisma.cubeTest.deleteMany({ where: { projectId: { in: ids }, description: { startsWith: "[DPR-DEMO]" } } });
+      const { qapStatusFromRow } = await import("../services/qualityDashboardSheets.js");
+      let qapFixed = 0;
+      for (const q of await prisma.qapActivity.findMany({ where: { projectId: { in: ids } } })) {
+        let daily: Record<string, boolean> = {};
+        try {
+          daily = q.dailyChecks ? JSON.parse(q.dailyChecks) : {};
+        } catch {
+          daily = {};
+        }
+        const flags = qapStatusFromRow({
+          srNo: q.srNo,
+          section: q.section || q.activity,
+          description: q.description || "",
+          frequency: q.frequency || "",
+          codeOfConformance: q.codeOfConformance || "",
+          testAgency: q.testAgency || "",
+          contractorPerformer: q.contractorPerformer || "",
+          contractorChecker: q.contractorChecker || "",
+          pmcRole: q.pmcRole || "",
+          clientRole: q.clientRole || "",
+          records: q.records || "",
+          remarks: q.remarks || "",
+          dailyChecks: daily,
+        } as never);
+        if (flags.status !== q.status) {
+          await prisma.qapActivity.update({ where: { id: q.id }, data: { status: flags.status, completedAt: flags.status === "Done" ? q.completedAt || new Date() : null } });
+          qapFixed++;
+        }
+      }
+      templates.cleanup = { demoSafety: demoSafety.count, demoCubes: demoCubes.count, qapStatusFixed: qapFixed };
       const summary: Record<string, unknown> = { templates: JSON.stringify(templates) };
       for (const [k, v] of Object.entries(out || {})) {
         if (k === "templates") continue;

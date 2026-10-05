@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../../api";
+import { api, mediaUrl } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
@@ -320,7 +320,7 @@ export default function InspectionsPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
               ["Week", dash.workbook?.dashboard?.weekLabel ?? "—"],
-              ["Concreting (m³)", dash.workbook?.dashboard?.concretingM3 ?? 0],
+              ["Concreting this week (m³)", dash.weekCharts?.concretingM3 ?? 0],
               ["Samples last week", dash.workbook?.dashboard?.samplesLastWeek ?? 0],
               ["QI checklist fills", dash.totals.fills],
               ["Open QI", dash.totals.openInspections],
@@ -388,11 +388,12 @@ export default function InspectionsPage() {
                 </Button>
               </div>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               {[
                 ["Checklist fills", dash.weekCharts?.kpis?.fills ?? 0],
-                ["Cube samples", dash.weekCharts?.kpis?.samples ?? 0],
-                ["Samples passed", `${dash.weekCharts?.kpis?.samplesPass ?? 0} / ${dash.weekCharts?.kpis?.samples ?? 0}`],
+                ["Cube sets cast", dash.weekCharts?.kpis?.setsCast ?? 0],
+                ["Failed at 7 days (this week)", dash.weekCharts?.kpis?.fail7 ?? 0],
+                ["Failed at 28 days (open)", dash.weekCharts?.kpis?.fail28 ?? 0],
                 ["Observations raised", dash.weekCharts?.kpis?.observations ?? 0],
                 ["Open NCRs (all)", dash.weekCharts?.kpis?.openNcrs ?? 0],
               ].map(([l, v]) => (
@@ -402,6 +403,62 @@ export default function InspectionsPage() {
                 </Card>
               ))}
             </div>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {[
+                ["Concrete poured (m³)", dash.weekCharts?.concretingM3 ?? 0, "From DPR concrete / RCC / PCC lines this week"],
+                ["Site observation success rate", dash.weekCharts?.successRates?.siteObservation != null ? `${dash.weekCharts.successRates.siteObservation}%` : "—", "Closed ÷ raised, project to date"],
+                ["Site instruction success rate", dash.weekCharts?.successRates?.siteInstruction != null ? `${dash.weekCharts.successRates.siteInstruction}%` : "—", "Closed ÷ issued, project to date"],
+              ].map(([l, v, h]) => (
+                <Card key={l as string} className="!p-3">
+                  <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+                  <div className="text-xl font-display mt-1">{v as string | number}</div>
+                  <div className="text-[10px] text-steel-muted">{h}</div>
+                </Card>
+              ))}
+            </div>
+            <Card padding={false}>
+              <div className="px-4 py-2.5 border-b border-line bg-sand/40 flex items-center justify-between">
+                <span className="font-semibold text-sm">Bad Quality Practice — Week {weekNo}</span>
+                <Link to={`/projects/${id}/inspections?sheet=site-observation`} className="text-xs font-semibold text-brand">Site observations →</Link>
+              </div>
+              {(dash.weekCharts?.badPractice || []).length ? (
+                <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 p-3">
+                  {dash.weekCharts.badPractice.map((b: any) => (
+                    <div key={b.id} className="rounded-lg border border-line overflow-hidden bg-white">
+                      {b.photos?.[0] ? (
+                        <a href={mediaUrl(b.photos[0].url)} target="_blank" rel="noreferrer">
+                          <img src={mediaUrl(b.photos[0].url)} alt={b.title} className="w-full h-32 object-cover" />
+                        </a>
+                      ) : (
+                        <div className="h-32 grid place-items-center text-[11px] text-steel-muted bg-sand/30">No photo</div>
+                      )}
+                      <div className="p-2 text-xs">
+                        <div className="font-semibold truncate">{b.title}</div>
+                        <div className="text-steel-muted">
+                          {b.type} · {b.location || "—"} · {b.status}
+                          {b.photos?.length > 1 ? ` · ${b.photos.length} photos` : ""}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="px-4 py-3 text-sm text-steel-muted">No high-severity or photographed observations this week.</p>
+              )}
+            </Card>
+            {(dash.weekCharts?.kpis?.ncDue || []).length > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <div className="font-semibold mb-1">28-day cube failures — raise an NCR</div>
+                <ul className="list-disc ml-5 space-y-0.5 text-xs">
+                  {dash.weekCharts.kpis.ncDue.map((t: string) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+                <Link to={`/projects/${id}/quality/ncr-fill-log`} className="inline-block mt-2 text-xs font-semibold underline">
+                  Open NCR / CAR →
+                </Link>
+              </div>
+            )}
             <div className="grid md:grid-cols-2 gap-4 items-start">
               <ColumnChart
                 title="Observations this week — open vs closed"
@@ -415,15 +472,26 @@ export default function InspectionsPage() {
                 emptyText="No observations raised this week."
               />
               <LineChart
-                title="Cube compressive strength (7 days)"
-                subtitle="N/mm² against the IS lower limit"
+                title="Cube compressive strength — 7 days"
+                subtitle="Set average (3 cubes) against the 7-day limit, N/mm²"
                 items={dash.weekCharts?.cubeSeries || []}
                 series={[
                   { key: "strength", label: "Compressive strength", color: CHART_COLORS.navy },
-                  { key: "limit", label: "IS code lower limit", color: CHART_COLORS.orange },
+                  { key: "limit", label: "7-day limit (IS / SPDC)", color: CHART_COLORS.orange },
                 ]}
                 yLabel="N/mm²"
                 emptyText="No cube results yet."
+              />
+              <ColumnChart
+                title="Cube compressive strength — 28 days"
+                subtitle="Set average against the grade (fck), N/mm²"
+                items={dash.weekCharts?.cubeSets28 || []}
+                series={[
+                  { key: "avg28", label: "28-day average", color: CHART_COLORS.navy },
+                  { key: "fck", label: "Grade (fck)", color: CHART_COLORS.orange },
+                ]}
+                yLabel="N/mm²"
+                emptyText="No 28-day results yet."
               />
               <ColumnChart
                 title="Checklist fills by day"

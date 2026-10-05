@@ -1938,6 +1938,7 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req: Au
 /** Quality + Safety module dashboards */
 checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) => {
   const projectId = req.params.projectId;
+  const sharedCube = await import("@sharnam/shared");
   const { loadQualityDashboardWorkbook, buildLiveSorLog, buildLiveSorEntries } = await import("../services/qualityDashboardSheets.js");
   const { buildQualityCatalogStatus, fillBuckets } = await import("../services/qualityChecklistCatalog.js");
   const FILL_TYPES = ["QualityInspection", "Safety", "SiteExecution", "DrawingCheck", "ActivityInspection"] as const;
@@ -2050,6 +2051,31 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         return acc;
       }, {})
     ).map(([label, value]) => ({ label, value }));
+  // Concrete poured in the selected week = DPR lines in cum / m3 for concrete, RCC or PCC work.
+  const concreteWeek = await (async () => {
+    const parse = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00`) : null);
+    const t = new Date();
+    const mon = new Date(t.getFullYear(), t.getMonth(), t.getDate() - ((t.getDay() + 6) % 7));
+    const f = parse(req.query.from) || mon;
+    const tt = parse(req.query.to) || new Date(f.getFullYear(), f.getMonth(), f.getDate() + 6);
+    const snaps = await prisma.dprSnapshot.findMany({
+      where: { projectId, logDate: { gte: new Date(f.getTime() - 86400000), lte: new Date(tt.getTime() + 86400000) } },
+      select: { linesJson: true, logDate: true },
+    });
+    let m3 = 0;
+    for (const sn of snaps) {
+      let lines: { description?: string; unit?: string; qtyToday?: number }[] = [];
+      try {
+        lines = JSON.parse(sn.linesJson || "[]");
+      } catch {
+        lines = [];
+      }
+      for (const l of lines) {
+        if (/cum|m3|m³|cu\.?\s?m/i.test(l.unit || "") && /concret|rcc|pcc|pour|slab|column|footing|raft|beam/i.test(l.description || "")) m3 += Number(l.qtyToday) || 0;
+      }
+    }
+    return Math.round(m3 * 10) / 10;
+  })();
   res.json({
     workbook: workbookOut,
     siteRecords,
@@ -2139,24 +2165,71 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         const c = f.assignment.template.category || f.assignment.template.checklistType || "Other";
         disc[c] = (disc[c] || 0) + 1;
       }
+      // Cube sets (3 specimens each) cast this week — 7-day and 28-day set averages against IS limits.
+      const { earlyStrengthLimitMPa, gradeTargetMPa, normalizeCubeSr } = sharedCube;
+      const setMap = new Map<string, typeof cubes>();
+      for (const c of cubes) {
+        const k = `${normalizeCubeSr(c.srNo)}|${c.castDate ? key(c.castDate) : ""}|${c.description || ""}`;
+        setMap.set(k, [...(setMap.get(k) || []), c]);
+      }
+      const avg = (vals: (number | null | undefined)[]) => {
+        const v = vals.filter((x): x is number => typeof x === "number" && Number.isFinite(x) && x > 0);
+        return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 : null;
+      };
+      const sets = [...setMap.values()].map((g) => {
+        const head = g[0];
+        const fck = gradeTargetMPa(head.grade) ?? 25;
+        const a7 = avg(g.map((c) => c.strength7));
+        const a28 = avg(g.map((c) => c.strength28));
+        const limit7 = earlyStrengthLimitMPa(head.grade) ?? 17;
+        const sr = normalizeCubeSr(head.srNo);
+        return {
+          label: sr && sr !== "—" ? `#${sr}` : String(head.description || "Set").replace(/^\[[^\]]+\]\s*/, "").slice(0, 16),
+          castDate: head.castDate,
+          description: head.description,
+          grade: head.grade || "",
+          avg7: a7 ?? 0,
+          avg28: a28 ?? 0,
+          limit7,
+          fck,
+          fail7: a7 != null && a7 < limit7,
+          fail28: a28 != null && a28 < fck,
+          pending28: a28 == null,
+        };
+      });
+      const weekSets = sets.filter((x) => inRange(x.castDate));
+      const shownSets = (weekSets.length ? weekSets : sets.slice(-12));
+      const cubeSeries = shownSets.map((x) => ({ label: x.label, strength: x.avg7, limit: x.limit7, avg28: x.avg28, fck: x.fck, grade: x.grade }));
       const weekCubes = cubes.filter((c) => inRange(c.castDate));
-      const cubeSeries = (weekCubes.length ? weekCubes : cubes.slice(-12)).map((c, i) => ({
-        label: c.srNo ? `#${c.srNo}` : `S${i + 1}`,
-        strength: Number(c.avgStrength ?? c.strength ?? 0) || 0,
-        // IS 456: 7-day target about 65% of grade (e.g. M25 -> 16.25); grade number from "M25"
-        limit: (() => {
-          const g = Number(String(c.grade || "").replace(/[^\d.]/g, ""));
-          return g ? Math.round(g * 0.67 * 10) / 10 : 17;
-        })(),
-        grade: c.grade || "",
-      }));
+      const soAll = siteRecords.filter((r) => /observation/i.test(r.recordType));
+      const siAll = siteRecords.filter((r) => /instruction/i.test(r.recordType));
+      const rate = (rows: typeof siteRecords) => (rows.length ? Math.round((rows.filter((r) => closed(r.status)).length / rows.length) * 1000) / 10 : null);
+      const badPractice = siteRecords
+        .filter((r) => inRange(r.occurredAt) && (r.photosJson || /high|crit/i.test(r.severity || "")))
+        .slice(0, 8)
+        .map((r) => {
+          let photos: { url: string; name: string }[] = [];
+          try {
+            photos = r.photosJson ? JSON.parse(r.photosJson) : [];
+          } catch {
+            photos = [];
+          }
+          return { id: r.id, type: r.recordType, title: r.title, location: r.location, severity: r.severity, status: r.status, photos };
+        });
       return {
         from: key(from),
         to: key(new Date(to)),
+        concretingM3: concreteWeek,
+        successRates: { siteObservation: rate(soAll), siteInstruction: rate(siAll) },
+        badPractice,
         kpis: {
           fills: weekFills.length,
           samples: weekCubes.length,
           samplesPass: weekCubes.filter((c) => /pass/i.test(c.result || "")).length,
+          setsCast: weekSets.length,
+          fail7: sets.filter((x) => x.fail7 && inRange(x.castDate)).length,
+          fail28: sets.filter((x) => x.fail28).length,
+          ncDue: sets.filter((x) => x.fail28).map((x) => `${x.label} ${x.description || ""} (${x.grade}) — 28-day avg ${x.avg28} < ${x.fck}`),
           observations: Object.values(sorRows).reduce((n, r) => n + r.open + r.closed, 0),
           openNcrs: ncrs.filter((n) => !closed(n.status)).length,
         },
@@ -2165,6 +2238,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         fillsByDiscipline: Object.entries(disc).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
         ncrByStatus: groupCount(ncrs.filter((n) => inRange(n.issueDate || n.createdAt)), "status"),
         cubeSeries,
+        cubeSets28: shownSets.filter((x) => x.avg28 > 0).map((x) => ({ label: x.label, avg28: x.avg28, fck: x.fck })),
       };
     })(),
     /** Progress Reports: QI fills → Quality section; SiteExecution → DPR site checklists */
@@ -3338,9 +3412,40 @@ checklistRouter.patch(
     for (const k of ["title", "description", "location", "severity", "status", "issuedTo", "correctiveAction", "recordType"] as const) {
       if (body[k] != null) data[k] = String(body[k]);
     }
+    if (body.status != null) data.closedAt = /clos/i.test(String(body.status)) ? new Date() : null;
     const row = await prisma.qualitySiteRecord.update({ where: { id: req.params.recordId }, data });
     res.json(row);
   }
+);
+
+/** Evidence photos on a site observation / instruction (filed to SharePoint, shown on the weekly report). */
+checklistRouter.post(
+  "/project/:projectId/quality-site-records/:recordId/photos",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  upload.array("photos", 8),
+  async (req: AuthedRequest, res) => {
+    const rec = await prisma.qualitySiteRecord.findFirst({ where: { id: req.params.recordId, projectId: req.params.projectId } });
+    if (!rec) return res.status(404).json({ error: "Record not found" });
+    const files = ((req as any).files || []) as Express.Multer.File[];
+    if (!files.length) return res.status(400).json({ error: "Attach at least one photo" });
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: req.params.projectId }, select: { code: true } });
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+    let photos: { url: string; sharePointUrl?: string | null; name: string }[] = [];
+    try {
+      photos = rec.photosJson ? JSON.parse(rec.photosJson) : [];
+    } catch {
+      photos = [];
+    }
+    const folder = `${MODULE_TO_ISO_FOLDER.qualityChecklist}/Site_Observations/${rec.recordType.replace(/[^A-Za-z0-9]+/g, "_")}`;
+    for (const f of files) {
+      const name = `${rec.id.slice(-6)}-${Date.now()}-${f.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const saved = await mockOneDrive.upload(project.code, folder, name, f.buffer, f.mimetype || "image/jpeg");
+      photos.push({ url: saved.url, sharePointUrl: saved.sharePointUrl || null, name: f.originalname });
+    }
+    const row = await prisma.qualitySiteRecord.update({ where: { id: rec.id }, data: { photosJson: JSON.stringify(photos.slice(-12)) } });
+    res.json(row);
+  },
 );
 
 checklistRouter.post(

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
 import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { RegisterFilterBar } from "./RegisterFilterBar";
@@ -79,6 +79,21 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
     });
   }, [rows, recordType, filters]);
 
+  const [photos, setPhotos] = useState<File[]>([]);
+  async function uploadPhotos(recordId: string, files: File[]) {
+    if (!files.length) return;
+    const fd = new FormData();
+    files.slice(0, 8).forEach((f) => fd.append("photos", f));
+    await api(`/api/checklist/project/${projectId}/quality-site-records/${recordId}/photos`, { method: "POST", token, body: fd });
+  }
+  const photosOf = (r: any): { url: string; name: string }[] => {
+    try {
+      return r.photosJson ? JSON.parse(r.photosJson) : [];
+    } catch {
+      return [];
+    }
+  };
+
   async function createRecord(e?: FormEvent) {
     e?.preventDefault();
     if (!form.description.trim()) {
@@ -88,7 +103,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
     setBusy(true);
     setMsg("");
     try {
-      await api(`/api/checklist/project/${projectId}/quality-site-records`, {
+      const created = await api<{ id: string }>(`/api/checklist/project/${projectId}/quality-site-records`, {
         method: "POST",
         token,
         body: JSON.stringify({
@@ -96,6 +111,8 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
           title: form.title || `${recordType} — ${form.location || "Site"}`,
         }),
       });
+      if (photos.length && created?.id) await uploadPhotos(created.id, photos);
+      setPhotos([]);
       setForm(emptyForm(recordType));
       setAddOpen(false);
       setMsg(`${recordType} logged — SOR Log totals updated.`);
@@ -178,6 +195,10 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             required
           />
+          <label className="sm:col-span-2 text-xs text-steel-muted">
+            Photos (up to 8) — filed to SharePoint and shown on the weekly Quality report
+            <input type="file" accept="image/*" multiple capture="environment" className="block mt-1 text-xs" onChange={(e) => setPhotos(Array.from(e.target.files || []))} />
+          </label>
           <TextArea
             className="sm:col-span-2"
             rows={2}
@@ -216,6 +237,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
                 <th className="text-left">Severity</th>
                 <th className="text-left">Description</th>
                 <th className="text-left">Status</th>
+                <th className="text-left">Photos</th>
                 <th className="text-left">Date</th>
                 {canEdit && <th className="text-left">Action</th>}
               </tr>
@@ -229,6 +251,36 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
                   <td className="text-left max-w-xs truncate">{r.description || "—"}</td>
                   <td className="text-left">
                     <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
+                  </td>
+                  <td className="text-left">
+                    <div className="flex items-center gap-1">
+                      {photosOf(r).slice(0, 3).map((p) => (
+                        <a key={p.url} href={mediaUrl(p.url)} target="_blank" rel="noreferrer">
+                          <img src={mediaUrl(p.url)} alt={p.name} className="h-8 w-8 rounded object-cover border border-line" />
+                        </a>
+                      ))}
+                      {canEdit && (
+                        <label className="text-[11px] font-semibold text-brand cursor-pointer whitespace-nowrap">
+                          + Photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={async (e) => {
+                              const files = Array.from(e.target.files || []);
+                              e.target.value = "";
+                              try {
+                                await uploadPhotos(r.id, files);
+                                await load();
+                              } catch (err) {
+                                setMsg(err instanceof Error ? err.message : "Photo upload failed");
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </td>
                   <td className="text-left whitespace-nowrap text-xs">
                     {new Date(r.occurredAt).toLocaleDateString()}
