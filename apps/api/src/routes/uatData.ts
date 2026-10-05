@@ -44,8 +44,48 @@ uatDataRouter.post("/load-arvind", async (req: AuthedRequest, res) => {
       const { seedArvindSitePack } = await import("../services/arvindSiteSeed.js");
       // Logins and project teams are set up; credential emails are not queued (staff keep their own passwords).
       const out = (await seedArvindSitePack(prisma as never, { skipInviteEmails: true })) as Record<string, unknown>;
-      const summary: Record<string, unknown> = {};
+      // Checklist templates for the Arvind projects: Quality catalog, SPDC HSE pack (F-01/F-02/F-03), Activity F-02.
+      const templates: Record<string, unknown> = {};
+      try {
+        const hse = await prisma.checklistTemplate.count({ where: { source: "SPDC HSE Pack" } });
+        if (!hse) {
+          const { seedSpdcSafetyPack } = await import("../services/safetyPackSeed.js");
+          templates.safety = (await seedSpdcSafetyPack()).templates.length;
+        } else templates.safety = `${hse} already loaded`;
+      } catch (err) {
+        templates.safety = `failed: ${err instanceof Error ? err.message : err}`;
+      }
+      try {
+        const { seedActivityChecklist } = await import("../services/activityChecklistSeed.js");
+        templates.activity = (await seedActivityChecklist())?.items ?? "format not found";
+      } catch (err) {
+        templates.activity = `failed: ${err instanceof Error ? err.message : err}`;
+      }
+      const arvindProjects = await prisma.project.findMany({ where: { code: { in: KEEP_CODES } }, select: { id: true, code: true } });
+      const { syncQualityChecklistCatalog } = await import("../services/qualityChecklistCatalog.js");
+      const hseAndActivity = await prisma.checklistTemplate.findMany({
+        where: { OR: [{ source: "SPDC HSE Pack" }, { checklistType: "ActivityInspection", isActive: true }] },
+        select: { id: true },
+      });
+      for (const p of arvindProjects) {
+        try {
+          const q = await syncQualityChecklistCatalog(p.id);
+          templates[`${p.code} quality`] = q.assigned;
+        } catch (err) {
+          templates[`${p.code} quality`] = `failed: ${err instanceof Error ? err.message : err}`;
+        }
+        for (const t of hseAndActivity) {
+          await prisma.checklistAssignment.upsert({
+            where: { projectId_templateId: { projectId: p.id, templateId: t.id } },
+            create: { projectId: p.id, templateId: t.id },
+            update: {},
+          });
+        }
+        templates[`${p.code} safety+activity`] = hseAndActivity.length;
+      }
+      const summary: Record<string, unknown> = { templates: JSON.stringify(templates) };
       for (const [k, v] of Object.entries(out || {})) {
+        if (k === "templates") continue;
         if (v == null || typeof v !== "object") summary[k] = v;
         else if (Array.isArray(v)) summary[k] = `${v.length} item(s)`;
         else summary[k] = "loaded";

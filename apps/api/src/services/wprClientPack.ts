@@ -3,6 +3,7 @@
  * from live portal data (separate from the 26-section WPR Maker pack in wprXlsx.ts).
  */
 import fs from "fs";
+import { findWorkbook } from "../lib/excelRoot.js";
 import path from "path";
 import XLSX from "../lib/xlsx.js";
 import type { WorkBook, WorkSheet } from "xlsx";
@@ -29,7 +30,8 @@ function resolveWprClientTemplate(): string | null {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return null;
+  // Same search as the other sheet loaders (repo root, apps/api, templates, seed/data…).
+  return findWorkbook(["WPR-Client-Week-Template.xlsx", "WPR-File.xlsx", "WPR File.xlsx"]);
 }
 
 function findSheet(wb: WorkBook, pattern: RegExp) {

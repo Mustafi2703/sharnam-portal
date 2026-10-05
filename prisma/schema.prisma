@@ -353,7 +353,7 @@ model ChecklistTemplate {
   checklistType    String   @default("SiteExecution")
   source           String?
   /// QA / fill instructions shown on the form
-  instructions     String?
+  instructions     String? @db.Text
   /// Minimum photos required on submit (Quality/Safety typically 3)
   requirePhotosMin Int      @default(0)
   isActive         Boolean  @default(true)
@@ -370,7 +370,7 @@ model ChecklistItem {
   itemCode     String?
   description  String
   /// Per-line quality / safety instruction
-  instruction  String?
+  instruction  String? @db.Text
   instructionFileUrl  String?
   instructionFileName String?
   sortOrder    Int     @default(0)
