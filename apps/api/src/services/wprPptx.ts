@@ -694,6 +694,24 @@ function slidesFor(key: string, natural: number): number {
   return Math.min(Math.max(natural, 1), max);
 }
 
+/** Saved snapshots can still hold fill-in placeholders ("[Upload photo 1]", wpr-demo/…) — never send those to a client. */
+function cleanSections(sections: WprPackInput["sections"], projectCode?: string): WprPackInput["sections"] {
+  const placeholder = /\[(upload|add|insert)[^\]]*\]|wpr-demo\/|\(awaiting data\)/i;
+  const out: WprPackInput["sections"] = {};
+  for (const [key, sec] of Object.entries(sections || {})) {
+    if (!sec) continue;
+    let rows = (sec.rows || []).filter((r) => !r.some((c) => placeholder.test(String(c ?? ""))));
+    let photos = sec.photos;
+    if (photos) {
+      const real = photos.filter((ph) => ph && !placeholder.test(ph) && resolvePhotoPath(ph, projectCode));
+      rows = key === "progressPictures" || key === "weeklyExecuted" ? (sec.rows || []).filter((_, i) => photos![i] && real.includes(photos![i])) : rows;
+      photos = real;
+    }
+    (out as any)[key] = { ...sec, rows, photos };
+  }
+  return out;
+}
+
 function ensureSection(pack: WprPackInput, key: keyof typeof DEFAULT_WPR_TITLES): WprSection {
   const sec = pack.sections[key];
   if (sec) return sec;
@@ -818,7 +836,7 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
   const rangeEnd = pack.header.weekEnd?.slice(0, 10) || rangeStart;
   const charts =
     pack.charts ?? mergeWprChartsForExport(pack.sections, null, rangeStart, rangeEnd);
-  const fullPack: WprPackInput = { ...pack, charts };
+  const fullPack: WprPackInput = { ...pack, charts, sections: cleanSections(pack.sections, pack.header.projectCode) };
 
   const pptx = createPptx();
   // Original SPDC WPR_50 is Office widescreen 13.33 × 7.5" (LAYOUT_WIDE).
