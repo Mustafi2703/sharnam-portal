@@ -4,7 +4,6 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { OfficeClockInCard } from "../components/OfficeClockInCard";
 import { Badge, Card } from "../components/ui";
-import { ReportExportButtons } from "../components/ReportExportButtons";
 import { ModuleIcon, type ModuleIconKey } from "../components/icons";
 import { WORKSPACE_PROJECT_KEY } from "../workspaces";
 
@@ -184,7 +183,6 @@ export default function DashboardPage() {
             <h1 className="font-display text-2xl mt-1">Hello {firstName}</h1>
             <p className="text-sm opacity-85 mt-1">What needs attention across your projects. Every number opens the register behind it.</p>
           </div>
-          {selected && !readOnly ? <ReportExportButtons projectId={selected.id} kind="analytics" label={`${selected.code} pack`} /> : null}
         </div>
       </div>
 

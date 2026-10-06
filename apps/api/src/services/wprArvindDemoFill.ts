@@ -17,6 +17,8 @@ export function applyWprArvindDemoFill(
   sections: WprSections,
   opts: { projectName?: string; clientName?: string; weekEnd: Date; weekStart: Date }
 ): WprSections {
+  // Sample content is never put into a client report unless explicitly switched on for a demo.
+  if (process.env.WPR_DEMO_FILL !== "1") return sections;
   const out = { ...sections };
   const we = iso(opts.weekEnd);
   const ws = iso(opts.weekStart);

@@ -199,20 +199,27 @@ export async function seedWprSections(
     ]),
   };
 
-  const communicationMatrix: WprSection = {
-    title: DEFAULT_WPR_TITLES.communicationMatrix,
-    headers: ["Communication Type", "From role", "To role", "Channel", "SLA"],
-    rows: [
-      ...matrix.map((r: any) => [r.communicationType, r.fromRole, r.toRole, r.channel, r.slaDays ?? ""]),
-      ...matrixContacts.map((r: any) => [
-        r.orgSection || "Contact",
-        r.personName || "",
-        r.mailRole || "CC",
-        "Email",
-        r.email || "",
-      ]),
-    ],
-  };
+  // Communication matrix as SPDC keeps it: party / name / designation / company / To-CC / email / mobile.
+  const contactRows = (matrixContacts as any[]).filter((r) => !r.isSectionHeader && (r.personName || r.email));
+  const communicationMatrix: WprSection = contactRows.length
+    ? {
+        title: DEFAULT_WPR_TITLES.communicationMatrix,
+        headers: ["Party", "Name", "Designation", "Company", "To / CC", "Email", "Mobile"],
+        rows: contactRows.map((r) => [
+          r.orgSection || r.orgName || "",
+          r.personName || "",
+          r.designation || "",
+          r.company || r.orgName || "",
+          r.mailRole || "CC",
+          r.email || "",
+          r.mobile || "",
+        ]),
+      }
+    : {
+        title: DEFAULT_WPR_TITLES.communicationMatrix,
+        headers: ["Communication Type", "From", "To", "Channel", "SLA (days)"],
+        rows: matrix.map((r: any) => [r.communicationType, r.fromRole, r.toRole, r.channel, r.slaDays ?? ""]),
+      };
 
   const capexSec: WprSection = {
     title: DEFAULT_WPR_TITLES.capex,
@@ -683,18 +690,54 @@ export async function seedWprSections(
     notes: valueAdditions.length ? "Value engineering / cost-time-quality improvements." : "Import WPR client pack → Value Addition sheet.",
   };
 
-  const photoEntries = photos
-    .map((p: any) => ({
-      url: String(p.fileUrl || "").trim(),
-      caption: [p.album, p.description, p.location, p.trade].filter(Boolean).join(" · "),
-    }))
-    .filter((e) => e.url);
+  // This week's photos first: DPR photos, checklist-fill evidence, site observation photos, project photos.
+  const weekPhotos: { url: string; caption: string }[] = [];
+  const pushPhoto = (url: unknown, caption: string) => {
+    const u = String(url || "").trim();
+    if (u && !weekPhotos.some((w) => w.url === u)) weekPhotos.push({ url: u, caption });
+  };
+  const [dprWeek, fillPhotos, siteRecs] = await Promise.all([
+    prisma.dprSnapshot.findMany({ where: { projectId, logDate: { gte: weekStart, lte: weekEnd } }, select: { headerJson: true, logDate: true } }),
+    prisma.checklistPhoto.findMany({
+      where: { createdAt: { gte: weekStart, lte: weekEnd }, kind: "photo", submission: { assignment: { projectId } } },
+      select: { fileUrl: true, caption: true, submission: { select: { assignment: { select: { template: { select: { name: true } } } } } } },
+      take: 40,
+    }),
+    prisma.qualitySiteRecord.findMany({ where: { projectId, occurredAt: { gte: weekStart, lte: weekEnd }, photosJson: { not: null } }, select: { title: true, photosJson: true } }),
+  ]);
+  for (const d of dprWeek) {
+    try {
+      const ex = JSON.parse(d.headerJson || "{}")._extras || {};
+      for (const ph of ex.photos || []) pushPhoto(ph.url || ph.fileUrl || ph.path, [ph.caption || ph.name || "Site progress", isoDate(d.logDate)].filter(Boolean).join(" · "));
+    } catch {
+      /* skip */
+    }
+  }
+  for (const f of fillPhotos) pushPhoto(f.fileUrl, f.caption || f.submission?.assignment?.template?.name || "Checklist evidence");
+  for (const r of siteRecs) {
+    try {
+      for (const ph of JSON.parse(r.photosJson || "[]")) pushPhoto(ph.url, r.title);
+    } catch {
+      /* skip */
+    }
+  }
+  for (const p of photos as any[]) {
+    if (p.createdAt && new Date(p.createdAt) >= weekStart && new Date(p.createdAt) <= weekEnd) {
+      pushPhoto(p.fileUrl, [p.album, p.description, p.location].filter(Boolean).join(" · ") || "Site photo");
+    }
+  }
+  // Top up with the latest project photos so the slide is never empty.
+  for (const p of photos as any[]) {
+    if (weekPhotos.length >= 8) break;
+    pushPhoto(p.fileUrl, [p.album, p.description, p.location, p.trade].filter(Boolean).join(" · ") || "Site photo");
+  }
+  const photoEntries = weekPhotos.slice(0, 16);
   const progressPictures: WprSection = {
     title: DEFAULT_WPR_TITLES.progressPictures,
     notes:
       photoEntries.length > 0
-        ? `${photoEntries.length} site photo(s) from Project Photos / Site Pilot — embedded in PPTX export.`
-        : "Attach 6–10 photos captured this week. Upload via WPR Maker or Photos — paths appear here on next WPR sync.",
+        ? `Site progress photographs — week ending ${isoDate(weekEnd)}.`
+        : "No site photographs were recorded this week.",
     headers: ["#", "Caption", "Path"],
     rows: photoEntries.map((e, i) => [i + 1, e.caption || "Site photo", e.url]),
     photos: photoEntries.map((e) => e.url),

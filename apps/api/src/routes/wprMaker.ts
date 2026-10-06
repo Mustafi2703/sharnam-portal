@@ -50,8 +50,11 @@ export function parseWprDateRange(query: {
   if (query.start) {
     const start = new Date(String(query.start));
     start.setHours(0, 0, 0, 0);
-    if (!Number.isNaN(start.getTime()) && start <= end) {
-      return { start, end, weekEnd: end, preset: "custom" };
+    // An explicit start + end is the client's own reporting week (e.g. Thu–Wed) — keep the end as given.
+    const exactEnd = new Date(Number.isNaN(endRaw.getTime()) ? end : endRaw);
+    exactEnd.setHours(23, 59, 59, 999);
+    if (!Number.isNaN(start.getTime()) && start <= exactEnd) {
+      return { start, end: exactEnd, weekEnd: exactEnd, preset: "custom" };
     }
   }
 
@@ -94,7 +97,7 @@ function parseEnd(v: unknown): Date {
 /** Resolve reporting window from download/publish query (respects preset + start). */
 function rangeFromQuery(query: Record<string, unknown>): WprDateRange {
   return parseWprDateRange({
-    end: query.end,
+    end: query.end ?? query.weekEnding,
     start: query.start,
     preset: query.preset,
   });
@@ -108,13 +111,15 @@ async function buildWprExportPack(
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return null;
   const { start: weekStart, end: weekEnd } = range;
-  const existing = await prisma.wprSnapshot.findUnique({
-    where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
-  });
+  // Saved reports are filed under the week's Sunday; a custom Thu–Wed week still finds its report.
+  const exact = await prisma.wprSnapshot.findUnique({ where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } } });
+  const sunday = await prisma.wprSnapshot.findUnique({ where: { projectId_weekEnding: { projectId, weekEnding: snapWeekEnding(weekEnd) } } });
+  const existing = exact || sunday;
+  const reportNumberFound = exact?.reportNumber || sunday?.reportNumber || undefined;
   const header: WprHeader = {
     projectName: project.name,
     projectCode: project.code,
-    reportNumber: existing?.reportNumber || undefined,
+    reportNumber: reportNumberFound,
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     clientName: project.clientName || "",

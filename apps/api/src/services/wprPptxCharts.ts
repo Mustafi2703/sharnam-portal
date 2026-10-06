@@ -349,7 +349,7 @@ function safetyChartSlide(
   }));
   barChartSlide(pptx, {
     title: "HSE Statistic · previous vs current week",
-    subtitle: "Safe manhours, TBT, induction, trainings — PW vs CW from the week sheet",
+    subtitle: "Safe man-hours, toolbox talks and inductions — previous vs current week",
     bars,
     valAxisTitle: "Count",
     client: opts.client,
@@ -371,7 +371,7 @@ export function renderWprChartSlide(
     case "scurve":
       lineChartSlide(pptx, {
         title: "Project S-curve · planned vs actual %",
-        subtitle: "Rollup from published DPRs in the reporting window",
+        subtitle: "Planned vs actual progress, cumulative %",
         points: charts.scurve,
         ...meta,
       });
@@ -379,7 +379,7 @@ export function renderWprChartSlide(
     case "milestones":
       barChartSlide(pptx, {
         title: "Project milestone schedule",
-        subtitle: "Plan vs actual days — edit data labels in PowerPoint",
+        subtitle: "Planned vs actual days by milestone",
         bars: charts.milestones,
         valAxisTitle: "Days",
         ...meta,
@@ -423,7 +423,7 @@ export function renderWprChartSlide(
     case "quality":
       pieChartSlide(pptx, {
         title: "Quality Statistic",
-        subtitle: "Site Observation / Instruction / NCR — totals from the week sheet",
+        subtitle: "Site observations, site instructions and NCR — this week",
         slices: charts.quality,
         ...meta,
       });

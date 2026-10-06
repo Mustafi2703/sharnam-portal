@@ -237,7 +237,7 @@ const INDEX_ITEMS = [
 
 function indexSlide(
   pptx: PptxDeck,
-  meta: { client?: string; page: number; total: number }
+  meta: { client?: string; page: number; total: number; entries?: { label: string; page: number }[] }
 ) {
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
@@ -269,9 +269,11 @@ function indexSlide(
     fill: { color: ORANGE },
   });
 
-  INDEX_ITEMS.forEach((label, i) => {
-    const col = i < 5 ? 0 : 1;
-    const row = i % 5;
+  const entries = meta.entries?.length ? meta.entries : INDEX_ITEMS.map((label) => ({ label, page: 0 }));
+  const perCol = Math.ceil(entries.length / 2);
+  entries.forEach(({ label, page }, i) => {
+    const col = i < perCol ? 0 : 1;
+    const row = i % perCol;
     const x = MARGIN + col * 6.3;
     const y = 1.3 + row * 1.05;
     slide.addShape(pptx.ShapeType.rect, {
@@ -302,15 +304,41 @@ function indexSlide(
     slide.addText(label, {
       x: x + 1.05,
       y,
-      w: 4.7,
+      w: 3.9,
       h: 0.88,
       fontSize: 16,
       bold: true,
       color: NAVY,
       valign: "middle",
     });
+    if (page) {
+      slide.addText(`Page ${page}`, {
+        x: x + 4.85,
+        y,
+        w: 1.0,
+        h: 0.88,
+        fontSize: 11,
+        color: BRAND,
+        align: "right",
+        valign: "middle",
+      });
+    }
   });
   footer(slide, meta.page, meta.total, meta.client);
+}
+
+/** Client-facing caption: drop notes that are instructions to portal users (import / fill / regenerate / menu paths). */
+export function clientCaption(note?: string | null): string {
+  const t = String(note || "").trim();
+  if (!t) return "";
+  const internal = /(→|\bimport\b|\bload\b .*template|\bfill (in|weekly)\b|regenerate|wpr maker|sync registers|edit data labels|attach progress|placeholder|not duplicated|same kpis as|rollup from published|from the week sheet|under finance|\bsap\b.*iso|iso \d)/i;
+  // Keep only sentences that read as report content.
+  const kept = t
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => sentence && !internal.test(sentence))
+    .join(" ")
+    .trim();
+  return kept;
 }
 
 function colWidths(headers: string[], totalW: number): number[] {
@@ -412,8 +440,9 @@ function tableSlide(
   });
 
   let y = 1.12;
-  if (opts.notes) {
-    slide.addText(opts.notes, {
+  const caption = clientCaption(opts.notes);
+  if (caption) {
+    slide.addText(caption, {
       x: MARGIN,
       y,
       w: CONTENT_W,
@@ -425,7 +454,7 @@ function tableSlide(
   }
 
   const headers = opts.headers.length ? opts.headers : ["Item", "Detail"];
-  const body = opts.rows.length ? opts.rows : [["(No rows — fill in WPR Maker / sync registers)", ""]];
+  const body = opts.rows.length ? opts.rows : [["No entries for this week", ""]];
   const colW = colWidths(headers, CONTENT_W);
   const tableRows = [
     headers.map((h) => ({
@@ -530,7 +559,13 @@ function photoGridSlide(
   const gap = 0.22;
   const originY = 1.15;
 
-  for (let i = 0; i < 4; i++) {
+  const count = Math.min(4, opts.photos.filter(Boolean).length);
+  if (!count) {
+    slide.addText("No site photographs were recorded for this week.", {
+      x: MARGIN, y: 3.2, w: CONTENT_W, h: 0.6, fontSize: 16, color: MUTED, align: "center", valign: "middle",
+    });
+  }
+  for (let i = 0; i < count; i++) {
     const col = i % 2;
     const row = Math.floor(i / 2);
     const x = MARGIN + col * (cellW + gap);
@@ -592,9 +627,9 @@ function siteImageSlide(
   slide.addText(
     [
       meta.projectName || "Project site",
-      meta.location || "Attach Google Earth / site photo in WPR Maker photos",
+      meta.location || "",
       "",
-      "Placeholder — portal photos appear on Progress Pictures slides.",
+      "Site location",
     ].join("\n"),
     {
       x: MARGIN + 0.4,
@@ -737,8 +772,8 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
     // capped at the fixed 2 (which either padded blank slides or dropped
     // photos past the cap when the client supplied more than 8).
     let useChunks: number;
-    if (n.key === "progressPictures" && sec.photos && sec.photos.length) {
-      useChunks = Math.max(1, Math.min(2, Math.ceil(sec.photos.length / 4)));
+    if (n.key === "progressPictures") {
+      useChunks = Math.max(1, Math.min(4, Math.ceil((sec.photos?.length || 0) / 4)));
     } else if (n.key === "weeklyExecuted" && sec.photos && sec.photos.length) {
       useChunks = Math.max(1, Math.min(3, Math.ceil(sec.photos.length / 2)));
     } else {
@@ -753,7 +788,15 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
       }
     }
   }
+  // Section numbers follow the deck order, so the index and the divider slides agree.
+  let sectionNo = 0;
+  for (const p of plan) if (p.type === "divider") p.no = String(++sectionNo).padStart(2, "0");
   return plan;
+}
+
+/** Index entries: every section divider with the page it starts on. */
+function indexEntries(plan: PlanItem[]): { label: string; page: number }[] {
+  return plan.flatMap((p, i) => (p.type === "divider" ? [{ label: p.title, page: i + 1 }] : []));
 }
 
 export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
@@ -781,7 +824,8 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
   // Original SPDC WPR_50 is Office widescreen 13.33 × 7.5" (LAYOUT_WIDE).
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "Sharnam PMC";
-  pptx.company = "Sharnam Project Development Consultants & Co.";
+  // pptxgenjs writes company into docProps/app.xml without XML escaping — a raw "&" makes Office reject the file.
+  pptx.company = "Sharnam Project Development Consultants &amp; Co.";
   pptx.subject = `WPR ${fullPack.header.reportNumber || fullPack.header.projectCode || ""}`;
   pptx.title = `Weekly Progress Report — ${fullPack.header.projectName || "Project"}`;
 
@@ -883,7 +927,7 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
     }
 
     if (item.type === "index") {
-      indexSlide(pptx, { client, page, total });
+      indexSlide(pptx, { client, page, total, entries: indexEntries(plan) });
       continue;
     }
 
