@@ -222,22 +222,26 @@ function dividerSlide(
   footer(slide, meta.page, meta.total, meta.client, "B8C4D0");
 }
 
-const INDEX_ITEMS = [
-  "Project Brief",
-  "Project Stakeholders",
-  "Mobilisation Plan",
-  "Risk Register",
-  "Procurement Tracker",
-  "Weekly Safety Update",
-  "Weekly Quality Update",
-  "Project Progress",
-  "Weekly Planned Vs. Actual",
-  "Project Progress Pictures",
-];
+type IndexEntry = { label: string; page: number };
+
+/**
+ * Staff-facing notes ("Import … under Finance", "Upload via WPR Maker", "Regenerate WPR")
+ * are guidance for the portal user, not report content — keep them off client slides.
+ */
+const INTERNAL_NOTE = /\b(import|upload|attach|load|populate|regenerate|re-?sync|sync|fill in|add (more )?rows|wpr maker|appear here|from project photos|auto-filled|not duplicated)\b|→/i;
+
+export function clientFacingNote(notes: string | undefined): string | undefined {
+  const parts = String(notes || "")
+    .split(/(?<=\.)\s+/)
+    .map((p) => p.trim())
+    .filter((p) => p && !INTERNAL_NOTE.test(p));
+  return parts.length ? parts.join(" ") : undefined;
+}
 
 function indexSlide(
   pptx: PptxDeck,
-  meta: { client?: string; page: number; total: number; entries?: { label: string; page: number }[] }
+  entries: IndexEntry[],
+  meta: { client?: string; page: number; total: number }
 ) {
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
@@ -269,32 +273,33 @@ function indexSlide(
     fill: { color: ORANGE },
   });
 
-  const entries = meta.entries?.length ? meta.entries : INDEX_ITEMS.map((label) => ({ label, page: 0 }));
-  const perCol = Math.ceil(entries.length / 2);
+  const perCol = Math.max(5, Math.ceil(entries.length / 2));
+  const rowH = Math.min(1.05, 5.5 / perCol);
   entries.forEach(({ label, page }, i) => {
     const col = i < perCol ? 0 : 1;
     const row = i % perCol;
     const x = MARGIN + col * 6.3;
-    const y = 1.3 + row * 1.05;
+    const y = 1.3 + row * rowH;
+    const h = rowH - 0.17;
     slide.addShape(pptx.ShapeType.rect, {
       x,
       y,
       w: 5.95,
-      h: 0.88,
+      h,
       fill: { color: i % 2 ? BAND : LIGHT },
     });
     slide.addShape(pptx.ShapeType.rect, {
       x,
       y,
-      w: 0.88,
-      h: 0.88,
+      w: h,
+      h,
       fill: { color: BRAND },
     });
     slide.addText(String(i + 1), {
       x,
       y,
-      w: 0.88,
-      h: 0.88,
+      w: h,
+      h,
       fontSize: 22,
       bold: true,
       color: WHITE,
@@ -302,27 +307,25 @@ function indexSlide(
       valign: "middle",
     });
     slide.addText(label, {
-      x: x + 1.05,
+      x: x + h + 0.17,
       y,
       w: 3.9,
-      h: 0.88,
+      h,
       fontSize: 16,
       bold: true,
       color: NAVY,
       valign: "middle",
     });
-    if (page) {
-      slide.addText(`Page ${page}`, {
-        x: x + 4.85,
-        y,
-        w: 1.0,
-        h: 0.88,
-        fontSize: 11,
-        color: BRAND,
-        align: "right",
-        valign: "middle",
-      });
-    }
+    slide.addText(`Page ${page}`, {
+      x: x + 4.65,
+      y,
+      w: 1.15,
+      h,
+      fontSize: 12,
+      color: MUTED,
+      align: "right",
+      valign: "middle",
+    });
   });
   footer(slide, meta.page, meta.total, meta.client);
 }
@@ -393,6 +396,18 @@ function addSignOffStrip(
   });
 }
 
+const DATE_HEADER = /date|dated|raised|cast|received|issued|occurrence|resolved/i;
+
+/** Excel date serials (e.g. 45974) imported from client workbooks → 06-11-2025 under date columns. */
+function cellText(header: string, v: string | number | null | undefined): string {
+  if (typeof v === "number" && DATE_HEADER.test(header) && v > 30000 && v < 60000 && Number.isInteger(v)) {
+    const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
+    return `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+  }
+  if (typeof v === "number" && !Number.isInteger(v)) return String(Math.round(v * 100) / 100);
+  return String(v ?? "");
+}
+
 function tableSlide(
   pptx: PptxDeck,
   opts: {
@@ -454,7 +469,7 @@ function tableSlide(
   }
 
   const headers = opts.headers.length ? opts.headers : ["Item", "Detail"];
-  const body = opts.rows.length ? opts.rows : [["No entries for this week", ""]];
+  const body = opts.rows.length ? opts.rows : [headers.map((_, i) => (i === 0 ? "No entries recorded for this reporting week." : ""))];
   const colW = colWidths(headers, CONTENT_W);
   const tableRows = [
     headers.map((h) => ({
@@ -462,8 +477,8 @@ function tableSlide(
       options: { bold: true, fill: { color: NAVY_XL }, color: WHITE, fontSize: 9, align: "center" },
     })),
     ...body.map((r, ri) =>
-      headers.map((_, i) => ({
-        text: String(r[i] ?? ""),
+      headers.map((h, i) => ({
+        text: cellText(h, r[i]),
         options: {
           fontSize: 9,
           color: INK,
@@ -536,7 +551,6 @@ function photoGridSlide(
     page: number;
     total: number;
     partLabel?: string;
-    projectCode?: string;
   }
 ) {
   const slide = pptx.addSlide();
@@ -554,38 +568,28 @@ function photoGridSlide(
     x: MARGIN, y: 0.92, w: 1.55, h: 0.055, fill: { color: ORANGE },
   });
 
-  const cellW = 6.05;
-  const cellH = 2.55;
+  // 1 photo: full width · 2: side by side · 3–4: 2 × 2 grid. Only real photos are placed.
+  const n = Math.min(4, opts.photos.length);
   const gap = 0.22;
+  const capH = 0.28;
   const originY = 1.15;
+  const areaH = 6.85 - originY;
+  const cols = n === 1 ? 1 : 2;
+  const rows = n <= 2 ? 1 : 2;
+  const cellW = (CONTENT_W - gap * (cols - 1)) / cols;
+  const cellH = (areaH - rows * capH - gap * (rows - 1)) / rows;
 
-  const count = Math.min(4, opts.photos.filter(Boolean).length);
-  if (!count) {
-    slide.addText("No site photographs were recorded for this week.", {
-      x: MARGIN, y: 3.2, w: CONTENT_W, h: 0.6, fontSize: 16, color: MUTED, align: "center", valign: "middle",
-    });
-  }
-  for (let i = 0; i < count; i++) {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
+  for (let i = 0; i < n; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
     const x = MARGIN + col * (cellW + gap);
-    const y = originY + row * (cellH + gap + 0.28);
-    const src = opts.photos[i] ? resolvePhotoPath(opts.photos[i], opts.projectCode) : undefined;
-    if (src) {
-      slide.addImage({ path: src, x, y, w: cellW, h: cellH, sizing: { type: "contain", w: cellW, h: cellH } });
-    } else {
-      slide.addShape(pptx.ShapeType.rect, {
-        x, y, w: cellW, h: cellH,
-        fill: { color: LIGHT },
-        line: { color: "E2E5EB", width: 0.5 },
-      });
-      slide.addText("(No photo)", {
-        x, y, w: cellW, h: cellH, fontSize: 10, color: MUTED, align: "center", valign: "middle",
+    const y = originY + row * (cellH + capH + gap);
+    slide.addImage({ path: opts.photos[i], x, y, w: cellW, h: cellH, sizing: { type: "contain", w: cellW, h: cellH } });
+    if (opts.captions[i]) {
+      slide.addText(opts.captions[i], {
+        x, y: y + cellH + 0.02, w: cellW, h: 0.22, fontSize: 9, color: INK,
       });
     }
-    slide.addText(opts.captions[i] || `Photo ${i + 1}`, {
-      x, y: y + cellH + 0.02, w: cellW, h: 0.22, fontSize: 9, color: INK,
-    });
   }
 
   footer(slide, opts.page, opts.total, opts.client);
@@ -593,7 +597,15 @@ function photoGridSlide(
 
 function siteImageSlide(
   pptx: PptxDeck,
-  meta: { client?: string; projectName?: string; location?: string; page: number; total: number }
+  meta: {
+    client?: string;
+    projectName?: string;
+    location?: string;
+    photo?: string;
+    projectCode?: string;
+    page: number;
+    total: number;
+  }
 ) {
   const slide = pptx.addSlide();
   slide.background = { color: WHITE };
@@ -608,7 +620,7 @@ function siteImageSlide(
     color: BRAND,
     bold: true,
   });
-  slide.addText("Site location / Google Earth view", {
+  slide.addText("Site Location", {
     x: MARGIN,
     y: 0.48,
     w: CONTENT_W - 1.6,
@@ -617,6 +629,16 @@ function siteImageSlide(
     bold: true,
     color: NAVY,
   });
+  const photo = meta.photo ? resolvePhotoPath(meta.photo, meta.projectCode) : undefined;
+  if (photo) {
+    try {
+      slide.addImage({ path: photo, x: MARGIN, y: 1.12, w: CONTENT_W, h: 5.7, sizing: { type: "contain", w: CONTENT_W, h: 5.7 } });
+      footer(slide, meta.page, meta.total, meta.client);
+      return;
+    } catch {
+      /* fall back to project details panel */
+    }
+  }
   slide.addShape(pptx.ShapeType.rect, {
     x: MARGIN,
     y: 1.12,
@@ -625,12 +647,7 @@ function siteImageSlide(
     fill: { color: LIGHT },
   });
   slide.addText(
-    [
-      meta.projectName || "Project site",
-      meta.location || "",
-      "",
-      "Site location",
-    ].join("\n"),
+    [meta.projectName || "Project site", meta.location || ""].filter(Boolean).join("\n"),
     {
       x: MARGIN + 0.4,
       y: 3.1,
@@ -718,8 +735,7 @@ function ensureSection(pack: WprPackInput, key: keyof typeof DEFAULT_WPR_TITLES)
   return {
     title: PPTX_TITLES[key] || DEFAULT_WPR_TITLES[key],
     headers: ["Item", "Status"],
-    rows: [["(Awaiting data)", "Open"]],
-    notes: "Populate via WPR Maker sync from portal registers.",
+    rows: [],
   };
 }
 
@@ -729,76 +745,107 @@ type PlanItem =
   | { type: "divider"; title: string; no: string }
   | { type: "siteImage" }
   | { type: "section"; key: keyof typeof DEFAULT_WPR_TITLES; chunk: number; chunks: number }
+  | { type: "photos"; key: keyof typeof DEFAULT_WPR_TITLES; chunk: number; chunks: number }
   | { type: "chart"; key: WprChartSlideKey };
 
-function buildPlan(pack: WprPackInput): PlanItem[] {
+type NarrativeItem =
+  | { kind: "divider"; title: string }
+  | { kind: "siteImage" }
+  | { kind: "section"; key: keyof typeof DEFAULT_WPR_TITLES; index?: string };
+
+/** Deck order (SPDC WPR_50). Dividers and `index` labels feed the INDEX slide in this same order. */
+const NARRATIVE: NarrativeItem[] = [
+  { kind: "divider", title: "Project Brief" },
+  { kind: "section", key: "brief" },
+  { kind: "siteImage" },
+  { kind: "section", key: "stakeholders", index: "Project Stakeholders" },
+  { kind: "section", key: "mobilisation", index: "Mobilisation Plan" },
+  { kind: "section", key: "communicationMatrix" },
+  { kind: "section", key: "projectDashboard" },
+  { kind: "section", key: "criticalAreas" },
+  { kind: "section", key: "capex" },
+  { kind: "section", key: "prTracker" },
+  { kind: "section", key: "invoiceTracker" },
+  { kind: "section", key: "hindrance" },
+  { kind: "section", key: "risk", index: "Risk Register" },
+  { kind: "section", key: "legal" },
+  { kind: "section", key: "drawingRegister" },
+  { kind: "section", key: "designStatus" },
+  { kind: "section", key: "procurement", index: "Procurement Status" },
+  { kind: "divider", title: "Project Progress" },
+  { kind: "section", key: "milestones" },
+  { kind: "section", key: "manpowerHistogram" },
+  { kind: "section", key: "weeklyExecuted" },
+  { kind: "section", key: "cashflow" },
+  { kind: "divider", title: "Weekly Quality Update" },
+  { kind: "section", key: "quality" },
+  { kind: "section", key: "cubeTest" },
+  { kind: "divider", title: "Weekly Safety Update" },
+  { kind: "section", key: "safety" },
+  { kind: "divider", title: "Weekly Planned Vs. Actual" },
+  { kind: "section", key: "plannedVsActual" },
+  { kind: "section", key: "valueAddition" },
+  { kind: "section", key: "materialStock" },
+  { kind: "divider", title: "Project Progress Pictures" },
+  { kind: "section", key: "progressPictures" },
+];
+
+/** Photo slides per section (4 photos each); sections not listed never get photo slides. */
+const PHOTO_SLIDES_MAX: Partial<Record<string, number>> = {
+  mobilisation: 1,
+  weeklyExecuted: 2,
+  progressPictures: 3,
+};
+
+/**
+ * Photos that actually exist on disk (or are remote URLs), with their captions.
+ * Missing files are dropped so the client deck never shows empty "(No photo)" boxes.
+ */
+function sectionPhotos(pack: WprPackInput, key: keyof typeof DEFAULT_WPR_TITLES): { path: string; caption: string }[] {
+  const sec = pack.sections[key];
+  if (!sec?.photos?.length) return [];
+  const out: { path: string; caption: string }[] = [];
+  sec.photos.forEach((p, i) => {
+    const resolved = resolvePhotoPath(p, pack.header.projectCode);
+    if (!resolved) return;
+    // progressPictures rows are [#, caption, path] or [caption]; other sections' rows are not photo captions.
+    let caption = "";
+    if (key === "progressPictures") {
+      const r = sec.rows?.[i] || [];
+      caption = String((r.length > 1 ? r[1] : r[0]) ?? "");
+    }
+    out.push({ path: resolved, caption });
+  });
+  return out;
+}
+
+function buildPlan(pack: WprPackInput): { plan: PlanItem[]; index: IndexEntry[] } {
   const plan: PlanItem[] = [{ type: "cover" }, { type: "index" }];
+  const index: IndexEntry[] = [];
 
-  const narrative: Array<
-    | { kind: "divider"; title: string; no: string }
-    | { kind: "siteImage" }
-    | { kind: "section"; key: keyof typeof DEFAULT_WPR_TITLES }
-  > = [
-    { kind: "divider", title: "Project Brief", no: "03" },
-    { kind: "section", key: "brief" },
-    { kind: "siteImage" },
-    { kind: "section", key: "stakeholders" },
-    { kind: "section", key: "mobilisation" },
-    { kind: "section", key: "communicationMatrix" },
-    { kind: "section", key: "projectDashboard" },
-    { kind: "section", key: "criticalAreas" },
-    { kind: "section", key: "capex" },
-    { kind: "section", key: "prTracker" },
-    { kind: "section", key: "invoiceTracker" },
-    { kind: "section", key: "hindrance" },
-    { kind: "section", key: "risk" },
-    { kind: "section", key: "legal" },
-    { kind: "section", key: "drawingRegister" },
-    { kind: "section", key: "designStatus" },
-    { kind: "section", key: "procurement" },
-    { kind: "divider", title: "Project Progress", no: "21" },
-    { kind: "section", key: "milestones" },
-    { kind: "section", key: "manpowerHistogram" },
-    { kind: "section", key: "weeklyExecuted" },
-    { kind: "section", key: "cashflow" },
-    { kind: "divider", title: "Weekly Quality Update", no: "40" },
-    { kind: "section", key: "quality" },
-    { kind: "section", key: "cubeTest" },
-    { kind: "divider", title: "Weekly Safety Update", no: "51" },
-    { kind: "section", key: "safety" },
-    { kind: "divider", title: "Weekly Planned Vs. Actual", no: "54" },
-    { kind: "section", key: "plannedVsActual" },
-    { kind: "section", key: "valueAddition" },
-    { kind: "section", key: "materialStock" },
-    { kind: "divider", title: "Project Progress Pictures", no: "59" },
-    { kind: "section", key: "progressPictures" },
-  ];
-
-  for (const n of narrative) {
+  for (const n of NARRATIVE) {
     if (n.kind === "divider") {
-      plan.push({ type: "divider", title: n.title, no: n.no });
+      // Divider number is its own page in this deck (WPR_50 prints the page, e.g. "21").
+      const page = plan.length + 1;
+      plan.push({ type: "divider", title: n.title, no: String(page).padStart(2, "0") });
+      index.push({ label: n.title, page });
       continue;
     }
     if (n.kind === "siteImage") {
       plan.push({ type: "siteImage" });
       continue;
     }
+    if (n.index) index.push({ label: n.index, page: plan.length + 1 });
     const sec = ensureSection(pack, n.key);
     const natural = Math.max(1, chunkRows(sec.rows || [], ROWS_PER[n.key] || 12).length);
-    // Progress-pictures: 4 photos per slide when photos are provided, so the
-    // slide count grows/shrinks with the actual photo pack instead of being
-    // capped at the fixed 2 (which either padded blank slides or dropped
-    // photos past the cap when the client supplied more than 8).
-    let useChunks: number;
-    if (n.key === "progressPictures") {
-      useChunks = Math.max(1, Math.min(4, Math.ceil((sec.photos?.length || 0) / 4)));
-    } else if (n.key === "weeklyExecuted" && sec.photos && sec.photos.length) {
-      useChunks = Math.max(1, Math.min(3, Math.ceil(sec.photos.length / 2)));
-    } else {
-      useChunks = slidesFor(n.key, natural);
+    const photoChunks = Math.min(PHOTO_SLIDES_MAX[n.key] ?? 0, Math.ceil(sectionPhotos(pack, n.key).length / 4));
+    // Progress Pictures rows are only captions — the photos are the content.
+    const tableChunks = n.key === "progressPictures" && photoChunks ? 0 : slidesFor(n.key, natural);
+    for (let i = 0; i < tableChunks; i++) {
+      plan.push({ type: "section", key: n.key, chunk: i, chunks: tableChunks });
     }
-    for (let i = 0; i < useChunks; i++) {
-      plan.push({ type: "section", key: n.key, chunk: i, chunks: useChunks });
+    for (let i = 0; i < photoChunks; i++) {
+      plan.push({ type: "photos", key: n.key, chunk: i, chunks: photoChunks });
     }
     if (pack.charts) {
       for (const ck of CHART_AFTER[n.key] || []) {
@@ -806,10 +853,23 @@ function buildPlan(pack: WprPackInput): PlanItem[] {
       }
     }
   }
-  // Section numbers follow the deck order, so the index and the divider slides agree.
-  let sectionNo = 0;
-  for (const p of plan) if (p.type === "divider") p.no = String(++sectionNo).padStart(2, "0");
-  return plan;
+  return { plan, index };
+}
+
+/** Week bounds are built at local 00:00 / 23:59 — format in the same zone so neither end shifts a day. */
+function fmtReportDate(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+/**
+ * Opt-in only: the reference-deck fill patches the cover and a couple of tables, every other
+ * slide keeps the reference week's pasted content — wrong data for any other week or project.
+ */
+export function wprTemplateFillEnabled(): boolean {
+  return process.env.WPR_PPTX_MODE === "template";
 }
 
 /** Index entries: every section divider with the page it starts on. */
@@ -818,7 +878,7 @@ function indexEntries(plan: PlanItem[]): { label: string; page: number }[] {
 }
 
 export async function buildWprPptx(pack: WprPackInput): Promise<Buffer> {
-  if (process.env.WPR_PPTX_LEGACY !== "1") {
+  if (wprTemplateFillEnabled()) {
     try {
       const { buildWprPptxFromTemplate, wprTemplateAvailable } = await import("./wprPptxTemplate.js");
       if (wprTemplateAvailable()) {
@@ -848,23 +908,11 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
   pptx.title = `Weekly Progress Report — ${fullPack.header.projectName || "Project"}`;
 
   const client = fullPack.header.clientName || fullPack.header.projectName || "Project";
-  const weekStartLabel = fullPack.header.weekStart
-    ? new Date(fullPack.header.weekStart).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
-    : "";
-  const weekLabel = fullPack.header.weekEnd
-    ? new Date(fullPack.header.weekEnd).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
-    : "—";
+  const weekStartLabel = fmtReportDate(fullPack.header.weekStart);
+  const weekLabel = fmtReportDate(fullPack.header.weekEnd) || "—";
   const weekRange = weekStartLabel ? `(${weekStartLabel} to ${weekLabel})` : weekLabel;
   const reportNo = fullPack.header.reportNumber || "—";
-  const plan = buildPlan(fullPack);
+  const { plan, index: indexEntries } = buildPlan(fullPack);
   const total = plan.length;
   let page = 0;
 
@@ -945,7 +993,7 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
     }
 
     if (item.type === "index") {
-      indexSlide(pptx, { client, page, total, entries: indexEntries(plan) });
+      indexSlide(pptx, indexEntries, { client, page, total });
       continue;
     }
 
@@ -959,6 +1007,8 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
         client,
         projectName: fullPack.header.projectName,
         location: fullPack.header.location,
+        photo: fullPack.sections.brief?.photos?.[0],
+        projectCode: fullPack.header.projectCode,
         page,
         total,
       });
@@ -970,32 +1020,24 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
       continue;
     }
 
+    if (item.type === "photos") {
+      const sec = ensureSection(fullPack, item.key);
+      const photos = sectionPhotos(fullPack, item.key).slice(item.chunk * 4, item.chunk * 4 + 4);
+      photoGridSlide(pptx, {
+        title: `${PPTX_TITLES[item.key] || sec.title || DEFAULT_WPR_TITLES[item.key]}${item.key === "progressPictures" ? "" : " · Photographs"}`,
+        captions: photos.map((p) => p.caption),
+        photos: photos.map((p) => p.path),
+        client,
+        page,
+        total,
+        partLabel: item.chunks > 1 ? `Part ${item.chunk + 1} of ${item.chunks}` : undefined,
+      });
+      continue;
+    }
+
     if (item.type !== "section") continue;
 
     const sec = ensureSection(fullPack, item.key);
-
-    // Progress-pictures: render a proper 4-photo grid per slide when the
-    // section carries any photo paths.  Falls back to the caption-only
-    // tableSlide when photos array is empty (keeps prior behaviour).
-    const photoPer = item.key === "progressPictures" ? 4 : item.key === "weeklyExecuted" ? 2 : 0;
-    if (photoPer && sec.photos && sec.photos.length) {
-      const start = item.chunk * photoPer;
-      const photos = sec.photos.slice(start, start + photoPer);
-      const captions = (sec.rows || []).slice(start, start + photoPer).map((r) => String(r?.[0] ?? r?.[1] ?? ""));
-      if (photos.length) {
-        photoGridSlide(pptx, {
-          title: PPTX_TITLES[item.key] || sec.title || DEFAULT_WPR_TITLES[item.key],
-          captions,
-          photos,
-          client,
-          page,
-          total,
-          projectCode: fullPack.header.projectCode,
-          partLabel: item.chunks > 1 ? `Part ${item.chunk + 1} of ${item.chunks}` : undefined,
-        });
-        continue;
-      }
-    }
 
     const per = ROWS_PER[item.key] || 12;
     const parts = chunkRows(sec.rows || [], per);
@@ -1003,12 +1045,12 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
     const rows = parts[Math.min(item.chunk, parts.length - 1)] || [];
     const showEmpty =
       item.chunk >= parts.length
-        ? [["(Continuation — add more rows in registers)", ""]]
+        ? []
         : rows;
     const signKeys = item.key === "brief" || item.key === "projectDashboard";
     tableSlide(pptx, {
       title: PPTX_TITLES[item.key] || sec.title || DEFAULT_WPR_TITLES[item.key],
-      notes: item.chunk === 0 ? sec.notes : undefined,
+      notes: item.chunk === 0 ? clientFacingNote(sec.notes) : undefined,
       headers: sec.headers || ["Item", "Detail"],
       rows: showEmpty,
       client,
@@ -1025,5 +1067,5 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
 }
 
 export function estimateWprSlideCount(pack: WprPackInput): number {
-  return buildPlan(pack).length;
+  return buildPlan(pack).plan.length;
 }

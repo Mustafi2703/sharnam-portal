@@ -103,6 +103,8 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
   let cumManDays = 0;
   let cumSafeHours = 0;
   const lineCum = new Map<string, number>();
+  /** Running cumulative on the latest prior DPR (its cum prev + qty today) — the next day continues from here. */
+  const lastCum = new Map<string, number>();
 
   for (const snap of prior) {
     const { header, extras } = splitHeaderJson(snap.headerJson);
@@ -113,10 +115,11 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
     for (const ln of lines) {
       const key = norm(ln.description || "");
       lineCum.set(key, (lineCum.get(key) || 0) + Number(ln.qtyToday || 0));
+      lastCum.set(key, Number(ln.cumQtyPrev || 0) + Number(ln.qtyToday || 0));
     }
   }
 
-  return { lineCum, cumManDays, cumSafeHours, priorCount: prior.length };
+  return { lineCum, lastCum, cumManDays, cumSafeHours, priorCount: prior.length };
 }
 
 function splitHeaderJson(headerJson: string | null) {
@@ -250,7 +253,10 @@ export async function buildDprAutoFill(
   if (hindrances.length) sources.push("Hindrance register");
   if (rfisOpen.length) sources.push("Open RFIs");
 
-  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number) {
+  // Suggest a day's qty from the register's weekly actual only before a line has any DPR history;
+  // after that the site enters actuals, so stale register figures never pile into the cumulative.
+  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number, description: string) {
+    if (prev.lastCum.has(norm(description))) return 0;
     const wa = Number(weeklyActual || 0);
     if (wa <= 0) return 0;
     const suggested = Math.round((wa / 6) * 1000) / 1000;
@@ -279,15 +285,16 @@ export async function buildDprAutoFill(
           const mbQty = mbLines
             .filter((m) => fuzzyMatch(m.description, r.description))
             .reduce((s, m) => s + (m.qty || 0), 0);
+          // Continue yesterday's running total; the register / MB figure only seeds the first DPR of a line.
           const dprCum = prev.lineCum.get(norm(r.description)) || 0;
-          const cumQtyPrev = Math.max(r.achievedQty || 0, mbQty, dprCum);
+          const cumQtyPrev = prev.lastCum.get(norm(r.description)) ?? Math.max(r.achievedQty || 0, mbQty, dprCum);
           const scopeQty = r.boqQty || r.gfcQty || act?.boqQty || 0;
           const remaining = Math.max(0, scopeQty - cumQtyPrev);
           const plannedHint = act?.weeklyPlanned ?? act?.boqQty;
           const weeklyPlanned = Number(act?.weeklyPlanned || 0);
           const plannedQtyToday =
             weeklyPlanned > 0 ? Math.round((weeklyPlanned / 6) * 1000) / 1000 : 0;
-          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining);
+          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining, r.description);
           return {
             srNo: undefined,
             group: r.section || act?.tower || undefined,
@@ -311,10 +318,11 @@ export async function buildDprAutoFill(
           .filter((a) => Number(a.weeklyActual || 0) > 0 || Number(a.weeklyPlanned || 0) > 0)
           .slice(0, 25)
           .map((a) => {
-            const cumQtyPrev = a.cumulativeQty || a.executedQty || prev.lineCum.get(norm(a.activity)) || 0;
+            const cumQtyPrev =
+              prev.lastCum.get(norm(a.activity)) ?? (a.cumulativeQty || a.executedQty || prev.lineCum.get(norm(a.activity)) || 0);
             const scopeQty = a.boqQty || a.gfcQty || 0;
             const remaining = Math.max(0, scopeQty - cumQtyPrev);
-            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining);
+            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining, a.activity);
             return {
               group: a.tower || undefined,
               description: a.activity,
