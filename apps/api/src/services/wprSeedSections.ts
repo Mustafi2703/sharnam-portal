@@ -4,7 +4,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { DEFAULT_WPR_TITLES, type WprSection, type WprSections } from "./wprXlsx.js";
 import { applyWprArvindDemoFill } from "./wprArvindDemoFill.js";
-import { activityWeekRollup, normActivity, nextReportNumber, qualityWeekStats } from "./wprWeekRollup.js";
+import { activityWeekRollup, nextReportNumber, qualityWeekStats, rollupFor } from "./wprWeekRollup.js";
 
 /** Local calendar date — toISOString() would print the previous day for local-midnight dates east of UTC (IST). */
 function round3(n: number) {
@@ -664,7 +664,7 @@ export async function seedWprSections(
   const pctOf = (done: number, scope: number) => (scope > 0 ? `${Math.round((done / scope) * 100)}%` : "");
   const pvaActivityRows: (string | number)[][] = activityLines.map((a: any) => {
     const scope = Number(a.gfcQty || a.boqQty || 0);
-    const dpr = pvaRollup?.get(normActivity(a.activity));
+    const dpr = rollupFor(pvaRollup, a.activity, a.unit);
     const tillDate = dpr ? dpr.tillDate : Number(a.executedQty || 0);
     const wkAct = pvaRollup ? dpr?.weekQty ?? 0 : Number(a.weeklyActual || 0);
     return [
@@ -682,12 +682,12 @@ export async function seedWprSections(
       pctOf(tillDate, scope) || a.status || "",
     ];
   });
-  // Activities reported in DPRs that are not in the register yet still count.
+  // DPR lines with work this week that match no register activity are listed too, so nothing done goes missing.
   if (pvaRollup) {
-    const known = new Set(activityLines.map((a: any) => normActivity(a.activity)));
+    const matched = new Set(activityLines.map((a: any) => rollupFor(pvaRollup, a.activity, a.unit)).filter(Boolean));
     let sr = activityLines.length;
-    for (const [key, r] of pvaRollup) {
-      if (known.has(key) || (!r.weekQty && !r.tillDate)) continue;
+    for (const r of pvaRollup.values()) {
+      if (matched.has(r) || !r.weekQty) continue;
       pvaActivityRows.push([++sr, "", r.description, r.unit || "", "", "", round3(r.tillDate - r.weekQty), "", r.weekQty, r.tillDate, "", ""]);
     }
   }

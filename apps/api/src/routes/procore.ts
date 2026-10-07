@@ -2152,6 +2152,32 @@ safetyRouter.put(
   },
 );
 
+/** Safety history before the portal (client HSE Statistic "Up to previous week"): safe man-hours / man-days to a date. */
+safetyRouter.get("/project/:projectId/opening-balance", async (req, res) => {
+  res.json(await prisma.safetyOpeningBalance.findUnique({ where: { projectId: req.params.projectId } }));
+});
+
+safetyRouter.put("/project/:projectId/opening-balance", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const b = req.body || {};
+  const asOf = String(b.asOf || "");
+  if (!DAY_KEY.test(asOf)) return res.status(400).json({ error: "As-of date must be YYYY-MM-DD" });
+  const { dayFromKey } = await import("../services/safetyWeek.js");
+  const data = {
+    asOf: dayFromKey(asOf),
+    safeManHours: Math.max(0, Number(b.safeManHours) || 0),
+    safeManDays: Math.max(0, Math.round(Number(b.safeManDays) || 0)),
+    source: "portal",
+    updatedById: req.user!.id,
+  };
+  const row = await prisma.safetyOpeningBalance.upsert({
+    where: { projectId: req.params.projectId },
+    create: { projectId: req.params.projectId, ...data },
+    update: data,
+  });
+  await audit("safety.opening_balance", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { asOf, safeManHours: data.safeManHours, safeManDays: data.safeManDays } });
+  res.json(row);
+});
+
 safetyRouter.delete("/project/:projectId/daily/:date", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const { dayFromKey } = await import("../services/safetyWeek.js");
   const key = String(req.params.date);

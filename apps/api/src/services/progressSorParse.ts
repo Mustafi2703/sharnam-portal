@@ -3,7 +3,7 @@
 import fs from "fs";
 import path from "path";
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
-import { resolveExcelRoot } from "../lib/excelRoot.js";
+import { findWorkbook } from "../lib/excelRoot.js";
 import { prisma } from "../prisma.js";
 
 export type ProgressSorSummaryRow = {
@@ -24,14 +24,8 @@ function cellNum(v: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function resolveMonthlyDashboardPath(root = resolveExcelRoot()) {
-  const named = path.join(
-    root,
-    fs.existsSync(path.join(root, "Monthly Progress Dashboard (1).xlsx"))
-      ? "Monthly Progress Dashboard (1).xlsx"
-      : "Monthly Progress Dashboard.xlsx"
-  );
-  return fs.existsSync(named) ? named : null;
+function resolveMonthlyDashboardPath() {
+  return findWorkbook(["Monthly Progress Dashboard (1).xlsx", "Monthly Progress Dashboard.xlsx"]);
 }
 
 export function readProgressSorSummaryFromWorkbook(wb: WorkBook): ProgressSorSummaryRow[] {

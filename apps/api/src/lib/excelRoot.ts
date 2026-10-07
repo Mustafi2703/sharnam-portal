@@ -25,11 +25,20 @@ export function workbookSearchRoots(): string[] {
   return out;
 }
 
+function hasWorkbooks(dir: string): boolean {
+  try {
+    return fs.readdirSync(dir).some((f) => /\.(xlsx|xlsm|xls)$/i.test(f));
+  } catch {
+    return false;
+  }
+}
+
 /** Same resolution as `seed/seed.ts` — bundled workbooks under seed/data when env unset. */
 export function resolveExcelRoot(): string {
   if (process.env.SHARNAM_EXCEL_ROOT) return path.resolve(process.env.SHARNAM_EXCEL_ROOT);
-  const roots = workbookSearchRoots();
-  const prefer = roots.find((r) => /module_prompts$/.test(r) || /untitled folder/.test(r));
+  // Only a folder that actually holds workbooks — the bare module_prompts folder has just the .md briefs.
+  const roots = workbookSearchRoots().filter(hasWorkbooks);
+  const prefer = roots.find((r) => /Sharnam_modules_docs 2$/.test(r) || /untitled folder$/.test(r));
   if (prefer) return prefer;
   const bundled = roots.find((r) => /seed[/\\]data$/.test(r));
   if (bundled) return bundled;

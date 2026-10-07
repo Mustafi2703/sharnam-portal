@@ -55,6 +55,14 @@ export function disciplinePackage(discipline: string): string {
   return disciplinePackages(discipline)[0];
 }
 
+/**
+ * One BOQ line across days: description + unit + rate. The client BOQ repeats short descriptions
+ * ("-do PL to G.F. Slab") under different parent items (RCC m³ @5400, shuttering m² @430 …).
+ */
+function lineKey(description: string, unit?: string | null, rate?: number | null) {
+  return `${norm(description || "")}|${norm(unit || "")}|${Number(rate) || 0}`;
+}
+
 function norm(s: string) {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -113,7 +121,7 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
 
     const lines: DprLine[] = JSON.parse(snap.linesJson || "[]");
     for (const ln of lines) {
-      const key = norm(ln.description || "");
+      const key = lineKey(ln.description || "", ln.unit, ln.rate);
       lineCum.set(key, (lineCum.get(key) || 0) + Number(ln.qtyToday || 0));
       lastCum.set(key, Number(ln.cumQtyPrev || 0) + Number(ln.qtyToday || 0));
     }
@@ -255,8 +263,8 @@ export async function buildDprAutoFill(
 
   // Suggest a day's qty from the register's weekly actual only before a line has any DPR history;
   // after that the site enters actuals, so stale register figures never pile into the cumulative.
-  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number, description: string) {
-    if (prev.lastCum.has(norm(description))) return 0;
+  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number, key: string) {
+    if (prev.lastCum.has(key)) return 0;
     const wa = Number(weeklyActual || 0);
     if (wa <= 0) return 0;
     const suggested = Math.round((wa / 6) * 1000) / 1000;
@@ -286,15 +294,16 @@ export async function buildDprAutoFill(
             .filter((m) => fuzzyMatch(m.description, r.description))
             .reduce((s, m) => s + (m.qty || 0), 0);
           // Continue yesterday's running total; the register / MB figure only seeds the first DPR of a line.
-          const dprCum = prev.lineCum.get(norm(r.description)) || 0;
-          const cumQtyPrev = prev.lastCum.get(norm(r.description)) ?? Math.max(r.achievedQty || 0, mbQty, dprCum);
+          const key = lineKey(r.description, r.uom || act?.unit, r.rate);
+          const dprCum = prev.lineCum.get(key) || 0;
+          const cumQtyPrev = prev.lastCum.get(key) ?? Math.max(r.achievedQty || 0, mbQty, dprCum);
           const scopeQty = r.boqQty || r.gfcQty || act?.boqQty || 0;
           const remaining = Math.max(0, scopeQty - cumQtyPrev);
           const plannedHint = act?.weeklyPlanned ?? act?.boqQty;
           const weeklyPlanned = Number(act?.weeklyPlanned || 0);
           const plannedQtyToday =
             weeklyPlanned > 0 ? Math.round((weeklyPlanned / 6) * 1000) / 1000 : 0;
-          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining, r.description);
+          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining, key);
           return {
             srNo: undefined,
             group: r.section || act?.tower || undefined,
@@ -318,11 +327,11 @@ export async function buildDprAutoFill(
           .filter((a) => Number(a.weeklyActual || 0) > 0 || Number(a.weeklyPlanned || 0) > 0)
           .slice(0, 25)
           .map((a) => {
-            const cumQtyPrev =
-              prev.lastCum.get(norm(a.activity)) ?? (a.cumulativeQty || a.executedQty || prev.lineCum.get(norm(a.activity)) || 0);
+            const key = lineKey(a.activity, a.unit, 0);
+            const cumQtyPrev = prev.lastCum.get(key) ?? (a.cumulativeQty || a.executedQty || prev.lineCum.get(key) || 0);
             const scopeQty = a.boqQty || a.gfcQty || 0;
             const remaining = Math.max(0, scopeQty - cumQtyPrev);
-            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining, a.activity);
+            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining, key);
             return {
               group: a.tower || undefined,
               description: a.activity,
@@ -396,7 +405,7 @@ export async function buildDprAutoFill(
   const safeManHoursToday = safetyLog?.logged
     ? safetyLog.safeManHours
     : manpower.reduce((s, m) => s + Number(m.actual || 0) * Number(m.hoursWorked || 8), 0);
-  if (safetyCum.daysLogged > 0) prev.cumSafeHours = safetyCum.safeManHours;
+  if (safetyCum.daysLogged > 0 || safetyCum.safeManHours > 0) prev.cumSafeHours = safetyCum.safeManHours;
 
   const safety: Partial<DprSafety> = {
     safeManHoursToday,

@@ -66,7 +66,7 @@ model Project {
   clientContactName       String?
   clientEmail             String?
   clientPhone             String?
-  clientAddress           String?
+  clientAddress           String? @db.Text
   clientGst               String?
   designConsultant        String?
   contractorName          String?
@@ -100,7 +100,7 @@ model Project {
   /// JSON array of work packages e.g. Civil, PEB, Electrical
   workPackages            String    @default("[]") @db.Text
   /// Default R2 bid disciplines for CRM packages on this project (JSON array of {key,label,sheetName})
-  bidDisciplinesJson      String?   @db.Text
+  bidDisciplinesJson      String?   @db.LongText
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -176,7 +176,7 @@ model EmailOutbox {
   id                String    @id @default(cuid())
   projectId         String?
   toEmails          String
-  subject           String
+  subject           String @db.Text
   body              String    @db.Text
   context           String?
   status            String    @default("Queued")
@@ -258,7 +258,7 @@ model Drawing {
   id            String   @id @default(cuid())
   projectId     String
   drawingNumber String
-  title         String
+  title         String @db.Text
   discipline    String   @default("Architecture")
   buildingArea  String?
   tlNo          String?
@@ -292,7 +292,7 @@ model DrawingRevision {
   dwgFileUrl               String?
   dwgFileName              String?
   /// Extra PDFs on this same revision (JSON [{fileUrl,fileName}]). Primary PDF stays in pdfFileUrl.
-  extraFilesJson           String?   @db.Text
+  extraFilesJson           String?   @db.LongText
   published                Boolean   @default(false)
   /// Planned issue date (GFC register column)
   plannedDate              DateTime?
@@ -320,7 +320,7 @@ model DrawingRevision {
   siteEngineerSignName     String?
   siteEngineerSignUrl      String?
   siteEngineerSignFileName String?
-  issueRemarks             String?
+  issueRemarks             String? @db.Text
   createdAt                DateTime  @default(now())
 
   drawing        Drawing                     @relation(fields: [drawingId], references: [id], onDelete: Cascade)
@@ -368,7 +368,7 @@ model ChecklistItem {
   id           String  @id @default(cuid())
   templateId   String
   itemCode     String?
-  description  String
+  description  String @db.Text
   /// Per-line quality / safety instruction
   instruction  String? @db.Text
   instructionFileUrl  String?
@@ -402,8 +402,8 @@ model ChecklistSubmission {
   revisionNumber String?
   submittedById  String
   status         String    @default("Draft")
-  responsesJson  String    @db.Text
-  remarks        String?
+  responsesJson  String    @db.LongText
+  remarks        String? @db.Text
   /// Fill | PreUploadDrawing
   purpose        String    @default("Fill")
   /// One-time token consumed when drawing/revision upload succeeds
@@ -428,8 +428,8 @@ model ChecklistPhoto {
   /// photo | doc
   kind         String   @default("photo")
   fileUrl      String
-  caption      String?
-  comment      String?
+  caption      String? @db.Text
+  comment      String? @db.Text
   createdAt    DateTime @default(now())
 
   submission ChecklistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
@@ -463,7 +463,7 @@ model DailyLogManpower {
   companyName String
   workerCount Int
   hoursWorked Float   @default(8)
-  comments    String?
+  comments    String? @db.Text
 
   dailyLog DailyLog @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
 }
@@ -474,7 +474,7 @@ model DailyLogEquipment {
   companyName   String
   equipmentType String
   hoursUsed     Float?
-  comments      String?
+  comments      String? @db.Text
 
   dailyLog DailyLog @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
 }
@@ -482,7 +482,7 @@ model DailyLogEquipment {
 model DailyLogNote {
   id         String   @id @default(cuid())
   dailyLogId String
-  noteText   String
+  noteText   String @db.Text
   createdAt  DateTime @default(now())
 
   dailyLog DailyLog @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
@@ -492,7 +492,7 @@ model DailyLogPhoto {
   id         String   @id @default(cuid())
   dailyLogId String
   fileUrl    String
-  caption    String?
+  caption    String? @db.Text
   createdAt  DateTime @default(now())
 
   dailyLog DailyLog @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
@@ -534,7 +534,7 @@ model CommunicationContact {
   email           String?
   /// TO | CC
   mailRole        String?
-  officeAddress   String?
+  officeAddress   String? @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -546,8 +546,8 @@ model CommunicationContact {
 model CommunicationLog {
   id        String   @id @default(cuid())
   projectId String
-  subject   String
-  body      String?
+  subject   String @db.Text
+  body      String? @db.Text
   fromUser  String?
   toRoles   String
   channel   String   @default("In-App")
@@ -559,14 +559,14 @@ model CommunicationLog {
 model Meeting {
   id              String   @id @default(cuid())
   projectId       String
-  title           String
+  title           String @db.Text
   meetingDate     DateTime
   location        String?
   /// Agenda → MoM → Follow-up → Closed (client video flow)
   status          String   @default("Agenda")
   /// Optional link to parent MoM when this is a follow-up
   parentMeetingId String?
-  agendaNotes     String?
+  agendaNotes     String? @db.Text
   /// Uploaded signed / typed minutes (maintain after the meeting is scheduled)
   momFileUrl      String?
   momFileName     String?
@@ -574,7 +574,7 @@ model Meeting {
   durationMins    Int      @default(60)
   /// Invited people picked from the communication matrix (+ extra emails):
   /// JSON [{ email, name?, company?, section?, mailRole: "TO" | "CC" }]. Later meeting emails go to these.
-  attendeesJson   String?  @db.Text
+  attendeesJson   String?  @db.LongText
   /// Microsoft Teams join URL (Graph onlineMeeting or calendar event)
   teamsJoinUrl    String?
   /// Graph calendar event id or onlineMeeting id
@@ -592,7 +592,7 @@ model MeetingItem {
   meetingId        String
   /// Agenda | MoM | Action | Follow-up
   category         String    @default("Agenda")
-  description      String
+  description      String @db.Text
   assignedToId     String?
   dueDate          DateTime?
   priority         String    @default("Medium")
@@ -616,7 +616,7 @@ model VendorBill {
   /// Draft | Submitted | Under review | Certified | Paid | Rejected
   status        String   @default("Draft")
   copNo         String?
-  description   String?
+  description   String? @db.Text
   attachmentUrl String?
   createdById   String?
   createdAt     DateTime @default(now())
@@ -630,7 +630,7 @@ model CostBudgetLine {
   id                String   @id @default(cuid())
   projectId         String
   srNo              String?
-  description       String
+  description       String @db.Text
   stakeholder       String?
   budgetedAmount    Float    @default(0)
   workOrderAmount   Float    @default(0)
@@ -662,7 +662,7 @@ model CostMonitoringLine {
   /// BOQ section heading (e.g. SECTION A — EARTH WORK)
   section              String?
   itemNo               String?
-  description          String
+  description          String @db.Text
   uom                  String?
   rate                 Float    @default(0)
   boqQty               Float    @default(0)
@@ -715,7 +715,7 @@ model CostMbLine {
   projectId   String
   packageName String   @default("Civil")
   srNo        String?
-  description String
+  description String @db.Text
   nos1        Float    @default(0)
   nos2        Float    @default(0)
   length      Float    @default(0)
@@ -789,7 +789,7 @@ model SiteFinalIndex {
   id          String   @id @default(cuid())
   srNo        Int      @default(0)
   drawingNo   String
-  title       String
+  title       String @db.Text
   discipline  String   @default("Architectural")
   stage       String   @default("Design")
   status      String   @default("Planned")
@@ -805,7 +805,7 @@ model BbsShapeMaster {
   id          String   @id @default(cuid())
   shapeCode   String   @unique
   name        String?
-  description String?
+  description String? @db.Text
   bendInfo    String?
   packageHint String?
   diagramPath String?
@@ -841,7 +841,7 @@ model CostRateDifference {
   id           String   @id @default(cuid())
   projectId    String
   materialType String
-  description  String
+  description  String @db.Text
   vendorName   String?
   purchaseNo   String?
   qty          Float    @default(0)
@@ -860,7 +860,7 @@ model BoqImportBatch {
   fileName    String
   rowCount    Int      @default(0)
   status      String   @default("Imported")
-  summaryJson String?  @db.Text
+  summaryJson String?  @db.LongText
   createdAt   DateTime @default(now())
 
   project Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -871,7 +871,7 @@ model BoqItem {
   id          String  @id @default(cuid())
   batchId     String
   srNo        String?
-  description String
+  description String @db.Text
   section     String?
   qty         Float   @default(0)
   rate        Float   @default(0)
@@ -886,10 +886,10 @@ model BoqItem {
 model AuditEvent {
   id        String   @id @default(cuid())
   userId    String?
-  action    String
+  action    String @db.Text
   entity    String?
   entityId  String?
-  metaJson  String?  @db.Text
+  metaJson  String?  @db.LongText
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id])
@@ -898,7 +898,7 @@ model AuditEvent {
 model Lead {
   id                 String    @id @default(cuid())
   projectId          String?
-  title              String
+  title              String @db.Text
   contactName        String?
   email              String?
   phone              String?
@@ -1019,7 +1019,7 @@ model Attendance {
   reviewedById  String?
   reviewedAt    DateTime?
   projectId     String?
-  notes         String?
+  notes         String? @db.Text
   createdAt     DateTime @default(now())
   updatedAt     DateTime @default(now()) @updatedAt
 
@@ -1091,12 +1091,12 @@ model LeaveRequest {
   toDate       DateTime
   days         Float     @default(1)
   halfDay      Boolean   @default(false)
-  reason       String?
+  reason       String? @db.Text
   /// Pending | Approved | Rejected | Cancelled
   status       String    @default("Pending")
   approverId   String?
   decidedAt    DateTime?
-  decisionNote String?
+  decisionNote String? @db.Text
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @default(now()) @updatedAt
 
@@ -1117,8 +1117,8 @@ model ExpenseVoucher {
   status          String    @default("Submitted")
   approverId      String?
   decidedAt       DateTime?
-  decisionNote    String?
-  particularsJson String?   @db.Text
+  decisionNote    String? @db.Text
+  particularsJson String?   @db.LongText
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -1146,7 +1146,7 @@ model EmployeeDocument {
   id          String    @id @default(cuid())
   userId      String
   category    String
-  title       String
+  title       String @db.Text
   fileUrl     String
   storagePath String?
   issuedOn    DateTime?
@@ -1175,7 +1175,7 @@ model ManpowerRequisition {
   approvedAt       DateTime?
   /// Draft | Submitted | Approved | Rejected | Closed
   status           String    @default("Submitted")
-  rejectionReason  String?
+  rejectionReason  String? @db.Text
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @default(now()) @updatedAt
 
@@ -1189,13 +1189,13 @@ model ManpowerRequisition {
 model JobPosting {
   id             String    @id @default(cuid())
   requisitionId  String?
-  title          String
+  title          String @db.Text
   department     String?
   location       String?
   employmentType String?   @default("Permanent")
-  description    String?
-  requirements   String?
-  channelsJson   String?   @default("[]") @db.Text
+  description    String? @db.Text
+  requirements   String? @db.Text
+  channelsJson   String?   @default("[]") @db.LongText
   postedAt       DateTime?
   closedAt       DateTime?
   /// Open | Closed | On-Hold
@@ -1231,8 +1231,8 @@ model Candidate {
   /// Upload | New | Screened | Shortlisted | Interview | Interviewed | Selected | SalaryDiscussion | Offered | Accepted | Joined | Rejected | Withdrawn
   status           String   @default("New")
   screenedById     String?
-  rejectionReason  String?
-  notes            String?
+  rejectionReason  String? @db.Text
+  notes            String? @db.Text
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
 
@@ -1250,7 +1250,7 @@ model CandidateDocument {
   id          String   @id @default(cuid())
   candidateId String
   category    String
-  title       String
+  title       String @db.Text
   fileUrl     String
   storagePath String?
   createdAt   DateTime @default(now())
@@ -1269,7 +1269,7 @@ model InterviewRound {
   candidateId        String
   roundNumber        Int       @default(1)
   roundType          String
-  panelJson          String?   @default("[]") @db.Text
+  panelJson          String?   @default("[]") @db.LongText
   scheduledAt        DateTime?
   durationMins       Int?      @default(60)
   mode               String    @default("Teams")
@@ -1283,11 +1283,11 @@ model InterviewRound {
   scoreCulture       Float?
   scoreOverall       Float?
   /// SPDC/HR/F-INT-01 scorecard (position, round, parameter scores, grade).
-  scorecardJson      String?   @db.Text
+  scorecardJson      String?   @db.LongText
   /// Scheduled | Completed | No-Show | Cancelled
   status             String    @default("Scheduled")
   /// Advance | Reject | Hold
-  decision           String?
+  decision           String? @db.Text
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @default(now()) @updatedAt
 
@@ -1315,11 +1315,11 @@ model Offer {
   offerLetterUrl    String?
   /// 12-input CTC calculator payload (see services/ctcAnnexure.ts) so
   /// Annexure I can be regenerated on demand without re-entering values.
-  ctcInputsJson     String?   @db.Text
+  ctcInputsJson     String?   @db.LongText
   /// URL of the generated Annexure I XLSX (Sharnam-branded, editable).
   annexureUrl       String?
   /// Extra fields printed on the SPDC offer / appointment letters (gender, address, grade, notice periods…)
-  letterFieldsJson  String?   @db.Text
+  letterFieldsJson  String?   @db.LongText
   /// HrmsDocument id of the generated SPDC offer letter
   offerLetterDocId  String?
   approvedById      String?
@@ -1330,7 +1330,7 @@ model Offer {
   joinedAt          DateTime?
   /// Draft | Approved | Sent | Accepted | Declined | Withdrawn | Joined
   status            String    @default("Draft")
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @default(now()) @updatedAt
 
@@ -1358,12 +1358,12 @@ model PreJoiningChecklist {
   itAssetDetails       String?
   emailCreated         Boolean   @default(false)
   emailCreatedAt       DateTime?
-  emailAddress         String?
+  emailAddress         String? @db.Text
   idCardRequested      Boolean   @default(false)
   idCardIssuedAt       DateTime?
   welcomeKitPrepared   Boolean   @default(false)
   welcomeKitAt         DateTime?
-  notes                String?
+  notes                String? @db.Text
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @default(now()) @updatedAt
 
@@ -1389,8 +1389,8 @@ model OnboardingChecklist {
   reportingManagerAssigned Boolean  @default(false)
   orientationDone          Boolean  @default(false)
   hrPolicyAcknowledged     Boolean  @default(false)
-  itemsCompletedAtJson     String   @default("{}") @db.Text
-  notes                    String?
+  itemsCompletedAtJson     String   @default("{}") @db.LongText
+  notes                    String? @db.Text
   createdAt                DateTime @default(now())
   updatedAt                DateTime @default(now()) @updatedAt
 
@@ -1411,13 +1411,13 @@ model PayHike {
   newBasicMonthly   Float?
   oldHraMonthly     Float?
   newHraMonthly     Float?
-  reason            String?
+  reason            String? @db.Text
   performanceRating String?
   approvedById      String?
   approvedAt        DateTime?
   /// Draft | Submitted | Approved | Rejected | Applied
   status            String    @default("Submitted")
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @default(now()) @updatedAt
 }
@@ -1451,7 +1451,7 @@ model Payslip {
   generatedAt     DateTime @default(now())
   generatedById   String?
   fileUrl         String?
-  notes           String?
+  notes           String? @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now()) @updatedAt
 
@@ -1463,8 +1463,8 @@ model CustomSheet {
   projectId   String?
   name        String
   category    String?
-  headersJson String   @db.Text
-  rowsJson    String   @db.Text
+  headersJson String   @db.LongText
+  rowsJson    String   @db.LongText
   sourceFile  String?
   storagePath String?
   createdById String?
@@ -1493,8 +1493,8 @@ model DprSnapshot {
   projectId     String
   logDate       DateTime
   discipline    String    @default("CIVIL")
-  headerJson    String    @default("{}") @db.Text
-  linesJson     String    @default("[]") @db.Text
+  headerJson    String    @default("{}") @db.LongText
+  linesJson     String    @default("[]") @db.LongText
   status        String    @default("Draft")
   publishedAt   DateTime?
   publishedPath String?
@@ -1523,7 +1523,7 @@ model WprSnapshot {
   projectId     String
   weekEnding    DateTime
   reportNumber  Int?
-  sectionsJson  String    @default("{}") @db.Text
+  sectionsJson  String    @default("{}") @db.LongText
   status        String    @default("Draft")
   publishedAt   DateTime?
   publishedPath String?
@@ -1544,7 +1544,7 @@ model Vendor {
   /// Contractor | Vendor | Client | Consultant | PMC
   partyType          String   @default("Vendor")
   trade              String?
-  address            String?
+  address            String? @db.Text
   city               String?
   state              String?
   country            String?  @default("India")
@@ -1559,7 +1559,7 @@ model Vendor {
   isMinorityOwned    Boolean  @default(false)
   isWomenOwned       Boolean  @default(false)
   insuranceVerified  Boolean  @default(false)
-  notes              String?
+  notes              String? @db.Text
   createdVia         String   @default("Manual")
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
@@ -1597,14 +1597,14 @@ model CrmBidPackage {
   id                       String    @id @default(cuid())
   leadId                   String?
   projectId                String?
-  title                    String
+  title                    String @db.Text
   status                   String    @default("Open")
   revisionLabel            String    @default("R2")
-  vendorNamesJson          String    @default("[]") @db.Text
+  vendorNamesJson          String    @default("[]") @db.LongText
   /// Selected discipline BOQ sheets for this package (JSON array of {key,label,sheetName})
-  disciplinesJson          String?   @db.Text
+  disciplinesJson          String?   @db.LongText
   dueDate                  DateTime?
-  notes                    String?
+  notes                    String? @db.Text
   comparativeSheetId       String?
   summarySheetId           String?
   comparativeSharePointUrl String?
@@ -1645,7 +1645,7 @@ model ProjectVendor {
   vendorId             String
   tradeRole            String?
   /// JSON string array of work packages this company holds on the project
-  packagesJson         String?   @db.Text
+  packagesJson         String?   @db.LongText
   assignedVia          String    @default("Manual")
   signatoryName        String?
   signatureUrl         String?
@@ -1664,14 +1664,14 @@ model Rfi {
   id                    String    @id @default(cuid())
   projectId             String
   number                String
-  subject               String
-  question              String
+  subject               String @db.Text
+  question              String @db.Text
   /// RequestForInformation | DrawingChecklist | QualityInspection | QualityIR | SafetyIR | ActivityInspection | SafetyChecklist | Manual | ClientConcern
   rfiKind               String    @default("RequestForInformation")
   /// SPDC IR / HSE / checklist reference number (IR/CIV/024, HSE/IR/012, CL/CIV/104)
   irNumber              String?
   /// Structured SPDC form fields (particulars, drawing ref text, clearance codes, etc.)
-  formDataJson          String?   @db.Text
+  formDataJson          String?   @db.LongText
   status                String    @default("Open")
   ballInCourt           String    @default("Assignee")
   assignedToId          String?
@@ -1679,7 +1679,7 @@ model Rfi {
   dueDate               DateTime?
   closedAt              DateTime?
   linkedDrawingId       String?
-  drawingPinJson        String?   @db.Text
+  drawingPinJson        String?   @db.LongText
   /// Legacy: often stores checklist template id
   linkedChecklistItemId String?
   /// Checklist assignment to be filled by matrix parties / vendor
@@ -1687,11 +1687,11 @@ model Rfi {
   specSectionLink       String?
   responsibleVendorId   String?
   questionReceivedFrom  String?
-  distributionJson      String?   @db.Text
+  distributionJson      String?   @db.LongText
   scheduleImpact        String?   @default("None")
   costImpact            String?   @default("None")
   isPrivate             Boolean   @default(false)
-  attachmentsJson       String?   @db.Text
+  attachmentsJson       String?   @db.LongText
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -1710,7 +1710,7 @@ model RfiResponse {
   rfiId              String
   respondedById      String
   responseChannel    String   @default("Web")
-  responseText       String
+  responseText       String @db.Text
   isOfficialResponse Boolean  @default(false)
   createdAt          DateTime @default(now())
 
@@ -1721,7 +1721,7 @@ model RfiResponse {
 model QualityInspection {
   id                  String    @id @default(cuid())
   projectId           String
-  title               String
+  title               String @db.Text
   inspectionType      String    @default("Quality")
   /// Draft → Ready → In Progress → Closed
   status              String    @default("Draft")
@@ -1734,7 +1734,7 @@ model QualityInspection {
   assignedToId        String?
   dueDate             DateTime?
   completedAt         DateTime?
-  attachmentsJson     String?   @db.Text
+  attachmentsJson     String?   @db.LongText
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -1748,11 +1748,11 @@ model QualityInspection {
 model InspectionItem {
   id              String    @id @default(cuid())
   inspectionId    String
-  description     String
+  description     String @db.Text
   status          String    @default("Pending")
-  remarks         String?
+  remarks         String? @db.Text
   /// JSON array of { url, name, kind, comment? }
-  attachmentsJson String?   @db.Text
+  attachmentsJson String?   @db.LongText
   sortOrder       Int       @default(0)
   dueDate         DateTime?
   autoGenerateRfi Boolean   @default(false)
@@ -1766,7 +1766,7 @@ model ProjectPhoto {
   projectId   String
   fileUrl     String
   album       String   @default("Unclassified")
-  description String?
+  description String? @db.Text
   trade       String?
   location    String?
   isPrivate   Boolean  @default(false)
@@ -1779,16 +1779,16 @@ model Submittal {
   id              String    @id @default(cuid())
   projectId       String
   number          String
-  title           String
+  title           String @db.Text
   submittalType   String    @default("Product Data")
   /// Draft → Submitted → Under Review → Revise & Resubmit → Approved / Rejected
   status          String    @default("Draft")
   ballInCourt     String    @default("Submitter")
   specSection     String?
-  description     String?
+  description     String? @db.Text
   revisionNumber  String    @default("0")
-  reviewerNotes   String?
-  attachmentsJson String?   @db.Text
+  reviewerNotes   String? @db.Text
+  attachmentsJson String?   @db.LongText
   dueDate         DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -1801,8 +1801,8 @@ model Submittal {
 model DesignCoordinationIssue {
   id              String    @id @default(cuid())
   projectId       String
-  title           String
-  description     String?
+  title           String @db.Text
+  description     String? @db.Text
   status          String    @default("Open")
   discipline      String?
   location        String?
@@ -1838,24 +1838,24 @@ model SafetyRecord {
   id                  String    @id @default(cuid())
   projectId           String
   recordType          String    @default("Observation")
-  title               String
-  description         String?
+  title               String @db.Text
+  description         String? @db.Text
   severity            String    @default("Low")
   status              String    @default("Open")
   location            String?
-  correctiveAction    String?
+  correctiveAction    String? @db.Text
   ncrNumber           String?
   activityTask        String?
   category            String?
-  rootCause           String?
+  rootCause           String? @db.Text
   contributingFactors String?
-  immediateAction     String?
-  longTermAction      String?
+  immediateAction     String? @db.Text
+  longTermAction      String? @db.Text
   responsibleParty    String?
   targetCompletion    DateTime?
   timeImpact          String?
   costImpact          String?
-  actionTaken         String?
+  actionTaken         String? @db.Text
   issuedTo            String?
   followUpDate        DateTime?
   source              String?
@@ -1883,8 +1883,8 @@ model QapActivity {
   srNo                String?
   /// Activity group (e.g. Site Survey, Reinforcement)
   section             String?
-  activity            String
-  description         String?
+  activity            String @db.Text
+  description         String? @db.Text
   frequency           String?
   codeOfConformance   String?
   testAgency          String?
@@ -1897,7 +1897,7 @@ model QapActivity {
   pmcRole             String?
   clientRole          String?
   records             String?
-  remarks             String?
+  remarks             String? @db.Text
   /// JSON map of day serial/label → checked (Week 50 cols 12–18)
   dailyChecks         String?   @db.Text
   status              String    @default("Open")
@@ -1916,7 +1916,7 @@ model CubeTest {
   projectId   String
   srNo        String?
   castDate    DateTime?
-  description String
+  description String @db.Text
   grade       String?
   cubeWeight  Float?
   testDate7   DateTime?
@@ -1943,7 +1943,7 @@ model QualitySiteRecord {
   id               String   @id @default(cuid())
   projectId        String
   recordType       String   @default("Site Observation")
-  title            String
+  title            String @db.Text
   description      String?  @db.Text
   location         String?
   severity         String?
@@ -1953,7 +1953,7 @@ model QualitySiteRecord {
   reportedById     String
   occurredAt       DateTime @default(now())
   /// Evidence photos [{url, sharePointUrl, name}] — "bad quality practice" panel
-  photosJson       String?   @db.Text
+  photosJson       String?   @db.LongText
   closedAt         DateTime?
   source           String?
   createdAt        DateTime @default(now())
@@ -1973,14 +1973,14 @@ model QualityNcr {
   issueDate      DateTime?
   ncrType        String?
   contractor     String?
-  description    String
+  description    String @db.Text
   location       String?
   plannedClosure DateTime?
   actualClosure  DateTime?
   status         String    @default("Open")
   source         String?
   /// NCR 01 extended fields (to/from, action required, follow-up sign-offs)
-  formDataJson   String?   @db.Text
+  formDataJson   String?   @db.LongText
   createdAt      DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -1991,7 +1991,7 @@ model ProgressMilestone {
   projectId    String
   code         String?
   category     String?
-  activity     String
+  activity     String @db.Text
   plannedStart DateTime?
   plannedEnd   DateTime?
   plannedDays  Float     @default(0)
@@ -2013,10 +2013,10 @@ model ProgressMilestone {
 model ProgressHindrance {
   id                    String    @id @default(cuid())
   projectId             String
-  description           String
+  description           String @db.Text
   location              String?
-  activity              String?
-  correspondence        String?
+  activity              String? @db.Text
+  correspondence        String? @db.Text
   category              String?
   type                  String?
   occurredAt            DateTime?
@@ -2027,8 +2027,8 @@ model ProgressHindrance {
   delayType             String?
   status                String    @default("Open")
   accountable           String?
-  resolutionDescription String?
-  remarks               String?
+  resolutionDescription String? @db.Text
+  remarks               String? @db.Text
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @default(now()) @updatedAt
 
@@ -2042,7 +2042,7 @@ model ProgressRisk {
   category          String?
   opportunityThreat String    @default("Threat")
   name              String
-  description       String?
+  description       String? @db.Text
   probability       Int       @default(1)
   consequence       Int       @default(1)
   severity          Int       @default(1)
@@ -2051,9 +2051,9 @@ model ProgressRisk {
   weeksLikely       Float     @default(0)
   urgency           String?
   responseCategory  String?
-  impactNotes       String?
+  impactNotes       String? @db.Text
   riskOwner         String?
-  contingencyPlan   String?
+  contingencyPlan   String? @db.Text
   trackingComments  String?
   dateLastUpdated   DateTime?
   status            String    @default("Open")
@@ -2105,7 +2105,7 @@ model ProgressLegalApproval {
   approvalId     String
   category       String?
   authority      String?
-  description    String
+  description    String @db.Text
   packageName    String?
   submissionDate DateTime?
   requiredBy     DateTime?
@@ -2113,7 +2113,7 @@ model ProgressLegalApproval {
   status         String    @default("Submitted")
   delayDays      Float     @default(0)
   responsible    String?
-  remarks        String?
+  remarks        String? @db.Text
   createdAt      DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -2143,7 +2143,7 @@ model ProgressActivityLine {
   projectId            String
   srNo                 Int       @default(0)
   tower                String?
-  activity             String
+  activity             String @db.Text
   unit                 String?
   discipline           String?
   packageName          String?
@@ -2170,7 +2170,7 @@ model ProgressActivityLine {
 model ProgressSorStat {
   id          String @id @default(cuid())
   projectId   String
-  observation String
+  observation String @db.Text
   total       Float  @default(0)
   openCount   Float  @default(0)
   closedCount Float  @default(0)
@@ -2187,7 +2187,7 @@ model ProgressValueAddition {
   block                 String?
   packageName           String?
   planning              String?
-  suggestions           String?
+  suggestions           String? @db.Text
   valueEngineeringPoints String? @db.Text
   cost                  Float    @default(0)
   timeImpact            String?
@@ -2219,7 +2219,7 @@ model ProgressProcurementLine {
   leadTimeDays            Int?
   priorityLevel           Int       @default(1)
   vendorAppointed         Boolean   @default(false)
-  remarks                 String?
+  remarks                 String? @db.Text
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -2239,7 +2239,7 @@ model SiteMaterialStock {
   balanceQuantity Float     @default(0)
   unit            String?
   location        String?
-  remarks         String?
+  remarks         String? @db.Text
   buildingQty     Float?
   externalQty     Float?
   createdAt       DateTime  @default(now())
@@ -2285,7 +2285,7 @@ model ProgressInvoiceTracker {
   invoiceDate    DateTime?
   amountExclGst  Float     @default(0)
   copStatus      String?
-  remarks        String?
+  remarks        String? @db.Text
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -2303,7 +2303,7 @@ model ProjectCapex {
   id             String   @id @default(cuid())
   projectId      String
   srNo           String?
-  description    String
+  description    String @db.Text
   packageName    String?
   stakeholder    String?
   budgetedAmount Float    @default(0)
@@ -2367,7 +2367,7 @@ model RaBill {
   raNumber               String
   invoiceNumber          String?
   invoiceDate            DateTime?
-  description            String?
+  description            String? @db.Text
   againstBillRaised      Float     @default(0)
   priceVariation         Float     @default(0)
   totalInvoiceWithoutGst Float     @default(0)
@@ -2411,7 +2411,7 @@ model RaBillAttachment {
   sharePointUrl String?
   /// contractor_doc | supporting | stage
   kind          String   @default("contractor_doc")
-  notes         String?
+  notes         String? @db.Text
   uploadedById  String?
   uploadedAt    DateTime @default(now())
 
@@ -2467,7 +2467,7 @@ model HrmsDocument {
   effectiveDate    DateTime?
   /// Draft | Generated | Sent | Signed | Cancelled
   status           String    @default("Draft")
-  dataJson         String    @db.Text
+  dataJson         String    @db.LongText
   generatedDocxUrl String?
   generatedPdfUrl  String?
   uploadedFileUrl  String?
@@ -2508,7 +2508,7 @@ model CertificateOfPayment {
   panNumber         String?
   gstNumber         String?
   payableTo         String?
-  remarks           String?
+  remarks           String? @db.Text
   /// Draft | Certified | Approved | Paid | Rejected
   status            String    @default("Draft")
   attachmentUrl     String?
@@ -2556,7 +2556,7 @@ model CopAttachment {
   sharePointUrl String?
   /// supporting | stage | generated
   kind          String   @default("supporting")
-  notes         String?
+  notes         String? @db.Text
   uploadedById  String?
   uploadedAt    DateTime @default(now())
 
@@ -2575,7 +2575,7 @@ model FinanceMaterialInvoice {
   sheetCategory     String    @default("Other")
   srNo              String?
   receivedDate      DateTime?
-  description       String
+  description       String @db.Text
   vehicleNo         String?
   taxInvoiceNo      String?
   invoiceDate       DateTime?
@@ -2586,7 +2586,7 @@ model FinanceMaterialInvoice {
   retentionAmount   Float     @default(0)
   netPayable        Float     @default(0)
   againstBillRaised Float     @default(0)
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -2605,9 +2605,9 @@ model Quotation {
   leadId                  String?
   quotationNo             String
   clientName              String
-  clientAddress           String?
+  clientAddress           String? @db.Text
   clientGst               String?
-  scopeSummary            String?
+  scopeSummary            String? @db.Text
   totalValue              Float     @default(0)
   currency                String    @default("INR")
   /// Draft | Sent | Negotiation | Won | Lost | Awarded
@@ -2616,7 +2616,7 @@ model Quotation {
   quotationDate           DateTime  @default(now())
   awardedAt               DateTime?
   awardedProjectId        String?
-  sectionsJson            String?   @db.Text
+  sectionsJson            String?   @db.LongText
   attachmentUrl           String?
   attachmentSharePointUrl String?
   /// Latest revision number on disk (R0, R1, …). Older files stay in SharePoint.
@@ -2671,7 +2671,7 @@ model DrawingRegisterLine {
   consultantName        String?
   revisionNumber        String?
   revisionDate          DateTime?
-  revisionDescription   String?
+  revisionDescription   String? @db.Text
   latestRevision        String?
   plannedSubmissionDate DateTime?
   actualSubmissionDate  DateTime?
@@ -2681,7 +2681,7 @@ model DrawingRegisterLine {
   issueDate             DateTime?
   copiesCount           Int?
   criticalDrawing       String?
-  remarks               String?
+  remarks               String? @db.Text
   source                String?
   drawingId             String?   @unique
   createdAt             DateTime  @default(now())
@@ -2701,7 +2701,7 @@ model SnagItem {
   projectId            String
   srNo                 Int?
   package              String?
-  itemDescription      String
+  itemDescription      String @db.Text
   location             String?
   area                 String?
   severity             String?
@@ -2727,7 +2727,7 @@ model LessonLearnt {
   projectId           String
   srNo                Int?
   category            String?
-  description         String?
+  description         String? @db.Text
   wentWell            String?
   notMetExpectation   String?  @db.Text
   lessonsLearnt       String?  @db.Text
@@ -2745,7 +2745,7 @@ model LessonLearnt {
 model SiteAudit {
   id          String    @id @default(cuid())
   projectId   String
-  title       String
+  title       String @db.Text
   auditRef    String?
   plannedDate DateTime?
   status      String    @default("Planned")
@@ -2805,7 +2805,7 @@ model AuditChecklistItem {
   observed        String?  @db.Text
   score           Int?
   photoRef        String?
-  response        String?
+  response        String? @db.Text
   notes           String?  @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -2876,10 +2876,10 @@ model KpiRoleKra {
 model ProjectClosureReport {
   id           String    @id @default(cuid())
   projectId    String    @unique
-  title        String?
+  title        String? @db.Text
   status       String    @default("Draft")
   summary      String?   @db.Text
-  sectionsJson String?   @db.Text
+  sectionsJson String?   @db.LongText
   fileUrl      String?
   fileName     String?
   approvedAt   DateTime?
@@ -2888,6 +2888,20 @@ model ProjectClosureReport {
   updatedAt    DateTime  @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// Safety history before the portal: safe man-hours / man-days up to `asOf` (from the client's HSE Statistic).
+/// Added to the daily safety log totals for any date on or after `asOf`, so cumulative figures carry on.
+model SafetyOpeningBalance {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  asOf         DateTime
+  safeManHours Float    @default(0)
+  safeManDays  Int      @default(0)
+  source       String?
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 /// One row per project per day — feeds Safety dashboard (safe hours, TBT, inductions), DPR safety block and WPR HSE indicators.

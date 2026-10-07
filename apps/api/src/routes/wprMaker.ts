@@ -33,7 +33,7 @@ import {
 import { buildWprPptx, wprTemplateFillEnabled } from "../services/wprPptx.js";
 import { nextReportNumber } from "../services/wprWeekRollup.js";
 import { seedWprSections } from "../services/wprSeedSections.js";
-import { snapWeekEnding } from "../services/wprDemoSeed.js";
+import { weekEndingOf } from "../services/wprDemoSeed.js";
 import { loadWprChartPack } from "../services/wprCharts.js";
 import { mergeWprChartsForExport } from "../services/wprChartMerge.js";
 
@@ -45,11 +45,14 @@ export function parseWprDateRange(query: {
   preset?: unknown;
 }): WprDateRange {
   const preset = String(query.preset || "week").toLowerCase();
-  const endRaw = query.end ? new Date(String(query.end)) : new Date();
-  const end = snapWeekEnding(Number.isNaN(endRaw.getTime()) ? new Date() : endRaw);
+  // The chosen week-ending day is the report's last day (no snapping to Sunday — Arvind reports Thu–Wed).
+  const endRaw = query.end ? weekEndingOf(String(query.end)) : weekEndingOf(new Date());
+  const end = Number.isNaN(endRaw.getTime()) ? weekEndingOf(new Date()) : endRaw;
 
   if (query.start) {
-    const start = new Date(String(query.start));
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(String(query.start).trim())
+      ? new Date(`${String(query.start).trim()}T00:00:00`)
+      : new Date(String(query.start));
     start.setHours(0, 0, 0, 0);
     if (!Number.isNaN(start.getTime()) && start <= end) {
       return { start, end, weekEnd: end, preset: "custom" };
@@ -323,7 +326,7 @@ wprMakerRouter.post("/:projectId/import-july", requireRoles("admin", "office", "
   if (!project) return res.status(404).json({ error: "project not found" });
   const { buildJulyWprPack } = await import("../services/wprJulyWorkbook.js");
   const pack = buildJulyWprPack();
-  const weekEnd = snapWeekEnding(new Date(`${pack.header.weekEnd || "2026-07-29"}T12:00:00`));
+  const weekEnd = weekEndingOf(pack.header.weekEnd?.slice(0, 10) || "2026-07-29");
   const weekStart = new Date(`${pack.header.weekStart || "2026-07-23"}T00:00:00`);
   weekStart.setHours(0, 0, 0, 0);
   const existing = await prisma.wprSnapshot.findUnique({
@@ -398,7 +401,7 @@ wprMakerRouter.get("/:projectId/download-client.xlsx", async (req, res) => {
   const pack = await buildWprExportPack(projectId, range);
   if (!pack) return res.status(404).json({ error: "project not found" });
   const { buildWprClientWorkbook } = await import("../services/wprClientPack.js");
-  const buf = await buildWprClientWorkbook(prisma, projectId, pack.weekStart, pack.weekEnd);
+  const buf = await buildWprClientWorkbook(prisma, projectId, pack.weekStart, pack.weekEnd, pack.sections);
   const fname = `WPR-ClientPack-${pack.project.code}-${range.weekEnd.toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
@@ -498,7 +501,7 @@ wprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
   const folder = MODULE_TO_ISO_FOLDER.wpr;
   const saved = await mockOneDrive.upload(project.code, folder, fname, buf);
   const { buildWprClientWorkbook } = await import("../services/wprClientPack.js");
-  const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
+  const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd, sections);
   await mockOneDrive.upload(project.code, folder, clientFname, clientBuf);
   const pptxBuf = await buildWprPptx({ header, sections, charts, packExtras: pack.packExtras || undefined });
   const pptxSaved = await mockOneDrive.upload(project.code, folder, pptxFname, pptxBuf);

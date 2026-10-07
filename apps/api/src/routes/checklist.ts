@@ -89,6 +89,15 @@ async function persistChecklistUploads(opts: {
   return itemAttachCount;
 }
 
+/** "29-07-2026 21:28" in IST — the time the site team saw when they submitted. */
+function istStamp(d: Date): string {
+  const p = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(d));
+  const g = (t: string) => p.find((x) => x.type === t)?.value || "";
+  return `${g("day")}-${g("month")}-${g("year")} ${g("hour")}:${g("minute")}`;
+}
+
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 guardProjectParam(checklistRouter);
@@ -1373,7 +1382,7 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
       const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "";
       const remarks = typeof ans === "object" ? ans.remarks || ans.remark || "" : "";
       rows.push({
-        "Submitted At": new Date(s.createdAt).toISOString(),
+        "Submitted At": istStamp(s.createdAt),
         Family: template.checklistType || "",
         Checklist: template.name || "",
         "Item Code": item.itemCode || "",
@@ -1394,7 +1403,7 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
     }
     if (!template.items.length) {
       rows.push({
-        "Submitted At": new Date(s.createdAt).toISOString(),
+        "Submitted At": istStamp(s.createdAt),
         Family: template.checklistType || "",
         Checklist: template.name || "",
         "Item Code": "",
@@ -1415,11 +1424,19 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
     }
   }
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Note: "No filled checklists yet" }]);
-  XLSX.utils.book_append_sheet(wb, ws, "Filled Schedules");
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const fname = `filled-checklists-${req.params.projectId}${type ? `-${type}` : ""}.xlsx`;
+  const { workbookBuffer } = await import("../services/brandedExport.js");
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  const headers = rows.length ? Object.keys(rows[0]) : ["Note"];
+  const buf = await workbookBuffer(
+    [
+      {
+        name: "Filled Schedules",
+        rows: [headers, ...(rows.length ? rows.map((r) => headers.map((h) => r[h])) : [["No filled checklists yet"]])],
+      },
+    ],
+    { title: `Filled checklists${type ? ` — ${type}` : ""}`, projectCode: project?.code || req.params.projectId }
+  );
+  const fname = `filled-checklists-${project?.code || req.params.projectId}${type ? `-${type}` : ""}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(buf);

@@ -273,7 +273,7 @@ export async function syncLegalFromTemplate(projectId: string, opts?: { force?: 
 import { isContentLessonRow } from "./lessonLearntUtils.js";
 
 export function resolveLessonsPath() {
-  return firstExisting(resolveExcelRoot(), ["Lessons Learnt - Sharnam PMC.xls", "Lessons Learnt - Sharnam PMC.xlsx"]);
+  return findWorkbook(["Lessons Learnt - Sharnam PMC.xls", "Lessons Learnt - Sharnam PMC.xlsx"]);
 }
 
 /** Timeline cells from Progress Overview.xlsx · Dashboard — values as stored in the pack. */

@@ -201,7 +201,7 @@ async function attachDirectorySigns(projectId: string, extras: DprExtras): Promi
 
 dprMakerRouter.get("/:projectId", async (req, res) => {
   const projectId = req.params.projectId;
-  const logDate = parseDate(req.query.date);
+  const logDate = parseDate(req.query.date ?? req.query.logDate);
   const discipline = normDiscipline(req.query.discipline);
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -547,7 +547,7 @@ dprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
-  const logDate = parseDate(req.query.date);
+  const logDate = parseDate(req.query.date ?? req.query.logDate);
   const discipline = normDiscipline(req.query.discipline);
 
   const { header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);
@@ -585,7 +585,7 @@ dprMakerRouter.get("/:projectId/download.html", async (req, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
-  const logDate = parseDate(req.query.date);
+  const logDate = parseDate(req.query.date ?? req.query.logDate);
   const discipline = normDiscipline(req.query.discipline);
 
   const { existing, header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);
