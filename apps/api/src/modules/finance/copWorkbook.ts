@@ -16,6 +16,7 @@ import { type WorkSheet } from "../../lib/xlsx.js";
 import { prisma } from "../../prisma.js";
 import { sharnamLogoPath } from "../../services/brandedExport.js";
 import { detachSharedStyles } from "../../lib/excelTemplate.js";
+import { findWorkbook } from "../../lib/excelRoot.js";
 
 const ISO_COP_FOLDER = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
 
@@ -30,7 +31,8 @@ export function resolveViatrixCopTemplatePath(): string | null {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return null;
+  // Same search as every other client workbook, independent of the working directory.
+  return findWorkbook(["Viatrix_RA BILL_COP.xlsm", "Viatrix_RA BILL_COP.xlsx"]);
 }
 
 function dateToExcelSerial(d: Date | null | undefined): number | "" {
@@ -340,6 +342,9 @@ export async function buildViatrixCopWorkbook(copId: string): Promise<{ buffer: 
       target.value = typeof cell.v === "number" ? cell.v : String(cell.v);
     }
   }
+
+  // Certificate date is written as an Excel serial — show it as a date.
+  ws.getCell("F8").numFmt = "dd-mmm-yyyy";
 
   await applySharnamLetterhead(wb, ws, cop);
 

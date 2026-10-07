@@ -5,6 +5,8 @@
 import { prisma } from "../prisma.js";
 import {
   computeDpr,
+  dprLineKey,
+  dprSheetLines,
   type DprHeader,
   type DprLine,
   type DprManpower,
@@ -13,8 +15,9 @@ import {
 } from "./dprXlsx.js";
 import type ExcelJS from "exceljs";
 
-export type DprChartPoint = { date: string; label: string; planned: number; actual: number };
-export type DprScurveEntryInput = { date: string; label?: string; planned: number; actual: number };
+/** actual is null for future dates (planned only). */
+export type DprChartPoint = { date: string; label: string; planned: number; actual: number | null };
+export type DprScurveEntryInput = { date: string; label?: string; planned: number; actual: number | null };
 
 export function formatScurveLabel(date: string, label?: string): string {
   const trimmed = (label || "").trim();
@@ -35,7 +38,8 @@ export function normalizeScurveEntries(
       date: p.date.slice(0, 10),
       label: formatScurveLabel(p.date, p.label),
       planned: Number(p.planned) || 0,
-      actual: Number(p.actual) || 0,
+      // Blank actual = planned-only (future) point.
+      actual: p.actual == null || (p.actual as unknown) === "" ? null : Number(p.actual) || 0,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-13);
@@ -45,14 +49,14 @@ function mergeSummaryWithScurve(
   kpis: ReturnType<typeof computeDpr>["kpis"],
   scurve: DprChartPoint[]
 ): DprChartPack["summary"] {
-  const last = scurve.length ? scurve[scurve.length - 1] : null;
+  const last = [...scurve].reverse().find((p) => p.actual != null) ?? null;
   let plannedPct = Math.round(kpis.plannedPct * 1000) / 10;
   let actualPct = Math.round(kpis.actualPct * 1000) / 10;
   if (plannedPct === 0 && last && last.planned > 0) {
     plannedPct = last.planned;
   }
-  if (actualPct === 0 && last && last.actual > 0) {
-    actualPct = last.actual;
+  if (actualPct === 0 && last && (last.actual ?? 0) > 0) {
+    actualPct = last.actual ?? 0;
   }
   const variance = Math.round((actualPct - plannedPct) * 10) / 10;
   const spi = plannedPct > 0 ? Math.round((actualPct / plannedPct) * 100) / 100 : 0;
@@ -129,7 +133,186 @@ function snapActualPct(snap: DprSnapshot): number {
   return computeDpr(snap).kpis.actualPct;
 }
 
-/** Last 13 reporting dates → planned vs actual % for S-curve chart. */
+const DAY = 86400000;
+const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const startOfDay = (d: Date | string) => {
+  const x = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T00:00:00`) : new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+const validDate = (v: unknown): Date | null => {
+  if (!v) return null;
+  const d = v instanceof Date ? startOfDay(v) : startOfDay(String(v).slice(0, 10));
+  return Number.isNaN(d.getTime()) || d.getFullYear() < 2000 ? null : d;
+};
+
+/**
+ * DPR S-curve on the template's 13 slots: 6 past reporting dates, today (slot 7), 6 future dates.
+ * Planned % — manual entries, else the S-curve register (discipline, then OVERALL), else the lines' planned
+ * start/finish weighted by scope × rate (same formula as the DASHBOARD sheet).
+ * Actual % — each line's cumulative quantity on the date from the DPR history (pre-portal dates are spread
+ * linearly from project start to the first DPR's opening quantity).
+ */
+export type DprScurveTimeline = {
+  points: DprChartPoint[];
+  dates: Date[];
+  /** Cumulative qty per sheet line (15) × past date (6); null where unknown. */
+  pastCum: (number | null)[][];
+  plannedFrom: "lines" | "register" | "manual";
+  actualFrom: "dpr" | "manual";
+};
+
+function interpolate(points: { t: number; v: number }[], t: number): number {
+  if (!points.length) return 0;
+  if (t <= points[0].t) return points[0].t === t ? points[0].v : 0;
+  for (let i = 1; i < points.length; i++) {
+    if (t <= points[i].t) {
+      const a = points[i - 1];
+      const b = points[i];
+      return a.v + ((b.v - a.v) * (t - a.t)) / Math.max(1, b.t - a.t);
+    }
+  }
+  return points[points.length - 1].v;
+}
+
+function linePlannedPct(lines: DprLine[], d: Date): number {
+  const w = lines.map((l) => (Number(l.scopeQty) || 0) * (Number(l.rate) || 0));
+  const total = w.reduce((a, b) => a + b, 0);
+  if (!total) return 0;
+  let sum = 0;
+  lines.forEach((l, i) => {
+    const s = validDate(l.start);
+    const f = validDate(l.finish);
+    if (!s || !f || !w[i]) return;
+    const frac = d >= f ? 1 : d < s ? 0 : (d.getTime() - s.getTime() + DAY) / (f.getTime() - s.getTime() + DAY);
+    sum += (w[i] / total) * Math.min(1, Math.max(0, frac));
+  });
+  return Math.round(sum * 1000) / 10;
+}
+
+function lineActualPct(lines: DprLine[], cum: (number | null)[]): number {
+  const w = lines.map((l) => (Number(l.scopeQty) > 0 ? Number(l.scopeQty) * (Number(l.rate) || 0) : 0));
+  const total = w.reduce((a, b) => a + b, 0);
+  if (!total) return 0;
+  const sum = lines.reduce((acc, l, i) => acc + (w[i] ? (w[i] / total) * Math.min(1, (cum[i] ?? 0) / Number(l.scopeQty)) : 0), 0);
+  return Math.round(sum * 1000) / 10;
+}
+
+export async function buildDprScurveTimeline(
+  projectId: string,
+  discipline: string,
+  logDate: Date,
+  currentSnap: DprSnapshot,
+  manualEntries?: DprChartPoint[]
+): Promise<DprScurveTimeline> {
+  const today = startOfDay(logDate);
+  const lines = dprSheetLines(currentSnap.lines || []);
+  const keys = lines.map((l) => dprLineKey(l));
+
+  const [history, project, register] = await Promise.all([
+    prisma.dprSnapshot.findMany({
+      where: { projectId, discipline, logDate: { lt: today } },
+      orderBy: { logDate: "asc" },
+      select: { logDate: true, linesJson: true },
+    }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true, endDate: true } }),
+    prisma.progressScurvePoint.findMany({
+      where: { projectId, discipline: { in: [discipline.toUpperCase(), "OVERALL"] } },
+      orderBy: { periodDate: "asc" },
+    }),
+  ]);
+
+  // Cumulative qty per line key on each DPR day (cum prev + qty today), and the opening qty of the first DPR.
+  const daily = history.map((h) => {
+    const map = new Map<string, { cum: number; prev: number }>();
+    try {
+      for (const l of JSON.parse(h.linesJson || "[]") as DprLine[]) {
+        map.set(dprLineKey(l), { cum: (Number(l.cumQtyPrev) || 0) + (Number(l.qtyToday) || 0), prev: Number(l.cumQtyPrev) || 0 });
+      }
+    } catch {
+      /* skip unreadable day */
+    }
+    return { date: startOfDay(h.logDate), map };
+  });
+
+  const lineStarts = lines.map((l) => validDate(l.start)).filter((d): d is Date => !!d);
+  const lineEnds = lines.map((l) => validDate(l.finish)).filter((d): d is Date => !!d);
+  const projectStart =
+    [validDate(project?.startDate), daily[0]?.date, ...lineStarts]
+      .filter((d): d is Date => !!d)
+      .sort((a, b) => a.getTime() - b.getTime())[0] ?? new Date(today.getTime() - 42 * DAY);
+
+  // 6 past dates spread from project start to yesterday, so the curve covers the whole project to date.
+  const from = projectStart.getTime();
+  const to = Math.max(from, today.getTime() - DAY);
+  const past = Array.from({ length: 6 }, (_, i) => startOfDay(new Date(from + ((to - from) * i) / 5)));
+  // 6 future dates up to the latest planned finish (contract completion), at least 6 weeks out.
+  const finish = [validDate(project?.endDate), ...lineEnds]
+    .filter((d): d is Date => !!d)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const end = finish && finish > today ? finish : new Date(today.getTime() + 42 * DAY);
+  const future = Array.from({ length: 6 }, (_, i) => startOfDay(new Date(today.getTime() + ((end.getTime() - today.getTime()) * (i + 1)) / 6)));
+  const dates = [...past, today, ...future];
+
+  const first = daily[0];
+  const cumAt = (key: string, d: Date, todayCum: number, todayPrev: number): number | null => {
+    for (let i = daily.length - 1; i >= 0; i--) {
+      if (daily[i].date <= d) {
+        const hit = daily[i].map.get(key);
+        if (hit) return hit.cum;
+      }
+    }
+    // Before the first DPR: spread the opening quantity from project start (no records exist for those dates).
+    const anchorDate = first?.date ?? today;
+    const opening = first ? first.map.get(key)?.prev : todayPrev;
+    if (opening == null) return null;
+    const span = anchorDate.getTime() - projectStart.getTime();
+    if (span <= 0) return d >= anchorDate ? todayCum : 0;
+    return Math.round(opening * Math.min(1, Math.max(0, (d.getTime() - projectStart.getTime()) / span)) * 1000) / 1000;
+  };
+  // Capped at scope, like the DASHBOARD's MIN(done / scope, 1) — S-Curve Calc row 20 has no cap of its own.
+  const pastCum = lines.map((l, i) =>
+    past.map((d) => {
+      const v = cumAt(keys[i], d, (Number(l.cumQtyPrev) || 0) + (Number(l.qtyToday) || 0), Number(l.cumQtyPrev) || 0);
+      const scope = Number(l.scopeQty) || 0;
+      return v == null ? null : scope > 0 ? Math.min(v, scope) : v;
+    })
+  );
+  const todayCum = lines.map((l) => (Number(l.cumQtyPrev) || 0) + (Number(l.qtyToday) || 0));
+
+  // Register: discipline points first, else OVERALL. Stored as % (MS Project import) or fractions (older UI).
+  const byDisc = register.filter((p) => p.discipline === discipline.toUpperCase());
+  const reg = byDisc.length ? byDisc : register.filter((p) => p.discipline === "OVERALL");
+  const regScale = reg.length && Math.max(...reg.map((p) => Number(p.plannedPct) || 0)) <= 1 ? 100 : 1;
+  const regPlanned = reg.map((p) => ({ t: startOfDay(p.periodDate).getTime(), v: (Number(p.plannedPct) || 0) * regScale }));
+
+  const manual = manualEntries?.length ? manualEntries : null;
+  const manualPlanned = manual?.map((p) => ({ t: startOfDay(p.date).getTime(), v: Number(p.planned) || 0 })) ?? [];
+  const manualActual = manual?.filter((p) => p.actual != null).map((p) => ({ t: startOfDay(p.date).getTime(), v: Number(p.actual) || 0 })) ?? [];
+
+  const plannedFrom: DprScurveTimeline["plannedFrom"] = manual ? "manual" : regPlanned.length ? "register" : "lines";
+  const points: DprChartPoint[] = dates.map((d, i) => {
+    const t = d.getTime();
+    const planned =
+      plannedFrom === "manual"
+        ? Math.round(interpolate(manualPlanned, t) * 10) / 10
+        : plannedFrom === "register"
+          ? Math.round(interpolate(regPlanned, t) * 10) / 10
+          : linePlannedPct(lines, d);
+    const actual =
+      i > 6
+        ? null
+        : manual && manualActual.length
+          ? Math.round(interpolate(manualActual, t) * 10) / 10
+          : lineActualPct(lines, i === 6 ? todayCum : pastCum.map((row) => row[i]));
+    const key = dayKey(d);
+    return { date: key, label: formatScurveLabel(key), planned, actual };
+  });
+
+  return { points, dates, pastCum, plannedFrom, actualFrom: manual && manualActual.length ? "manual" : "dpr" };
+}
+
+/** 13 S-curve points for the DPR Maker chart / PDF (same numbers as the Excel DASHBOARD chart). */
 export async function loadDprScurveHistory(
   projectId: string,
   discipline: string,
@@ -137,106 +320,8 @@ export async function loadDprScurveHistory(
   currentSnap: DprSnapshot,
   manualEntries?: DprScurveEntryInput[]
 ): Promise<DprChartPoint[]> {
-  const manual = normalizeScurveEntries(manualEntries);
-  if (manual?.length) return manual;
-
-  const disciplineKey = discipline.toUpperCase();
-  const registerPoints = await prisma.progressScurvePoint.findMany({
-    where: {
-      projectId,
-      discipline: { in: [disciplineKey, "OVERALL"] },
-      periodDate: { lte: logDate },
-    },
-    orderBy: { periodDate: "desc" },
-    take: 13,
-  });
-  if (registerPoints.length) {
-    return registerPoints
-      .slice()
-      .reverse()
-      .map((p) => ({
-      date: p.periodDate.toISOString().slice(0, 10),
-      label: formatScurveLabel(p.periodDate.toISOString().slice(0, 10), p.periodLabel || undefined),
-      planned: Number(p.plannedPct) || 0,
-      actual: Number(p.actualPct) || 0,
-    }));
-  }
-
-  let msScurve: { date: string; periodLabel: string; plannedPct: number; actualPct: number }[] = [];
-  const msPlannedByDate = new Map<string, number>();
-  try {
-    const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
-    const ms = await loadMsProjectSummary(projectId);
-    msScurve = ms.scurve || [];
-    for (const p of msScurve) {
-      msPlannedByDate.set(p.date.slice(0, 10), p.plannedPct);
-    }
-  } catch {
-    /* MS Project schedule optional */
-  }
-
-  const end = new Date(logDate);
-  end.setHours(23, 59, 59, 999);
-  const logKey = logDate.toISOString().slice(0, 10);
-  const prior = await prisma.dprSnapshot.findMany({
-    where: { projectId, discipline, logDate: { lte: end } },
-    orderBy: { logDate: "asc" },
-    take: 12,
-  });
-
-  const actualByDate = new Map<string, number>();
-  const points: DprChartPoint[] = [];
-  for (const row of prior) {
-    const snap = parseSnap(row.headerJson, row.linesJson);
-    snap.discipline = discipline;
-    snap.header.dataDate = row.logDate.toISOString();
-    const computed = computeDpr(snap);
-    const dateKey = row.logDate.toISOString().slice(0, 10);
-    const actual = Math.round(computed.kpis.actualPct * 1000) / 10;
-    actualByDate.set(dateKey, actual);
-    points.push({
-      date: dateKey,
-      label: formatScurveLabel(dateKey),
-      planned: msPlannedByDate.has(dateKey)
-        ? msPlannedByDate.get(dateKey)!
-        : Math.round(computed.kpis.plannedPct * 1000) / 10,
-      actual,
-    });
-  }
-
-  const hasToday = points.some((p) => p.date === logKey);
-  if (!hasToday) {
-    const computed = computeDpr(currentSnap);
-    const actual = Math.round(computed.kpis.actualPct * 1000) / 10;
-    actualByDate.set(logKey, actual);
-    points.push({
-      date: logKey,
-      label: formatScurveLabel(logKey),
-      planned: msPlannedByDate.has(logKey)
-        ? msPlannedByDate.get(logKey)!
-        : Math.round(computed.kpis.plannedPct * 1000) / 10,
-      actual,
-    });
-  }
-
-  const merged = points.slice(-13);
-  const needsMsPlanned = merged.length === 0 || merged.every((p) => p.planned === 0);
-  if (needsMsPlanned && msScurve.length) {
-    const msSlice = msScurve.filter((p) => p.date.slice(0, 10) <= logKey).slice(-13);
-    if (msSlice.length) {
-      return msSlice.map((p) => {
-        const dateKey = p.date.slice(0, 10);
-        return {
-          date: dateKey,
-          label: formatScurveLabel(dateKey, p.periodLabel),
-          planned: p.plannedPct,
-          actual: actualByDate.get(dateKey) ?? (dateKey === logKey ? actualByDate.get(logKey) ?? p.actualPct : p.actualPct),
-        };
-      });
-    }
-  }
-
-  return merged;
+  const timeline = await buildDprScurveTimeline(projectId, discipline, logDate, currentSnap, normalizeScurveEntries(manualEntries));
+  return timeline.points;
 }
 
 /** Map MS Project S-curve export → DPR chart points (for manual override after XML import). */
@@ -292,23 +377,45 @@ export function scurveEntriesFromChartPoints(points: DprChartPoint[]): DprScurve
   }));
 }
 
-/** Write S-curve history into INPUT rows 125–137 for DASHBOARD chart formulas. */
-export function fillScurveHistorySheet(ws: ExcelJS.Worksheet, history: DprChartPoint[]) {
-  const slice = history.slice(-13);
-  for (let i = 0; i < 13; i++) {
-    const row = 125 + i;
-    const p = slice[i];
-    if (!p) {
-      ws.getCell(`A${row}`).value = null;
-      ws.getCell(`B${row}`).value = null;
-      ws.getCell(`C${row}`).value = null;
-      continue;
+/**
+ * Put the timeline on the template the way it was designed:
+ *  INPUT A125:A137 dates (6 past · today · 6 future); B125:B130 stay formulas reading S-Curve Calc row 20.
+ *  S-Curve Calc F4:K4 past dates, F5:K19 each line's cumulative qty on those dates (L4 today, M4 next date).
+ *  DASHBOARD Z5:Z17 / AA5:AA17 are overwritten only when planned / actual come from the register or manual entries.
+ */
+export function fillScurveTimeline(wb: ExcelJS.Workbook, t: DprScurveTimeline) {
+  const input = wb.getWorksheet("INPUT");
+  const calc = wb.getWorksheet("S-Curve Calc");
+  const dash = wb.getWorksheet("DASHBOARD");
+  if (!input) return;
+  t.dates.forEach((d, i) => {
+    input.getCell(`A${125 + i}`).value = d;
+  });
+  for (let i = 7; i < 13; i++) input.getCell(`B${125 + i}`).value = null;
+  if (calc) {
+    const cols = ["F", "G", "H", "I", "J", "K"];
+    cols.forEach((c, j) => {
+      calc.getCell(`${c}4`).value = t.dates[j];
+    });
+    calc.getCell("L4").value = t.dates[6];
+    calc.getCell("M4").value = t.dates[7];
+    for (let li = 0; li < 15; li++) {
+      cols.forEach((c, j) => {
+        const v = t.pastCum[li]?.[j];
+        calc.getCell(`${c}${5 + li}`).value = v == null ? null : v;
+      });
     }
-    const d = new Date(p.date);
-    d.setHours(0, 0, 0, 0);
-    ws.getCell(`A${row}`).value = d;
-    ws.getCell(`B${row}`).value = p.planned / 100;
-    ws.getCell(`C${row}`).value = p.actual / 100;
+  }
+  if (t.actualFrom === "manual") {
+    for (let i = 0; i < 6; i++) input.getCell(`B${125 + i}`).value = (t.points[i].actual ?? 0) / 100;
+  }
+  if (dash) {
+    t.points.forEach((p, i) => {
+      if (t.plannedFrom !== "lines") dash.getCell(`Z${5 + i}`).value = p.planned / 100;
+      if (t.actualFrom === "manual") dash.getCell(`AA${5 + i}`).value = p.actual == null ? null : p.actual / 100;
+      // Future slots: truly empty — the template's IF(…,"",…) returns text, which charts plot as 0.
+      if (i > 6) dash.getCell(`AA${5 + i}`).value = null;
+    });
   }
 }
 
@@ -318,7 +425,7 @@ export function dprChartsSvg(charts: DprChartPack): string {
   const w = 520;
   const h = 160;
   const pad = 28;
-  const maxY = Math.max(100, ...pts.flatMap((p) => [p.planned, p.actual])) * 1.1;
+  const maxY = Math.max(100, ...pts.flatMap((p) => [p.planned, p.actual ?? 0])) * 1.1;
   const step = pts.length > 1 ? (w - pad * 2) / (pts.length - 1) : 0;
 
   const toY = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
@@ -326,7 +433,9 @@ export function dprChartsSvg(charts: DprChartPack): string {
     .map((p, i) => `${i === 0 ? "M" : "L"} ${pad + i * step} ${toY(p.planned)}`)
     .join(" ");
   const actualPath = pts
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${pad + i * step} ${toY(p.actual)}`)
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.actual != null)
+    .map(({ p, i }, k) => `${k === 0 ? "M" : "L"} ${pad + i * step} ${toY(p.actual ?? 0)}`)
     .join(" ");
 
   const barW = 36;

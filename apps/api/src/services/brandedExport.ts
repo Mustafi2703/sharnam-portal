@@ -4,6 +4,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import ExcelJS from "exceljs";
+import type { ChartSpec } from "../lib/xlsxCharts.js";
 import { prisma } from "../prisma.js";
 
 const __apiDir = path.dirname(fileURLToPath(import.meta.url));
@@ -34,10 +35,24 @@ const LOGO_CANDIDATES = [
   ...EMAIL_LOGO_CANDIDATES,
 ];
 
+/** Optional chart hints for a sheet (headers by name); false = no chart. Without hints a chart is picked automatically. */
+export type SheetChart = {
+  title?: string;
+  category?: string;
+  planned?: string;
+  actual?: string;
+  /** Single series (with `type`). */
+  values?: string;
+  type?: "column" | "line" | "bar";
+  /** Status-type column for a pie breakdown. */
+  breakdown?: string;
+};
+
 export type SheetSpec = {
   name: string;
   /** First row = headers */
   rows: (string | number | boolean | null | undefined)[][];
+  chart?: SheetChart | false;
 };
 
 function esc(s: unknown) {
@@ -257,6 +272,7 @@ export async function workbookBuffer(sheets: SheetSpec[], meta?: { title?: strin
 
   // ── Data sheets ──
   const used = new Set<string>(["Cover"]);
+  const charts: ChartSpec[] = [];
   for (const sheet of sheets) {
     let name = sheet.name.replace(/[\\/?*[\]:]/g, "-").slice(0, 31) || "Sheet";
     for (let n = 2; used.has(name); n++) name = `${name.slice(0, 28)} ${n}`;
@@ -329,10 +345,128 @@ export async function workbookBuffer(sheets: SheetSpec[], meta?: { title?: strin
     ws.mergeCells(at, 1, at, Math.max(width, 4));
     ws.getCell(at, 1).value = BRAND_FOOTER;
     ws.getCell(at, 1).font = { name: "Arial", italic: true, size: 8, color: { argb: "FF666666" } };
+
+    if (headerIdx >= 0 && bodyRows.length >= 2 && sheet.chart !== false) {
+      const spec = autoChart(name, hdr, bodyRows, headerRow, width, at, sheet.chart || undefined, (r, c, v, head) => {
+        const cell = ws.getCell(r, c);
+        cell.value = v as ExcelJS.CellValue;
+        cell.font = head
+          ? { name: "Arial", bold: true, size: 9, color: { argb: "FFFFFFFF" } }
+          : { name: "Arial", size: 9 };
+        if (head) cell.fill = solid(BRAND_NAVY);
+        cell.border = box;
+        if (ws.getColumn(c).width == null || (ws.getColumn(c).width ?? 0) < 14) ws.getColumn(c).width = head ? 22 : 14;
+      });
+      if (spec) charts.push(spec);
+    }
   }
 
-  const out = await wb.xlsx.writeBuffer();
-  return Buffer.from(out);
+  const out = Buffer.from(await wb.xlsx.writeBuffer());
+  if (!charts.length) return out;
+  const { addCharts } = await import("../lib/xlsxCharts.js");
+  return addCharts(out, charts);
+}
+
+const colLetter = (n: number) => {
+  let s = "";
+  for (let x = n; x > 0; x = Math.floor((x - 1) / 26)) s = String.fromCharCode(65 + ((x - 1) % 26)) + s;
+  return s;
+};
+
+const PLAN_RE = /^(planned|plan\b|budget|required|boq|target|scheduled|estimated)|planned|budgeted|required/i;
+const ACT_RE = /actual|available|achieved|achived|executed|certified|done|spent|received|paid/i;
+const TIME_RE = /month|period|week|date|day/i;
+const STATUS_RE = /^(status|state|result|severity|priority|type|category|discipline|record type|stage)$/i;
+
+/**
+ * Pick a native chart for a branded register sheet:
+ *  - planned-type vs actual-type numeric columns → column chart (line when the categories are dates / months)
+ *  - else a status / type / discipline column → counts table beside the data + pie chart
+ * `put` writes the small counts table. Returns null when nothing chartable.
+ */
+function autoChart(
+  sheetName: string,
+  hdr: string[],
+  body: (string | number | boolean | null | undefined)[][],
+  headerRow: number,
+  width: number,
+  footerRow: number,
+  explicit: SheetChart | undefined,
+  put: (row: number, col: number, v: string | number, head: boolean) => void
+): ChartSpec | null {
+  const numeric = (i: number) => body.filter((r) => typeof r?.[i] === "number").length >= Math.max(2, body.length * 0.5);
+  const textCol = (i: number) => body.filter((r) => typeof r?.[i] === "string" && String(r[i]).trim()).length >= body.length * 0.5;
+  const find = (re: RegExp, pred: (i: number) => boolean) => hdr.findIndex((h, i) => re.test(h) && pred(i));
+  // Charts beside the table when it is narrow, else under the footer.
+  const beside = width <= 12;
+  const at = beside ? { col: width + 1, row: headerRow - 1 } : { col: 0, row: footerRow + 1 };
+  const first = headerRow + 1;
+  const rowsShown = Math.min(body.length, 40);
+  const last = headerRow + rowsShown;
+
+  let plan = explicit?.planned ? hdr.indexOf(explicit.planned) : find(PLAN_RE, numeric);
+  let act = explicit?.actual ? hdr.indexOf(explicit.actual) : find(ACT_RE, (i) => numeric(i) && i !== plan);
+  let cat = explicit?.category ? hdr.indexOf(explicit.category) : find(TIME_RE, textCol);
+  if (cat < 0) cat = hdr.findIndex((h, i) => !/^(sr|s\.?\s*no|no\.?|#|id)\b/i.test(h) && textCol(i));
+  if (plan >= 0 && act >= 0 && plan !== act && cat >= 0) {
+    const timeLike = TIME_RE.test(hdr[cat]) && rowsShown > 6;
+    return {
+      sheet: sheetName,
+      type: timeLike ? "line" : "column",
+      title: explicit?.title || `${hdr[plan]} vs ${hdr[act]}`,
+      categories: `${colLetter(cat + 1)}${first}:${colLetter(cat + 1)}${last}`,
+      series: [
+        { name: hdr[plan], values: `${colLetter(plan + 1)}${first}:${colLetter(plan + 1)}${last}` },
+        { name: hdr[act], values: `${colLetter(act + 1)}${first}:${colLetter(act + 1)}${last}` },
+      ],
+      at: { ...at, cols: 9, rows: 18 },
+      numFmt: "#,##0",
+    };
+  }
+  // Single numeric series (e.g. cube strength, amounts) when explicitly asked for.
+  if (explicit?.values) {
+    const v = hdr.indexOf(explicit.values);
+    if (v >= 0 && cat >= 0) {
+      return {
+        sheet: sheetName,
+        type: explicit.type || "column",
+        title: explicit.title || hdr[v],
+        categories: `${colLetter(cat + 1)}${first}:${colLetter(cat + 1)}${last}`,
+        series: [{ name: hdr[v], values: `${colLetter(v + 1)}${first}:${colLetter(v + 1)}${last}` }],
+        at: { ...at, cols: 9, rows: 18 },
+        numFmt: "#,##0.##",
+      };
+    }
+  }
+  plan = -1;
+  act = -1;
+  // Breakdown of a status-type column.
+  const sIdx = explicit?.breakdown ? hdr.indexOf(explicit.breakdown) : hdr.findIndex((h, i) => STATUS_RE.test(h.trim()) && textCol(i));
+  if (sIdx < 0) return null;
+  const counts = new Map<string, number>();
+  for (const r of body) {
+    const k = String(r?.[sIdx] ?? "").trim() || "—";
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  if (counts.size < 2 || counts.size > 12) return null;
+  const c0 = beside ? width + 2 : 1;
+  const r0 = beside ? headerRow : footerRow + 2;
+  put(r0, c0, hdr[sIdx], true);
+  put(r0, c0 + 1, "Count", true);
+  [...counts.entries()].forEach(([k, n], i) => {
+    put(r0 + 1 + i, c0, k, false);
+    put(r0 + 1 + i, c0 + 1, n, false);
+  });
+  const L = colLetter(c0);
+  const N = colLetter(c0 + 1);
+  return {
+    sheet: sheetName,
+    type: "pie",
+    title: explicit?.title || `${hdr[sIdx]} breakdown`,
+    categories: `${L}${r0 + 1}:${L}${r0 + counts.size}`,
+    series: [{ name: "Count", values: `${N}${r0 + 1}:${N}${r0 + counts.size}` }],
+    at: beside ? { col: c0 - 1, row: r0 + counts.size + 1, cols: 7, rows: 16 } : { col: c0 + 2, row: r0 - 1, cols: 7, rows: 16 },
+  };
 }
 
 export async function sendStampedXlsx(
@@ -370,7 +504,9 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
       editAs: "oneCell",
     });
     const out = await wb.xlsx.writeBuffer();
-    return Buffer.from(out);
+    // ExcelJS drops charts on save — carry over the ones the incoming workbook had.
+    const { restoreTemplateCharts } = await import("../lib/xlsxCharts.js");
+    return await restoreTemplateCharts(buffer, Buffer.from(out));
   } catch {
     return buffer;
   } finally {

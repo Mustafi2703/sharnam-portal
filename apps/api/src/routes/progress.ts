@@ -1175,22 +1175,67 @@ progressRouter.post(
 /** Per-discipline S-curve register — feeds DPR INPUT and WPR charts. */
 progressRouter.get("/:projectId/scurve-points", async (req, res) => {
   const discipline = String(req.query.discipline || "OVERALL").toUpperCase();
-  const rows = await prisma.progressScurvePoint.findMany({
-    where: { projectId: req.params.projectId, discipline },
-    orderBy: { periodDate: "asc" },
-    take: 52,
-  });
-  res.json(rows);
+  const { readScurvePoints } = await import("../services/scurveBaseline.js");
+  // Percentages (0–100); older rows saved as fractions are scaled.
+  res.json(await readScurvePoints(prisma, req.params.projectId, discipline));
 });
+
+/** Upload a planned baseline: Excel / CSV with Date | Planned % | Actual % (optional). Replaces the discipline's rows. */
+progressRouter.post(
+  "/:projectId/scurve-points/import",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const discipline = String(req.body.discipline || req.query.discipline || "OVERALL").toUpperCase();
+    try {
+      const { importScurveBaseline } = await import("../services/scurveBaseline.js");
+      const points = await importScurveBaseline(prisma, req.params.projectId, discipline, req.file.buffer);
+      await audit("progress.scurve.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { discipline, points } });
+      res.json({ ok: true, points });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+    }
+  }
+);
+
+/** Generate a monthly planned baseline from the activity register's planned dates (actual from DPRs). */
+progressRouter.post(
+  "/:projectId/scurve-points/generate",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const discipline = String(req.body.discipline || "OVERALL").toUpperCase();
+    try {
+      const { generateScurveBaseline } = await import("../services/scurveBaseline.js");
+      const out = await generateScurveBaseline(prisma, req.params.projectId, discipline);
+      await audit("progress.scurve.generate", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { discipline, ...out } });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not generate" });
+    }
+  }
+);
 
 progressRouter.post(
   "/:projectId/scurve-points",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
     const discipline = String(req.body.discipline || "OVERALL").toUpperCase();
     const periodDate = new Date(String(req.body.periodDate || req.body.date));
     if (Number.isNaN(periodDate.getTime())) return res.status(400).json({ error: "periodDate required" });
+    // Register is in % (0–100). Convert a discipline still holding older fraction rows once, so they never mix.
+    const existing = await prisma.progressScurvePoint.findMany({ where: { projectId, discipline } });
+    if (existing.length && existing.every((r) => (Number(r.plannedPct) || 0) <= 1 && (Number(r.actualPct) || 0) <= 1)) {
+      await prisma.$transaction(
+        existing.map((r) =>
+          prisma.progressScurvePoint.update({
+            where: { id: r.id },
+            data: { plannedPct: (Number(r.plannedPct) || 0) * 100, actualPct: (Number(r.actualPct) || 0) * 100 },
+          })
+        )
+      );
+    }
     const row = await prisma.progressScurvePoint.upsert({
       where: {
         projectId_discipline_periodDate: { projectId, discipline, periodDate },
@@ -1217,7 +1262,7 @@ progressRouter.post(
 
 progressRouter.delete(
   "/:projectId/scurve-points/:pointId",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     await prisma.progressScurvePoint.deleteMany({
       where: { id: req.params.pointId, projectId: req.params.projectId },

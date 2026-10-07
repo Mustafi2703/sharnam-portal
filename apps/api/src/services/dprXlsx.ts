@@ -35,10 +35,12 @@
  *  14. S-curve history            rows 125-137 (13 rows — mostly formulas)
  */
 import ExcelJS from "exceljs";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { fillScurveHistorySheet, loadDprScurveHistory, normalizeScurveEntries } from "./dprCharts.js";
+import { buildDprScurveTimeline, fillScurveTimeline, normalizeScurveEntries } from "./dprCharts.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { restoreTemplateCharts } from "../lib/xlsxCharts.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -316,6 +318,35 @@ function writeDate(ws: ExcelJS.Worksheet, addr: string, v: string | null | undef
  * the real SPDC layout. Rows and columns are constant across all
  * seven discipline templates (verified against the reference files).
  */
+/** One BOQ line across days: description + unit + rate (the client BOQ repeats "-do …" descriptions). */
+export function dprLineKey(l: { description?: string | null; unit?: string | null; rate?: number | null }): string {
+  const n = (s: string | null | undefined) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  return `${n(l.description)}|${n(l.unit)}|${Number(l.rate) || 0}`;
+}
+
+/** Rows available for BOQ lines on the INPUT sheet (24–38). */
+export const DPR_SHEET_LINES = 15;
+
+/**
+ * The 15 lines that go on the INPUT sheet: today's work first, then lines with a scope, then the rest. Lines without scope would make the template's S-curve formula divide by 0.
+ */
+export function dprSheetLines(lines: DprLine[]): DprLine[] {
+  const rank = (l: DprLine) => (num(l.qtyToday) > 0 ? 0 : num(l.scopeQty) > 0 ? 1 : 2);
+  const value = (l: DprLine) => num(l.scopeQty) * num(l.rate);
+  // Within a group, higher-value items first — they carry the package's S-curve weight.
+  return lines
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => rank(a.l) - rank(b.l) || value(b.l) - value(a.l) || a.i - b.i)
+    .slice(0, DPR_SHEET_LINES)
+    .map((x) => x.l);
+}
+
+/** AC certified is entered in ₹ lakh; older DPR drafts stored rupees. */
+export function acCertifiedLakh(v: unknown): number {
+  const n = num(v);
+  return n > 100000 ? Math.round((n / 100000) * 100) / 100 : n;
+}
+
 function fillInputSheet(ws: ExcelJS.Worksheet, snap: DprSnapshot) {
   const H = snap.header;
 
@@ -333,15 +364,16 @@ function fillInputSheet(ws: ExcelJS.Worksheet, snap: DprSnapshot) {
   writeDate(ws, "B14", H.reportDate);
   writeDate(ws, "B15", H.dataDate);
   writeCell(ws, "B16", H.reportNumber || "");
-  writeCell(ws, "B17", num(H.acCertifiedToDate));
+  writeCell(ws, "B17", acCertifiedLakh(H.acCertifiedToDate));
   writeCell(ws, "B18", num(H.cumManDaysPrev));
   writeCell(ws, "B19", num(H.cumSafeManHoursPrev));
   writeDate(ws, "B20", H.dateOfLastLti);
 
   // 2. Quantity progress (rows 24-38, 15 slots)
-  for (let i = 0; i < 15; i++) {
+  const sheetLines = dprSheetLines(snap.lines);
+  for (let i = 0; i < DPR_SHEET_LINES; i++) {
     const row = 24 + i;
-    const l = snap.lines[i];
+    const l = sheetLines[i];
     writeCell(ws, `A${row}`, l?.group ?? null);
     writeCell(ws, `B${row}`, l?.description ?? null);
     writeCell(ws, `E${row}`, l?.unit ?? null);
@@ -482,14 +514,14 @@ export async function buildDprWorkbook(
   fillInputSheet(inputSheet, snap);
 
   if (opts?.projectId && opts.logDate) {
-    const history = await loadDprScurveHistory(
+    const timeline = await buildDprScurveTimeline(
       opts.projectId,
       snap.discipline,
       opts.logDate,
       snap,
       normalizeScurveEntries(opts.scurveEntries)
     );
-    fillScurveHistorySheet(inputSheet, history);
+    fillScurveTimeline(wb, timeline);
   }
 
   // Attach a PHOTOS sheet listing every uploaded evidence artefact
@@ -516,5 +548,7 @@ export async function buildDprWorkbook(
   }
 
   const buf = await wb.xlsx.writeBuffer();
-  return Buffer.from(buf as ArrayBuffer);
+  // ExcelJS drops the template's S-curve chart on save — put it back, reading the filled cells.
+  // Future S-curve dates have no actual yet — plot them as gaps, not 0 %.
+  return restoreTemplateCharts(fs.readFileSync(templatePath), Buffer.from(buf as ArrayBuffer), { blanksAsGap: true });
 }

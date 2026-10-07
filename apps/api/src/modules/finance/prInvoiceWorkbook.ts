@@ -15,6 +15,7 @@ export async function buildPrInvoiceWorkbook(projectId: string): Promise<Buffer>
     [
       {
         name: "PR Tracker",
+        chart: { title: "PR amount (₹)", category: "PR No", values: "Amount" },
         rows: [
           ["Sr No", "PR Type", "PR No", "Discipline", "Qty", "Unit", "Rate", "Amount", "Material Code", "PO"],
           ...prs.map((r) => [r.srNo, r.prType, r.prNumber, r.discipline, r.qty, r.unit, r.rate, r.amount, r.materialCode, r.poNumber]),
@@ -22,6 +23,7 @@ export async function buildPrInvoiceWorkbook(projectId: string): Promise<Buffer>
       },
       {
         name: "Invoice Processing Tracker",
+        chart: { title: "Invoice value (₹, excl. GST)", category: "Invoice No", values: "Invoice Rise (Excl. GST)" },
         rows: [
           ["Sr No", "Name of Work", "Invoice No", "PO", "Vendor", "Invoice Date", "Invoice Rise (Excl. GST)", "COP Status"],
           ...invoices.map((r) => [

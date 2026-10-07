@@ -558,7 +558,11 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
         netAmountPayable: "",
       });
       setFiles([]);
-      setMsg("RA bill added — documents filed in 09.01/RA folder.");
+      setMsg(
+        vendorMode
+          ? "RA bill submitted — PMC will check (Corrected) and certify it before the COP is generated."
+          : "RA bill added — the first workbook is filed as the Submission (09.01/RA folder)."
+      );
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add failed");
@@ -599,9 +603,17 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
           </Link>
         </Card>
       )}
-      {canWrite && (!activePkg || activePkg.billKind === "ra") && (
+      {(canWrite || vendorMode) && (!activePkg || activePkg.billKind === "ra") && (
         <Card id="add-ra-form">
-          <h3 className="font-semibold text-sm mb-2">Add RA Bill {activePkg ? `· ${activePkg.label}` : ""}</h3>
+          <h3 className="font-semibold text-sm mb-2">
+            {vendorMode ? "Raise RA bill (stage 1 · Submission)" : "Add RA Bill"} {activePkg ? `· ${activePkg.label}` : ""}
+          </h3>
+          {vendorMode && (
+            <p className="text-xs text-steel-muted mb-2">
+              Choose the discipline, enter the bill amounts and attach your RA bill workbook. PMC checks it (Corrected) and certifies it;
+              the COP is generated from the certified bill.
+            </p>
+          )}
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Select
               value={form.packageKey}
@@ -617,7 +629,9 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
             <Input placeholder="RA number (RA-01)" value={form.raNumber} onChange={(e) => setForm({ ...form, raNumber: e.target.value })} required />
             <Input placeholder="Invoice number" value={form.invoiceNumber} onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })} />
             <Input placeholder="Invoice date" type="date" value={form.invoiceDate} onChange={(e) => setForm({ ...form, invoiceDate: e.target.value })} />
-            <Input placeholder="Vendor name" value={form.vendorName} onChange={(e) => setForm({ ...form, vendorName: e.target.value })} />
+            {!vendorMode && (
+              <Input placeholder="Vendor name" value={form.vendorName} onChange={(e) => setForm({ ...form, vendorName: e.target.value })} />
+            )}
             <input type="hidden" name="discipline" value={form.discipline} />
             <Input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             <Input placeholder="Against bill raised" type="number" value={form.againstBillRaised} onChange={(e) => setForm({ ...form, againstBillRaised: e.target.value })} />
@@ -783,8 +797,9 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const linkedRa = form.raBillId ? filteredRas.find((r: any) => r.id === form.raBillId) : null;
-  const linkedRaCertified = linkedRa ? raHasCertifiedWorkbook(linkedRa) : true;
-  const canCreateCop = !form.raBillId || linkedRaCertified;
+  const linkedRaCertified = linkedRa ? raHasCertifiedWorkbook(linkedRa) : false;
+  // Stage 3: a COP is generated only from an RA bill that was submitted, checked and certified.
+  const canCreateCop = !!form.raBillId && linkedRaCertified;
 
   useEffect(() => {
     if (!raBillIdPrefill) return;
@@ -837,7 +852,11 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   async function add(e: FormEvent) {
     e.preventDefault();
     if (!canCreateCop) {
-      setMsg("Upload the Certified RA workbook before creating a COP for this bill.");
+      setMsg(
+        form.raBillId
+          ? "Upload the Certified RA workbook before creating a COP for this bill."
+          : "Pick the certified RA bill this COP is for — COPs are generated from Submitted → Checked → Certified bills."
+      );
       return;
     }
     try {
@@ -924,7 +943,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
               Certificate PDF (optional)
               <input type="file" accept=".pdf,image/*" className="block mt-1 text-xs" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
-            <Button type="submit" disabled={!canCreateCop} title={!canCreateCop ? "Certified RA workbook required" : undefined}>
+            <Button type="submit" disabled={!canCreateCop} title={!canCreateCop ? "Link a certified RA bill first" : undefined}>
               Create COP
             </Button>
           </form>

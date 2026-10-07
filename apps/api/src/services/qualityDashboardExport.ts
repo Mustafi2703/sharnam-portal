@@ -9,6 +9,7 @@ import { findWorkbook } from "../lib/excelRoot.js";
 import { SPDC_PMC_NAME } from "@sharnam/shared";
 import { drawingRegisterWeekStamp } from "./drawingRegisterDrive.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { restoreTemplateCharts } from "../lib/xlsxCharts.js";
 
 function day(v?: Date | null) {
   if (!v) return "";
@@ -146,9 +147,9 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
     });
   }
 
-  const buf = await wb.xlsx.writeBuffer();
+  const buf = await restoreTemplateCharts(fs.readFileSync(tpl), Buffer.from(await wb.xlsx.writeBuffer()));
   return {
-    buffer: Buffer.from(buf),
+    buffer: buf,
     counts: { ncrs: ncrs.length, siteRecords: siteRecords.length, cubes: cubes.length, qapCount, qiFills },
   };
 }

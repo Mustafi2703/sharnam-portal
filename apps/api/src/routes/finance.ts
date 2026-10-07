@@ -34,6 +34,25 @@ async function canAccessRaBill(req: AuthedRequest, bill: { vendorId?: string | n
   return false;
 }
 
+/** RA bill workflow (discipline-wise): vendor bill → PMC check → certified → COP. Status only moves forward. */
+const RA_STATUS_ORDER = ["Draft", "Submitted", "Corrected", "Checked", "Certified", "COP generated", "Paid"];
+const STAGE_STATUS: Record<string, string> = { Submitted: "Submitted", Corrected: "Checked", Certified: "Certified" };
+const STAGE_PREREQ: Record<string, string | null> = { Submitted: null, Corrected: "Submitted", Certified: "Corrected" };
+
+function forwardStatus(current: string | null | undefined, next: string): string {
+  const a = RA_STATUS_ORDER.indexOf(current || "");
+  const b = RA_STATUS_ORDER.indexOf(next);
+  return b > a ? next : current || next;
+}
+
+/** The previous stage's workbook must be on file: Submitted → Corrected (checked) → Certified. */
+async function missingPrereqStage(billId: string, stage: string): Promise<string | null> {
+  const need = STAGE_PREREQ[stage];
+  if (!need) return null;
+  const has = await prisma.raBillRevision.findFirst({ where: { raBillId: billId, stage: need } });
+  return has ? null : need;
+}
+
 async function canUploadRaStage(
   req: AuthedRequest,
   bill: { id: string; vendorId?: string | null },
@@ -557,12 +576,25 @@ financeRouter.get("/:projectId/ra", async (req: AuthedRequest, res) => {
   res.json(pkg ? rows.filter((r) => raMatchesPackage(r, pkg)) : rows);
 });
 
-financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fields([
+financeRouter.post("/:projectId/ra", requireRoles("admin", "office", "vendor"), upload.fields([
   { name: "files", maxCount: 25 },
   { name: "file", maxCount: 1 },
 ]), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "not found" });
+  // Stage 1 — a contractor raises their own bill: always theirs, always "Submitted", workbook filed as Submission.
+  const vendorUser = req.user?.role === "vendor" ? await vendorForRequest(req) : null;
+  if (req.user?.role === "vendor") {
+    if (!vendorUser) return res.status(403).json({ error: "Your login is not linked to a vendor — ask the office to link it." });
+    const files = req.files as { files?: Express.Multer.File[]; file?: Express.Multer.File[] } | undefined;
+    if (!(files?.files?.length || files?.file?.length)) {
+      return res.status(400).json({ error: "Attach your RA bill workbook (Excel / PDF)." });
+    }
+    req.body.vendorId = vendorUser.id;
+    req.body.vendorName = vendorUser.name;
+    req.body.status = "Submitted";
+    req.body.copNo = "";
+  }
 
   const raNumber = s(req.body.raNumber) || `RA-${Date.now()}`;
   const pkg = resolveFinancePackage(s(req.body.discipline) || s(req.body.packageKey) || "");
@@ -683,6 +715,22 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fie
         kind: "contractor_doc",
         uploadedById: req.user!.id,
       })),
+    });
+    // The bill workbook raised with the bill is its Submission (stage 1) — the PMC check builds on it.
+    const first = attachmentRows[0];
+    await prisma.raBillRevision.create({
+      data: {
+        raBillId: created.id,
+        stage: "Submitted",
+        revisionNo: 1,
+        fileName: first.fileName,
+        fileUrl: first.fileUrl,
+        storagePath: first.storagePath || null,
+        sharePointUrl: first.sharePointUrl || null,
+        amountAtStage: created.totalInvoiceWithoutGst || null,
+        notes: vendorUser ? "Raised by contractor in the portal" : "Filed with the RA bill",
+        uploadedById: req.user!.id,
+      },
     });
   }
 
@@ -854,6 +902,12 @@ financeRouter.post(
     if (!req.file) {
       return res.status(400).json({ error: "file required" });
     }
+    const missing = await missingPrereqStage(bill.id, stage);
+    if (missing) {
+      return res.status(400).json({
+        error: `Upload the ${missing} workbook first — RA bills go Submitted (vendor) → Corrected (PMC check) → Certified.`,
+      });
+    }
 
     const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
     const revisionNo = existing + 1;
@@ -901,10 +955,11 @@ financeRouter.post(
       },
     });
 
-    /** File uploads only — do not roll workflow status from stage uploads. */
+    // Each stage file moves the bill forward: Submitted → Checked → Certified (never backwards).
     await prisma.raBill.update({
       where: { id: bill.id },
       data: {
+        status: forwardStatus(bill.status, STAGE_STATUS[stage]),
         attachmentUrl: fileUrl || bill.attachmentUrl,
         ...(revision.amountAtStage != null ? { totalInvoiceWithoutGst: revision.amountAtStage } : {}),
       },
@@ -954,6 +1009,13 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   if (!project) return res.status(404).json({ error: "not found" });
 
   const raBillId = s(req.body.raBillId) || null;
+  // Stage 3 — a COP comes from a certified RA bill. Admin may record a historical COP without one.
+  const historical = req.user?.role === "admin" && (req.body.withoutRaBill === "1" || req.body.withoutRaBill === "true");
+  if (!raBillId && !historical) {
+    return res.status(400).json({
+      error: "Link the certified RA bill — a COP is generated from a bill the contractor submitted and PMC checked and certified.",
+    });
+  }
   if (raBillId) {
     const certified = await raHasCertifiedWorkbook(raBillId);
     if (!certified) {
@@ -1012,7 +1074,10 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   });
 
   if (created.raBillId) {
-    await prisma.raBill.update({ where: { id: created.raBillId }, data: { copNo: created.certificateNumber } });
+    await prisma.raBill.update({
+      where: { id: created.raBillId },
+      data: { copNo: created.certificateNumber, status: forwardStatus(linkedRa?.status, "COP generated") },
+    });
     const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
     await recomputeRaCumulativeChain(prisma, req.params.projectId, {
       discipline: linkedRa?.discipline,

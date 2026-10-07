@@ -4,6 +4,7 @@
 import { renderBrandedReportHtml } from "./brandedExport.js";
 import { dprChartsSvg, type DprChartPack } from "./dprCharts.js";
 import type { DprDelay, DprHeader, DprIssue, DprLine, DprManpower, DprMaterial, DprPhoto, DprSafety } from "./dprXlsx.js";
+import { acCertifiedLakh } from "./dprXlsx.js";
 
 function inr(v: number | undefined) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v || 0);
@@ -123,7 +124,7 @@ export function renderDprSnapshotHtml(opts: {
       { label: "Manpower on site", value: manActual },
       { label: "Rebar consumed (kg)", value: rebarKg },
       { label: "Safe man-hours", value: s.safeManHoursToday ?? 0 },
-      { label: "AC certified", value: inr(h.acCertifiedToDate) },
+      { label: "AC certified (₹ lakh)", value: acCertifiedLakh(h.acCertifiedToDate).toLocaleString("en-IN") },
     ],
     sections: [
       {

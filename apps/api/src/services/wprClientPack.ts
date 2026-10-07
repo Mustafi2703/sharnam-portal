@@ -25,19 +25,19 @@ function excelSerial(d: Date | null | undefined): number | "" {
   return Math.floor((d.getTime() - epoch.getTime()) / 86400000);
 }
 
+/**
+ * The client's week workbook ("WPR 23 July to 29 July" = WPR-Client-Week-Template.xlsx) first, then the older
+ * combined WPR File — searched across every known folder, so the choice does not depend on the working directory.
+ */
 function resolveWprClientTemplate(): string | null {
-  const candidates = [
-    process.env.SHARNAM_EXCEL_ROOT ? path.join(process.env.SHARNAM_EXCEL_ROOT, "WPR File.xlsx") : "",
-    path.join(process.cwd(), "templates", "wpr-client", "WPR-Client-Week-Template.xlsx"),
-    path.join(process.cwd(), "templates", "WPR-File.xlsx"),
-    path.join(process.cwd(), "seed", "data", "WPR File.xlsx"),
-    path.join(process.cwd(), "packages", "shared", "untitled folder", "WPR  23 July to 29 July.xlsx"),
-  ].filter(Boolean);
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+  if (process.env.SHARNAM_EXCEL_ROOT) {
+    const own = path.join(process.env.SHARNAM_EXCEL_ROOT, "WPR File.xlsx");
+    if (fs.existsSync(own)) return own;
   }
-  // Same search as the other sheet loaders (repo root, apps/api, templates, seed/data…).
-  return findWorkbook(["WPR-Client-Week-Template.xlsx", "WPR-File.xlsx", "WPR File.xlsx"]);
+  return (
+    findWorkbook(["WPR-Client-Week-Template.xlsx", "WPR  23 July to 29 July.xlsx"]) ||
+    findWorkbook(["WPR-File.xlsx", "WPR File.xlsx"])
+  );
 }
 
 function findSheet(wb: WorkBook, pattern: RegExp) {
@@ -676,7 +676,9 @@ async function replayOntoStyledTemplate(template: string, wb: WorkBook): Promise
         cell.value = w.v;
       }
     }
-    return Buffer.from(await styled.xlsx.writeBuffer());
+    // The client's charts (ExcelJS drops them) go back on, reading the filled cells.
+    const { restoreTemplateCharts } = await import("../lib/xlsxCharts.js");
+    return restoreTemplateCharts(fs.readFileSync(template), Buffer.from(await styled.xlsx.writeBuffer()));
   } catch (err) {
     console.warn("[wpr-client] styled template write failed — plain workbook:", err instanceof Error ? err.message : err);
     return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;

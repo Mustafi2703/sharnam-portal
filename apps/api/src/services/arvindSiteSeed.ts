@@ -355,6 +355,11 @@ export async function seedArvindSitePack(db: PrismaClient, opts: { skipInviteEma
         },
       });
     }
+    // Scheduled start from the same sheet (M01 planned start) — the DPR S-curve runs from it.
+    const scheduledStart = dateOf(ms[0]?.[3]);
+    if (scheduledStart) {
+      await db.project.updateMany({ where: { id: dorm.id, startDate: null }, data: { startDate: scheduledStart } });
+    }
     const { syncLessonsFromTemplate } = await import("./progressRegistersImport.js");
     await syncLessonsFromTemplate(dorm.id, { force: true });
   } catch (err) {

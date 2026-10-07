@@ -34,6 +34,7 @@ import type {
   DprSafety,
   DprSafetyRow,
 } from "./dprXlsx.js";
+import { dprLineKey } from "./dprXlsx.js";
 
 /** Cost monitoring package names from SPDC_Budget_Arvind (see seed/costFromBudget.ts). */
 const DISCIPLINE_PACKAGES: Record<string, string[]> = {
@@ -60,7 +61,7 @@ export function disciplinePackage(discipline: string): string {
  * ("-do PL to G.F. Slab") under different parent items (RCC m³ @5400, shuttering m² @430 …).
  */
 function lineKey(description: string, unit?: string | null, rate?: number | null) {
-  return `${norm(description || "")}|${norm(unit || "")}|${Number(rate) || 0}`;
+  return dprLineKey({ description, unit, rate });
 }
 
 function norm(s: string) {
@@ -113,6 +114,8 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
   const lineCum = new Map<string, number>();
   /** Running cumulative on the latest prior DPR (its cum prev + qty today) — the next day continues from here. */
   const lastCum = new Map<string, number>();
+  /** Planned start / finish last entered for a line — carried to the next day's DPR. */
+  const lastDates = new Map<string, { start?: string | null; finish?: string | null }>();
 
   for (const snap of prior) {
     const { header, extras } = splitHeaderJson(snap.headerJson);
@@ -124,10 +127,11 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
       const key = lineKey(ln.description || "", ln.unit, ln.rate);
       lineCum.set(key, (lineCum.get(key) || 0) + Number(ln.qtyToday || 0));
       lastCum.set(key, Number(ln.cumQtyPrev || 0) + Number(ln.qtyToday || 0));
+      if (ln.start || ln.finish) lastDates.set(key, { start: ln.start, finish: ln.finish });
     }
   }
 
-  return { lineCum, lastCum, cumManDays, cumSafeHours, priorCount: prior.length };
+  return { lineCum, lastCum, lastDates, cumManDays, cumSafeHours, priorCount: prior.length };
 }
 
 function splitHeaderJson(headerJson: string | null) {
@@ -347,6 +351,13 @@ export async function buildDprAutoFill(
     sources.push("Progress weekly actual → qty today");
   }
 
+  // Planned dates the site already set on an earlier DPR win over every default.
+  for (const ln of lines) {
+    const kept = prev.lastDates.get(lineKey(ln.description, ln.unit, ln.rate));
+    if (kept?.start) ln.start = kept.start;
+    if (kept?.finish) ln.finish = kept.finish;
+  }
+
   try {
     const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
     const ms = await loadMsProjectSummary(projectId);
@@ -360,6 +371,19 @@ export async function buildDprAutoFill(
     }
   } catch {
     /* MS Project schedule optional */
+  }
+
+  // Still no planned dates: the project window (start → contract completion), so the S-curve has a planned
+  // line from day one. The site refines dates per line on the DPR; those carry forward from then on.
+  const projectWindow = await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true, endDate: true } });
+  const firstDpr = projectWindow?.startDate
+    ? null
+    : await prisma.dprSnapshot.findFirst({ where: { projectId }, orderBy: { logDate: "asc" }, select: { logDate: true } });
+  const pStart = (projectWindow?.startDate ?? firstDpr?.logDate ?? logDate).toISOString().slice(0, 10);
+  const pEnd = projectWindow?.endDate?.toISOString().slice(0, 10) ?? null;
+  for (const ln of lines) {
+    if (!ln.start && pStart) ln.start = pStart;
+    if (!ln.finish && pEnd) ln.finish = pEnd;
   }
 
   const bbsKg = bbsLines.reduce((s, b) => s + (b.weightKg || 0), 0);
@@ -580,7 +604,8 @@ export async function buildDprAutoFill(
     monitoring.reduce((s, m) => s + (m.certifiedQty || 0) * (m.rate || 0), 0);
 
   const header: Partial<DprHeader> = {
-    acCertifiedToDate: acCertifiedToDateVal,
+    // DPR field and INPUT!B17 are ₹ lakh; finance figures are rupees.
+    acCertifiedToDate: Math.round((acCertifiedToDateVal / 100000) * 100) / 100,
     cumManDaysPrev: prev.cumManDays,
     cumSafeManHoursPrev: prev.cumSafeHours,
   };
