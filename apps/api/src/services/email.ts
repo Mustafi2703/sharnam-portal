@@ -1,6 +1,7 @@
 import { prisma } from "../prisma.js";
 import { graphConfig, graphFetch } from "./graph.js";
 import { sendGraphHtmlMail } from "./graphHtmlMail.js";
+import { allowedRecipients, portalMailLive } from "./mailSwitch.js";
 
 function parseRecipients(raw: string): string[] {
   return raw
@@ -15,10 +16,7 @@ function graphMailEnabled() {
   return cfg.configured && Boolean(cfg.mailbox);
 }
 
-/** Live Graph to clients/vendors only when Hostinger sets PORTAL_MAIL_LIVE=true. */
-export function portalMailLive() {
-  return process.env.PORTAL_MAIL_LIVE === "true";
-}
+export { portalMailLive };
 
 function threadHeaders(opts: { messageId: string; inReplyTo?: string | null; references?: string | null }) {
   // Graph only accepts custom headers that start with x- / X-.
@@ -135,11 +133,13 @@ export async function queueProjectEmail(opts: {
     },
   });
 
-  if (graphMailEnabled() && portalMailLive()) {
+  const sendTo = allowedRecipients(recipients);
+  const sendCc = allowedRecipients(cc);
+  if (graphMailEnabled() && portalMailLive() && sendTo.length) {
     try {
       await sendViaGraph({
-        to: recipients,
-        cc,
+        to: sendTo,
+        cc: sendCc,
         subject,
         body: bodyPlain,
         bodyHtml: opts.bodyHtml ? `${opts.bodyHtml}` : undefined,

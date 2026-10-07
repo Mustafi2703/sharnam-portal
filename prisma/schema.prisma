@@ -2915,3 +2915,11 @@ model SafetyDailyLog {
   @@unique([projectId, date])
   @@index([projectId, date])
 }
+
+/// Small admin-controlled switches (e.g. portal mail live + test recipient list) so they don't need a hosting-panel change.
+model AppSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}

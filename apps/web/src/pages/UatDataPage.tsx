@@ -7,6 +7,69 @@ import { StatusNote } from "../components/StatusNote";
 
 type Load = { status: "idle" | "running" | "done" | "failed"; startedAt?: string; finishedAt?: string; startedBy?: string; summary?: Record<string, unknown>; error?: string };
 
+type MailState = { live: boolean; source: "hosting" | "admin" | "off"; allow: string[] };
+
+/** Portal email for UAT: on only for the test mailboxes SPDC owns; everyone else stays held. */
+function MailSwitchCard({ token }: { token: string | null }) {
+  const [state, setState] = useState<MailState | null>(null);
+  const [allow, setAllow] = useState("");
+  const [testTo, setTestTo] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api<MailState>("/api/uat-data/mail", { token })
+      .then((m) => {
+        setState(m);
+        setAllow(m.allow.join(", "));
+      })
+      .catch(() => undefined);
+  }, [token]);
+  async function save(live: boolean) {
+    setBusy(true);
+    setNote("");
+    try {
+      const m = await api<MailState>("/api/uat-data/mail", { method: "PUT", token, body: JSON.stringify({ live, allow }), headers: { "Content-Type": "application/json" } });
+      setState(m);
+      setAllow(m.allow.join(", "));
+      setNote(live ? "Email is on — only the listed test mailboxes receive mail." : "Email is off — everything is held.");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function sendTest() {
+    setBusy(true);
+    try {
+      await api("/api/uat-data/mail/test", { method: "POST", token, body: JSON.stringify({ to: testTo }), headers: { "Content-Type": "application/json" } });
+      setNote(`Test mail sent to ${testTo}.`);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not send");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="font-semibold">4. Test Email</h3>
+        {state ? <Badge tone={state.live ? "ok" : "neutral"}>{state.source === "hosting" ? "On (hosting, all recipients)" : state.live ? "On (test list only)" : "Off — held"}</Badge> : null}
+      </div>
+      <p className="text-xs text-steel-muted">Use mailboxes SPDC owns for UAT. Mail is sent only to the addresses or @domains listed here; every other recipient (clients, vendors, .demo logins) stays held. Switch it off when UAT ends.</p>
+      <Input label="Test mailboxes or @domains (comma separated)" value={allow} onChange={(e) => setAllow(e.target.value)} placeholder="uat1@spdc.in, @yourtestdomain.com" />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" disabled={busy || state?.source === "hosting"} onClick={() => void save(true)}>Switch email on</Button>
+        <Button type="button" variant="secondary" disabled={busy || state?.source === "hosting"} onClick={() => void save(false)}>Switch email off</Button>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input label="Send a test mail to" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="uat1@spdc.in" />
+        <Button type="button" variant="secondary" disabled={busy || !testTo || !state?.live} onClick={() => void sendTest()}>Send test mail</Button>
+      </div>
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Admin · UAT data — load the Arvind data SPDC shared, then clear test projects and test logins. */
 export default function UatDataPage() {
   const { token, user } = useAuth();
@@ -174,6 +237,8 @@ export default function UatDataPage() {
           {busy === "users" ? "Switching off…" : `Switch off ${pickUsers.length || ""} login(s)`}
         </Button>
       </Card>
+
+      <MailSwitchCard token={token} />
     </div>
   );
 }

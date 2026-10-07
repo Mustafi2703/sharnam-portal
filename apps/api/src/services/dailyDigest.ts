@@ -1,6 +1,7 @@
 /**
  * Morning project digest — plain-language summary + deep links for SPDC leadership.
  */
+import { portalMailLive } from "./mailSwitch.js";
 import { prisma } from "../prisma.js";
 import { graphConfig } from "./graph.js";
 import { sendGraphHtmlMail } from "./graphHtmlMail.js";
@@ -116,7 +117,7 @@ export async function sendDailyDigest(opts?: {
   const cfg = graphConfig();
 
   // Held like every other portal email until Hostinger sets PORTAL_MAIL_LIVE=true.
-  if (opts?.preview || !cfg.configured || process.env.GRAPH_MAIL_ENABLED === "false" || process.env.PORTAL_MAIL_LIVE !== "true") {
+  if (opts?.preview || !cfg.configured || process.env.GRAPH_MAIL_ENABLED === "false" || !portalMailLive()) {
     return { preview: true as const, subject, html, recipients, sent: false };
   }
 

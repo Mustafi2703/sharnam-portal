@@ -3,6 +3,7 @@
  * Gmail/Outlook block data: URIs — inline attachments load reliably.
  */
 import { graphConfig, graphFetch } from "./graph.js";
+import { allowedRecipients } from "./mailSwitch.js";
 import {
   SHARNAM_EMAIL_LOGO_CID,
   sharnamEmailLogoInlineAttachment,
@@ -28,6 +29,12 @@ export async function sendGraphHtmlMail(opts: {
   const mailbox = opts.mailbox || cfg.mailbox;
   if (!mailbox) throw new Error("GRAPH_MAIL_FROM not configured");
 
+  const to = allowedRecipients(opts.to);
+  if (!to.length) {
+    console.log(`[email] held — no recipient on the test list | ${opts.subject}`);
+    return;
+  }
+  opts = { ...opts, to, cc: allowedRecipients(opts.cc) };
   const html = ensureEmailHtmlUsesInlineLogo(opts.bodyHtml);
   const attachment = buildGraphInlineLogoAttachment();
 

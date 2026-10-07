@@ -131,6 +131,34 @@ uatDataRouter.post("/load-arvind", async (req: AuthedRequest, res) => {
   })();
 });
 
+/** Portal mail switch — on only for the listed test mailboxes / domains. */
+uatDataRouter.get("/mail", async (_req, res) => {
+  const { loadMailSwitch } = await import("../services/mailSwitch.js");
+  res.json(await loadMailSwitch());
+});
+uatDataRouter.put("/mail", async (req: AuthedRequest, res) => {
+  const { setMailSwitch } = await import("../services/mailSwitch.js");
+  const allow = Array.isArray(req.body?.allow) ? req.body.allow.map(String) : String(req.body?.allow || "").split(/[\s,;]+/);
+  try {
+    const state = await setMailSwitch({ live: Boolean(req.body?.live), allow }, req.user!.email);
+    await audit("uat.mail_switch", { userId: req.user!.id, meta: { live: state.live, allow: state.allow } });
+    res.json(state);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not save." });
+  }
+});
+
+/** Sends one proof mail to a listed test mailbox. */
+uatDataRouter.post("/mail/test", async (req: AuthedRequest, res) => {
+  const { portalMailLive, allowedRecipients } = await import("../services/mailSwitch.js");
+  const to = String(req.body?.to || "").trim();
+  if (!portalMailLive()) return res.status(400).json({ error: "Mail is switched off." });
+  if (!allowedRecipients([to]).length) return res.status(400).json({ error: "That address is not on the test list." });
+  const { sendGraphHtmlMail } = await import("../services/graphHtmlMail.js");
+  await sendGraphHtmlMail({ to: [to], subject: "[SPDC Portal] UAT mail test", bodyHtml: "<p>This is a UAT test message from the SPDC portal.</p>" });
+  res.json({ ok: true });
+});
+
 /** What the clean-up would touch: every project except Arvind, and test-looking logins. Nothing is changed here. */
 uatDataRouter.get("/cleanup-preview", async (req: AuthedRequest, res) => {
   const projects = await prisma.project.findMany({

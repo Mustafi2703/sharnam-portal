@@ -9,6 +9,7 @@ import cors from "cors";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 dotenv.config();
+import { portalMailLive, loadMailSwitch } from "./services/mailSwitch.js";
 import { applyDatabaseUrl } from "./resolveDatabaseUrl.js";
 applyDatabaseUrl();
 import { authRouter, rolesRouter, usersRouter } from "./routes/auth.js";
@@ -143,7 +144,7 @@ app.get("/api/health", async (_req, res) => {
       Boolean((process.env.GRAPH_MAIL_FROM || process.env.GRAPH_SHARED_MAILBOX || "").trim()) &&
       process.env.GRAPH_MAIL_ENABLED !== "false",
     /** Live Graph mail to clients/vendors — keep false until all modules are production-ready. */
-    portalMailLive: process.env.PORTAL_MAIL_LIVE === "true",
+    portalMailLive: portalMailLive(),
     timezone: "Asia/Kolkata",
     time: new Date().toISOString(),
     commit: deployCommit || "local",
@@ -276,6 +277,7 @@ async function start() {
   startSharePointDayClose();
   const { startSelfieRotation } = await import("./services/attendanceGeo.js");
   startSelfieRotation();
+  void loadMailSwitch();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });
