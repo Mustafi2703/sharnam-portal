@@ -612,6 +612,139 @@ financeRouter.get("/:projectId/ra", async (req: AuthedRequest, res) => {
   res.json(pkg ? rows.filter((r) => raMatchesPackage(r, pkg)) : rows);
 });
 
+/* RA bill from the BOQ — Cost monitoring lines priced at BOQ rate, discipline from the BOQ package. */
+financeRouter.get("/:projectId/ra/from-boq/packages", requireRoles("admin", "office"), async (req, res) => {
+  const { boqPackages } = await import("../modules/finance/raFromBoq.js");
+  res.json(await boqPackages(prisma, req.params.projectId));
+});
+
+financeRouter.get("/:projectId/ra/from-boq/lines", requireRoles("admin", "office"), async (req, res) => {
+  const packageName = s(req.query.package);
+  if (!packageName) return res.status(400).json({ error: "package required" });
+  const { boqBillLines } = await import("../modules/finance/raFromBoq.js");
+  const { packageForCostPackage } = await import("../modules/finance/disciplines.js");
+  const lines = await boqBillLines(prisma, req.params.projectId, packageName);
+  res.json({ packageName, discipline: packageForCostPackage(packageName).discipline, lines, total: lines.reduce((n, l) => n + l.amount, 0) });
+});
+
+/**
+ * Body (JSON): packageName, raNumber, vendorName | vendorId, discipline?, purchaseOrderId?, invoiceNumber?,
+ * invoiceDate?, gstPct? (18), retentionPct? (PO's, else 5), advanceAdjusted?, qty? { lineId: thisQty }.
+ * Creates the RA bill with its BOQ abstract filed as the Submitted workbook.
+ */
+financeRouter.post("/:projectId/ra/from-boq", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const { boqBillLines, buildBoqAbstractWorkbook } = await import("../modules/finance/raFromBoq.js");
+  const { packageForCostPackage } = await import("../modules/finance/disciplines.js");
+  const packageName = s(req.body.packageName);
+  const raNumber = s(req.body.raNumber);
+  if (!packageName || !raNumber) return res.status(400).json({ error: "packageName and raNumber required" });
+  if (await prisma.raBill.findFirst({ where: { projectId: project.id, raNumber }, select: { id: true } })) {
+    return res.status(400).json({ error: `${raNumber} already exists on this project` });
+  }
+  const qty = req.body.qty && typeof req.body.qty === "object" ? (req.body.qty as Record<string, number>) : undefined;
+  const lines = await boqBillLines(prisma, project.id, packageName, qty);
+  if (!lines.length) return res.status(400).json({ error: "Nothing to bill — no measured quantity beyond what is already certified or on an open bill." });
+
+  // Linked to the vendor master (by id or name) so the contractor sees the bill in their portal.
+  const vendor = s(req.body.vendorId)
+    ? await prisma.vendor.findUnique({ where: { id: s(req.body.vendorId) } })
+    : (await prisma.vendor.findMany({ where: { isActive: true } })).find(
+        (v) => v.name.trim().toLowerCase() === s(req.body.vendorName).toLowerCase()
+      ) || null;
+  const vendorName = vendor?.name || s(req.body.vendorName);
+  if (!vendorName) return res.status(400).json({ error: "Contractor required" });
+  const discipline = s(req.body.discipline) || packageForCostPackage(packageName).discipline;
+  const po = s(req.body.purchaseOrderId)
+    ? await prisma.purchaseOrder.findFirst({ where: { id: s(req.body.purchaseOrderId), projectId: project.id } })
+    : null;
+
+  const against = Math.round(lines.reduce((n, l) => n + l.amount, 0) * 100) / 100;
+  const gstPct = req.body.gstPct != null && req.body.gstPct !== "" ? num(req.body.gstPct) : 18;
+  const retentionPct = req.body.retentionPct != null && req.body.retentionPct !== "" ? num(req.body.retentionPct) : po?.retentionPct ?? 5;
+  const advanceAdjusted = num(req.body.advanceAdjusted);
+  const gst = Math.round(against * gstPct) / 100;
+  const retention = Math.round(against * retentionPct) / 100;
+  const net = Math.round((against + gst - retention - advanceAdjusted) * 100) / 100;
+
+  const buf = await buildBoqAbstractWorkbook({
+    projectCode: project.code,
+    raNumber,
+    discipline,
+    packageName,
+    vendorName,
+    lines,
+    amounts: { against, gst, retention, net, gstPct, retentionPct },
+  });
+  const fileName = `${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}-BOQ-Abstract.xlsx`;
+  const saved = await saveRaBillFile(project.code, raNumber, `Submitted-R1-${Date.now()}.xlsx`, buf, "Submitted");
+
+  const created = await prisma.raBill.create({
+    data: {
+      projectId: project.id,
+      purchaseOrderId: po?.id || null,
+      raNumber,
+      invoiceNumber: s(req.body.invoiceNumber) || null,
+      invoiceDate: req.body.invoiceDate ? new Date(req.body.invoiceDate) : new Date(),
+      description: `${packageName} · ${lines.length} BOQ item(s) from measured quantities`,
+      againstBillRaised: against,
+      totalInvoiceWithoutGst: against,
+      gstAmount: gst,
+      totalInvoiceWithGst: against + gst,
+      advanceAdjusted,
+      retentionAmount: retention,
+      netAmountPayable: net,
+      status: "Submitted",
+      discipline,
+      vendorId: vendor?.id || null,
+      vendorName,
+      attachmentUrl: saved.fileUrl,
+      boqPackage: packageName,
+      boqLinesJson: JSON.stringify(lines),
+      createdById: req.user!.id,
+    },
+  });
+  await prisma.raBillAttachment.create({
+    data: {
+      raBillId: created.id,
+      fileName,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path || null,
+      sharePointUrl: saved.url || null,
+      kind: "stage",
+      uploadedById: req.user!.id,
+    },
+  });
+  await prisma.raBillRevision.create({
+    data: {
+      raBillId: created.id,
+      stage: "Submitted",
+      revisionNo: 1,
+      fileName,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path || null,
+      sharePointUrl: saved.url || null,
+      amountAtStage: against,
+      notes: `Raised from BOQ · ${packageName} · ${lines.length} item(s)`,
+      uploadedById: req.user!.id,
+    },
+  });
+  const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+  await recomputeRaCumulativeChain(prisma, project.id, { discipline, purchaseOrderId: po?.id || null });
+  await audit("finance.ra.from_boq", { userId: req.user!.id, entity: "RaBill", entityId: created.id, meta: { raNumber, packageName, discipline, items: lines.length } });
+  res.status(201).json({ ...created, lines });
+});
+
+/** The BOQ abstract lines of a bill raised from the BOQ. */
+financeRouter.get("/ra/:id/boq-lines", async (req: AuthedRequest, res) => {
+  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id } });
+  if (!bill) return res.status(404).json({ error: "RA bill not found" });
+  if (!(await canAccessRaBill(req, bill))) return res.status(403).json({ error: "forbidden" });
+  const { parseLines } = await import("../modules/finance/raFromBoq.js");
+  res.json({ boqPackage: bill.boqPackage, posted: !!bill.boqPostedAt, lines: parseLines(bill.boqLinesJson) });
+});
+
 financeRouter.post("/:projectId/ra", requireRoles("admin", "office", "vendor"), upload.fields([
   { name: "files", maxCount: 25 },
   { name: "file", maxCount: 1 },
@@ -1032,8 +1165,8 @@ financeRouter.get("/:projectId/cop", async (req, res) => {
   const rows = await prisma.certificateOfPayment.findMany({
     where: { projectId: req.params.projectId },
     include: {
-      purchaseOrder: { select: { id: true, poNumber: true } },
-      raBill: { select: { id: true, raNumber: true } },
+      purchaseOrder: { select: { id: true, poNumber: true, packageName: true, workTrade: true } },
+      raBill: { select: { id: true, raNumber: true, discipline: true, boqPackage: true } },
     },
     orderBy: [{ certificateDate: "desc" }, { createdAt: "desc" }],
   });
@@ -1147,6 +1280,9 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
       discipline: linkedRa?.discipline,
       purchaseOrderId: created.purchaseOrderId,
     });
+    // A bill raised from the BOQ: its (certified) quantities become certified on the BOQ.
+    const { postRaToBoq } = await import("../modules/finance/raFromBoq.js");
+    await postRaToBoq(prisma, created.raBillId);
   }
 
   const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
@@ -1303,6 +1439,41 @@ financeRouter.post(
 );
 
 /** Download Viatrix-format COP certificate (xlsx). */
+/** Branded COP PDF in the client's certificate format. */
+financeRouter.get("/:projectId/cop/:copId/download.pdf", async (req, res) => {
+  const cop = await prisma.certificateOfPayment.findFirst({
+    where: { id: req.params.copId, projectId: req.params.projectId },
+    select: { id: true, certificateNumber: true },
+  });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const { buildCopPdf } = await import("../modules/finance/copPdf.js");
+  const pdf = await buildCopPdf(prisma, [cop.id]);
+  if (!pdf) return res.status(404).json({ error: "COP not found" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Sharnam-COP-${cop.certificateNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf"`);
+  res.send(pdf);
+});
+
+/** Every COP on the project (optionally one discipline): register page + one certificate per page. */
+financeRouter.get("/:projectId/cops/download.pdf", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const { copMatchesPackage } = await import("../modules/finance/disciplines.js");
+  const pkg = resolveFinancePackage(s(req.query.discipline));
+  const cops = await prisma.certificateOfPayment.findMany({
+    where: { projectId: req.params.projectId, status: { not: "Rejected" } },
+    include: { purchaseOrder: true, raBill: true },
+    orderBy: [{ certificateDate: "asc" }, { createdAt: "asc" }],
+  });
+  const picked = pkg ? cops.filter((c) => copMatchesPackage(c, pkg)) : cops;
+  if (!picked.length) return res.status(404).json({ error: pkg ? `No COPs for ${pkg.discipline}` : "No COPs yet" });
+  const { buildCopPdf } = await import("../modules/finance/copPdf.js");
+  const pdf = await buildCopPdf(prisma, picked.map((c) => c.id), { scope: pkg ? pkg.label : "All disciplines" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Sharnam-COPs-${project.code}${pkg ? `-${pkg.key}` : ""}.pdf"`);
+  res.send(pdf);
+});
+
 financeRouter.get("/:projectId/cop/:copId/download.xlsx", async (req, res) => {
   const cop = await prisma.certificateOfPayment.findFirst({
     where: { id: req.params.copId, projectId: req.params.projectId },

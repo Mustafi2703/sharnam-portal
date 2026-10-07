@@ -10,6 +10,7 @@
  * and the certificate workbook (older COPs created before these fields were filled still print complete).
  */
 import type { PrismaClient, PurchaseOrder, RaBill, CertificateOfPayment } from "@prisma/client";
+import { packageForCostPackage } from "./disciplines.js";
 
 const norm = (s: string | null | undefined) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -52,9 +53,18 @@ export async function resolveRaPurchaseOrder(prisma: PrismaClient, ra: RaBill): 
   const pos = await prisma.purchaseOrder.findMany({ where: { projectId: ra.projectId }, orderBy: { createdAt: "asc" } });
   const vendor = norm(ra.vendorName);
   const mine = pos.filter((p) => (ra.vendorId && p.vendorId === ra.vendorId) || (vendor && norm(p.vendorName) === vendor));
-  if (mine.length <= 1) return mine[0] || null;
-  const trade = norm(ra.discipline);
-  return mine.find((p) => trade && (norm(p.workTrade).includes(trade) || norm(p.packageName).includes(trade))) || mine[0];
+  // Only a PO for the bill's discipline — a vendor's Civil order never heads an MEP certificate.
+  const want = disciplineKey(ra.discipline);
+  const sameTrade = mine.filter((p) => {
+    const trade = `${p.workTrade || ""} ${p.packageName || ""}`.trim();
+    return !ra.discipline || !trade || disciplineKey(trade) === want;
+  });
+  return sameTrade[0] || null;
+}
+
+/** Finance package key for a discipline / trade label ("Civil · Civil dormitory" → civil, "Electrical" → mep). */
+export function disciplineKey(label: string | null | undefined): string {
+  return packageForCostPackage(label).key;
 }
 
 export type CopDefaults = {
@@ -218,11 +228,56 @@ export async function copLineHistory(prisma: PrismaClient, cop: CopWithRa) {
     },
     include: { raBill: true },
   });
+  // Same discipline only: an MEP certificate's previous bills are the contractor's earlier MEP certificates.
+  const disc = (c: CopWithRa) => disciplineKey(c.raBill?.discipline || c.workTrade);
   const earlier = peers.filter(
-    (p) => when(p) < when(cop) || (when(p) === when(cop) && p.createdAt.getTime() < cop.createdAt.getTime())
+    (p) =>
+      disc(p) === disc(cop) &&
+      (when(p) < when(cop) || (when(p) === when(cop) && p.createdAt.getTime() < cop.createdAt.getTime()))
   );
   let previous = ZERO;
   for (const p of earlier) previous = addLines(previous, copLines(p, await submitted(p.raBillId)));
   const current = copLines(cop, await submitted(cop.raBillId));
   return { previous, current, cumulative: addLines(previous, current), previousCount: earlier.length };
 }
+
+/**
+ * Everything a printed certificate shows, in the client's order — stored COP fields first, then the PO,
+ * vendor and RA bill. `discipline` is the RA bill's discipline (the package the bill was raised under).
+ */
+export async function loadCopView(prisma: PrismaClient, copId: string) {
+  const cop = await prisma.certificateOfPayment.findUnique({
+    where: { id: copId },
+    include: {
+      purchaseOrder: true,
+      raBill: true,
+      project: { select: { id: true, code: true, name: true, clientName: true, location: true } },
+    },
+  });
+  if (!cop) return null;
+  const d = cop.raBillId ? await copDefaultsForRa(prisma, cop.projectId, cop.raBillId) : null;
+  const h = await copLineHistory(prisma, cop);
+  const po = cop.purchaseOrder;
+  const ra = cop.raBill;
+  const gstNo = cop.gstNumber || po?.gstNumber || d?.gstNumber || "";
+  const genericType = !!ra && /^against\s*-\s*ra$/i.test(String(cop.certificateType || "").trim());
+  const header = {
+    contractor: cop.contractor || d?.contractor || po?.vendorName || "Contractor",
+    workTrade: cop.workTrade || d?.workTrade || po?.workTrade || "",
+    certificateType: (!genericType && cop.certificateType) || d?.certificateType || (ra ? `Against - ${ra.raNumber}` : "Against - RA"),
+    certificateNumber: cop.certificateNumber,
+    budgetCode: cop.budgetCode || po?.budgetCode || d?.budgetCode || "",
+    certificateDate: cop.certificateDate || cop.createdAt,
+    poNumberDate: cop.poNumberDate || d?.poNumberDate || "",
+    payableTo: cop.payableTo || po?.payableTo || d?.payableTo || cop.contractor,
+    originalWoValue: cop.originalWoValue || po?.originalValue || d?.originalWoValue || 0,
+    panNumber: cop.panNumber || po?.panNumber || d?.panNumber || panFromGstin(gstNo),
+    amendmentNo: cop.amendmentNo || po?.amendmentNo || d?.amendmentNo || "",
+    gstNumber: gstNo,
+    amendedWoValue: cop.amendedWoValue || po?.amendedValue || d?.amendedWoValue || 0,
+    invoiceNoDate: d?.invoiceNoDate || cop.invoiceNoDate || "",
+  };
+  const discipline = ra?.discipline || cop.workTrade?.split(/[·|,-]/)[0]?.trim() || "—";
+  return { cop, ra, po, project: cop.project, header, history: h, discipline };
+}
+export type CopView = NonNullable<Awaited<ReturnType<typeof loadCopView>>>;

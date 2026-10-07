@@ -14,6 +14,7 @@ import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
 import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
 import { CopDocumentSlots } from "../components/CopDocumentSlots";
 import { WorkOrderCard } from "../components/WorkOrderCard";
+import { RaFromBoqCard } from "../components/RaFromBoqCard";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -604,6 +605,16 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
           </Link>
         </Card>
       )}
+      {canWrite && !vendorMode && (!activePkg || activePkg.billKind === "ra") && (
+        <RaFromBoqCard
+          projectId={projectId}
+          token={token}
+          disciplines={[...new Set<string>(FINANCE_PACKAGES.map((p) => p.discipline))]}
+          vendorNames={[...new Set<string>(ras.map((r: any) => r.vendorName).filter(Boolean))]}
+          reload={reload}
+          setMsg={setMsg}
+        />
+      )}
       {(canWrite || vendorMode) && (!activePkg || activePkg.billKind === "ra") && (
         <Card id="add-ra-form">
           <h3 className="font-semibold text-sm mb-2">
@@ -972,6 +983,20 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-steel-muted">{filteredCops.length} entries</span>
+            <Button
+              type="button"
+              className="!text-xs"
+              disabled={!filteredCops.length}
+              onClick={() =>
+                void downloadAuthFile(
+                  `/api/finance/${projectId}/cops/download.pdf${activePkg ? `?discipline=${activePkg.key}` : ""}`,
+                  token,
+                  `Sharnam-COPs${activePkg ? `-${activePkg.key}` : ""}.pdf`
+                ).catch((err) => setMsg(err instanceof Error ? err.message : "PDF failed"))
+              }
+            >
+              {activePkg ? `${activePkg.discipline} COPs (PDF)` : "All COPs (PDF)"}
+            </Button>
             {canWrite && (
               <Button type="button" variant="secondary" className="!text-xs" disabled={bulkBusy} onClick={() => void uploadAllToDms()}>
                 {bulkBusy ? "Uploading…" : "Upload all COPs → DMS"}
@@ -987,6 +1012,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                 <th className="px-3 py-2.5">Type</th>
                 <th className="px-3 py-2.5">Date</th>
                 <th className="px-3 py-2.5">Contractor</th>
+                <th className="px-3 py-2.5">Discipline</th>
                 <th className="px-3 py-2.5">RA</th>
                 <th className="px-3 py-2.5 text-right">Certified</th>
                 <th className="px-3 py-2.5 text-right">Payable</th>
@@ -1002,6 +1028,10 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                   <td className="py-3 px-3">{c.certificateType || "—"}</td>
                   <td className="py-3 px-3">{d(c.certificateDate)}</td>
                   <td className="py-3 px-3">{c.contractor}</td>
+                  <td className="py-3 px-3">
+                    <Badge tone="brand">{c.raBill?.discipline || c.workTrade || "—"}</Badge>
+                    {c.raBill?.boqPackage && <div className="text-[11px] text-steel-muted mt-1">BOQ · {c.raBill.boqPackage}</div>}
+                  </td>
                   <td className="py-3 px-3">{c.raBill?.raNumber || "—"}</td>
                   <td className="py-3 px-3 text-right tabular-nums">{money(c.amountCertified)}</td>
                   <td className="py-3 px-3 text-right tabular-nums font-semibold">{money(c.amountPayable)}</td>
@@ -1025,6 +1055,20 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                   </td>
                   <td className="py-3 px-3">
                     <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!py-1 !px-2 !text-[11px]"
+                        onClick={() =>
+                          void downloadAuthFile(
+                            `/api/finance/${projectId}/cop/${c.id}/download.pdf`,
+                            token,
+                            `Sharnam-COP-${String(c.certificateNumber).replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf`
+                          ).catch((err) => setMsg(err instanceof Error ? err.message : "PDF failed"))
+                        }
+                      >
+                        PDF
+                      </Button>
                       {canWrite && c.status === "Draft" && (
                         <Button type="button" className="!py-1 !px-2 !text-[11px]" disabled={busyId === c.id} onClick={() => void updateCopStatus(c.id, "Certified")}>
                           Certify
@@ -1046,7 +1090,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
               ))}
               {!filteredCops.length && (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-steel-muted">
+                  <td colSpan={11} className="py-8 text-center text-steel-muted">
                     No COPs yet — upload RA workbooks, then create COP from linked RA bill.
                   </td>
                 </tr>

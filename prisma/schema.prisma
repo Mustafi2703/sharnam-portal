@@ -2386,6 +2386,12 @@ model RaBill {
   vendorName             String?
   copNo                  String?
   attachmentUrl          String?
+  /// BOQ package (Cost → Monitoring sheet) when the bill was built from the BOQ
+  boqPackage             String?
+  /// BOQ abstract: [{ lineId, itemNo, description, uom, rate, boqQty, prevQty, thisQty, amount }]
+  boqLinesJson           String?   @db.LongText
+  /// Set once the bill's quantities are posted to the BOQ as certified (on COP)
+  boqPostedAt            DateTime?
   createdById            String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
