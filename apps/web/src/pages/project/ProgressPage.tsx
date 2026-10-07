@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { formatQty } from "../../components/BoqMonitoringEditor";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
+import { saveExportToSharePoint } from "../../lib/saveExport";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
@@ -1025,6 +1026,17 @@ export default function ProgressPage() {
                 : undefined
             }
             onDownloadXlsx={() => void downloadPlannedActual("xlsx")}
+            onPublishSharePoint={
+              canEdit && id
+                ? async () => {
+                    try {
+                      setMsg(await saveExportToSharePoint(id, token, `/api/progress/${id}/planned-actual/download.xlsx`, "progress"));
+                    } catch (e) {
+                      setMsg(e instanceof Error ? e.message : "Save to SharePoint failed");
+                    }
+                  }
+                : undefined
+            }
             onGenerate={
               canEdit
                 ? async () => {

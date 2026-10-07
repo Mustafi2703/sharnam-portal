@@ -462,6 +462,33 @@ export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 guardProjectParam(projectsRouter, "id");
 
+/** Save any module export (its download path) to the project's SharePoint ISO folder. */
+projectsRouter.post(
+  "/:id/save-export",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const path = String(req.body?.path || "");
+    const moduleKey = String(req.body?.module || "");
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : String(req.query.token || "");
+    if (!path || !moduleKey) return res.status(400).json({ error: "path and module required" });
+    try {
+      const { saveExportToSharePoint } = await import("../services/exportToSharePoint.js");
+      const out = await saveExportToSharePoint({
+        projectId: req.params.id,
+        userId: req.user!.id,
+        token,
+        path,
+        moduleKey,
+        fileName: req.body?.fileName ? String(req.body.fileName) : undefined,
+      });
+      res.json(out);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not save to SharePoint" });
+    }
+  }
+);
+
 /** List/register fields only — skip large JSON blobs (workPackages, bidDisciplinesJson, enabledModules). */
 const PROJECT_LIST_SELECT = {
   id: true,

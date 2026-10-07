@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { countLeaveWorkingDays } from "@sharnam/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -221,7 +221,13 @@ export function FieldDeskHome({ variant }: { variant: "site" | "vendor" }) {
             ? "Use one section at a time. Attendance is selfie + GPS. Check-out must be near where you checked in. Expense vouchers are on Expense voucher in the sidebar."
             : "Check in with selfie and GPS. Leave and documents are separate from bid tools. Letters are issued by HR at onboarding."
         }
-        actions={undefined}
+        actions={
+          site ? undefined : (
+            <Link to="/vendor-actions" className="ui-btn inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-semibold bg-brand text-white">
+              NCR / CAR · safety · RA bills →
+            </Link>
+          )
+        }
       />
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Site desk sections">

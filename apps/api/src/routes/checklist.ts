@@ -2833,10 +2833,16 @@ checklistRouter.patch(
       const merged = {
         ...existing,
         ...body,
-        formDataJson:
-          body.formDataJson && typeof body.formDataJson === "object"
-            ? JSON.stringify(body.formDataJson)
-            : body.formDataJson ?? existing.formDataJson,
+        // Saved form + this request's close-out fields (a close that only sends the close-out fields
+        // must still see the contractor response and action already on the form).
+        formDataJson: JSON.stringify({
+          ...parseNcrFormObject(existing.formDataJson || "{}"),
+          ...(body.formDataJson && typeof body.formDataJson === "object"
+            ? (body.formDataJson as Record<string, unknown>)
+            : body.formDataJson
+              ? parseNcrFormObject(String(body.formDataJson))
+              : {}),
+        }),
         plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : existing.plannedClosure,
         actualClosure: body.actualClosure ? new Date(body.actualClosure) : existing.actualClosure,
       };

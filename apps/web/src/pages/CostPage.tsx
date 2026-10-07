@@ -16,6 +16,7 @@ import { CostSheetFlowBar } from "../components/CostSheetFlowBar";
 import { BbsShapeMasterPanel } from "../components/BbsShapeMasterPanel";
 import { RegisterEntryModal } from "../components/RegisterEntryModal";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { saveExportToSharePoint } from "../lib/saveExport";
 import { DEFAULT_COST_MONITORING_PKG, isLikelySpdcBudgetFile } from "../lib/costWorkbook";
 import { flowPackageForTab, linkedBbsPackage, mbPackageForSelection } from "../lib/spdcCostPackages";
 import { StatusNote } from "../components/StatusNote";
@@ -227,6 +228,18 @@ export default function CostPage() {
     }
   }
 
+  /** Same branded workbook as Download XLSX, filed in the sheet's ISO folder on SharePoint. */
+  async function publishSheet(kind: string) {
+    if (!id) return;
+    const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
+    const iso: Record<string, string> = { boq: "boq", mb: "mb", bbs: "bbs", budget: "budget", cashflow: "cashflow", rates: "costReport" };
+    try {
+      setMsg(await saveExportToSharePoint(id, token, `/api/cost/${id}/download/${kind}.xlsx${q}`, iso[kind] || "costReport"));
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save to SharePoint failed");
+    }
+  }
+
   async function downloadSheet(kind: string, fmt: "csv" | "xlsx" = "csv") {
     if (!id) return;
     const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
@@ -242,7 +255,8 @@ export default function CostPage() {
   useEffect(() => {
     if (!clientBlocked) {
       void load();
-      void loadBills();
+      // Contractor bills are office-only; site employees work the measurement sheets.
+      if (!siteBoqMode) void loadBills().catch(() => undefined);
       api<any[]>(`/api/vendors/project/${id}`, { token })
         .then((rows) => setParties(rows.map((r: any) => r.vendor || r).filter(Boolean)))
         .catch(() =>
@@ -1013,6 +1027,7 @@ export default function CostPage() {
             busy={syncing}
             onDownloadCsv={() => void downloadSheet("boq")}
             onDownloadXlsx={() => void downloadSheet("boq", "xlsx")}
+            onPublishSharePoint={canEdit ? () => publishSheet("boq") : undefined}
             message={msg || undefined}
           />
           <div className="cost-page__register min-w-0">
@@ -1051,6 +1066,7 @@ export default function CostPage() {
             busy={sheetAddBusy}
             onDownloadCsv={() => void downloadSheet("mb")}
             onDownloadXlsx={() => void downloadSheet("mb", "xlsx")}
+            onPublishSharePoint={canEdit ? () => publishSheet("mb") : undefined}
             message={msg || undefined}
           />
           <div className="cost-page__register min-w-0">
@@ -1122,6 +1138,7 @@ export default function CostPage() {
             busy={sheetAddBusy}
             onDownloadCsv={() => void downloadSheet("bbs")}
             onDownloadXlsx={() => void downloadSheet("bbs", "xlsx")}
+            onPublishSharePoint={canEdit ? () => publishSheet("bbs") : undefined}
             message={msg || undefined}
           />
           {(canEdit || canSiteEdit) && (
@@ -1201,6 +1218,7 @@ export default function CostPage() {
             onSheetDateChange={persistSheetDate}
             onDownloadCsv={() => void downloadSheet("budget")}
             onDownloadXlsx={() => void downloadSheet("budget", "xlsx")}
+            onPublishSharePoint={canEdit ? () => publishSheet("budget") : undefined}
             message={msg || undefined}
           />
           <details className="rounded border border-line bg-paper shrink-0">
@@ -1307,6 +1325,7 @@ export default function CostPage() {
             }
             onDownloadCsv={() => void downloadSheet("cashflow")}
             onDownloadXlsx={() => void downloadSheet("cashflow", "xlsx")}
+            onPublishSharePoint={canEdit ? () => publishSheet("cashflow") : undefined}
             message={msg || undefined}
           />
           <RegisterEntryModal
@@ -1569,6 +1588,7 @@ export default function CostPage() {
             onAddRow={canEdit ? () => setRateAddOpen(true) : undefined}
             onDownloadCsv={() => void downloadSheet("rates")}
             onDownloadXlsx={() => void downloadSheet("rates", "xlsx")}
+            onPublishSharePoint={canEdit ? () => publishSheet("rates") : undefined}
             message={msg || undefined}
           />
           <RegisterEntryModal

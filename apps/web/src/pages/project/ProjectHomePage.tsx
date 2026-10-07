@@ -68,6 +68,7 @@ export default function ProjectHomePage() {
 
   const tools = isVendor
     ? [
+        ["actions", "Action desk", "NCR / CAR, safety notices and RA bills waiting on you", "ACT", "#C24D1A"],
         ["checklist", "Checklist fills", "Fill assigned quality / drawing-check sheets from the fill log", "QA", "#2F6F4E"],
         ["quality-inspections", "Quality inspections", "QI forms assigned to your company", "QI", "#2F6F4E"],
         ["rfis", "RFIs + checklist requests", "Respond and fill linked checklists", "RFI", "#0B6A78"],

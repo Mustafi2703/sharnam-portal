@@ -97,7 +97,24 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     ]);
 
   const { readProgressOverviewDashboard } = await import("../services/progressRegistersImport.js");
-  const overviewSheet = readProgressOverviewDashboard();
+  // The Progress Overview workbook describes one project — only show it where that pack was loaded
+  // (or, for projects loaded earlier, where its start date matches the project's).
+  const overviewFile = readProgressOverviewDashboard();
+  const overviewSheet = await (async () => {
+    if (!overviewFile) return null;
+    const loaded = await prisma.auditEvent.findFirst({
+      where: { entityId: projectId, action: { in: ["progress.registers.pack", "progress.registers.resync"] } },
+      select: { id: true },
+    });
+    if (loaded) return overviewFile;
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true } });
+    const sheetStart = overviewFile.startDate ? new Date(overviewFile.startDate as unknown as string) : null;
+    const near =
+      project?.startDate && sheetStart && !Number.isNaN(sheetStart.getTime())
+        ? Math.abs(project.startDate.getTime() - sheetStart.getTime()) <= 31 * 86400000
+        : false;
+    return near ? overviewFile : null;
+  })();
 
   const openHindrance = hindrances.filter((h) => h.status === "Open").length;
   const openRisk = risks.filter((r) => r.status === "Open").length;
@@ -664,13 +681,26 @@ progressRouter.patch(
   }
 );
 
+/** Risk register level 1–5: numbers as entered, or the sheet's words (Very low … Very high / Rare … Almost certain). */
+function riskLevel(v: unknown): number {
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 0) return Math.min(5, Math.max(1, Math.round(n)));
+  const t = String(v ?? "").trim().toLowerCase();
+  if (/very\s*high|almost certain|extreme|critical/.test(t)) return 5;
+  if (/high|likely|major/.test(t)) return 4;
+  if (/medium|moderate|possible/.test(t)) return 3;
+  if (/very\s*low|rare|insignificant/.test(t)) return 1;
+  if (/low|unlikely|minor/.test(t)) return 2;
+  return 1;
+}
+
 progressRouter.post(
   "/:projectId/risks",
   requireRoles("admin", "office", "employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
-    const probability = Number(body.probability || 1);
-    const consequence = Number(body.consequence || 1);
+    const probability = riskLevel(body.probability);
+    const consequence = riskLevel(body.consequence);
     const row = await prisma.progressRisk.create({
       data: {
         projectId: req.params.projectId,
@@ -726,7 +756,7 @@ progressRouter.patch(
       if (body[k] !== undefined) data[k] = body[k];
     }
     for (const k of ["probability", "consequence", "severity"] as const) {
-      if (body[k] != null) data[k] = Number(body[k]);
+      if (body[k] != null) data[k] = k === "severity" ? Number(body[k]) || 0 : riskLevel(body[k]);
     }
     for (const k of ["probabilityPct", "costImpact", "weeksLikely"] as const) {
       if (body[k] != null) data[k] = Number(body[k]);

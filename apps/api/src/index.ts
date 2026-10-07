@@ -32,6 +32,7 @@ import { closureRouter } from "./routes/closure.js";
 import { auditKpiRouter } from "./routes/auditKpi.js";
 import { siteIndexRouter } from "./routes/siteIndex.js";
 import { uatDataRouter } from "./routes/uatData.js";
+import { vendorActionsRouter } from "./routes/vendorActions.js";
 import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
 import { errorDetail, pushRuntimeLog } from "./services/runtimeLog.js";
 import { audit } from "./services/audit.js";
@@ -222,6 +223,7 @@ app.use("/api/closure", closureRouter);
 app.use("/api/audit-kpi", auditKpiRouter);
 app.use("/api/master/site-index", siteIndexRouter);
 app.use("/api/uat-data", uatDataRouter);
+app.use("/api/vendor-actions", vendorActionsRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {
@@ -276,6 +278,15 @@ async function start() {
   startSharePointDayClose();
   const { startSelfieRotation } = await import("./services/attendanceGeo.js");
   startSelfieRotation();
+  // BBS weights imported before the kg fix held tonnes or a running-metre column — recompute from dia × metres.
+  void prisma
+    .$executeRawUnsafe(
+      "UPDATE CostBbsLine SET weightKg = ROUND(diameterMm * diameterMm / 162 * totalLength, 2) " +
+        "WHERE rowKind = 'data' AND diameterMm >= 6 AND totalLength > 0 " +
+        "AND ABS(weightKg - diameterMm * diameterMm / 162 * totalLength) > 0.01 * diameterMm * diameterMm / 162 * totalLength"
+    )
+    .then((n) => n && console.log(`[cost] BBS weights recomputed on ${n} line(s)`))
+    .catch((err) => console.warn("[cost] BBS weight check skipped:", err instanceof Error ? err.message : err));
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

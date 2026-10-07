@@ -358,5 +358,8 @@ export async function syncProgressRegisterPack(projectId: string, opts?: { force
   const risk = await syncRiskFromTemplate(projectId, opts);
   const legal = await syncLegalFromTemplate(projectId, opts);
   const lessons = await syncLessonsFromTemplate(projectId, opts);
+  // Marks the project as carrying the client's Progress Overview pack (its dashboard band applies here).
+  const { audit } = await import("./audit.js");
+  await audit("progress.registers.pack", { entity: "project", entityId: projectId, meta: { source: resolveProgressOverviewPath() } });
   return { milestones, hindrance, risk, legal, lessons };
 }

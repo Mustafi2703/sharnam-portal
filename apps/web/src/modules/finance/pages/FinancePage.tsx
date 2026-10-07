@@ -15,6 +15,7 @@ import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
 import { CopDocumentSlots } from "../components/CopDocumentSlots";
 import { WorkOrderCard } from "../components/WorkOrderCard";
 import { RaFromBoqCard } from "../components/RaFromBoqCard";
+import { SaveToSharePointButton } from "../../../components/SaveToSharePointButton";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -997,6 +998,14 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
             >
               {activePkg ? `${activePkg.discipline} COPs (PDF)` : "All COPs (PDF)"}
             </Button>
+            {canWrite && filteredCops.length > 0 && (
+              <SaveToSharePointButton
+                projectId={projectId}
+                path={`/api/finance/${projectId}/cops/download.pdf${activePkg ? `?discipline=${activePkg.key}` : ""}`}
+                module="finance"
+                label="COPs → SharePoint"
+              />
+            )}
             {canWrite && (
               <Button type="button" variant="secondary" className="!text-xs" disabled={bulkBusy} onClick={() => void uploadAllToDms()}>
                 {bulkBusy ? "Uploading…" : "Upload all COPs → DMS"}

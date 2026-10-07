@@ -2240,6 +2240,19 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
   const existing = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Not found" });
 
+  // Contractors answer only what is issued to their company, and never close it — PMC verifies and closes.
+  if (req.user!.role === "vendor") {
+    const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+    const { safetyRecordAssignedToVendor } = await import("../services/vendorActions.js");
+    const vendor = await resolveVendorForUser(req.user!);
+    if (!vendor || !safetyRecordAssignedToVendor(existing, vendor, req.user!.id)) {
+      return res.status(403).json({ error: "This safety record is not issued to your company" });
+    }
+    if (body.status != null && String(body.status) === "Closed" && existing.status !== "Closed") {
+      return res.status(403).json({ error: "Only PMC can close a safety NCR / observation after verifying the corrective action" });
+    }
+  }
+
   const nextStatus = body.status != null ? String(body.status) : existing.status;
   if (nextStatus === "Closed" && existing.status !== "Closed" && existing.recordType === "NCR") {
     const { safetyNcrMissingFields } = await import("../services/ncrFormExport.js");

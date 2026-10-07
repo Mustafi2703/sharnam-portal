@@ -21,9 +21,9 @@ When a step fails: note the **step number, login, project and a screenshot**, an
 
 | Role in the portal | Use | What this login may do |
 |---|---|---|
-| **Site employee** (`site_employee`) | e.g. `hitesh.rajput@spdc.in`, `pratik.solanki@spdc.in`, `planning.estimation@spdc.in` | DPR, check-in, checklists / inspections, quality observations, safety log & records, hindrance / risk / milestone registers, S-curve, photos. **Not** cost, finance or COP. |
+| **Site employee** (`site_employee`) | e.g. `hitesh.rajput@spdc.in`, `pratik.solanki@spdc.in`, `planning.estimation@spdc.in` | Check-in first (selfie + GPS), then DPR, checklists / inspections, quality observations, NCR / CAR raising, safety log & records, hindrance / milestone registers, S-curve, photos, and **Cost → measurement only** (MB, BBS, BOQ achieved / GFC qty). **Not** budget, cashflow, rates, finance or COP. |
 | **Office employee** (`office`) | `operations@spdc.in` | Everything project-side incl. Cost, Finance (RA bills, COP, payment summary, PR / invoice tracker), imports, publishing. |
-| Contractor / vendor | `site@bhavanainfra.demo` (Bhavana Infra) | Raise own RA bills (stage 1), contractor desk, assigned fills, safety records. Sees only its own bills. |
+| Contractor / vendor | `site@bhavanainfra.demo` (Bhavana Infra) | **Action desk** (NCR / CAR, safety NCR / NCN / observations issued to the company, RA bill stage), raise own RA bills (stage 1), assigned fills. Answers only what is issued to its company and cannot close — PMC verifies and closes. |
 | Client (read-only) | `projects@arvind.demo` | View, sign the weekly report, raise a concern. |
 | HR | `anushka.jha@spdc.in` | HRMS (separate HR UAT). |
 
@@ -120,6 +120,12 @@ Type a long description (300+ characters) in a meeting agenda, NCR description, 
 5b. **RA bill from BOQ (discipline carried through)** → Office → Finance → **RA Bill Tracker** → **From BOQ** → pick **Electric** → ✅ discipline shows **MEP**; items list measured qty − already certified, at BOQ rate; change a "This bill" qty → amount updates. Enter RA no. + contractor → **Raise RA bill** → ✅ bill in **MEP**, status Submitted, BOQ abstract (Excel) filed as the Submission workbook; the vendor sees it in their portal. Open **From BOQ → Electric** again → ✅ those quantities are no longer billable (no double billing). Upload **Corrected**, then **Certified** → **Create COP** → ✅ COP discipline **MEP**, register filter MEP shows it, PDF chip reads MEP, "Previous bills" counts only earlier MEP COPs; Cost → Monitoring → the items' **certified qty** goes up (pro rata if PMC certified less than raised). 📸
 6. **Payment summary → Download** → ✅ RA bill sheets + Summary Civil with charts; the new bill is listed. 📸
 7. COP **Certified / Paid** → ✅ Cost → Cashflow actuals update. 📸
+
+## 6b. Save to SharePoint (office)
+Every register download now has **Save to SharePoint** beside it (Cost sheets, Payment summary, PR / Invoice tracker, COPs, Planned vs Actual, and the Quality / Safety / Progress / Cost module Excel). ✅ "Saved … live copy + this week's copy" — the file is in the module's ISO folder and in `Weekly/<week>`. 📸
+
+## 6c. New-project UAT with evidence
+Follow `docs/UAT_EVIDENCE_PLAN.md` on a fresh project (A1 → G4). `scripts/uat-evidence/run.mjs` runs the same IDs automatically and writes one screenshot per step plus `results.json`.
 
 ## 7. Client, consultant, contractor views
 1. Client `projects@arvind.demo`: dashboard, drawings, RFIs, raise a concern, **sign the WPR**. Editing anything else → read-only. 📸
