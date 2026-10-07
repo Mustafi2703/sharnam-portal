@@ -13,6 +13,7 @@ import { FinanceBillRegister } from "../components/FinanceBillRegister";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
 import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
 import { CopDocumentSlots } from "../components/CopDocumentSlots";
+import { WorkOrderCard } from "../components/WorkOrderCard";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -801,23 +802,30 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   // Stage 3: a COP is generated only from an RA bill that was submitted, checked and certified.
   const canCreateCop = !!form.raBillId && linkedRaCertified;
 
+  // Picking a certified RA bill fills the certificate from it, its PO and the vendor master.
+  async function applyRaDefaults(raBillId: string) {
+    setForm((f) => ({ ...f, raBillId }));
+    if (!raBillId) return;
+    try {
+      const d = await api<Record<string, string | number>>(`/api/finance/${projectId}/cop/defaults?raBillId=${encodeURIComponent(raBillId)}`, { token });
+      setForm((f) => {
+        const next: Record<string, string> = { ...f, raBillId };
+        for (const k of Object.keys(f)) {
+          if (k === "raBillId" || k === "remarks" || d[k] == null || d[k] === "" || d[k] === 0) continue;
+          next[k] = String(d[k]);
+        }
+        return next as typeof f;
+      });
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not load RA bill details");
+    }
+  }
+
   useEffect(() => {
     if (!raBillIdPrefill) return;
-    const ra = filteredRas.find((r: any) => r.id === raBillIdPrefill);
-    if (!ra) return;
-    setForm((f) => ({
-      ...f,
-      raBillId: ra.id,
-      contractor: ra.vendorName || f.contractor,
-      workTrade: ra.discipline || f.workTrade,
-      invoiceNoDate: `${ra.raNumber}${ra.invoiceNumber ? ` · ${ra.invoiceNumber}` : ""}`,
-      amountCertified: String(ra.totalInvoiceWithoutGst ?? ra.againstBillRaised ?? ""),
-      amountPayable: String(ra.netAmountPayable ?? ""),
-      gstAmount: String(ra.gstAmount ?? ""),
-      retentionAmount: String(ra.retentionAmount ?? ""),
-      certificateNumber: f.certificateNumber || `01/N.K.INFRA/2025-26/${(ra.raNumber || "").replace("RA-", "")}`,
-    }));
-  }, [raBillIdPrefill, filteredRas]);
+    if (filteredRas.some((r: any) => r.id === raBillIdPrefill)) void applyRaDefaults(raBillIdPrefill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raBillIdPrefill, filteredRas.length]);
 
   async function updateCopStatus(copId: string, status: string) {
     setBusyId(copId);
@@ -901,6 +909,13 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
           { label: "WPR pack", hint: "Dashboard + charts", href: `/projects/${projectId}/wpr-maker` },
         ]}
       />
+      <WorkOrderCard
+        projectId={projectId}
+        token={token}
+        canWrite={canWrite}
+        vendorNames={[...new Set<string>(ras.map((r: any) => r.vendorName).filter(Boolean))]}
+        setMsg={setMsg}
+      />
       {canWrite && (
         <Card id="add-cop-form">
           <h3 className="font-semibold text-sm mb-2">Certify a payment (COP)</h3>
@@ -911,6 +926,15 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
             </div>
           )}
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
+            <Select className="md:col-span-4" value={form.raBillId} onChange={(e) => void applyRaDefaults(e.target.value)}>
+              <option value="">Certified RA bill (fills the certificate)</option>
+              {filteredRas.map((r: any) => (
+                <option key={r.id} value={r.id}>
+                  {r.raNumber} · {r.invoiceNumber || "no invoice"}
+                  {raHasCertifiedWorkbook(r) ? "" : " · Certified pending"}
+                </option>
+              ))}
+            </Select>
             <Input placeholder="Cert No. (01/N.K.INFRA/2025)" value={form.certificateNumber} onChange={(e) => setForm({ ...form, certificateNumber: e.target.value })} required />
             <Input placeholder="Cert type (Against - RA / Advance)" value={form.certificateType} onChange={(e) => setForm({ ...form, certificateType: e.target.value })} />
             <Input placeholder="Cert date" type="date" value={form.certificateDate} onChange={(e) => setForm({ ...form, certificateDate: e.target.value })} />
@@ -922,15 +946,6 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
             <Input placeholder="Amendment no." value={form.amendmentNo} onChange={(e) => setForm({ ...form, amendmentNo: e.target.value })} />
             <Input placeholder="Amended WO value" type="number" value={form.amendedWoValue} onChange={(e) => setForm({ ...form, amendedWoValue: e.target.value })} />
             <Input placeholder="Invoice No. & date" value={form.invoiceNoDate} onChange={(e) => setForm({ ...form, invoiceNoDate: e.target.value })} />
-            <Select value={form.raBillId} onChange={(e) => setForm({ ...form, raBillId: e.target.value })}>
-              <option value="">Link RA (optional)</option>
-              {filteredRas.map((r: any) => (
-                <option key={r.id} value={r.id}>
-                  {r.raNumber} · {r.invoiceNumber || "no invoice"}
-                  {raHasCertifiedWorkbook(r) ? "" : " · Certified pending"}
-                </option>
-              ))}
-            </Select>
             <Input placeholder="Amount certified" type="number" value={form.amountCertified} onChange={(e) => setForm({ ...form, amountCertified: e.target.value })} />
             <Input placeholder="Amount payable" type="number" value={form.amountPayable} onChange={(e) => setForm({ ...form, amountPayable: e.target.value })} />
             <Input placeholder="GST" type="number" value={form.gstAmount} onChange={(e) => setForm({ ...form, gstAmount: e.target.value })} />

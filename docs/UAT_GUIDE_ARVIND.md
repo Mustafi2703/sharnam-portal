@@ -112,9 +112,10 @@ Type a long description (300+ characters) in a meeting agenda, NCR description, 
 
 1. Vendor `site@bhavanainfra.demo` → project → **Finance → RA Bill Tracker** → **Raise RA bill**: discipline Civil, RA no., amounts, attach the workbook → Submit. ✅ "RA bill submitted". Try without a file → ✅ refused. 📸
 2. Vendor sees **only Bhavana's** bills. 📸
-3. Office → Finance → **RA Bill Tracker** → the bill → try **Certified** first → ✅ "Upload the Corrected workbook first". Upload **Corrected** → ✅ status Checked. Upload **Certified** → ✅ Certified. 📸
-4. Office → **COP** tab → try **Create COP** without picking a bill → ✅ blocked. Pick the certified bill (amounts pre-fill) → **Create COP**. ✅ bill status **COP generated**. 📸
-5. **Download COP** → ✅ Viatrix certificate layout with Sharnam letterhead, contractor, RA, amounts, date. 📸
+3. Office → Finance → **RA Bill Tracker** → the bill → try **Certified** first → ✅ "Upload the Corrected workbook first". Upload **Corrected** → ✅ status Checked. Upload **Certified** with the certified amount (excl. GST) → ✅ Certified; GST, retention and net payable recompute on the certified amount. 📸
+4. Office → **COP** tab → try **Create COP** without picking a bill → ✅ blocked. Pick the certified bill in **Certified RA bill** → ✅ the whole form fills: certificate no. (`02/BHAVANA.INFRA/2026-27`), type "Against - RA-…", PO no. & date, budget code, original / amended WO value, amendment no., invoice no. & date, PAN (from the GSTIN), GST no., payable to, amounts. → **Create COP**. ✅ bill status **COP generated**. 📸
+   *Before testing, give the vendor a PO (Cost → Purchase orders: PO no., date, budget code, WO value) and a GST no. on the vendor master — that is where these fields come from.*
+5. **Download COP** → ✅ Viatrix certificate with Sharnam letterhead, every header field filled, and sections A–H with **Previous bills / This bill / Cumulative** (previous = this contractor's earlier COPs on the PO). Net payable and amount in words match the RA bill. **Print** gives the same on A4. 📸
 6. **Payment summary → Download** → ✅ RA bill sheets + Summary Civil with charts; the new bill is listed. 📸
 7. COP **Certified / Paid** → ✅ Cost → Cashflow actuals update. 📸
 
