@@ -33,6 +33,7 @@ async function projectId() {
 async function sectionA() {
   await step("A1", "New project created", OFFICE, async (page) => {
     if (!(await projectId())) {
+      state.createdNow = true;
       await open(page, "/crm/setup");
       await page.getByPlaceholder("Project code").fill(CODE);
       await page.getByPlaceholder("Project name").fill("UAT Warehouse — Sanand");
@@ -60,7 +61,8 @@ async function sectionA() {
     });
     ok(v.status < 300, `vendor assign ${v.status} ${JSON.stringify(v.body).slice(0, 120)}`);
     // Client: the project card's client company + login email links the client portal to this project.
-    const c = await call(OFFICE, "PATCH", `/api/projects/${id}/settings`, {
+    // A running project (Arvind) keeps its own card — only a project created by this run is filled in.
+    const c = !state.createdNow ? { status: 200, body: {} } : await call(OFFICE, "PATCH", `/api/projects/${id}/settings`, {
       clientName: "Arvind Limited",
       clientEmail: CLIENT,
       clientContactName: "Arvind projects team",

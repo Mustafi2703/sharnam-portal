@@ -26,6 +26,22 @@ type Props = {
   onClose: () => void;
 };
 
+/** Testing dates follow the casting date (SPDC register =C+7 / =C+28) unless the user changed them. */
+function cubeTestDatesFor(cast: string, form: { castDate: string; testDate7: string; testDate28: string }) {
+  const add = (d: string, n: number) => {
+    if (!d) return "";
+    const x = new Date(`${d}T00:00:00`);
+    x.setDate(x.getDate() + n);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+  };
+  const auto7 = !form.testDate7 || form.testDate7 === add(form.castDate, 7);
+  const auto28 = !form.testDate28 || form.testDate28 === add(form.castDate, 28);
+  return {
+    ...(auto7 ? { testDate7: add(cast, 7) } : {}),
+    ...(auto28 ? { testDate28: add(cast, 28) } : {}),
+  };
+}
+
 export function emptyCubeForm(): CubeAddFormState {
   return {
     srNo: "",
@@ -78,7 +94,7 @@ export function CubeRegisterAddForm({ open, busy, form, onChange, onSubmit, onCl
             </label>
             <label className="register-form-field">
               <span>Cast date</span>
-              <Input type="date" value={form.castDate} onChange={(e) => onChange({ ...form, castDate: e.target.value })} />
+              <Input type="date" value={form.castDate} onChange={(e) => onChange({ ...form, castDate: e.target.value, ...cubeTestDatesFor(e.target.value, form) })} />
             </label>
             <label className="register-form-field register-form-field--wide">
               <span>Description / footing</span>

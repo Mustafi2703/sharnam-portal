@@ -529,4 +529,34 @@ async function sectionG({ projectId, ok, users: { OFFICE, SITE, VENDOR, CLIENT }
   }
 }
 
-export const sections = { B: sectionB, C: sectionC, D: sectionD, E: sectionE, F: sectionF, G: sectionG };
+// ── H. HR and design consultant ─────────────────────────────────────────────────────────────────
+async function sectionH({ ok }) {
+  const HR = "anushka.jha@spdc.in";
+  const DES = "ak@consultant.demo";
+  for (const [hid, title, url] of [
+    ["H1", "HR attendance review", "/hrm/attendance"],
+    ["H2", "HR leave desk", "/hrm/leave"],
+    ["H3", "HR expense vouchers", "/hrm/vouchers"],
+    ["H4", "HR payroll", "/hrm/payroll"],
+  ]) {
+    await step(hid, title, HR, async (page) => {
+      await open(page, url);
+      ok(!/\/login/.test(page.url()), `redirected to ${page.url()}`);
+      await evidence(hid, title, HR, page);
+    });
+  }
+  await step("H5", "Consultant RFI register", DES, async (page) => {
+    const projects = (await call(DES, "GET", "/api/projects")).body;
+    const arvind = (Array.isArray(projects) ? projects : []).find((p) => p.code === "SPDC-ARVIND-01");
+    ok(arvind, "consultant does not see SPDC-ARVIND-01");
+    await open(page, `/projects/${arvind.id}/rfis`);
+    await evidence("H5", "Consultant RFI register", DES, page);
+  });
+  await step("H6", "Consultant design coordination", DES, async (page) => {
+    const arvind = ((await call(DES, "GET", "/api/projects")).body || []).find((p) => p.code === "SPDC-ARVIND-01");
+    await open(page, `/projects/${arvind.id}/drawings/coordination`);
+    await evidence("H6", "Consultant design coordination", DES, page);
+  });
+}
+
+export const sections = { B: sectionB, C: sectionC, D: sectionD, E: sectionE, F: sectionF, G: sectionG, H: sectionH };

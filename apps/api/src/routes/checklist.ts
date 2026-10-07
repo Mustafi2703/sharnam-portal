@@ -3488,7 +3488,9 @@ checklistRouter.post(
       grade: b.grade ? String(b.grade) : null,
       result: b.result ? String(b.result) : null,
     });
-    const row = await prisma.cubeTest.create({
+    const { cubeTestDates, recomputeCubeGroup } = await import("../services/cubeRegisterImport.js");
+    const autoDates = cubeTestDates(b.castDate ? new Date(b.castDate) : null);
+    const created = await prisma.cubeTest.create({
       data: {
         projectId: req.params.projectId,
         srNo: b.srNo ? String(b.srNo) : null,
@@ -3496,8 +3498,9 @@ checklistRouter.post(
         description: String(b.description || "Cube test"),
         grade: b.grade ? String(b.grade) : null,
         cubeWeight: b.cubeWeight != null && b.cubeWeight !== "" ? Number(b.cubeWeight) : null,
-        testDate7: b.testDate7 ? new Date(b.testDate7) : null,
-        testDate28: b.testDate28 ? new Date(b.testDate28) : null,
+        // Testing dates follow the casting date (SPDC register =C+7 / =C+28) unless entered.
+        testDate7: b.testDate7 ? new Date(b.testDate7) : autoDates.testDate7,
+        testDate28: b.testDate28 ? new Date(b.testDate28) : autoDates.testDate28,
         load7,
         load28,
         strength7: computed.strength7,
@@ -3509,6 +3512,9 @@ checklistRouter.post(
         source: "portal",
       },
     });
+    // The new specimen joins its footing group — refresh the group's average and PASS / FAIL.
+    await recomputeCubeGroup(req.params.projectId, created);
+    const row = await prisma.cubeTest.findUnique({ where: { id: created.id } });
     res.status(201).json(row);
   }
 );
@@ -3566,6 +3572,11 @@ checklistRouter.patch(
     if (b.castDate !== undefined) data.castDate = b.castDate ? new Date(b.castDate) : null;
     if (b.testDate7 !== undefined) data.testDate7 = b.testDate7 ? new Date(b.testDate7) : null;
     if (b.testDate28 !== undefined) data.testDate28 = b.testDate28 ? new Date(b.testDate28) : null;
+    if (b.castDate && b.testDate7 === undefined && b.testDate28 === undefined) {
+      // New casting date → testing dates move with it (=C+7 / =C+28).
+      const { cubeTestDates } = await import("../services/cubeRegisterImport.js");
+      Object.assign(data, cubeTestDates(new Date(b.castDate)));
+    }
     if (b.cubeWeight !== undefined) data.cubeWeight = b.cubeWeight === null || b.cubeWeight === "" ? null : Number(b.cubeWeight);
     if (b.load7 !== undefined) data.load7 = b.load7 === null || b.load7 === "" ? null : Number(b.load7);
     if (b.load28 !== undefined) data.load28 = b.load28 === null || b.load28 === "" ? null : Number(b.load28);

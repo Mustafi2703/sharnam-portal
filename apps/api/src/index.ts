@@ -287,6 +287,13 @@ async function start() {
     )
     .then((n) => n && console.log(`[cost] BBS weights recomputed on ${n} line(s)`))
     .catch((err) => console.warn("[cost] BBS weight check skipped:", err instanceof Error ? err.message : err));
+  // Cube specimens entered before testing dates were automatic: =cast+7 / =cast+28 (SPDC register).
+  void Promise.all([
+    prisma.$executeRawUnsafe("UPDATE CubeTest SET testDate7 = DATE_ADD(castDate, INTERVAL 7 DAY) WHERE testDate7 IS NULL AND castDate IS NOT NULL"),
+    prisma.$executeRawUnsafe("UPDATE CubeTest SET testDate28 = DATE_ADD(castDate, INTERVAL 28 DAY) WHERE testDate28 IS NULL AND castDate IS NOT NULL"),
+  ])
+    .then(([a, b]) => (a || b) && console.log(`[quality] cube testing dates filled on ${a} / ${b} specimen(s)`))
+    .catch((err) => console.warn("[quality] cube date backfill skipped:", err instanceof Error ? err.message : err));
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

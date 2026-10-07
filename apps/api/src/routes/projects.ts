@@ -1059,7 +1059,9 @@ projectsRouter.get("/:id", async (req: AuthedRequest, res) => {
     { ...project, workPackages: JSON.stringify(cleanedPackages) } as unknown as Record<string, unknown>,
     req.user!.role
   );
-  res.json(payload);
+  // Register header parties (card, else project directory) — client / consultant / PMC / contractor.
+  const { projectParties } = await import("../services/projectParties.js");
+  res.json({ ...payload, parties: await projectParties(project.id) });
 });
 
 projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
