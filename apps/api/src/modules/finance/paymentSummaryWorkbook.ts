@@ -239,6 +239,7 @@ export async function buildPaymentSummaryWorkbook(projectId: string): Promise<Bu
     if (!pkgRas.length && pkg.key !== "civil") continue;
     sheets.push({
       name: pkg.sheetName.slice(0, 31),
+      chart: { title: "Invoice value by bill (₹, without GST)", category: "Tax Invoice No.", values: "Total Invoice value without GST" },
       rows: [
         ["Sharnam Project Development Consultants & Co. — Payment Summary"],
         [pkg.sheetName.toUpperCase()],
@@ -270,6 +271,7 @@ export async function buildPaymentSummaryWorkbook(projectId: string): Promise<Bu
   const totalPrev = civilRas.reduce((s, r) => s + r.previousBillTotal, 0) / Math.max(1, civilRas.length);
   sheets.push({
     name: "Summary Civil",
+    chart: { title: "Previous bill vs this bill (₹)", category: "DESCRIPTION", planned: "PREVIOUS BILL", actual: "THIS BILL" },
     rows: [
       ["SUMMARY OF COST"],
       [`PROJECT NAME: ${project.name}`, "", "", "", "RA BILL:", civilRas.length],

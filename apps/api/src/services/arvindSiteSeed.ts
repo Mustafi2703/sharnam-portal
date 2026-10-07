@@ -17,7 +17,7 @@ import { syncDrawingRegisterToProject, syncDciArvindDrawings } from "./drawingRe
 import { upsertScurveRegisterPoints } from "./msProjectSchedule.js";
 import { seedDprDemoDay } from "./dprDemoDaySeed.js";
 import { overlayChecklistFillKpis, seedWprSections } from "./wprSeedSections.js";
-import { publishExistingWpr, snapWeekEnding } from "./wprDemoSeed.js";
+import { publishExistingWpr, weekEndingOf } from "./wprDemoSeed.js";
 import { buildJulyWprPack } from "./wprJulyWorkbook.js";
 import { importWprTrackerPack, importPrInvoiceFromWorkbook } from "./wprTrackerPackImport.js";
 import { seedChecklistFillsFromDashboard, checklistFillSummary } from "./qualityChecklistFills.js";
@@ -168,7 +168,7 @@ async function saveWprSnapshot(
   sections: Record<string, unknown>,
   reportNumber?: number
 ) {
-  const weekEnd = snapWeekEnding(weekEndRaw);
+  const weekEnd = weekEndingOf(weekEndRaw);
   return db.wprSnapshot.upsert({
     where: { projectId_weekEnding: { projectId, weekEnding: weekEnd } },
     create: {
@@ -322,6 +322,48 @@ export async function seedArvindSitePack(db: PrismaClient, opts: { skipInviteEma
     console.log("Dormitory July trackers", dormTrackers, pr);
   } catch (err) {
     console.warn("Dormitory tracker import:", err instanceof Error ? err.message : err);
+  }
+  // Dormitory milestones live in Dash Bord For Budget 52 — put them in Progress → Milestones too,
+  // so the app register (and a WPR built from it) has them, not only the July WPR pack.
+  try {
+    const ms = buildJulyWprPack().sections.milestones?.rows || [];
+    const dateOf = (v: unknown) => {
+      const t = String(v ?? "").trim();
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? new Date(`${t}T00:00:00`) : null;
+      return d && !Number.isNaN(d.getTime()) ? d : null;
+    };
+    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    await db.progressMilestone.deleteMany({ where: { projectId: dorm.id } });
+    for (const r of ms) {
+      if (!String(r[2] ?? "").trim()) continue;
+      const plannedDays = n(r[5]);
+      const actualDays = n(r[8]);
+      await db.progressMilestone.create({
+        data: {
+          projectId: dorm.id,
+          code: String(r[0] ?? "") || null,
+          category: String(r[1] ?? "") || null,
+          activity: String(r[2]),
+          plannedStart: dateOf(r[3]),
+          plannedEnd: dateOf(r[4]),
+          plannedDays,
+          actualStart: dateOf(r[6]),
+          actualEnd: dateOf(r[7]),
+          actualDays,
+          varianceDays: plannedDays && actualDays ? actualDays - plannedDays : 0,
+          status: plannedDays && actualDays > plannedDays ? "Delayed" : "In progress",
+        },
+      });
+    }
+    // Scheduled start from the same sheet (M01 planned start) — the DPR S-curve runs from it.
+    const scheduledStart = dateOf(ms[0]?.[3]);
+    if (scheduledStart) {
+      await db.project.updateMany({ where: { id: dorm.id, startDate: null }, data: { startDate: scheduledStart } });
+    }
+    const { syncLessonsFromTemplate } = await import("./progressRegistersImport.js");
+    await syncLessonsFromTemplate(dorm.id, { force: true });
+  } catch (err) {
+    console.warn("Dormitory milestones / lessons:", err instanceof Error ? err.message : err);
   }
   try {
     const { syncBudgetWorkbookTemplate } = await import("./budgetWorkbookImport.js");

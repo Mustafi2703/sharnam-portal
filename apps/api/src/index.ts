@@ -33,6 +33,7 @@ import { closureRouter } from "./routes/closure.js";
 import { auditKpiRouter } from "./routes/auditKpi.js";
 import { siteIndexRouter } from "./routes/siteIndex.js";
 import { uatDataRouter } from "./routes/uatData.js";
+import { vendorActionsRouter } from "./routes/vendorActions.js";
 import { ensureDbConnected, isPrismaFatal, prisma } from "./prisma.js";
 import { errorDetail, pushRuntimeLog } from "./services/runtimeLog.js";
 import { audit } from "./services/audit.js";
@@ -223,6 +224,7 @@ app.use("/api/closure", closureRouter);
 app.use("/api/audit-kpi", auditKpiRouter);
 app.use("/api/master/site-index", siteIndexRouter);
 app.use("/api/uat-data", uatDataRouter);
+app.use("/api/vendor-actions", vendorActionsRouter);
 
 // Serve built React app AFTER API routes (single-service Render deploy)
 if (webDist) {
@@ -278,6 +280,22 @@ async function start() {
   const { startSelfieRotation } = await import("./services/attendanceGeo.js");
   startSelfieRotation();
   void loadMailSwitch();
+  // BBS weights imported before the kg fix held tonnes or a running-metre column — recompute from dia × metres.
+  void prisma
+    .$executeRawUnsafe(
+      "UPDATE CostBbsLine SET weightKg = ROUND(diameterMm * diameterMm / 162 * totalLength, 2) " +
+        "WHERE rowKind = 'data' AND diameterMm >= 6 AND totalLength > 0 " +
+        "AND ABS(weightKg - diameterMm * diameterMm / 162 * totalLength) > 0.01 * diameterMm * diameterMm / 162 * totalLength"
+    )
+    .then((n) => n && console.log(`[cost] BBS weights recomputed on ${n} line(s)`))
+    .catch((err) => console.warn("[cost] BBS weight check skipped:", err instanceof Error ? err.message : err));
+  // Cube specimens entered before testing dates were automatic: =cast+7 / =cast+28 (SPDC register).
+  void Promise.all([
+    prisma.$executeRawUnsafe("UPDATE CubeTest SET testDate7 = DATE_ADD(castDate, INTERVAL 7 DAY) WHERE testDate7 IS NULL AND castDate IS NOT NULL"),
+    prisma.$executeRawUnsafe("UPDATE CubeTest SET testDate28 = DATE_ADD(castDate, INTERVAL 28 DAY) WHERE testDate28 IS NULL AND castDate IS NOT NULL"),
+  ])
+    .then(([a, b]) => (a || b) && console.log(`[quality] cube testing dates filled on ${a} / ${b} specimen(s)`))
+    .catch((err) => console.warn("[quality] cube date backfill skipped:", err instanceof Error ? err.message : err));
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

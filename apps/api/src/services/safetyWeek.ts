@@ -124,13 +124,18 @@ export async function safetyCumulative(projectId: string, toKey: string) {
   const lastLti = [lastLtiLog?.date, lastLtiRecord?.occurredAt].filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] || null;
   const since = lastLti || firstLog?.date || null;
   const daysWithoutLti = since ? Math.max(0, Math.floor((dayFromKey(toKey).getTime() - dayFromKey(keyFromDate(since)).getTime()) / 86400000) + (lastLti ? 0 : 1)) : 0;
+  // History before the portal (client HSE Statistic) counts from its as-of date onward.
+  const opening = await prisma.safetyOpeningBalance.findUnique({ where: { projectId } });
+  const open = opening && keyFromDate(opening.asOf) <= toKey ? opening : null;
   return {
-    safeManHours: agg._sum.safeManHours || 0,
+    safeManHours: (agg._sum.safeManHours || 0) + (open?.safeManHours || 0),
     toolboxTalks: agg._sum.toolboxTalks || 0,
     inductions: agg._sum.inductions || 0,
     permitsIssued: agg._sum.permitsIssued || 0,
     manDays: agg._sum.manpower || 0,
     daysLogged: agg._count._all,
+    /** Safe man-days to date: logged days plus the pre-portal opening balance. */
+    safeManDays: agg._count._all + (open?.safeManDays || 0),
     daysWithoutLti,
     lastLti: lastLti ? keyFromDate(lastLti) : null,
   };

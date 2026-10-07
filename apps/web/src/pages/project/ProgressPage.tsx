@@ -5,6 +5,7 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { formatQty } from "../../components/BoqMonitoringEditor";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
+import { saveExportToSharePoint } from "../../lib/saveExport";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { BarChart, PieChart } from "../../components/PieChart";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
@@ -71,6 +72,7 @@ export default function ProgressPage() {
   const [scurveModalOpen, setScurveModalOpen] = useState(false);
   const [scurveForm, setScurveForm] = useState({ periodDate: "", periodLabel: "", plannedPct: "", actualPct: "" });
   const [scurveBusy, setScurveBusy] = useState(false);
+  const scurveImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
   const [hindranceModalOpen, setHindranceModalOpen] = useState(false);
   const [mileAddOpen, setMileAddOpen] = useState(false);
@@ -170,8 +172,8 @@ export default function ProgressPage() {
           discipline: scurveDiscipline,
           periodDate: scurveForm.periodDate,
           periodLabel: scurveForm.periodLabel,
-          plannedPct: Number(scurveForm.plannedPct) / 100,
-          actualPct: Number(scurveForm.actualPct) / 100,
+          plannedPct: Number(scurveForm.plannedPct),
+          actualPct: Number(scurveForm.actualPct),
           source: "manual",
         }),
       });
@@ -181,6 +183,45 @@ export default function ProgressPage() {
       setMsg(`S-curve row saved for ${scurveDiscipline}.`);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setScurveBusy(false);
+    }
+  }
+
+  /** Planned baseline from an Excel / CSV (Date | Planned % | Actual %) — replaces this discipline's rows. */
+  async function importScurveBaseline(file: File) {
+    if (!id || !canEdit) return;
+    setScurveBusy(true);
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("discipline", scurveDiscipline);
+      const out = await api<{ points: number }>(`/api/progress/${id}/scurve-points/import`, { method: "POST", token, body: fd });
+      await loadScurvePoints();
+      setMsg(`S-curve baseline uploaded — ${out.points} points for ${scurveDiscipline}. DPR and WPR S-curves use it from now on.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setScurveBusy(false);
+    }
+  }
+
+  /** Monthly planned % from the activity register's planned dates; actual % from DPRs. */
+  async function generateScurveBaseline() {
+    if (!id || !canEdit) return;
+    setScurveBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ points: number; activities: number }>(`/api/progress/${id}/scurve-points/generate`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ discipline: scurveDiscipline }),
+      });
+      await loadScurvePoints();
+      setMsg(`Planned baseline generated from ${out.activities} activities — ${out.points} monthly points for ${scurveDiscipline}.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not generate");
     } finally {
       setScurveBusy(false);
     }
@@ -985,6 +1026,17 @@ export default function ProgressPage() {
                 : undefined
             }
             onDownloadXlsx={() => void downloadPlannedActual("xlsx")}
+            onPublishSharePoint={
+              canEdit && id
+                ? async () => {
+                    try {
+                      setMsg(await saveExportToSharePoint(id, token, `/api/progress/${id}/planned-actual/download.xlsx`, "progress"));
+                    } catch (e) {
+                      setMsg(e instanceof Error ? e.message : "Save to SharePoint failed");
+                    }
+                  }
+                : undefined
+            }
             onGenerate={
               canEdit
                 ? async () => {
@@ -1720,7 +1772,10 @@ export default function ProgressPage() {
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">DPR-style register</p>
                 <h3 className="font-display text-lg text-ink">Per-discipline S-curve input</h3>
-                <p className="text-sm text-steel-muted mt-1">Manual weekly planned / actual % — same format as DPR dashboard rows.</p>
+                <p className="text-sm text-steel-muted mt-1">
+                  Planned baseline (and actual) % by date. The DPR S-curve uses this planned line when it is set; otherwise it uses each
+                  BOQ line's planned start / finish. Upload columns: Date · Planned % · Actual % (optional).
+                </p>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
                 <Select value={scurveDiscipline} onChange={(e) => setScurveDiscipline(e.target.value)} className="!w-auto min-w-[180px]">
@@ -1729,9 +1784,28 @@ export default function ProgressPage() {
                   ))}
                 </Select>
                 {canEdit ? (
-                  <Button type="button" onClick={() => setScurveModalOpen(true)} disabled={scurveBusy}>
-                    + Add week
-                  </Button>
+                  <>
+                    <Button type="button" variant="secondary" onClick={() => void generateScurveBaseline()} disabled={scurveBusy}>
+                      Generate from schedule
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={() => scurveImportRef.current?.click()} disabled={scurveBusy}>
+                      Upload baseline (Excel / CSV)
+                    </Button>
+                    <input
+                      ref={scurveImportRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void importScurveBaseline(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button type="button" onClick={() => setScurveModalOpen(true)} disabled={scurveBusy}>
+                      + Add week
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -1740,8 +1814,8 @@ export default function ProgressPage() {
                 <ProgressScurveChart
                   points={scurvePoints.map((p) => ({
                     label: p.periodLabel || fmtDate(p.periodDate),
-                    planned: (Number(p.plannedPct) || 0) * 100,
-                    actual: (Number(p.actualPct) || 0) * 100,
+                    planned: Number(p.plannedPct) || 0,
+                    actual: Number(p.actualPct) || 0,
                   }))}
                 />
                 <div className="overflow-x-auto mt-4 border border-line rounded-lg">
@@ -1758,8 +1832,8 @@ export default function ProgressPage() {
                       {scurvePoints.map((p) => (
                         <tr key={p.id} className="border-t border-line/60">
                           <td className="px-3 py-2">{p.periodLabel || fmtDate(p.periodDate)}</td>
-                          <td className="px-3 py-2 text-right font-mono">{pct(Number(p.plannedPct))}</td>
-                          <td className="px-3 py-2 text-right font-mono">{pct(Number(p.actualPct))}</td>
+                          <td className="px-3 py-2 text-right font-mono">{(Number(p.plannedPct) || 0).toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right font-mono">{(Number(p.actualPct) || 0).toFixed(1)}%</td>
                           {canEdit ? (
                             <td className="px-3 py-2 text-right">
                               <button type="button" className="text-xs text-danger underline" disabled={scurveBusy} onClick={() => void deleteScurvePoint(p.id)}>

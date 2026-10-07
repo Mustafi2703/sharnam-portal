@@ -237,16 +237,17 @@ function detectBbsLayout(rows: unknown[][]): BbsColLayout {
     e: e >= 0 ? e : a >= 0 ? a + 4 : 16,
     cutting: cutting >= 0 ? cutting : totalLen >= 0 ? totalLen - 1 : 17,
     totalLen: totalLen >= 0 ? totalLen : 18,
-    weight: weight >= 0 ? weight : totalLen >= 0 ? totalLen + 1 : 19,
+    // SPDC BBS sheets carry no weight column — the columns after "Total length" are running metres per
+    // diameter (8 … 32 mm), so weight is only read from a real weight / kg header.
+    weight,
   };
 }
 
+/** Bar weight in kg: a real weight column if the sheet has one, else d² / 162 kg per metre × total metres. */
 function bbsWeightKg(diaMm: number, totalLenM: number, row: unknown[], weightCol: number): number {
-  const fromCell = n(row[weightCol]);
+  const fromCell = weightCol >= 0 ? n(row[weightCol]) : 0;
   if (fromCell > 0 && fromCell < 50000) return Math.round(fromCell * 100) / 100;
-  if (diaMm >= 6 && totalLenM > 0) {
-    return Math.round(((Math.PI * (diaMm / 1000 / 2) ** 2 * totalLenM * 7850) / 1000) * 100) / 100;
-  }
+  if (diaMm >= 6 && totalLenM > 0) return Math.round(((diaMm * diaMm) / 162) * totalLenM * 100) / 100;
   return 0;
 }
 

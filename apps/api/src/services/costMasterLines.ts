@@ -191,8 +191,8 @@ export function mapBbsRow(headers: string[], row: SheetCell[], packageName: stri
   const nos = num(row, idx(["total nos", "total nos"], 5)) || nosPerMember * nosOfMember || 1;
   const totalLen = num(row, idx(["total l", "total length"], 12));
   const weightRaw = num(row, idx(["weight"], 13));
-  const weight =
-    dia && totalLen ? (Math.PI * (dia / 1000 / 2) ** 2 * totalLen * 7850) / 1000 : weightRaw;
+  // kg: d² / 162 kg per metre × total metres (the steel-density formula /1000 gave tonnes in a kg field)
+  const weight = dia && totalLen ? Math.round(((dia * dia) / 162) * totalLen * 100) / 100 : weightRaw;
 
   return {
     packageName,

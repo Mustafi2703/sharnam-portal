@@ -34,6 +34,25 @@ async function canAccessRaBill(req: AuthedRequest, bill: { vendorId?: string | n
   return false;
 }
 
+/** RA bill workflow (discipline-wise): vendor bill → PMC check → certified → COP. Status only moves forward. */
+const RA_STATUS_ORDER = ["Draft", "Submitted", "Corrected", "Checked", "Certified", "COP generated", "Paid"];
+const STAGE_STATUS: Record<string, string> = { Submitted: "Submitted", Corrected: "Checked", Certified: "Certified" };
+const STAGE_PREREQ: Record<string, string | null> = { Submitted: null, Corrected: "Submitted", Certified: "Corrected" };
+
+function forwardStatus(current: string | null | undefined, next: string): string {
+  const a = RA_STATUS_ORDER.indexOf(current || "");
+  const b = RA_STATUS_ORDER.indexOf(next);
+  return b > a ? next : current || next;
+}
+
+/** The previous stage's workbook must be on file: Submitted → Corrected (checked) → Certified. */
+async function missingPrereqStage(billId: string, stage: string): Promise<string | null> {
+  const need = STAGE_PREREQ[stage];
+  if (!need) return null;
+  const has = await prisma.raBillRevision.findFirst({ where: { raBillId: billId, stage: need } });
+  return has ? null : need;
+}
+
 async function canUploadRaStage(
   req: AuthedRequest,
   bill: { id: string; vendorId?: string | null },
@@ -70,6 +89,30 @@ async function raHasCertifiedWorkbook(raBillId: string) {
 financeRouter.get("/meta/packages", (_req, res) => {
   res.json({ packages: FINANCE_PACKAGES, raColumns: FINANCE_RA_COLUMNS, materialColumns: FINANCE_MATERIAL_COLUMNS });
 });
+
+/**
+ * A stage amount (the corrected / certified bill value, excl. GST) re-bases the bill: GST and retention keep
+ * their share of the bill (18% / 5% when none was entered), advance and other recoveries stay as entered, and
+ * net payable is recomputed — so the COP built from the certified bill adds up.
+ */
+function rescaleRaAmounts(
+  bill: { totalInvoiceWithoutGst: number; gstAmount: number; retentionAmount: number; advanceAdjusted: number; otherRecoveries: number; priceVariation: number },
+  amount: number
+) {
+  const old = bill.totalInvoiceWithoutGst || 0;
+  const share = (v: number, dflt: number) => (old > 0 && v > 0 ? v / old : dflt);
+  const gstAmount = Math.round(amount * share(bill.gstAmount, 0.18) * 100) / 100;
+  const retentionAmount = Math.round(amount * share(bill.retentionAmount, 0.05) * 100) / 100;
+  const totalInvoiceWithGst = amount + gstAmount;
+  return {
+    totalInvoiceWithoutGst: amount,
+    againstBillRaised: amount - (bill.priceVariation || 0),
+    gstAmount,
+    totalInvoiceWithGst,
+    retentionAmount,
+    netAmountPayable: Math.round((totalInvoiceWithGst - retentionAmount - (bill.advanceAdjusted || 0) - (bill.otherRecoveries || 0)) * 100) / 100,
+  };
+}
 
 function num(v: unknown): number {
   const n = typeof v === "string" ? Number(v.replace(/,/g, "")) : Number(v ?? 0);
@@ -322,12 +365,23 @@ financeRouter.post("/:projectId/po", requireRoles("admin", "office"), upload.sin
     );
     attachmentUrl = saved.url || `/uploads/onedrive/${project.code}/${saved.path}`;
   }
+  // Link the PO to the vendor master by name so COPs pick up the vendor's GST / PAN.
+  const vendorName = s(req.body.vendorName);
+  const vendorId =
+    s(req.body.vendorId) ||
+    (vendorName
+      ? (await prisma.vendor.findMany({ where: { isActive: true }, select: { id: true, name: true } })).find(
+          (v) => v.name.trim().toLowerCase() === vendorName.toLowerCase()
+        )?.id
+      : undefined) ||
+    null;
+  const { panFromGstin } = await import("../modules/finance/copDefaults.js");
   const created = await prisma.purchaseOrder.create({
     data: {
       projectId: req.params.projectId,
       poNumber: s(req.body.poNumber) || `PO-${Date.now()}`,
       poDate: req.body.poDate ? new Date(req.body.poDate) : null,
-      vendorId: s(req.body.vendorId) || null,
+      vendorId,
       vendorName: s(req.body.vendorName) || "Vendor",
       workTrade: s(req.body.workTrade) || null,
       packageName: s(req.body.packageName) || null,
@@ -337,7 +391,7 @@ financeRouter.post("/:projectId/po", requireRoles("admin", "office"), upload.sin
       amendedValue: num(req.body.amendedValue),
       retentionPct: num(req.body.retentionPct) || 5,
       advancePct: num(req.body.advancePct),
-      panNumber: s(req.body.panNumber) || null,
+      panNumber: s(req.body.panNumber) || panFromGstin(s(req.body.gstNumber)) || null,
       gstNumber: s(req.body.gstNumber) || null,
       payableTo: s(req.body.payableTo) || null,
       attachmentUrl: attachmentUrl || null,
@@ -359,6 +413,7 @@ financeRouter.put("/po/:id", requireRoles("admin", "office"), async (req: Authed
       vendorName: s(req.body.vendorName) || before.vendorName,
       workTrade: s(req.body.workTrade) || null,
       packageName: s(req.body.packageName) || null,
+      budgetCode: s(req.body.budgetCode) || before.budgetCode,
       originalValue: num(req.body.originalValue),
       amendmentNo: s(req.body.amendmentNo) || null,
       amendedValue: num(req.body.amendedValue),
@@ -557,12 +612,158 @@ financeRouter.get("/:projectId/ra", async (req: AuthedRequest, res) => {
   res.json(pkg ? rows.filter((r) => raMatchesPackage(r, pkg)) : rows);
 });
 
-financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fields([
+/* RA bill from the BOQ — Cost monitoring lines priced at BOQ rate, discipline from the BOQ package. */
+financeRouter.get("/:projectId/ra/from-boq/packages", requireRoles("admin", "office"), async (req, res) => {
+  const { boqPackages } = await import("../modules/finance/raFromBoq.js");
+  res.json(await boqPackages(prisma, req.params.projectId));
+});
+
+financeRouter.get("/:projectId/ra/from-boq/lines", requireRoles("admin", "office"), async (req, res) => {
+  const packageName = s(req.query.package);
+  if (!packageName) return res.status(400).json({ error: "package required" });
+  const { boqBillLines } = await import("../modules/finance/raFromBoq.js");
+  const { packageForCostPackage } = await import("../modules/finance/disciplines.js");
+  const lines = await boqBillLines(prisma, req.params.projectId, packageName);
+  res.json({ packageName, discipline: packageForCostPackage(packageName).discipline, lines, total: lines.reduce((n, l) => n + l.amount, 0) });
+});
+
+/**
+ * Body (JSON): packageName, raNumber, vendorName | vendorId, discipline?, purchaseOrderId?, invoiceNumber?,
+ * invoiceDate?, gstPct? (18), retentionPct? (PO's, else 5), advanceAdjusted?, qty? { lineId: thisQty }.
+ * Creates the RA bill with its BOQ abstract filed as the Submitted workbook.
+ */
+financeRouter.post("/:projectId/ra/from-boq", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const { boqBillLines, buildBoqAbstractWorkbook } = await import("../modules/finance/raFromBoq.js");
+  const { packageForCostPackage } = await import("../modules/finance/disciplines.js");
+  const packageName = s(req.body.packageName);
+  const raNumber = s(req.body.raNumber);
+  if (!packageName || !raNumber) return res.status(400).json({ error: "packageName and raNumber required" });
+  if (await prisma.raBill.findFirst({ where: { projectId: project.id, raNumber }, select: { id: true } })) {
+    return res.status(400).json({ error: `${raNumber} already exists on this project` });
+  }
+  const qty = req.body.qty && typeof req.body.qty === "object" ? (req.body.qty as Record<string, number>) : undefined;
+  const lines = await boqBillLines(prisma, project.id, packageName, qty);
+  if (!lines.length) return res.status(400).json({ error: "Nothing to bill — no measured quantity beyond what is already certified or on an open bill." });
+
+  // Linked to the vendor master (by id or name) so the contractor sees the bill in their portal.
+  const vendor = s(req.body.vendorId)
+    ? await prisma.vendor.findUnique({ where: { id: s(req.body.vendorId) } })
+    : (await prisma.vendor.findMany({ where: { isActive: true } })).find(
+        (v) => v.name.trim().toLowerCase() === s(req.body.vendorName).toLowerCase()
+      ) || null;
+  const vendorName = vendor?.name || s(req.body.vendorName);
+  if (!vendorName) return res.status(400).json({ error: "Contractor required" });
+  const discipline = s(req.body.discipline) || packageForCostPackage(packageName).discipline;
+  const po = s(req.body.purchaseOrderId)
+    ? await prisma.purchaseOrder.findFirst({ where: { id: s(req.body.purchaseOrderId), projectId: project.id } })
+    : null;
+
+  const against = Math.round(lines.reduce((n, l) => n + l.amount, 0) * 100) / 100;
+  const gstPct = req.body.gstPct != null && req.body.gstPct !== "" ? num(req.body.gstPct) : 18;
+  const retentionPct = req.body.retentionPct != null && req.body.retentionPct !== "" ? num(req.body.retentionPct) : po?.retentionPct ?? 5;
+  const advanceAdjusted = num(req.body.advanceAdjusted);
+  const gst = Math.round(against * gstPct) / 100;
+  const retention = Math.round(against * retentionPct) / 100;
+  const net = Math.round((against + gst - retention - advanceAdjusted) * 100) / 100;
+
+  const buf = await buildBoqAbstractWorkbook({
+    projectCode: project.code,
+    raNumber,
+    discipline,
+    packageName,
+    vendorName,
+    lines,
+    amounts: { against, gst, retention, net, gstPct, retentionPct },
+  });
+  const fileName = `${raNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}-BOQ-Abstract.xlsx`;
+  const saved = await saveRaBillFile(project.code, raNumber, `Submitted-R1-${Date.now()}.xlsx`, buf, "Submitted");
+
+  const created = await prisma.raBill.create({
+    data: {
+      projectId: project.id,
+      purchaseOrderId: po?.id || null,
+      raNumber,
+      invoiceNumber: s(req.body.invoiceNumber) || null,
+      invoiceDate: req.body.invoiceDate ? new Date(req.body.invoiceDate) : new Date(),
+      description: `${packageName} · ${lines.length} BOQ item(s) from measured quantities`,
+      againstBillRaised: against,
+      totalInvoiceWithoutGst: against,
+      gstAmount: gst,
+      totalInvoiceWithGst: against + gst,
+      advanceAdjusted,
+      retentionAmount: retention,
+      netAmountPayable: net,
+      status: "Submitted",
+      discipline,
+      vendorId: vendor?.id || null,
+      vendorName,
+      attachmentUrl: saved.fileUrl,
+      boqPackage: packageName,
+      boqLinesJson: JSON.stringify(lines),
+      createdById: req.user!.id,
+    },
+  });
+  await prisma.raBillAttachment.create({
+    data: {
+      raBillId: created.id,
+      fileName,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path || null,
+      sharePointUrl: saved.url || null,
+      kind: "stage",
+      uploadedById: req.user!.id,
+    },
+  });
+  await prisma.raBillRevision.create({
+    data: {
+      raBillId: created.id,
+      stage: "Submitted",
+      revisionNo: 1,
+      fileName,
+      fileUrl: saved.fileUrl,
+      storagePath: saved.path || null,
+      sharePointUrl: saved.url || null,
+      amountAtStage: against,
+      notes: `Raised from BOQ · ${packageName} · ${lines.length} item(s)`,
+      uploadedById: req.user!.id,
+    },
+  });
+  const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
+  await recomputeRaCumulativeChain(prisma, project.id, { discipline, purchaseOrderId: po?.id || null });
+  await audit("finance.ra.from_boq", { userId: req.user!.id, entity: "RaBill", entityId: created.id, meta: { raNumber, packageName, discipline, items: lines.length } });
+  res.status(201).json({ ...created, lines });
+});
+
+/** The BOQ abstract lines of a bill raised from the BOQ. */
+financeRouter.get("/ra/:id/boq-lines", async (req: AuthedRequest, res) => {
+  const bill = await prisma.raBill.findUnique({ where: { id: req.params.id } });
+  if (!bill) return res.status(404).json({ error: "RA bill not found" });
+  if (!(await canAccessRaBill(req, bill))) return res.status(403).json({ error: "forbidden" });
+  const { parseLines } = await import("../modules/finance/raFromBoq.js");
+  res.json({ boqPackage: bill.boqPackage, posted: !!bill.boqPostedAt, lines: parseLines(bill.boqLinesJson) });
+});
+
+financeRouter.post("/:projectId/ra", requireRoles("admin", "office", "vendor"), upload.fields([
   { name: "files", maxCount: 25 },
   { name: "file", maxCount: 1 },
 ]), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "not found" });
+  // Stage 1 — a contractor raises their own bill: always theirs, always "Submitted", workbook filed as Submission.
+  const vendorUser = req.user?.role === "vendor" ? await vendorForRequest(req) : null;
+  if (req.user?.role === "vendor") {
+    if (!vendorUser) return res.status(403).json({ error: "Your login is not linked to a vendor — ask the office to link it." });
+    const files = req.files as { files?: Express.Multer.File[]; file?: Express.Multer.File[] } | undefined;
+    if (!(files?.files?.length || files?.file?.length)) {
+      return res.status(400).json({ error: "Attach your RA bill workbook (Excel / PDF)." });
+    }
+    req.body.vendorId = vendorUser.id;
+    req.body.vendorName = vendorUser.name;
+    req.body.status = "Submitted";
+    req.body.copNo = "";
+  }
 
   const raNumber = s(req.body.raNumber) || `RA-${Date.now()}`;
   const pkg = resolveFinancePackage(s(req.body.discipline) || s(req.body.packageKey) || "");
@@ -599,7 +800,7 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fie
     _sum: { totalInvoiceWithoutGst: true },
   });
   const previousBillTotal = prev._sum?.totalInvoiceWithoutGst || 0;
-  const totalInvoiceWithoutGst = num(req.body.totalInvoiceWithoutGst) || (num(req.body.againstBillRaised) - num(req.body.priceVariation));
+  const totalInvoiceWithoutGst = num(req.body.totalInvoiceWithoutGst) || (num(req.body.againstBillRaised) + num(req.body.priceVariation));
   const netAmountPayable =
     num(req.body.netAmountPayable) ||
     num(req.body.totalInvoiceWithGst || totalInvoiceWithoutGst) -
@@ -683,6 +884,22 @@ financeRouter.post("/:projectId/ra", requireRoles("admin", "office"), upload.fie
         kind: "contractor_doc",
         uploadedById: req.user!.id,
       })),
+    });
+    // The bill workbook raised with the bill is its Submission (stage 1) — the PMC check builds on it.
+    const first = attachmentRows[0];
+    await prisma.raBillRevision.create({
+      data: {
+        raBillId: created.id,
+        stage: "Submitted",
+        revisionNo: 1,
+        fileName: first.fileName,
+        fileUrl: first.fileUrl,
+        storagePath: first.storagePath || null,
+        sharePointUrl: first.sharePointUrl || null,
+        amountAtStage: created.totalInvoiceWithoutGst || null,
+        notes: vendorUser ? "Raised by contractor in the portal" : "Filed with the RA bill",
+        uploadedById: req.user!.id,
+      },
     });
   }
 
@@ -854,6 +1071,12 @@ financeRouter.post(
     if (!req.file) {
       return res.status(400).json({ error: "file required" });
     }
+    const missing = await missingPrereqStage(bill.id, stage);
+    if (missing) {
+      return res.status(400).json({
+        error: `Upload the ${missing} workbook first — RA bills go Submitted (vendor) → Corrected (PMC check) → Certified.`,
+      });
+    }
 
     const existing = await prisma.raBillRevision.count({ where: { raBillId: bill.id, stage } });
     const revisionNo = existing + 1;
@@ -901,12 +1124,13 @@ financeRouter.post(
       },
     });
 
-    /** File uploads only — do not roll workflow status from stage uploads. */
+    // Each stage file moves the bill forward: Submitted → Checked → Certified (never backwards).
     await prisma.raBill.update({
       where: { id: bill.id },
       data: {
+        status: forwardStatus(bill.status, STAGE_STATUS[stage]),
         attachmentUrl: fileUrl || bill.attachmentUrl,
-        ...(revision.amountAtStage != null ? { totalInvoiceWithoutGst: revision.amountAtStage } : {}),
+        ...(revision.amountAtStage != null ? rescaleRaAmounts(bill, revision.amountAtStage) : {}),
       },
     });
 
@@ -941,12 +1165,22 @@ financeRouter.get("/:projectId/cop", async (req, res) => {
   const rows = await prisma.certificateOfPayment.findMany({
     where: { projectId: req.params.projectId },
     include: {
-      purchaseOrder: { select: { id: true, poNumber: true } },
-      raBill: { select: { id: true, raNumber: true } },
+      purchaseOrder: { select: { id: true, poNumber: true, packageName: true, workTrade: true } },
+      raBill: { select: { id: true, raNumber: true, discipline: true, boqPackage: true } },
     },
     orderBy: [{ certificateDate: "desc" }, { createdAt: "desc" }],
   });
   res.json(rows);
+});
+
+/** Prefill for the COP form: certificate no., PO, WO values, PAN / GST and amounts from a certified RA bill. */
+financeRouter.get("/:projectId/cop/defaults", requireRoles("admin", "office"), async (req, res) => {
+  const raBillId = s(req.query.raBillId);
+  if (!raBillId) return res.status(400).json({ error: "raBillId required" });
+  const { copDefaultsForRa } = await import("../modules/finance/copDefaults.js");
+  const d = await copDefaultsForRa(prisma, req.params.projectId, raBillId);
+  if (!d) return res.status(404).json({ error: "RA bill not found" });
+  res.json(d);
 });
 
 financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
@@ -954,6 +1188,13 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   if (!project) return res.status(404).json({ error: "not found" });
 
   const raBillId = s(req.body.raBillId) || null;
+  // Stage 3 — a COP comes from a certified RA bill. Admin may record a historical COP without one.
+  const historical = req.user?.role === "admin" && (req.body.withoutRaBill === "1" || req.body.withoutRaBill === "true");
+  if (!raBillId && !historical) {
+    return res.status(400).json({
+      error: "Link the certified RA bill — a COP is generated from a bill the contractor submitted and PMC checked and certified.",
+    });
+  }
   if (raBillId) {
     const certified = await raHasCertifiedWorkbook(raBillId);
     if (!certified) {
@@ -976,34 +1217,35 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   const linkedRa = raBillId
     ? await prisma.raBill.findFirst({ where: { id: raBillId, projectId: req.params.projectId } })
     : null;
-  const amountCertified = num(req.body.amountCertified) || linkedRa?.totalInvoiceWithoutGst || 0;
-  const amountPayable = num(req.body.amountPayable) || linkedRa?.netAmountPayable || 0;
-  const gstAmount = num(req.body.gstAmount) || linkedRa?.gstAmount || 0;
-  const retentionAmount = num(req.body.retentionAmount) || linkedRa?.retentionAmount || 0;
+  // Whatever the form leaves blank comes from the certified RA bill, its PO and the vendor master.
+  const { copDefaultsForRa } = await import("../modules/finance/copDefaults.js");
+  const d = linkedRa ? await copDefaultsForRa(prisma, req.params.projectId, linkedRa.id) : null;
+  const pick = (k: string) => s(req.body[k]) || (d ? String((d as Record<string, unknown>)[k] || "") : "") || null;
+  const pickNum = (k: string) => num(req.body[k]) || (d ? Number((d as Record<string, unknown>)[k]) || 0 : 0);
 
   const created = await prisma.certificateOfPayment.create({
     data: {
       projectId: req.params.projectId,
-      certificateNumber: s(req.body.certificateNumber) || `COP-${Date.now()}`,
-      certificateType: s(req.body.certificateType) || null,
+      certificateNumber: pick("certificateNumber") || `COP-${Date.now()}`,
+      certificateType: /^against\s*-\s*ra$/i.test(s(req.body.certificateType)) ? d?.certificateType || "Against - RA" : pick("certificateType"),
       certificateDate: req.body.certificateDate ? new Date(req.body.certificateDate) : new Date(),
-      contractor: s(req.body.contractor) || linkedRa?.vendorName || "Contractor",
-      workTrade: s(req.body.workTrade) || linkedRa?.discipline || null,
-      budgetCode: s(req.body.budgetCode) || null,
-      purchaseOrderId: s(req.body.purchaseOrderId) || linkedRa?.purchaseOrderId || null,
-      poNumberDate: s(req.body.poNumberDate) || null,
-      originalWoValue: num(req.body.originalWoValue),
-      amendmentNo: s(req.body.amendmentNo) || null,
-      amendedWoValue: num(req.body.amendedWoValue),
-      invoiceNoDate: s(req.body.invoiceNoDate) || linkedRa?.invoiceNumber || null,
-      raBillId: s(req.body.raBillId) || null,
-      amountCertified,
-      amountPayable,
-      gstAmount,
-      retentionAmount,
-      panNumber: s(req.body.panNumber) || null,
-      gstNumber: s(req.body.gstNumber) || null,
-      payableTo: s(req.body.payableTo) || null,
+      contractor: pick("contractor") || "Contractor",
+      workTrade: pick("workTrade"),
+      budgetCode: pick("budgetCode"),
+      purchaseOrderId: pick("purchaseOrderId"),
+      poNumberDate: pick("poNumberDate"),
+      originalWoValue: pickNum("originalWoValue"),
+      amendmentNo: pick("amendmentNo"),
+      amendedWoValue: pickNum("amendedWoValue"),
+      invoiceNoDate: pick("invoiceNoDate"),
+      raBillId,
+      amountCertified: pickNum("amountCertified"),
+      amountPayable: pickNum("amountPayable"),
+      gstAmount: pickNum("gstAmount"),
+      retentionAmount: pickNum("retentionAmount"),
+      panNumber: pick("panNumber"),
+      gstNumber: pick("gstNumber"),
+      payableTo: pick("payableTo"),
       remarks: s(req.body.remarks) || null,
       status: s(req.body.status) || "Draft",
       attachmentUrl: attachmentUrl || null,
@@ -1012,12 +1254,35 @@ financeRouter.post("/:projectId/cop", requireRoles("admin", "office"), upload.si
   });
 
   if (created.raBillId) {
-    await prisma.raBill.update({ where: { id: created.raBillId }, data: { copNo: created.certificateNumber } });
+    await prisma.raBill.update({
+      where: { id: created.raBillId },
+      data: {
+        copNo: created.certificateNumber,
+        status: forwardStatus(linkedRa?.status, "COP generated"),
+        ...(!linkedRa?.purchaseOrderId && created.purchaseOrderId ? { purchaseOrderId: created.purchaseOrderId } : {}),
+      },
+    });
+    // The vendor's earlier bills in this trade that carry no PO belong to the same order — link them so the
+    // RA cumulative chain and the COP's "previous bills" agree.
+    if (!linkedRa?.purchaseOrderId && created.purchaseOrderId && linkedRa) {
+      await prisma.raBill.updateMany({
+        where: {
+          projectId: req.params.projectId,
+          purchaseOrderId: null,
+          discipline: linkedRa.discipline,
+          ...(linkedRa.vendorId ? { vendorId: linkedRa.vendorId } : { vendorName: linkedRa.vendorName }),
+        },
+        data: { purchaseOrderId: created.purchaseOrderId },
+      });
+    }
     const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
     await recomputeRaCumulativeChain(prisma, req.params.projectId, {
       discipline: linkedRa?.discipline,
       purchaseOrderId: created.purchaseOrderId,
     });
+    // A bill raised from the BOQ: its (certified) quantities become certified on the BOQ.
+    const { postRaToBoq } = await import("../modules/finance/raFromBoq.js");
+    await postRaToBoq(prisma, created.raBillId);
   }
 
   const { syncCopToCashflow } = await import("../modules/finance/cashflowSync.js");
@@ -1174,6 +1439,41 @@ financeRouter.post(
 );
 
 /** Download Viatrix-format COP certificate (xlsx). */
+/** Branded COP PDF in the client's certificate format. */
+financeRouter.get("/:projectId/cop/:copId/download.pdf", async (req, res) => {
+  const cop = await prisma.certificateOfPayment.findFirst({
+    where: { id: req.params.copId, projectId: req.params.projectId },
+    select: { id: true, certificateNumber: true },
+  });
+  if (!cop) return res.status(404).json({ error: "COP not found" });
+  const { buildCopPdf } = await import("../modules/finance/copPdf.js");
+  const pdf = await buildCopPdf(prisma, [cop.id]);
+  if (!pdf) return res.status(404).json({ error: "COP not found" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Sharnam-COP-${cop.certificateNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf"`);
+  res.send(pdf);
+});
+
+/** Every COP on the project (optionally one discipline): register page + one certificate per page. */
+financeRouter.get("/:projectId/cops/download.pdf", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "not found" });
+  const { copMatchesPackage } = await import("../modules/finance/disciplines.js");
+  const pkg = resolveFinancePackage(s(req.query.discipline));
+  const cops = await prisma.certificateOfPayment.findMany({
+    where: { projectId: req.params.projectId, status: { not: "Rejected" } },
+    include: { purchaseOrder: true, raBill: true },
+    orderBy: [{ certificateDate: "asc" }, { createdAt: "asc" }],
+  });
+  const picked = pkg ? cops.filter((c) => copMatchesPackage(c, pkg)) : cops;
+  if (!picked.length) return res.status(404).json({ error: pkg ? `No COPs for ${pkg.discipline}` : "No COPs yet" });
+  const { buildCopPdf } = await import("../modules/finance/copPdf.js");
+  const pdf = await buildCopPdf(prisma, picked.map((c) => c.id), { scope: pkg ? pkg.label : "All disciplines" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="Sharnam-COPs-${project.code}${pkg ? `-${pkg.key}` : ""}.pdf"`);
+  res.send(pdf);
+});
+
 financeRouter.get("/:projectId/cop/:copId/download.xlsx", async (req, res) => {
   const cop = await prisma.certificateOfPayment.findFirst({
     where: { id: req.params.copId, projectId: req.params.projectId },
@@ -1195,11 +1495,43 @@ financeRouter.get("/:projectId/cop/:copId/print.html", async (req, res) => {
     where: { id: req.params.copId, projectId: req.params.projectId },
     include: {
       project: { select: { code: true, name: true, location: true } },
-      purchaseOrder: { select: { poNumber: true, poDate: true, vendorName: true } },
-      raBill: { select: { raNumber: true, invoiceNumber: true, invoiceDate: true, netAmountPayable: true } },
+      purchaseOrder: true,
+      raBill: true,
     },
   });
   if (!cop) return res.status(404).json({ error: "COP not found" });
+  const { copDefaultsForRa, copLineHistory, panFromGstin } = await import("../modules/finance/copDefaults.js");
+  const d = cop.raBillId ? await copDefaultsForRa(prisma, cop.projectId, cop.raBillId) : null;
+  const h = await copLineHistory(prisma, cop);
+  const po = cop.purchaseOrder;
+  const gstNo = cop.gstNumber || po?.gstNumber || d?.gstNumber || "";
+  const f = {
+    type: cop.certificateType || d?.certificateType,
+    trade: cop.workTrade || d?.workTrade,
+    budget: cop.budgetCode || po?.budgetCode || d?.budgetCode,
+    po: cop.poNumberDate || d?.poNumberDate,
+    wo: cop.originalWoValue || po?.originalValue || d?.originalWoValue || 0,
+    amendNo: cop.amendmentNo || po?.amendmentNo || d?.amendmentNo,
+    amended: cop.amendedWoValue || po?.amendedValue || d?.amendedWoValue || 0,
+    invoice: d?.invoiceNoDate || cop.invoiceNoDate,
+    pan: cop.panNumber || po?.panNumber || d?.panNumber || panFromGstin(gstNo),
+    gst: gstNo,
+    payTo: cop.payableTo || po?.payableTo || d?.payableTo || cop.contractor,
+  };
+  const lineRows: [string, keyof typeof h.current, boolean?][] = [
+    ["A · Amount raised", "raised"],
+    ["B1 · Against bill raised", "against"],
+    ["B4 · Price variation of material", "priceVariation"],
+    ["Total (B) · Amount certified", "totalB", true],
+    ["C1 · Recoveries", "recoveries"],
+    ["C2 · Mobilisation advance adjusted", "mobilisationAdvance"],
+    ["Total (C) · Recoveries and debits", "totalC", true],
+    ["Total (D = B − C) · After recoveries", "totalD", true],
+    ["Total (E) · Retention", "totalE", true],
+    ["Total (F = D − E) · After retention", "totalF", true],
+    ["Total (G) · GST as per tax invoice", "totalG", true],
+    ["Total (H = F + G) · Net payable", "totalH", true],
+  ];
   const { amountInWordsInr } = await import("../modules/finance/copWorkbook.js");
   const { sharnamLogoDataUri } = await import("../services/brandedExport.js");
   const logo = sharnamLogoDataUri();
@@ -1257,39 +1589,42 @@ financeRouter.get("/:projectId/cop/:copId/print.html", async (req, res) => {
   <h2>Contract particulars</h2>
   <div class="grid" style="grid-template-columns:1fr 2fr;">
     <div class="k">Project</div><div class="v">${esc(cop.project?.code)} · ${esc(cop.project?.name)}</div>
-    <div class="k">Certificate type</div><div class="v">${esc(cop.certificateType)}</div>
+    <div class="k">Certificate type</div><div class="v">${esc(f.type)}</div>
     <div class="k">Certificate date</div><div class="v">${dt(cop.certificateDate)}</div>
     <div class="k">Contractor</div><div class="v">${esc(cop.contractor)}</div>
-    <div class="k">Work / Trade</div><div class="v">${esc(cop.workTrade)}</div>
-    <div class="k">Budget code</div><div class="v">${esc(cop.budgetCode)}</div>
-    <div class="k">Purchase order</div><div class="v">${esc(cop.purchaseOrder?.poNumber || cop.poNumberDate)} · ${dt(cop.purchaseOrder?.poDate)}</div>
-    <div class="k">Original WO value</div><div class="v">${inr(cop.originalWoValue)}</div>
-    <div class="k">Amendment no.</div><div class="v">${esc(cop.amendmentNo)} · ${inr(cop.amendedWoValue)}</div>
-    <div class="k">Invoice no. / date</div><div class="v">${esc(cop.invoiceNoDate || cop.raBill?.invoiceNumber)} · ${dt(cop.raBill?.invoiceDate)}</div>
+    <div class="k">Work / Trade</div><div class="v">${esc(f.trade)}</div>
+    <div class="k">Budget code</div><div class="v">${esc(f.budget || "-")}</div>
+    <div class="k">W.O. / P.O. no. &amp; date</div><div class="v">${esc(f.po || "-")}</div>
+    <div class="k">Original WO value</div><div class="v">${f.wo ? inr(f.wo) : "-"}</div>
+    <div class="k">Amendment no. · amended value</div><div class="v">${esc(f.amendNo || "-")} · ${f.amended ? inr(f.amended) : "-"}</div>
+    <div class="k">Invoice no. &amp; date</div><div class="v">${esc(f.invoice || "-")}</div>
     <div class="k">Linked RA bill</div><div class="v">${esc(cop.raBill?.raNumber)}</div>
-    <div class="k">PAN · GST</div><div class="v">${esc(cop.panNumber)} · ${esc(cop.gstNumber)}</div>
+    <div class="k">PAN · GST no.</div><div class="v">${esc(f.pan || "-")} · ${esc(f.gst || "-")}</div>
+    <div class="k">Certified to date (excl. GST)</div><div class="v">Previous ${inr(h.previous.totalB)} · Now ${inr(h.current.totalB)} · Total ${inr(h.cumulative.totalB)}</div>
   </div>
 
   <h2>Amount worked out</h2>
   <table>
-    <thead><tr><th>Description</th><th style="width:22%">Amount (INR)</th></tr></thead>
+    <thead><tr><th>Description</th><th style="width:18%">Previous bills</th><th style="width:18%">This bill</th><th style="width:18%">Cumulative</th></tr></thead>
     <tbody>
-      <tr><td>Amount certified this bill</td><td class="n">${inr(cop.amountCertified)}</td></tr>
-      <tr><td>Add: GST as applicable</td><td class="n">${inr(cop.gstAmount)}</td></tr>
-      <tr><td>Less: Retention (as per contract)</td><td class="n">(${inr(cop.retentionAmount)})</td></tr>
-      <tr><td><b>Net payable to contractor</b></td><td class="n"><b>${inr(cop.amountPayable)}</b></td></tr>
+      ${lineRows
+        .map(([label, k, bold]) => {
+          const c = (n: number) => `<td class="n">${bold ? `<b>${inr(n)}</b>` : inr(n)}</td>`;
+          return `<tr><td>${bold ? `<b>${esc(label)}</b>` : esc(label)}</td>${c(h.previous[k])}${c(h.current[k])}${c(h.cumulative[k])}</tr>`;
+        })
+        .join("")}
     </tbody>
   </table>
 
   <div class="amt-band">
     <div>
       <div class="lbl">Net payable · figures</div>
-      <div class="val">${inr(cop.amountPayable)}</div>
-      <div class="words">${esc(amountInWordsInr(cop.amountPayable))} rupees only.</div>
+      <div class="val">${inr(h.current.totalH)}</div>
+      <div class="words">Rupees ${esc(amountInWordsInr(h.current.totalH))} only.</div>
     </div>
     <div style="text-align:right">
       <div class="lbl">Payable to</div>
-      <div class="val" style="font-size:12px;">${esc(cop.payableTo || cop.contractor)}</div>
+      <div class="val" style="font-size:12px;">${esc(f.payTo)}</div>
     </div>
   </div>
 

@@ -80,7 +80,7 @@ const CATALOG: CatalogEntry[] = [
   { names: ["Project Closure Report.docx"], status: "export_template", importer: "closure template download", feeds: "Closure form" },
   { names: ["DPR-Sharnam PMC- ARVIND LIMITED (3) (1).xlsx"], status: "export_template", importer: "dprXlsx (layout ref)", feeds: "Live DPRs from dpr-templates" },
   { names: ["Snaglist - Sharnam PMC.xlsx", "Snaglist - Sharnam PMC (1).xlsx"], status: "imported", importer: "closureDrawingsSeed", feeds: "Snag items (seed / UI)" },
-  { names: ["Communication Matrix_BPCL (2).xlsx"], status: "out_of_scope", importer: "bpclMatrixSeed", feeds: "BPCL CRM — not Arvind week" },
+  { names: ["Communication Matrix_BPCL (2).xlsx", "Communication Matrix_BPCL (1).xlsx", "Communication-Matrix-BPCL.xlsx"], status: "out_of_scope", importer: "bpclMatrixSeed", feeds: "BPCL CRM — not Arvind week" },
   { names: ["Data - July 2026.xlsx"], status: "out_of_scope", importer: "crm/leads/import", feeds: "CRM leads" },
   { names: ["SPDC_CTC_Structure_Calculator.xlsx"], status: "out_of_scope", importer: "HRMS", feeds: "HRMS CTC" },
   { names: ["SPDC_Letter_of_Appointment.docx"], status: "out_of_scope", importer: "HRMS", feeds: "HRMS appointment" },

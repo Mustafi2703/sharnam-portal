@@ -201,7 +201,7 @@ async function attachDirectorySigns(projectId: string, extras: DprExtras): Promi
 
 dprMakerRouter.get("/:projectId", async (req, res) => {
   const projectId = req.params.projectId;
-  const logDate = parseDate(req.query.date);
+  const logDate = parseDate(req.query.date ?? req.query.logDate);
   const discipline = normDiscipline(req.query.discipline);
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -359,7 +359,17 @@ dprMakerRouter.post("/:projectId/save", requireRoles("admin", "office", "employe
   if (!project) return res.status(404).json({ error: "project not found" });
   const logDate = parseDate(req.body.logDate);
   const discipline = normDiscipline(req.body.discipline);
-  const header: DprHeader = req.body.header || {};
+  // Fields the request leaves out keep the project card's values (a save never blanks the report header).
+  const header: DprHeader = {
+    projectName: project.name,
+    projectManager: project.designConsultant || "",
+    contractor: project.contractorName || "",
+    location: project.location || "",
+    contractCompletion: project.endDate ? project.endDate.toISOString() : null,
+    reportDate: logDate.toISOString(),
+    dataDate: logDate.toISOString(),
+    ...(req.body.header && typeof req.body.header === "object" ? req.body.header : {}),
+  };
   const lines: DprLine[] = Array.isArray(req.body.lines) ? req.body.lines : [];
   const extras: DprExtras = {
     manpower:     Array.isArray(req.body.manpower)     ? req.body.manpower     : [],
@@ -547,7 +557,7 @@ dprMakerRouter.get("/:projectId/download.xlsx", async (req, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
-  const logDate = parseDate(req.query.date);
+  const logDate = parseDate(req.query.date ?? req.query.logDate);
   const discipline = normDiscipline(req.query.discipline);
 
   const { header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);
@@ -585,7 +595,7 @@ dprMakerRouter.get("/:projectId/download.html", async (req, res) => {
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return res.status(404).json({ error: "project not found" });
-  const logDate = parseDate(req.query.date);
+  const logDate = parseDate(req.query.date ?? req.query.logDate);
   const discipline = normDiscipline(req.query.discipline);
 
   const { existing, header, extras, lines } = await loadFullSnapshot(project, projectId, logDate, discipline);

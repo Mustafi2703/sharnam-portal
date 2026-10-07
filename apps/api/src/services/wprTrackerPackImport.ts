@@ -7,6 +7,7 @@ import path from "path";
 import type { PrismaClient } from "@prisma/client";
 import XLSX from "../lib/xlsx.js";
 import type { WorkBook } from "../lib/xlsx.js";
+import { findWorkbook } from "../lib/excelRoot.js";
 
 function searchRoots(): string[] {
   return [process.cwd(), path.resolve(process.cwd(), ".."), path.resolve(process.cwd(), "../..")];
@@ -131,6 +132,7 @@ export type WprTrackerImportResult = {
   risks: number;
   legalApprovals: number;
   manpower: number;
+  safetyOpening?: number;
   cashflow: number;
   activityLines: number;
   cubeTests: number;
@@ -330,6 +332,29 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
       }
     }
 
+    // HSE Statistic "Up to Previous Week (PW)" → safety opening balance as of the day before the report week,
+    // so safe man-hours / man-days keep running on from the client's figures once daily safety logs start.
+    const hseRows = sheetRows(wb, /HSE Statistic/i);
+    const pvaTitle = String(
+      sheetRows(wb, /Planned Vs Actual/i)
+        .slice(0, 6)
+        .flat()
+        .find((c) => /date\s*:/i.test(String(c))) ?? ""
+    );
+    const weekFrom = pvaTitle.match(/(\d{1,2})-(\d{1,2})-(\d{4})\s*to/i);
+    const pwOf = (re: RegExp) => num((hseRows.find((r) => re.test(str(r[1]))) || [])[2]);
+    if (weekFrom && hseRows.length) {
+      const asOf = new Date(Number(weekFrom[3]), Number(weekFrom[2]) - 1, Number(weekFrom[1]) - 1);
+      const data = {
+        asOf,
+        safeManHours: pwOf(/safe-?\s*man-?\s*hours/i),
+        safeManDays: Math.round(pwOf(/safe-?\s*man-?\s*days/i)),
+        source: path.basename(wprPath),
+      };
+      await prisma.safetyOpeningBalance.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
+      out.safetyOpening = data.safeManHours;
+    }
+
     const manRows = sheetRows(wb, /Weekly Manpower/i);
     if (manRows.length > 1) {
       await prisma.progressManpower.deleteMany({ where: { projectId } });
@@ -412,7 +437,8 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
       let lastTower = "";
       for (const row of pvaRows.slice(3)) {
         const activity = str(row[2]);
-        if (!activity) continue;
+        // Skip blank rows and the sheet's own column-header row ("Sr.No. | Tower | Activity …").
+        if (!activity || /^activity$/i.test(activity) || /^tower$/i.test(str(row[1]))) continue;
         const tower = str(row[1]) || lastTower;
         if (str(row[1])) lastTower = str(row[1]);
         const gfc = num(row[7]);
@@ -473,9 +499,13 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
   out.purchaseRequisitions = prCounts.purchaseRequisitions;
   out.invoiceTrackers = prCounts.invoiceTrackers;
 
-  const matFile = findWorkbookFile(dir, /Site Materials/i);
-  if (matFile) {
-    const rows = readSheetRows(path.join(dir, matFile));
+  // Client file first (Site Materials-52.xls), then the bundled template copy (Site-Materials-Template.xls).
+  const matTemplate = findWorkbookFile(dir, /Site[\s_-]*Materials/i);
+  const matPath =
+    findWorkbook(["Site Materials-52.xls", "Site Materials-52.xlsx", "Site Materials.xls", "Site Materials.xlsx"]) ||
+    (matTemplate ? path.join(dir, matTemplate) : "");
+  if (matPath) {
+    const rows = readSheetRows(matPath);
     await prisma.siteMaterialStock.deleteMany({ where: { projectId } });
     let sr = 0;
     for (const row of rows.slice(1)) {

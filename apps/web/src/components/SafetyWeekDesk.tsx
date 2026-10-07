@@ -335,6 +335,64 @@ export function SafetyWeekDesk({ projectId, showLog = true }: { projectId: strin
           </div>
         </Card>
       )}
+      <SafetyOpeningBalanceCard projectId={projectId} canEdit={canDelete} />
     </div>
+  );
+}
+
+/**
+ * Safe man-hours / man-days before the portal (the client's HSE Statistic "Up to previous week").
+ * Added to the daily log totals from the as-of date, so cumulative figures in the DPR, WPR and
+ * Safety Dashboard carry on from the client's numbers.
+ */
+function SafetyOpeningBalanceCard({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
+  const { token } = useAuth();
+  const [form, setForm] = useState({ asOf: "", safeManHours: "", safeManDays: "" });
+  const [saved, setSaved] = useState<string>("");
+  useEffect(() => {
+    api<{ asOf: string; safeManHours: number; safeManDays: number } | null>(`/api/safety/project/${projectId}/opening-balance`, { token })
+      .then((row) => {
+        if (row) setForm({ asOf: String(row.asOf).slice(0, 10), safeManHours: String(row.safeManHours), safeManDays: String(row.safeManDays) });
+      })
+      .catch(() => undefined);
+  }, [projectId, token]);
+  const save = async () => {
+    try {
+      await api(`/api/safety/project/${projectId}/opening-balance`, { method: "PUT", token, body: JSON.stringify(form) });
+      setSaved("Saved — cumulative figures now include this balance.");
+    } catch (err) {
+      setSaved(err instanceof Error ? err.message : "Could not save");
+    }
+  };
+  const input = "w-full rounded border border-line bg-white px-2 py-1 text-sm tabular-nums";
+  return (
+    <Card>
+      <div className="space-y-2 p-1">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">Opening balance · before the portal</p>
+        <p className="text-xs text-steel-muted">
+          Safe man-hours and safe man-days up to a date (client HSE Statistic, "Up to previous week"). Daily logs after that date add on.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-end">
+          <label className="text-xs text-steel-muted">
+            Up to (date)
+            <input type="date" className={input} disabled={!canEdit} value={form.asOf} onChange={(e) => setForm({ ...form, asOf: e.target.value })} />
+          </label>
+          <label className="text-xs text-steel-muted">
+            Safe man-hours
+            <input type="number" min={0} className={input} disabled={!canEdit} value={form.safeManHours} onChange={(e) => setForm({ ...form, safeManHours: e.target.value })} />
+          </label>
+          <label className="text-xs text-steel-muted">
+            Safe man-days
+            <input type="number" min={0} className={input} disabled={!canEdit} value={form.safeManDays} onChange={(e) => setForm({ ...form, safeManDays: e.target.value })} />
+          </label>
+          {canEdit && (
+            <Button type="button" className="!text-xs !py-1.5" disabled={!form.asOf} onClick={() => void save()}>
+              Save opening balance
+            </Button>
+          )}
+        </div>
+        {saved && <p className="text-xs text-steel-muted">{saved}</p>}
+      </div>
+    </Card>
   );
 }

@@ -255,6 +255,11 @@ export function parsePlannedActualDashboard(buffer: Buffer): ParsedPlannedActual
   };
 }
 
+/** Column-header rows ("Tower | Activity | Unit") repeated inside client sheets are not activities. */
+function isHeaderLine(line: ParsedPlannedActual["activityLines"][number]) {
+  return /^activity$/i.test(String(line.activity || "").trim()) || /^tower$/i.test(String(line.tower || "").trim());
+}
+
 function activityKey(line: ParsedPlannedActual["activityLines"][number]) {
   return line.activity.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -264,6 +269,8 @@ function mergeActivityLines(
   pva: ParsedPlannedActual["activityLines"],
   draw: ParsedPlannedActual["activityLines"]
 ): ParsedPlannedActual["activityLines"] {
+  pva = pva.filter((l) => !isHeaderLine(l));
+  draw = draw.filter((l) => !isHeaderLine(l));
   if (!pva.length) return draw;
   if (!draw.length) return pva;
   const byActivity = new Map<string, ParsedPlannedActual["activityLines"][number]>();

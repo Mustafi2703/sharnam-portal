@@ -5,6 +5,8 @@ import { RegisterEntryModal } from "./RegisterEntryModal";
 import { ReferenceSheetToolbar } from "./ReferenceSheetToolbar";
 import { ToolLink } from "./ToolLink";
 import { StatusNote } from "./StatusNote";
+import { downloadAuthFile } from "../lib/downloadReport";
+import { saveExportToSharePoint } from "../lib/saveExport";
 
 type Tab = "value" | "procurement" | "pr" | "invoice" | "materials" | "quality";
 
@@ -415,6 +417,31 @@ export function WprTrackerRegisters({
         canEdit={canEdit}
         onAddRow={canEdit ? openAdd : undefined}
         addRowLabel={`+ Add ${TITLE[sub].toLowerCase()}`}
+        {...(sub === "pr" || sub === "invoice"
+          ? {
+              // PR Tracker + Invoice Processing Tracker — one branded workbook (client column order, charts).
+              onDownloadXlsx: () =>
+                void downloadAuthFile(`/api/finance/${projectId}/pr-tracker/download.xlsx`, token ?? null, "PR-Invoice-Tracker.xlsx").catch((e) =>
+                  setMsg(e instanceof Error ? e.message : "Download failed")
+                ),
+              onPublishSharePoint: canEdit
+                ? async () => {
+                    try {
+                      setMsg(
+                        await saveExportToSharePoint(
+                          projectId,
+                          token ?? null,
+                          `/api/finance/${projectId}/pr-tracker/download.xlsx`,
+                          sub === "pr" ? "prTracker" : "invoiceTracker"
+                        )
+                      );
+                    } catch (e) {
+                      setMsg(e instanceof Error ? e.message : "Save to SharePoint failed");
+                    }
+                  }
+                : undefined,
+            }
+          : {})}
       />
 
       <div className="flex flex-wrap gap-1.5">

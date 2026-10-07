@@ -34,6 +34,7 @@ import type {
   DprSafety,
   DprSafetyRow,
 } from "./dprXlsx.js";
+import { dprLineKey } from "./dprXlsx.js";
 
 /** Cost monitoring package names from SPDC_Budget_Arvind (see seed/costFromBudget.ts). */
 const DISCIPLINE_PACKAGES: Record<string, string[]> = {
@@ -53,6 +54,14 @@ export function disciplinePackages(discipline: string): string[] {
 /** Primary package label (for logging / UI). */
 export function disciplinePackage(discipline: string): string {
   return disciplinePackages(discipline)[0];
+}
+
+/**
+ * One BOQ line across days: description + unit + rate. The client BOQ repeats short descriptions
+ * ("-do PL to G.F. Slab") under different parent items (RCC m³ @5400, shuttering m² @430 …).
+ */
+function lineKey(description: string, unit?: string | null, rate?: number | null) {
+  return dprLineKey({ description, unit, rate });
 }
 
 function norm(s: string) {
@@ -105,6 +114,8 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
   const lineCum = new Map<string, number>();
   /** Running cumulative on the latest prior DPR (its cum prev + qty today) — the next day continues from here. */
   const lastCum = new Map<string, number>();
+  /** Planned start / finish last entered for a line — carried to the next day's DPR. */
+  const lastDates = new Map<string, { start?: string | null; finish?: string | null }>();
 
   for (const snap of prior) {
     const { header, extras } = splitHeaderJson(snap.headerJson);
@@ -113,13 +124,14 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
 
     const lines: DprLine[] = JSON.parse(snap.linesJson || "[]");
     for (const ln of lines) {
-      const key = norm(ln.description || "");
+      const key = lineKey(ln.description || "", ln.unit, ln.rate);
       lineCum.set(key, (lineCum.get(key) || 0) + Number(ln.qtyToday || 0));
       lastCum.set(key, Number(ln.cumQtyPrev || 0) + Number(ln.qtyToday || 0));
+      if (ln.start || ln.finish) lastDates.set(key, { start: ln.start, finish: ln.finish });
     }
   }
 
-  return { lineCum, lastCum, cumManDays, cumSafeHours, priorCount: prior.length };
+  return { lineCum, lastCum, lastDates, cumManDays, cumSafeHours, priorCount: prior.length };
 }
 
 function splitHeaderJson(headerJson: string | null) {
@@ -255,8 +267,8 @@ export async function buildDprAutoFill(
 
   // Suggest a day's qty from the register's weekly actual only before a line has any DPR history;
   // after that the site enters actuals, so stale register figures never pile into the cumulative.
-  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number, description: string) {
-    if (prev.lastCum.has(norm(description))) return 0;
+  function dailyQtyFromProgress(weeklyActual: number | null | undefined, remaining: number, key: string) {
+    if (prev.lastCum.has(key)) return 0;
     const wa = Number(weeklyActual || 0);
     if (wa <= 0) return 0;
     const suggested = Math.round((wa / 6) * 1000) / 1000;
@@ -286,15 +298,16 @@ export async function buildDprAutoFill(
             .filter((m) => fuzzyMatch(m.description, r.description))
             .reduce((s, m) => s + (m.qty || 0), 0);
           // Continue yesterday's running total; the register / MB figure only seeds the first DPR of a line.
-          const dprCum = prev.lineCum.get(norm(r.description)) || 0;
-          const cumQtyPrev = prev.lastCum.get(norm(r.description)) ?? Math.max(r.achievedQty || 0, mbQty, dprCum);
+          const key = lineKey(r.description, r.uom || act?.unit, r.rate);
+          const dprCum = prev.lineCum.get(key) || 0;
+          const cumQtyPrev = prev.lastCum.get(key) ?? Math.max(r.achievedQty || 0, mbQty, dprCum);
           const scopeQty = r.boqQty || r.gfcQty || act?.boqQty || 0;
           const remaining = Math.max(0, scopeQty - cumQtyPrev);
           const plannedHint = act?.weeklyPlanned ?? act?.boqQty;
           const weeklyPlanned = Number(act?.weeklyPlanned || 0);
           const plannedQtyToday =
             weeklyPlanned > 0 ? Math.round((weeklyPlanned / 6) * 1000) / 1000 : 0;
-          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining, r.description);
+          const qtyToday = dailyQtyFromProgress(act?.weeklyActual, remaining, key);
           return {
             srNo: undefined,
             group: r.section || act?.tower || undefined,
@@ -318,11 +331,11 @@ export async function buildDprAutoFill(
           .filter((a) => Number(a.weeklyActual || 0) > 0 || Number(a.weeklyPlanned || 0) > 0)
           .slice(0, 25)
           .map((a) => {
-            const cumQtyPrev =
-              prev.lastCum.get(norm(a.activity)) ?? (a.cumulativeQty || a.executedQty || prev.lineCum.get(norm(a.activity)) || 0);
+            const key = lineKey(a.activity, a.unit, 0);
+            const cumQtyPrev = prev.lastCum.get(key) ?? (a.cumulativeQty || a.executedQty || prev.lineCum.get(key) || 0);
             const scopeQty = a.boqQty || a.gfcQty || 0;
             const remaining = Math.max(0, scopeQty - cumQtyPrev);
-            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining, a.activity);
+            const qtyToday = dailyQtyFromProgress(a.weeklyActual, remaining, key);
             return {
               group: a.tower || undefined,
               description: a.activity,
@@ -338,6 +351,13 @@ export async function buildDprAutoFill(
     sources.push("Progress weekly actual → qty today");
   }
 
+  // Planned dates the site already set on an earlier DPR win over every default.
+  for (const ln of lines) {
+    const kept = prev.lastDates.get(lineKey(ln.description, ln.unit, ln.rate));
+    if (kept?.start) ln.start = kept.start;
+    if (kept?.finish) ln.finish = kept.finish;
+  }
+
   try {
     const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
     const ms = await loadMsProjectSummary(projectId);
@@ -351,6 +371,19 @@ export async function buildDprAutoFill(
     }
   } catch {
     /* MS Project schedule optional */
+  }
+
+  // Still no planned dates: the project window (start → contract completion), so the S-curve has a planned
+  // line from day one. The site refines dates per line on the DPR; those carry forward from then on.
+  const projectWindow = await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true, endDate: true } });
+  const firstDpr = projectWindow?.startDate
+    ? null
+    : await prisma.dprSnapshot.findFirst({ where: { projectId }, orderBy: { logDate: "asc" }, select: { logDate: true } });
+  const pStart = (projectWindow?.startDate ?? firstDpr?.logDate ?? logDate).toISOString().slice(0, 10);
+  const pEnd = projectWindow?.endDate?.toISOString().slice(0, 10) ?? null;
+  for (const ln of lines) {
+    if (!ln.start && pStart) ln.start = pStart;
+    if (!ln.finish && pEnd) ln.finish = pEnd;
   }
 
   const bbsKg = bbsLines.reduce((s, b) => s + (b.weightKg || 0), 0);
@@ -396,7 +429,7 @@ export async function buildDprAutoFill(
   const safeManHoursToday = safetyLog?.logged
     ? safetyLog.safeManHours
     : manpower.reduce((s, m) => s + Number(m.actual || 0) * Number(m.hoursWorked || 8), 0);
-  if (safetyCum.daysLogged > 0) prev.cumSafeHours = safetyCum.safeManHours;
+  if (safetyCum.daysLogged > 0 || safetyCum.safeManHours > 0) prev.cumSafeHours = safetyCum.safeManHours;
 
   const safety: Partial<DprSafety> = {
     safeManHoursToday,
@@ -571,7 +604,8 @@ export async function buildDprAutoFill(
     monitoring.reduce((s, m) => s + (m.certifiedQty || 0) * (m.rate || 0), 0);
 
   const header: Partial<DprHeader> = {
-    acCertifiedToDate: acCertifiedToDateVal,
+    // DPR field and INPUT!B17 are ₹ lakh; finance figures are rupees.
+    acCertifiedToDate: Math.round((acCertifiedToDateVal / 100000) * 100) / 100,
     cumManDaysPrev: prev.cumManDays,
     cumSafeManHoursPrev: prev.cumSafeHours,
   };

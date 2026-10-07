@@ -16,6 +16,8 @@ import { type WorkSheet } from "../../lib/xlsx.js";
 import { prisma } from "../../prisma.js";
 import { sharnamLogoPath } from "../../services/brandedExport.js";
 import { detachSharedStyles } from "../../lib/excelTemplate.js";
+import { findWorkbook } from "../../lib/excelRoot.js";
+import { copDefaultsForRa, copLineHistory, panFromGstin, type CopDefaults, type CopLines } from "./copDefaults.js";
 
 const ISO_COP_FOLDER = "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification";
 
@@ -30,7 +32,8 @@ export function resolveViatrixCopTemplatePath(): string | null {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return null;
+  // Same search as every other client workbook, independent of the working directory.
+  return findWorkbook(["Viatrix_RA BILL_COP.xlsm", "Viatrix_RA BILL_COP.xlsx"]);
 }
 
 function dateToExcelSerial(d: Date | null | undefined): number | "" {
@@ -45,7 +48,7 @@ function fmtInvoiceDate(d: Date | null | undefined) {
 }
 
 function setCell(ws: WorkSheet, addr: string, value: string | number) {
-  if (value === "" || value === null || value === undefined) return;
+  if (value === null || value === undefined) return;
   ws[addr] = { t: typeof value === "number" ? "n" : "s", v: value };
 }
 
@@ -96,91 +99,78 @@ async function loadCopBundle(copId: string) {
   return cop;
 }
 
-/** Fill one worksheet (Viatrix layout) from COP + linked RA/PO. */
-function fillViatrixSheet(ws: WorkSheet, cop: CopBundle) {
+type CopHistory = Awaited<ReturnType<typeof copLineHistory>>;
+
+/**
+ * Fill the Viatrix certificate (sheet "02"). Labels sit in B:C and F; values in D (merged D:E) and G.
+ * Amount rows: E = previous bills, F = this bill, G = cumulative; D = remarks. Totals are written as
+ * values (not left as template formulas) so every viewer shows them without recalculating.
+ */
+function fillViatrixSheet(ws: WorkSheet, cop: CopBundle, d: CopDefaults | null, h: CopHistory) {
   const po = cop.purchaseOrder;
   const ra = cop.raBill;
-  const contractor = cop.contractor || po?.vendorName || "Contractor";
-  const workTrade = cop.workTrade || po?.workTrade || "Civil Packages";
-  const certType =
-    cop.certificateType ||
-    (ra ? `Against - ${ra.raNumber}` : "Against - RA");
+  const contractor = cop.contractor || d?.contractor || po?.vendorName || "Contractor";
   const poText =
     cop.poNumberDate ||
-    (po ? `${po.poNumber}${po.poDate ? ` dt ${fmtInvoiceDate(po.poDate)}` : ""}` : "");
+    (po ? `${po.poNumber}${po.poDate ? ` dt ${fmtInvoiceDate(po.poDate)}` : ""}` : d?.poNumberDate || "");
   const invoiceText =
-    cop.invoiceNoDate ||
-    (ra
-      ? `${ra.invoiceNumber || ra.raNumber}${ra.invoiceDate ? ` , ${fmtInvoiceDate(ra.invoiceDate)}` : ""}`
-      : "");
+    cop.invoiceNoDate && cop.invoiceNoDate !== ra?.invoiceNumber ? cop.invoiceNoDate : d?.invoiceNoDate || cop.invoiceNoDate || "";
+  const gstNo = cop.gstNumber || po?.gstNumber || d?.gstNumber || "";
 
-  const against = ra?.againstBillRaised ?? cop.amountCertified;
-  const priceVar = ra?.priceVariation ?? 0;
-  const totalWithoutGst = ra?.totalInvoiceWithoutGst ?? cop.amountCertified;
-  const advanceAdj = ra?.advanceAdjusted ?? 0;
-  const withGst = ra?.totalInvoiceWithGst ?? cop.amountCertified + cop.gstAmount;
-  const retention = ra?.retentionAmount ?? cop.retentionAmount;
-  const gst = ra?.gstAmount ?? cop.gstAmount;
-  const netPayable = ra?.netAmountPayable ?? cop.amountPayable;
-  const prevCum = ra?.previousBillTotal ?? 0;
-  const cum = ra?.cumulativeBillTotal ?? totalWithoutGst;
-  const certifiedAfterRec = totalWithoutGst;
-  const afterRetention = Math.max(0, certifiedAfterRec - retention);
-  const totalWithGst = afterRetention + gst;
+  setCell(ws, "D6", contractor);
+  setCell(ws, "G6", cop.workTrade || d?.workTrade || po?.workTrade || "-");
+  const certType = cop.certificateType && !(ra && /^against\s*-\s*ra$/i.test(cop.certificateType.trim())) ? cop.certificateType : null;
+  setCell(ws, "D7", certType || d?.certificateType || (ra ? `Against - ${ra.raNumber}` : "Against - RA"));
+  setCell(ws, "G7", cop.certificateNumber);
+  setCell(ws, "D8", cop.budgetCode || po?.budgetCode || d?.budgetCode || "-");
+  setCell(ws, "G8", dateToExcelSerial(cop.certificateDate || cop.createdAt));
+  setCell(ws, "D9", poText || "-");
+  setCell(ws, "G9", cop.payableTo || po?.payableTo || d?.payableTo || contractor);
+  setCell(ws, "D10", cop.originalWoValue || po?.originalValue || d?.originalWoValue || "-");
+  setCell(ws, "G10", cop.panNumber || po?.panNumber || d?.panNumber || panFromGstin(gstNo) || "-");
+  setCell(ws, "D11", cop.amendmentNo || po?.amendmentNo || d?.amendmentNo || "-");
+  setCell(ws, "G11", gstNo || "-");
+  setCell(ws, "D12", cop.amendedWoValue || po?.amendedValue || d?.amendedWoValue || "-");
+  setCell(ws, "G12", invoiceText || "-");
 
-  setCell(ws, "C6", contractor);
-  setCell(ws, "F6", workTrade);
-  setCell(ws, "C7", certType);
-  setCell(ws, "F7", cop.certificateNumber);
-  setCell(ws, "C8", cop.budgetCode || "-");
-  setCell(ws, "F8", dateToExcelSerial(cop.certificateDate));
-  setCell(ws, "C9", poText);
-  setCell(ws, "F9", cop.payableTo || contractor);
-  setCell(ws, "C10", cop.originalWoValue || po?.originalValue || 0);
-  setCell(ws, "F10", cop.panNumber || po?.panNumber || "");
-  setCell(ws, "C11", cop.amendmentNo || po?.amendmentNo || "-");
-  setCell(ws, "F11", cop.gstNumber || po?.gstNumber || "");
-  setCell(ws, "C12", cop.amendedWoValue || po?.amendedValue || "-");
-  setCell(ws, "F12", invoiceText);
+  // Certified to date (excl. GST, after recoveries) — previous, now, total.
+  setCell(ws, "D13", h.previous.totalB);
+  setCell(ws, "D14", h.current.totalB);
+  setCell(ws, "D15", h.cumulative.totalB);
 
-  setCell(ws, "C14", netPayable);
-  setCell(ws, "C15", netPayable);
-
-  // Section A — amount raised
-  setCell(ws, "E17", against);
-  setCell(ws, "F17", against);
-
-  // Section B — certified
-  setCell(ws, "E21", against);
-  setCell(ws, "F21", against);
-  setCell(ws, "E24", priceVar);
-  setCell(ws, "F25", totalWithoutGst);
-
-  // Section C — recoveries / advance
-  setCell(ws, "E30", advanceAdj);
-  setCell(ws, "F32", advanceAdj);
-
-  // D = B - C
-  setCell(ws, "E35", certifiedAfterRec);
-  setCell(ws, "F35", certifiedAfterRec);
-
-  // E retention
-  setCell(ws, "E37", retention);
-  setCell(ws, "F39", retention);
-
-  // F after retention
-  setCell(ws, "E41", afterRetention);
-  setCell(ws, "F41", afterRetention);
-
-  // G GST
-  setCell(ws, "E43", gst);
-  setCell(ws, "F44", gst);
-
-  // H net payable
-  setCell(ws, "E47", netPayable);
-  setCell(ws, "F47", netPayable);
-
-  setCell(ws, "B48", amountInWordsInr(netPayable));
+  const rows: [number, keyof CopLines][] = [
+    [17, "raised"],
+    [18, "raised"],
+    [21, "against"],
+    [22, "extra"],
+    [23, "securedAdvance"],
+    [24, "priceVariation"],
+    [25, "totalB"],
+    [28, "recoveries"],
+    [29, "mobilisationAdvance"],
+    [30, "adhoc"],
+    [31, "other"],
+    [32, "totalC"],
+    [35, "totalD"],
+    [37, "retention"],
+    [39, "totalE"],
+    [41, "totalF"],
+    [43, "gst"],
+    [44, "totalG"],
+    [47, "totalH"],
+  ];
+  for (const [r, k] of rows) {
+    setCell(ws, `E${r}`, h.previous[k]);
+    setCell(ws, `F${r}`, h.current[k]);
+    setCell(ws, `G${r}`, h.cumulative[k]);
+  }
+  const base = h.current.totalB;
+  const pct = (n: number) => (base ? `${Math.round((n / base) * 1000) / 10}% of certified` : "");
+  setCell(ws, "D17", ra ? `Raised · ${ra.raNumber}` : "Raised");
+  setCell(ws, "D30", "");
+  setCell(ws, "D37", pct(h.current.retention));
+  setCell(ws, "D43", pct(h.current.gst));
+  setCell(ws, "D48", amountInWordsInr(h.current.totalH));
 }
 
 /**
@@ -331,15 +321,36 @@ export async function buildViatrixCopWorkbook(copId: string): Promise<{ buffer: 
   // values into ExcelJS.  This preserves the original layout without having
   // to duplicate every setCell mapping in ExcelJS terms.
   const proxy: WorkSheet = {};
-  fillViatrixSheet(proxy, cop);
+  const defaults = cop.raBillId ? await copDefaultsForRa(prisma, cop.projectId, cop.raBillId) : null;
+  fillViatrixSheet(proxy, cop, defaults, await copLineHistory(prisma, cop));
   for (const key of Object.keys(proxy)) {
     if (key.startsWith("!")) continue;
     const cell = proxy[key] as { t?: string; v?: string | number };
     if (cell?.v !== undefined && cell?.v !== null) {
       const target = ws.getCell(key);
-      target.value = typeof cell.v === "number" ? cell.v : String(cell.v);
+      target.value = typeof cell.v === "number" ? cell.v : String(cell.v) || null;
     }
   }
+
+  // Certificate date is written as an Excel serial — show it as a date.
+  ws.getCell("G8").numFmt = "dd-mmm-yyyy";
+  ws.getCell("H32").value = null; // template scratch formula beside the certificate
+  // Template sample cells carry their own fonts / alignment — match the other value cells.
+  const valueStyle = ws.getCell("D8");
+  ws.getCell("D9").font = { ...valueStyle.font };
+  ws.getCell("D9").alignment = { ...valueStyle.alignment };
+  for (const addr of ["D37", "D43"]) ws.getCell(addr).font = { ...valueStyle.font, italic: true };
+  const amountFont = ws.getCell("E21").font;
+  for (let r = 17; r <= 47; r++) {
+    if (ws.getCell(`E${r}`).value == null) continue;
+    const bold = [18, 25, 32, 35, 39, 41, 44, 47].includes(r);
+    for (const c of ["E", "F", "G"]) {
+      ws.getCell(`${c}${r}`).font = { ...amountFont, bold };
+      ws.getCell(`${c}${r}`).alignment = { horizontal: "right", vertical: "middle" };
+    }
+  }
+  for (const addr of ["D10", "D12", "D13", "D14", "D15"]) ws.getCell(addr).numFmt = "#,##,##0.00";
+  for (let r = 17; r <= 47; r++) for (const c of ["E", "F", "G"]) if (ws.getCell(`${c}${r}`).value != null) ws.getCell(`${c}${r}`).numFmt = "#,##,##0.00";
 
   await applySharnamLetterhead(wb, ws, cop);
 

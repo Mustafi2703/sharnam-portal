@@ -13,7 +13,20 @@ import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
 import { seedWprSections } from "./wprSeedSections.js";
 
-/** Snap to the Sunday ending the week that contains `d`. */
+/**
+ * End of the chosen report day (23:59:59.999 local). The week-ending day is whatever the project reports on
+ * (Arvind: Thursday–Wednesday), so it is not moved to a Sunday. "YYYY-MM-DD" strings are read as local dates.
+ */
+export function weekEndingOf(d: Date | string): Date {
+  const out =
+    typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())
+      ? new Date(`${d.trim()}T00:00:00`)
+      : new Date(d);
+  out.setHours(23, 59, 59, 999);
+  return out;
+}
+
+/** Snap to the Sunday ending the week that contains `d` (demo seeds that build Mon–Sun weeks). */
 export function snapWeekEnding(d: Date): Date {
   const out = new Date(d);
   out.setHours(23, 59, 59, 999);
@@ -90,7 +103,7 @@ export async function publishExistingWpr(
     snapshotId?: string;
   }
 ) {
-  const weekEnd = snapWeekEnding(weekEndRaw);
+  const weekEnd = weekEndingOf(weekEndRaw);
   const weekStart = new Date(weekEnd);
   weekStart.setDate(weekEnd.getDate() - 6);
   weekStart.setHours(0, 0, 0, 0);

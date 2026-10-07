@@ -273,7 +273,7 @@ export async function syncLegalFromTemplate(projectId: string, opts?: { force?: 
 import { isContentLessonRow } from "./lessonLearntUtils.js";
 
 export function resolveLessonsPath() {
-  return firstExisting(resolveExcelRoot(), ["Lessons Learnt - Sharnam PMC.xls", "Lessons Learnt - Sharnam PMC.xlsx"]);
+  return findWorkbook(["Lessons Learnt - Sharnam PMC.xls", "Lessons Learnt - Sharnam PMC.xlsx"]);
 }
 
 /** Timeline cells from Progress Overview.xlsx · Dashboard — values as stored in the pack. */
@@ -358,5 +358,8 @@ export async function syncProgressRegisterPack(projectId: string, opts?: { force
   const risk = await syncRiskFromTemplate(projectId, opts);
   const legal = await syncLegalFromTemplate(projectId, opts);
   const lessons = await syncLessonsFromTemplate(projectId, opts);
+  // Marks the project as carrying the client's Progress Overview pack (its dashboard band applies here).
+  const { audit } = await import("./audit.js");
+  await audit("progress.registers.pack", { entity: "project", entityId: projectId, meta: { source: resolveProgressOverviewPath() } });
   return { milestones, hindrance, risk, legal, lessons };
 }

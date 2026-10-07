@@ -221,6 +221,8 @@ export function buildSafetyNcrXlsxBuffer(
     status?: string | null;
     issuedTo?: string | null;
     occurredAt?: Date | string | null;
+    recordType?: string | null;
+    correctiveAction?: string | null;
   },
   project?: { name?: string; code?: string; clientName?: string | null }
 ) {
@@ -277,6 +279,46 @@ function setMergedRow(ws: ExcelJS.Worksheet, row: number, value: string) {
   } catch {
     /* merged */
   }
+}
+
+/** Fill the client's "Site Unsafe Act Report" (Safety NCR.xlsx sheet 2): value cells in column C, tick boxes in C beside options in D. */
+function fillUnsafeActSheet(
+  ws: ExcelJS.Worksheet,
+  row: Parameters<typeof buildSafetyNcrXlsxBuffer>[0],
+  project?: Parameters<typeof buildSafetyNcrXlsxBuffer>[1]
+) {
+  const put = (r: number, v: string) => setSafetyValue(ws, r, v);
+  const tick = (from: number, to: number, value: string | null | undefined, fallbackRow?: number) => {
+    const want = String(value || "").toLowerCase();
+    let hit = false;
+    for (let r = from; r <= to; r++) {
+      const label = String(ws.getRow(r).getCell(4).value ?? "").toLowerCase();
+      const on = !!want && !!label && (want.includes(label.split(":")[0].trim()) || label.includes(want));
+      ws.getRow(r).getCell(3).value = on;
+      hit ||= on;
+    }
+    if (!hit && fallbackRow && want) ws.getRow(fallbackRow).getCell(3).value = true;
+  };
+  put(2, project?.name || project?.code || "");
+  put(3, project?.clientName || "");
+  put(4, SPDC_PMC_NAME);
+  put(5, SPDC_PMC_NAME);
+  put(6, row.issuedTo || row.responsibleParty || "");
+  put(7, row.ncrNumber || row.title || "");
+  tick(10, 15, row.category || row.activityTask, 15);
+  put(16, row.description || row.title || "");
+  put(17, row.location || "");
+  put(19, row.immediateAction || row.correctiveAction || "");
+  put(20, row.responsibleParty || "");
+  put(21, "");
+  put(22, "");
+  tick(24, 26, row.severity);
+  put(27, [row.timeImpact, row.costImpact].filter(Boolean).join(" · "));
+  put(28, row.longTermAction || row.correctiveAction || "");
+  put(29, row.responsibleParty || "");
+  put(30, fmtDate(row.targetCompletion));
+  put(32, fmtDate(row.followUpDate));
+  tick(33, 35, row.status || "Open");
 }
 
 function setSafetyValue(ws: ExcelJS.Worksheet, row: number, value: string) {
@@ -489,6 +531,15 @@ export async function buildSafetyNcrXlsxFromTemplate(
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(tpl);
   detachSharedStyles(wb);
+  // The template carries two forms: NCR (sheet 1) and "Observation - Unsafe Act" (sheet 2, with the client's
+  // sample report filled in). Keep only the form this record is, so no sample text reaches the export.
+  const unsafeSheet = wb.worksheets.find((w) => /unsafe/i.test(w.name));
+  if (unsafeSheet && /unsafe|observation/i.test(row.recordType || "")) {
+    fillUnsafeActSheet(unsafeSheet, row, project);
+    for (const w of [...wb.worksheets]) if (w !== unsafeSheet) wb.removeWorksheet(w.id);
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+  if (unsafeSheet) wb.removeWorksheet(unsafeSheet.id);
   const ws = wb.worksheets[0];
 
   setSafetyValue(ws, 2, project?.name || project?.code || "");

@@ -13,6 +13,9 @@ import { FinanceBillRegister } from "../components/FinanceBillRegister";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
 import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
 import { CopDocumentSlots } from "../components/CopDocumentSlots";
+import { WorkOrderCard } from "../components/WorkOrderCard";
+import { RaFromBoqCard } from "../components/RaFromBoqCard";
+import { SaveToSharePointButton } from "../../../components/SaveToSharePointButton";
 import { api } from "../../../api";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { useAuth } from "../../../auth";
@@ -558,7 +561,11 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
         netAmountPayable: "",
       });
       setFiles([]);
-      setMsg("RA bill added — documents filed in 09.01/RA folder.");
+      setMsg(
+        vendorMode
+          ? "RA bill submitted — PMC will check (Corrected) and certify it before the COP is generated."
+          : "RA bill added — the first workbook is filed as the Submission (09.01/RA folder)."
+      );
       await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add failed");
@@ -599,9 +606,27 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
           </Link>
         </Card>
       )}
-      {canWrite && (!activePkg || activePkg.billKind === "ra") && (
+      {canWrite && !vendorMode && (!activePkg || activePkg.billKind === "ra") && (
+        <RaFromBoqCard
+          projectId={projectId}
+          token={token}
+          disciplines={[...new Set<string>(FINANCE_PACKAGES.map((p) => p.discipline))]}
+          vendorNames={[...new Set<string>(ras.map((r: any) => r.vendorName).filter(Boolean))]}
+          reload={reload}
+          setMsg={setMsg}
+        />
+      )}
+      {(canWrite || vendorMode) && (!activePkg || activePkg.billKind === "ra") && (
         <Card id="add-ra-form">
-          <h3 className="font-semibold text-sm mb-2">Add RA Bill {activePkg ? `· ${activePkg.label}` : ""}</h3>
+          <h3 className="font-semibold text-sm mb-2">
+            {vendorMode ? "Raise RA bill (stage 1 · Submission)" : "Add RA Bill"} {activePkg ? `· ${activePkg.label}` : ""}
+          </h3>
+          {vendorMode && (
+            <p className="text-xs text-steel-muted mb-2">
+              Choose the discipline, enter the bill amounts and attach your RA bill workbook. PMC checks it (Corrected) and certifies it;
+              the COP is generated from the certified bill.
+            </p>
+          )}
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
             <Select
               value={form.packageKey}
@@ -617,7 +642,9 @@ function RaTab({ ras, canWrite, canUploadRa, vendorMode, reload, setMsg, project
             <Input placeholder="RA number (RA-01)" value={form.raNumber} onChange={(e) => setForm({ ...form, raNumber: e.target.value })} required />
             <Input placeholder="Invoice number" value={form.invoiceNumber} onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })} />
             <Input placeholder="Invoice date" type="date" value={form.invoiceDate} onChange={(e) => setForm({ ...form, invoiceDate: e.target.value })} />
-            <Input placeholder="Vendor name" value={form.vendorName} onChange={(e) => setForm({ ...form, vendorName: e.target.value })} />
+            {!vendorMode && (
+              <Input placeholder="Vendor name" value={form.vendorName} onChange={(e) => setForm({ ...form, vendorName: e.target.value })} />
+            )}
             <input type="hidden" name="discipline" value={form.discipline} />
             <Input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             <Input placeholder="Against bill raised" type="number" value={form.againstBillRaised} onChange={(e) => setForm({ ...form, againstBillRaised: e.target.value })} />
@@ -783,26 +810,34 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   const [bulkBusy, setBulkBusy] = useState(false);
 
   const linkedRa = form.raBillId ? filteredRas.find((r: any) => r.id === form.raBillId) : null;
-  const linkedRaCertified = linkedRa ? raHasCertifiedWorkbook(linkedRa) : true;
-  const canCreateCop = !form.raBillId || linkedRaCertified;
+  const linkedRaCertified = linkedRa ? raHasCertifiedWorkbook(linkedRa) : false;
+  // Stage 3: a COP is generated only from an RA bill that was submitted, checked and certified.
+  const canCreateCop = !!form.raBillId && linkedRaCertified;
+
+  // Picking a certified RA bill fills the certificate from it, its PO and the vendor master.
+  async function applyRaDefaults(raBillId: string) {
+    setForm((f) => ({ ...f, raBillId }));
+    if (!raBillId) return;
+    try {
+      const d = await api<Record<string, string | number>>(`/api/finance/${projectId}/cop/defaults?raBillId=${encodeURIComponent(raBillId)}`, { token });
+      setForm((f) => {
+        const next: Record<string, string> = { ...f, raBillId };
+        for (const k of Object.keys(f)) {
+          if (k === "raBillId" || k === "remarks" || d[k] == null || d[k] === "" || d[k] === 0) continue;
+          next[k] = String(d[k]);
+        }
+        return next as typeof f;
+      });
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not load RA bill details");
+    }
+  }
 
   useEffect(() => {
     if (!raBillIdPrefill) return;
-    const ra = filteredRas.find((r: any) => r.id === raBillIdPrefill);
-    if (!ra) return;
-    setForm((f) => ({
-      ...f,
-      raBillId: ra.id,
-      contractor: ra.vendorName || f.contractor,
-      workTrade: ra.discipline || f.workTrade,
-      invoiceNoDate: `${ra.raNumber}${ra.invoiceNumber ? ` · ${ra.invoiceNumber}` : ""}`,
-      amountCertified: String(ra.totalInvoiceWithoutGst ?? ra.againstBillRaised ?? ""),
-      amountPayable: String(ra.netAmountPayable ?? ""),
-      gstAmount: String(ra.gstAmount ?? ""),
-      retentionAmount: String(ra.retentionAmount ?? ""),
-      certificateNumber: f.certificateNumber || `01/N.K.INFRA/2025-26/${(ra.raNumber || "").replace("RA-", "")}`,
-    }));
-  }, [raBillIdPrefill, filteredRas]);
+    if (filteredRas.some((r: any) => r.id === raBillIdPrefill)) void applyRaDefaults(raBillIdPrefill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raBillIdPrefill, filteredRas.length]);
 
   async function updateCopStatus(copId: string, status: string) {
     setBusyId(copId);
@@ -837,7 +872,11 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
   async function add(e: FormEvent) {
     e.preventDefault();
     if (!canCreateCop) {
-      setMsg("Upload the Certified RA workbook before creating a COP for this bill.");
+      setMsg(
+        form.raBillId
+          ? "Upload the Certified RA workbook before creating a COP for this bill."
+          : "Pick the certified RA bill this COP is for — COPs are generated from Submitted → Checked → Certified bills."
+      );
       return;
     }
     try {
@@ -882,6 +921,13 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
           { label: "WPR pack", hint: "Dashboard + charts", href: `/projects/${projectId}/wpr-maker` },
         ]}
       />
+      <WorkOrderCard
+        projectId={projectId}
+        token={token}
+        canWrite={canWrite}
+        vendorNames={[...new Set<string>(ras.map((r: any) => r.vendorName).filter(Boolean))]}
+        setMsg={setMsg}
+      />
       {canWrite && (
         <Card id="add-cop-form">
           <h3 className="font-semibold text-sm mb-2">Certify a payment (COP)</h3>
@@ -892,6 +938,15 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
             </div>
           )}
           <form onSubmit={add} className="grid md:grid-cols-4 gap-2">
+            <Select className="md:col-span-4" value={form.raBillId} onChange={(e) => void applyRaDefaults(e.target.value)}>
+              <option value="">Certified RA bill (fills the certificate)</option>
+              {filteredRas.map((r: any) => (
+                <option key={r.id} value={r.id}>
+                  {r.raNumber} · {r.invoiceNumber || "no invoice"}
+                  {raHasCertifiedWorkbook(r) ? "" : " · Certified pending"}
+                </option>
+              ))}
+            </Select>
             <Input placeholder="Cert No. (01/N.K.INFRA/2025)" value={form.certificateNumber} onChange={(e) => setForm({ ...form, certificateNumber: e.target.value })} required />
             <Input placeholder="Cert type (Against - RA / Advance)" value={form.certificateType} onChange={(e) => setForm({ ...form, certificateType: e.target.value })} />
             <Input placeholder="Cert date" type="date" value={form.certificateDate} onChange={(e) => setForm({ ...form, certificateDate: e.target.value })} />
@@ -903,15 +958,6 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
             <Input placeholder="Amendment no." value={form.amendmentNo} onChange={(e) => setForm({ ...form, amendmentNo: e.target.value })} />
             <Input placeholder="Amended WO value" type="number" value={form.amendedWoValue} onChange={(e) => setForm({ ...form, amendedWoValue: e.target.value })} />
             <Input placeholder="Invoice No. & date" value={form.invoiceNoDate} onChange={(e) => setForm({ ...form, invoiceNoDate: e.target.value })} />
-            <Select value={form.raBillId} onChange={(e) => setForm({ ...form, raBillId: e.target.value })}>
-              <option value="">Link RA (optional)</option>
-              {filteredRas.map((r: any) => (
-                <option key={r.id} value={r.id}>
-                  {r.raNumber} · {r.invoiceNumber || "no invoice"}
-                  {raHasCertifiedWorkbook(r) ? "" : " · Certified pending"}
-                </option>
-              ))}
-            </Select>
             <Input placeholder="Amount certified" type="number" value={form.amountCertified} onChange={(e) => setForm({ ...form, amountCertified: e.target.value })} />
             <Input placeholder="Amount payable" type="number" value={form.amountPayable} onChange={(e) => setForm({ ...form, amountPayable: e.target.value })} />
             <Input placeholder="GST" type="number" value={form.gstAmount} onChange={(e) => setForm({ ...form, gstAmount: e.target.value })} />
@@ -924,7 +970,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
               Certificate PDF (optional)
               <input type="file" accept=".pdf,image/*" className="block mt-1 text-xs" onChange={(e) => setFile(e.target.files?.[0] || null)} />
             </label>
-            <Button type="submit" disabled={!canCreateCop} title={!canCreateCop ? "Certified RA workbook required" : undefined}>
+            <Button type="submit" disabled={!canCreateCop} title={!canCreateCop ? "Link a certified RA bill first" : undefined}>
               Create COP
             </Button>
           </form>
@@ -938,6 +984,28 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-steel-muted">{filteredCops.length} entries</span>
+            <Button
+              type="button"
+              className="!text-xs"
+              disabled={!filteredCops.length}
+              onClick={() =>
+                void downloadAuthFile(
+                  `/api/finance/${projectId}/cops/download.pdf${activePkg ? `?discipline=${activePkg.key}` : ""}`,
+                  token,
+                  `Sharnam-COPs${activePkg ? `-${activePkg.key}` : ""}.pdf`
+                ).catch((err) => setMsg(err instanceof Error ? err.message : "PDF failed"))
+              }
+            >
+              {activePkg ? `${activePkg.discipline} COPs (PDF)` : "All COPs (PDF)"}
+            </Button>
+            {canWrite && filteredCops.length > 0 && (
+              <SaveToSharePointButton
+                projectId={projectId}
+                path={`/api/finance/${projectId}/cops/download.pdf${activePkg ? `?discipline=${activePkg.key}` : ""}`}
+                module="finance"
+                label="COPs → SharePoint"
+              />
+            )}
             {canWrite && (
               <Button type="button" variant="secondary" className="!text-xs" disabled={bulkBusy} onClick={() => void uploadAllToDms()}>
                 {bulkBusy ? "Uploading…" : "Upload all COPs → DMS"}
@@ -953,6 +1021,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                 <th className="px-3 py-2.5">Type</th>
                 <th className="px-3 py-2.5">Date</th>
                 <th className="px-3 py-2.5">Contractor</th>
+                <th className="px-3 py-2.5">Discipline</th>
                 <th className="px-3 py-2.5">RA</th>
                 <th className="px-3 py-2.5 text-right">Certified</th>
                 <th className="px-3 py-2.5 text-right">Payable</th>
@@ -968,6 +1037,10 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                   <td className="py-3 px-3">{c.certificateType || "—"}</td>
                   <td className="py-3 px-3">{d(c.certificateDate)}</td>
                   <td className="py-3 px-3">{c.contractor}</td>
+                  <td className="py-3 px-3">
+                    <Badge tone="brand">{c.raBill?.discipline || c.workTrade || "—"}</Badge>
+                    {c.raBill?.boqPackage && <div className="text-[11px] text-steel-muted mt-1">BOQ · {c.raBill.boqPackage}</div>}
+                  </td>
                   <td className="py-3 px-3">{c.raBill?.raNumber || "—"}</td>
                   <td className="py-3 px-3 text-right tabular-nums">{money(c.amountCertified)}</td>
                   <td className="py-3 px-3 text-right tabular-nums font-semibold">{money(c.amountPayable)}</td>
@@ -991,6 +1064,20 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
                   </td>
                   <td className="py-3 px-3">
                     <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!py-1 !px-2 !text-[11px]"
+                        onClick={() =>
+                          void downloadAuthFile(
+                            `/api/finance/${projectId}/cop/${c.id}/download.pdf`,
+                            token,
+                            `Sharnam-COP-${String(c.certificateNumber).replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf`
+                          ).catch((err) => setMsg(err instanceof Error ? err.message : "PDF failed"))
+                        }
+                      >
+                        PDF
+                      </Button>
                       {canWrite && c.status === "Draft" && (
                         <Button type="button" className="!py-1 !px-2 !text-[11px]" disabled={busyId === c.id} onClick={() => void updateCopStatus(c.id, "Certified")}>
                           Certify
@@ -1012,7 +1099,7 @@ function CopTab({ cops, ras, canWrite, reload, setMsg, projectId, token, activeP
               ))}
               {!filteredCops.length && (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-steel-muted">
+                  <td colSpan={11} className="py-8 text-center text-steel-muted">
                     No COPs yet — upload RA workbooks, then create COP from linked RA bill.
                   </td>
                 </tr>

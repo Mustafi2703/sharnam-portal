@@ -128,6 +128,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   quality: [
     {
+      to: "actions",
+      label: "NCR / CAR to answer",
+      end: true,
+      roles: ["vendor"],
+      blurb: "Quality NCR / CAR issued to your company — root cause, corrective action, evidence.",
+    },
+    {
       to: "rfis",
       label: "Checklist fills & QI responses",
       end: true,
@@ -263,11 +270,11 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   safety: [
     {
-      to: "rfis",
+      to: "actions",
       label: "NCR & safety responses",
       end: true,
       roles: ["vendor"],
-      blurb: "Respond to safety NCRs and checklist fills assigned to your company.",
+      blurb: "Safety NCR / NCN / observations issued to your company — respond; PMC verifies and closes.",
     },
     { to: "safety", label: "Dashboard", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
     {
@@ -886,6 +893,12 @@ for (const key of Object.keys(MODULE_TOOLS) as (WorkspaceKey | "home")[]) {
   }));
 }
 
+MODULE_TOOLS.cost = MODULE_TOOLS.cost.map((t) => {
+  if (t.roles) return t;
+  const measurement = t.label === "BOQ / Monitoring" || /tab=(mb|bbs|bbs-master)(&|$)/.test(t.query || "");
+  return { ...t, roles: measurement ? ["admin", "office", "employee", "site_employee"] : ["admin", "office", "employee"] };
+});
+
 for (const key of Object.keys(MODULE_META) as WorkspaceKey[]) {
   MODULE_META[key].title = formatUiText(MODULE_META[key].title);
   MODULE_META[key].desc = formatUiText(MODULE_META[key].desc);
@@ -907,7 +920,8 @@ export const WORKSPACES: {
   if (key === "drawings") roles = ["admin", "office", "site_employee", "employee", "client"];
   if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "inspection") roles = ["admin", "office", "site_employee", "employee"];
-  if (key === "cost") roles = ["admin", "office", "employee"];
+  // Site employees enter measurements (BOQ achieved qty, MB, BBS); budget / cashflow / bills stay office-only.
+  if (key === "cost") roles = ["admin", "office", "employee", "site_employee"];
   if (key === "finance") roles = ["admin", "office", "employee"];
   if (key === "progress" || key === "reports") roles = ["admin", "office", "site_employee", "employee", "client"];
   if (key === "auditKpi") roles = ["admin", "office", "employee"];

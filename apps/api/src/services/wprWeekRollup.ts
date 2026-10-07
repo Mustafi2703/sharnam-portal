@@ -12,6 +12,23 @@ export function normActivity(s: string | null | undefined): string {
   return String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Rollup row for a register activity: exact description + unit, else the description alone when only one
+ * unit was reported under it.
+ */
+export function rollupFor(
+  map: Map<string, ActivityWeekQty> | null,
+  activity: string | null | undefined,
+  unit?: string | null
+): ActivityWeekQty | undefined {
+  if (!map) return undefined;
+  const d = normActivity(activity);
+  const exact = map.get(`${d}|${normActivity(unit)}`);
+  if (exact) return exact;
+  const hits = [...map.entries()].filter(([k]) => k.slice(0, k.lastIndexOf("|")) === d);
+  return hits.length === 1 ? hits[0][1] : undefined;
+}
+
 export type ActivityWeekQty = {
   description: string;
   unit?: string;
@@ -39,29 +56,34 @@ export async function activityWeekRollup(
   });
   if (!snaps.length) return null;
 
-  const lastCum = new Map<string, number>(); // discipline|activity → running cumulative
+  // Running cumulative per discipline × BOQ line (description · unit · rate — the client BOQ repeats "-do …"
+  // descriptions under different items), then summed per description · unit for the weekly report.
+  const lastCum = new Map<string, number>();
+  const lineOut = new Map<string, string>(); // line key → output key
   const out = new Map<string, ActivityWeekQty>();
   for (const snap of snaps) {
     const inWeek = snap.logDate >= weekStart;
-    let lines: { description?: string; unit?: string; cumQtyPrev?: number; qtyToday?: number }[] = [];
+    let lines: { description?: string; unit?: string; rate?: number; cumQtyPrev?: number; qtyToday?: number }[] = [];
     try {
       lines = JSON.parse(snap.linesJson || "[]");
     } catch {
       continue;
     }
     for (const ln of lines) {
-      const key = normActivity(ln.description);
-      if (!key) continue;
+      const desc = normActivity(ln.description);
+      if (!desc) continue;
+      const outKey = `${desc}|${normActivity(ln.unit)}`;
+      const lineKey = `${snap.discipline}|${outKey}|${Number(ln.rate) || 0}`;
       const today = Number(ln.qtyToday) || 0;
-      lastCum.set(`${snap.discipline}|${key}`, (Number(ln.cumQtyPrev) || 0) + today);
-      const row = out.get(key) || { description: String(ln.description), unit: ln.unit, weekQty: 0, tillDate: 0 };
+      lastCum.set(lineKey, (Number(ln.cumQtyPrev) || 0) + today);
+      lineOut.set(lineKey, outKey);
+      const row = out.get(outKey) || { description: String(ln.description), unit: ln.unit, weekQty: 0, tillDate: 0 };
       if (inWeek) row.weekQty += today;
-      if (!row.unit && ln.unit) row.unit = ln.unit;
-      out.set(key, row);
+      out.set(outKey, row);
     }
   }
   for (const [k, cum] of lastCum) {
-    const row = out.get(k.slice(k.indexOf("|") + 1));
+    const row = out.get(lineOut.get(k)!);
     if (row) row.tillDate += cum;
   }
   for (const row of out.values()) {
@@ -81,10 +103,21 @@ export type QualityWeekRow = {
 
 const isClosedStatus = (st?: string | null) => /clos|complete|done|resolved/i.test(st || "");
 
+/** "Site Observation " / "site observations" / "NCR" → one key. */
+function qualityKey(label: string) {
+  const l = label.toLowerCase().replace(/\s+/g, " ").trim().replace(/s$/, "");
+  if (/ncr|car|non.?conform/.test(l)) return "NCR";
+  if (/instruction/.test(l)) return "Site Instruction";
+  if (/observation/.test(l)) return "Site Observation";
+  return label.trim();
+}
+
 /**
- * Site Observation / Site Instruction / NCR from the live registers as of the week end.
- * An item counts as closed when its closure date is on or before the week end
- * (or it is marked closed with no date). Returns [] when nothing has been recorded yet.
+ * Site Observation / Site Instruction / NCR as of the week end.
+ * Where the client's summary (imported SOR stats) covers a type, that summary is the baseline and only records
+ * entered in the portal since are added; imported register rows for that type are already in the baseline.
+ * Other types count the live records. An item is closed when its closure date is on or before the week end
+ * (or it is marked closed with no date). Returns [] when nothing has been recorded or imported.
  */
 export async function qualityWeekStats(
   prisma: PrismaClient,
@@ -92,18 +125,30 @@ export async function qualityWeekStats(
   weekStart: Date,
   weekEnd: Date
 ): Promise<QualityWeekRow[]> {
-  const [records, ncrs] = await Promise.all([
+  const [records, ncrs, baseline] = await Promise.all([
     prisma.qualitySiteRecord.findMany({
       where: { projectId, occurredAt: { lte: weekEnd } },
-      select: { recordType: true, status: true, occurredAt: true, closedAt: true },
+      select: { recordType: true, status: true, occurredAt: true, closedAt: true, source: true },
     }),
     prisma.qualityNcr.findMany({
       where: { projectId, OR: [{ issueDate: { lte: weekEnd } }, { issueDate: null, createdAt: { lte: weekEnd } }] },
-      select: { ncrType: true, status: true, issueDate: true, createdAt: true, actualClosure: true },
+      select: { status: true, issueDate: true, createdAt: true, actualClosure: true, source: true },
     }),
+    prisma.progressSorStat.findMany({ where: { projectId } }),
   ]);
   const rows = new Map<string, QualityWeekRow>();
-  const bump = (label: string, raised: Date, closedAt: Date | null, status: string | null) => {
+  for (const b of baseline) {
+    const label = qualityKey(b.observation);
+    const r = rows.get(label) || { label, raisedThisWeek: 0, total: 0, open: 0, closed: 0 };
+    r.total += Number(b.total) || 0;
+    r.open += Number(b.openCount) || 0;
+    r.closed += Number(b.closedCount) || 0;
+    rows.set(label, r);
+  }
+  const hasBaseline = new Set(rows.keys());
+  const imported = (source: string | null) => !!source && source !== "portal";
+  const bump = (label: string, raised: Date, closedAt: Date | null, status: string | null, source: string | null) => {
+    if (hasBaseline.has(label) && imported(source)) return;
     const r = rows.get(label) || { label, raisedThisWeek: 0, total: 0, open: 0, closed: 0 };
     r.total++;
     if (raised >= weekStart) r.raisedThisWeek++;
@@ -112,8 +157,9 @@ export async function qualityWeekStats(
     else r.open++;
     rows.set(label, r);
   };
-  for (const r of records) bump(r.recordType || "Site Observation", r.occurredAt, r.closedAt, r.status);
-  for (const n of ncrs) bump(n.ncrType ? n.ncrType.toUpperCase() : "NCR", n.issueDate || n.createdAt, n.actualClosure, n.status);
+  for (const r of records) bump(qualityKey(r.recordType || "Site Observation"), r.occurredAt, r.closedAt, r.status, r.source);
+  // The client statistic counts every NCR category (Workmanship, Material…) as NCR.
+  for (const n of ncrs) bump("NCR", n.issueDate || n.createdAt, n.actualClosure, n.status, n.source);
 
   const order = ["Site Observation", "Site Instruction", "NCR"];
   return [...rows.values()].sort((a, b) => {

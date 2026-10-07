@@ -97,7 +97,24 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     ]);
 
   const { readProgressOverviewDashboard } = await import("../services/progressRegistersImport.js");
-  const overviewSheet = readProgressOverviewDashboard();
+  // The Progress Overview workbook describes one project — only show it where that pack was loaded
+  // (or, for projects loaded earlier, where its start date matches the project's).
+  const overviewFile = readProgressOverviewDashboard();
+  const overviewSheet = await (async () => {
+    if (!overviewFile) return null;
+    const loaded = await prisma.auditEvent.findFirst({
+      where: { entityId: projectId, action: { in: ["progress.registers.pack", "progress.registers.resync"] } },
+      select: { id: true },
+    });
+    if (loaded) return overviewFile;
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true } });
+    const sheetStart = overviewFile.startDate ? new Date(overviewFile.startDate as unknown as string) : null;
+    const near =
+      project?.startDate && sheetStart && !Number.isNaN(sheetStart.getTime())
+        ? Math.abs(project.startDate.getTime() - sheetStart.getTime()) <= 31 * 86400000
+        : false;
+    return near ? overviewFile : null;
+  })();
 
   const openHindrance = hindrances.filter((h) => h.status === "Open").length;
   const openRisk = risks.filter((r) => r.status === "Open").length;
@@ -664,13 +681,26 @@ progressRouter.patch(
   }
 );
 
+/** Risk register level 1–5: numbers as entered, or the sheet's words (Very low … Very high / Rare … Almost certain). */
+function riskLevel(v: unknown): number {
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 0) return Math.min(5, Math.max(1, Math.round(n)));
+  const t = String(v ?? "").trim().toLowerCase();
+  if (/very\s*high|almost certain|extreme|critical/.test(t)) return 5;
+  if (/high|likely|major/.test(t)) return 4;
+  if (/medium|moderate|possible/.test(t)) return 3;
+  if (/very\s*low|rare|insignificant/.test(t)) return 1;
+  if (/low|unlikely|minor/.test(t)) return 2;
+  return 1;
+}
+
 progressRouter.post(
   "/:projectId/risks",
   requireRoles("admin", "office", "employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
-    const probability = Number(body.probability || 1);
-    const consequence = Number(body.consequence || 1);
+    const probability = riskLevel(body.probability);
+    const consequence = riskLevel(body.consequence);
     const row = await prisma.progressRisk.create({
       data: {
         projectId: req.params.projectId,
@@ -726,7 +756,7 @@ progressRouter.patch(
       if (body[k] !== undefined) data[k] = body[k];
     }
     for (const k of ["probability", "consequence", "severity"] as const) {
-      if (body[k] != null) data[k] = Number(body[k]);
+      if (body[k] != null) data[k] = k === "severity" ? Number(body[k]) || 0 : riskLevel(body[k]);
     }
     for (const k of ["probabilityPct", "costImpact", "weeksLikely"] as const) {
       if (body[k] != null) data[k] = Number(body[k]);
@@ -1175,22 +1205,67 @@ progressRouter.post(
 /** Per-discipline S-curve register — feeds DPR INPUT and WPR charts. */
 progressRouter.get("/:projectId/scurve-points", async (req, res) => {
   const discipline = String(req.query.discipline || "OVERALL").toUpperCase();
-  const rows = await prisma.progressScurvePoint.findMany({
-    where: { projectId: req.params.projectId, discipline },
-    orderBy: { periodDate: "asc" },
-    take: 52,
-  });
-  res.json(rows);
+  const { readScurvePoints } = await import("../services/scurveBaseline.js");
+  // Percentages (0–100); older rows saved as fractions are scaled.
+  res.json(await readScurvePoints(prisma, req.params.projectId, discipline));
 });
+
+/** Upload a planned baseline: Excel / CSV with Date | Planned % | Actual % (optional). Replaces the discipline's rows. */
+progressRouter.post(
+  "/:projectId/scurve-points/import",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const discipline = String(req.body.discipline || req.query.discipline || "OVERALL").toUpperCase();
+    try {
+      const { importScurveBaseline } = await import("../services/scurveBaseline.js");
+      const points = await importScurveBaseline(prisma, req.params.projectId, discipline, req.file.buffer);
+      await audit("progress.scurve.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { discipline, points } });
+      res.json({ ok: true, points });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Import failed" });
+    }
+  }
+);
+
+/** Generate a monthly planned baseline from the activity register's planned dates (actual from DPRs). */
+progressRouter.post(
+  "/:projectId/scurve-points/generate",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const discipline = String(req.body.discipline || "OVERALL").toUpperCase();
+    try {
+      const { generateScurveBaseline } = await import("../services/scurveBaseline.js");
+      const out = await generateScurveBaseline(prisma, req.params.projectId, discipline);
+      await audit("progress.scurve.generate", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { discipline, ...out } });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not generate" });
+    }
+  }
+);
 
 progressRouter.post(
   "/:projectId/scurve-points",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
     const discipline = String(req.body.discipline || "OVERALL").toUpperCase();
     const periodDate = new Date(String(req.body.periodDate || req.body.date));
     if (Number.isNaN(periodDate.getTime())) return res.status(400).json({ error: "periodDate required" });
+    // Register is in % (0–100). Convert a discipline still holding older fraction rows once, so they never mix.
+    const existing = await prisma.progressScurvePoint.findMany({ where: { projectId, discipline } });
+    if (existing.length && existing.every((r) => (Number(r.plannedPct) || 0) <= 1 && (Number(r.actualPct) || 0) <= 1)) {
+      await prisma.$transaction(
+        existing.map((r) =>
+          prisma.progressScurvePoint.update({
+            where: { id: r.id },
+            data: { plannedPct: (Number(r.plannedPct) || 0) * 100, actualPct: (Number(r.actualPct) || 0) * 100 },
+          })
+        )
+      );
+    }
     const row = await prisma.progressScurvePoint.upsert({
       where: {
         projectId_discipline_periodDate: { projectId, discipline, periodDate },
@@ -1217,7 +1292,7 @@ progressRouter.post(
 
 progressRouter.delete(
   "/:projectId/scurve-points/:pointId",
-  requireRoles("admin", "office", "employee"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     await prisma.progressScurvePoint.deleteMany({
       where: { id: req.params.pointId, projectId: req.params.projectId },

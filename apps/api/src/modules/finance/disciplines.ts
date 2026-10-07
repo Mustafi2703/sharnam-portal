@@ -237,10 +237,16 @@ export function poMatchesPackage(
 }
 
 export function copMatchesPackage(
-  cop: { workTrade?: string | null; purchaseOrder?: { packageName?: string | null; workTrade?: string | null } | null },
+  cop: {
+    workTrade?: string | null;
+    purchaseOrder?: { packageName?: string | null; workTrade?: string | null } | null;
+    raBill?: { discipline?: string | null } | null;
+  },
   pkg: FinancePackage | null
 ): boolean {
   if (!pkg) return true;
+  // A COP belongs to the discipline of the RA bill it certifies.
+  if (cop.raBill?.discipline) return raMatchesPackage({ discipline: cop.raBill.discipline }, pkg);
   const blob = `${cop.workTrade ?? ""} ${cop.purchaseOrder?.packageName ?? ""} ${cop.purchaseOrder?.workTrade ?? ""}`.toLowerCase();
   if (pkg.poHints?.some((h) => blob.includes(h))) return true;
   return pkg.discipline.toLowerCase() === String(cop.workTrade ?? "").toLowerCase();
@@ -320,4 +326,19 @@ export function buildFinanceDisciplineRollup(input: {
       copPayable: pkgCops.reduce((n, c) => n + c.amountPayable, 0),
     };
   });
+}
+
+/**
+ * Finance package for a Cost BOQ / monitoring package name ("Civil Dormitory", "Electric", "Fire Fighting" …),
+ * so an RA bill raised from the BOQ lands in the right discipline. Unknown packages are Civil works.
+ */
+export function packageForCostPackage(name: string | null | undefined): FinancePackage {
+  const t = String(name ?? "").toLowerCase();
+  const by = (key: string) => FINANCE_PACKAGES.find((p) => p.key === key)!;
+  if (/fire|sprinkler|fm.?200|hydrant/.test(t)) return by("fire");
+  if (/electric|plumb|gas|hvac|mep|mechanical|lift|elevator|solar|lighting|cctv|drain/.test(t)) return by("mep");
+  if (/peb/.test(t)) return by(/supply/.test(t) ? "peb-supply" : "peb-erection");
+  if (/facade|cladding|glazing|acp/.test(t)) return by("facade");
+  if (/steel|rebar|tmt/.test(t)) return by("civil-steel");
+  return by("civil");
 }

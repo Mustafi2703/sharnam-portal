@@ -2,6 +2,19 @@ import { useState } from "react";
 import { Button } from "./ui";
 import { downloadAuthFile, exportPaths, type ExportModule } from "../lib/downloadReport";
 import { useAuth } from "../auth";
+import { SaveToSharePointButton } from "./SaveToSharePointButton";
+
+/** ISO folder for each module report. */
+const ISO_MODULE: Record<string, string> = {
+  quality: "qap",
+  safety: "safety",
+  progress: "progress",
+  cost: "costReport",
+  drawings: "drawings",
+  rfis: "rfiInformation",
+  comms: "meetings",
+  analytics: "wpr",
+};
 
 /** Excel + branded PDF (HTML print) downloads for dashboard / module sections */
 export function ReportExportButtons({
@@ -65,6 +78,7 @@ export function ReportExportButtons({
         >
           {busy === "pdf" ? "…" : `${label} PDF`}
         </Button>
+        {!menu && <SaveToSharePointButton projectId={projectId} path={paths.xlsx} module={ISO_MODULE[kind] || "progress"} />}
       </div>
       {msg && !menu && <p className="text-[11px] text-steel-muted max-w-xs text-right">{msg}</p>}
       {msg && menu && <p className="text-[11px] text-steel-muted px-2 py-1">{msg}</p>}

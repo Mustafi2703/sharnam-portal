@@ -7,7 +7,7 @@ import path from "path";
 import type { PrismaClient } from "@prisma/client";
 import { ARVIND_DORM_CODE, ARVIND_NTX_CODE } from "./arvindSiteSeed.js";
 import { runArvindWeekTest } from "./arvindWeekTest.js";
-import { snapWeekEnding } from "./wprDemoSeed.js";
+import { weekEndingOf } from "./wprDemoSeed.js";
 
 export type WalkStep = {
   role: string;
@@ -241,7 +241,7 @@ export async function walkArvindWeekFromDb(db: PrismaClient): Promise<WalkStep[]
     const dprs = await db.dprSnapshot.count({
       where: { projectId: project.id, status: "Published" },
     });
-    const weekEnd = snapWeekEnding(new Date(`${job.weekEnd}T12:00:00`));
+    const weekEnd = weekEndingOf(job.weekEnd);
     const wpr = await db.wprSnapshot.findFirst({
       where: { projectId: project.id, weekEnding: weekEnd },
     });

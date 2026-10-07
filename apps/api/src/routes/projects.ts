@@ -462,6 +462,33 @@ export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 guardProjectParam(projectsRouter, "id");
 
+/** Save any module export (its download path) to the project's SharePoint ISO folder. */
+projectsRouter.post(
+  "/:id/save-export",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const path = String(req.body?.path || "");
+    const moduleKey = String(req.body?.module || "");
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : String(req.query.token || "");
+    if (!path || !moduleKey) return res.status(400).json({ error: "path and module required" });
+    try {
+      const { saveExportToSharePoint } = await import("../services/exportToSharePoint.js");
+      const out = await saveExportToSharePoint({
+        projectId: req.params.id,
+        userId: req.user!.id,
+        token,
+        path,
+        moduleKey,
+        fileName: req.body?.fileName ? String(req.body.fileName) : undefined,
+      });
+      res.json(out);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not save to SharePoint" });
+    }
+  }
+);
+
 /** List/register fields only — skip large JSON blobs (workPackages, bidDisciplinesJson, enabledModules). */
 const PROJECT_LIST_SELECT = {
   id: true,
@@ -1032,7 +1059,9 @@ projectsRouter.get("/:id", async (req: AuthedRequest, res) => {
     { ...project, workPackages: JSON.stringify(cleanedPackages) } as unknown as Record<string, unknown>,
     req.user!.role
   );
-  res.json(payload);
+  // Register header parties (card, else project directory) — client / consultant / PMC / contractor.
+  const { projectParties } = await import("../services/projectParties.js");
+  res.json({ ...payload, parties: await projectParties(project.id) });
 });
 
 projectsRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

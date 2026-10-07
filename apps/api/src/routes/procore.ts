@@ -2152,6 +2152,32 @@ safetyRouter.put(
   },
 );
 
+/** Safety history before the portal (client HSE Statistic "Up to previous week"): safe man-hours / man-days to a date. */
+safetyRouter.get("/project/:projectId/opening-balance", async (req, res) => {
+  res.json(await prisma.safetyOpeningBalance.findUnique({ where: { projectId: req.params.projectId } }));
+});
+
+safetyRouter.put("/project/:projectId/opening-balance", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const b = req.body || {};
+  const asOf = String(b.asOf || "");
+  if (!DAY_KEY.test(asOf)) return res.status(400).json({ error: "As-of date must be YYYY-MM-DD" });
+  const { dayFromKey } = await import("../services/safetyWeek.js");
+  const data = {
+    asOf: dayFromKey(asOf),
+    safeManHours: Math.max(0, Number(b.safeManHours) || 0),
+    safeManDays: Math.max(0, Math.round(Number(b.safeManDays) || 0)),
+    source: "portal",
+    updatedById: req.user!.id,
+  };
+  const row = await prisma.safetyOpeningBalance.upsert({
+    where: { projectId: req.params.projectId },
+    create: { projectId: req.params.projectId, ...data },
+    update: data,
+  });
+  await audit("safety.opening_balance", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { asOf, safeManHours: data.safeManHours, safeManDays: data.safeManDays } });
+  res.json(row);
+});
+
 safetyRouter.delete("/project/:projectId/daily/:date", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const { dayFromKey } = await import("../services/safetyWeek.js");
   const key = String(req.params.date);
@@ -2213,6 +2239,19 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
   const body = req.body || {};
   const existing = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "Not found" });
+
+  // Contractors answer only what is issued to their company, and never close it — PMC verifies and closes.
+  if (req.user!.role === "vendor") {
+    const { resolveVendorForUser } = await import("../services/vendorPortal.js");
+    const { safetyRecordAssignedToVendor } = await import("../services/vendorActions.js");
+    const vendor = await resolveVendorForUser(req.user!);
+    if (!vendor || !safetyRecordAssignedToVendor(existing, vendor, req.user!.id)) {
+      return res.status(403).json({ error: "This safety record is not issued to your company" });
+    }
+    if (body.status != null && String(body.status) === "Closed" && existing.status !== "Closed") {
+      return res.status(403).json({ error: "Only PMC can close a safety NCR / observation after verifying the corrective action" });
+    }
+  }
 
   const nextStatus = body.status != null ? String(body.status) : existing.status;
   if (nextStatus === "Closed" && existing.status !== "Closed" && existing.recordType === "NCR") {

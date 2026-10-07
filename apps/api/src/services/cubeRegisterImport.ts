@@ -6,6 +6,7 @@ import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { findWorkbook } from "../lib/excelRoot.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -154,9 +155,20 @@ export async function createSpdcCubeGroup(opts: {
   specimens?: CubeGroupSpecimenInput[];
 }) {
   const { applyCubeFormula } = await import("@sharnam/shared");
+  // SPDC register: three cubes crushed at 7 days and three different cubes at 28 days. A slot carrying both
+  // loads is two specimens; an empty new group opens with the six rows.
   const slots: CubeGroupSpecimenInput[] =
-    opts.specimens && opts.specimens.length ? opts.specimens : [{}, {}, {}];
-  return prisma.$transaction(
+    opts.specimens && opts.specimens.length
+      ? opts.specimens.flatMap((sl): CubeGroupSpecimenInput[] =>
+          sl.load7 != null && sl.load28 != null
+            ? [
+                { ...sl, phase: "7d", load28: null },
+                { ...sl, phase: "28d", load7: null },
+              ]
+            : [sl]
+        )
+      : [{ phase: "7d" }, { phase: "7d" }, { phase: "7d" }, { phase: "28d" }, { phase: "28d" }, { phase: "28d" }];
+  const created = await prisma.$transaction(
     slots.map((slot) => {
       const load7 = slot.phase === "28d" ? null : slot.load7 ?? null;
       const load28 = slot.phase === "7d" ? null : slot.load28 ?? null;
@@ -174,8 +186,8 @@ export async function createSpdcCubeGroup(opts: {
           description: opts.description,
           grade: opts.grade || "M25",
           testAgency: opts.testAgency || null,
-          testDate7: opts.testDate7 || null,
-          testDate28: opts.testDate28 || null,
+          testDate7: opts.testDate7 || cubeTestDates(opts.castDate).testDate7,
+          testDate28: opts.testDate28 || cubeTestDates(opts.castDate).testDate28,
           cubeWeight: slot.cubeWeight ?? null,
           load7,
           load28,
@@ -189,6 +201,8 @@ export async function createSpdcCubeGroup(opts: {
       });
     })
   );
+  if (created[0]) await recomputeCubeGroup(opts.projectId, created[0]);
+  return prisma.cubeTest.findMany({ where: { id: { in: created.map((c) => c.id) } }, orderBy: { createdAt: "asc" } });
 }
 
 export function resolveCubeRegisterPath(): string | null {
@@ -202,7 +216,8 @@ export function resolveCubeRegisterPath(): string | null {
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
   }
-  return null;
+  // Same search as every other client workbook, independent of the server's working folder.
+  return findWorkbook(["SPDC CUBE REGISTER (1).xlsx", "SPDC CUBE REGISTER.xlsx"]);
 }
 
 export async function importCubeRegisterWorkbook(projectId: string, buffer: Buffer, replace = true) {
@@ -310,14 +325,33 @@ export async function exportCubeWorkbook(projectId: string) {
     detachSharedStyles(wb);
     const ws = wb.worksheets[0];
     if (ws) {
-      ws.getCell("E2").value = [project.name, project.location].filter(Boolean).join(" — ");
-      ws.getCell("E3").value = project.clientName || "";
-      ws.getCell("E4").value = project.designConsultant || "";
-      ws.getCell("E5").value = project.pmcName || "Sharnam Project Development Consultants & Co. (SPDC)";
-      ws.getCell("E6").value = project.contractorName || "";
+      // Header from the project card, else the project directory (client / consultant / contractor parties).
+      const { projectParties } = await import("./projectParties.js");
+      const parties = await projectParties(projectId);
+      ws.getCell("E2").value = parties?.projectName || project.name;
+      ws.getCell("E3").value = parties?.client || "";
+      ws.getCell("E4").value = parties?.consultant || "";
+      ws.getCell("E5").value = parties?.pmc || "Sharnam Project Development Consultants & Co. (SPDC)";
+      ws.getCell("E6").value = parties?.vendor || "";
+      // Row 8: the template carries a sample project's title — use this project's, and today's date.
+      ws.getCell("D8").value = `${project.name} — reports for 7 days and 28 days`;
+      ws.getCell("K8").value = new Date();
+      ws.getCell("K8").numFmt = "dd-mmm-yyyy";
       // Clear template demo body (Burckhardt sample etc.) so export matches portal rows only.
       // Layout: header row 9, sub-header row 10, data from row 11 — cols B–M (2–13).
       const lastDataRow = Math.max(ws.rowCount, 11);
+      // The template merges each sample group's cells (B11:B13 …) — writing a blank into the lower cells of a
+      // merge overwrites the group's values, so drop the body merges and re-merge per real group below.
+      for (const range of [...((ws as unknown as { model: { merges?: string[] } }).model.merges || [])]) {
+        const m = /^[A-Z]+(\d+):[A-Z]+(\d+)$/.exec(range);
+        if (m && Number(m[1]) >= 11) {
+          try {
+            ws.unMergeCells(range);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
       for (let r = 11; r <= lastDataRow; r++) {
         for (let c = 2; c <= 13; c++) {
           ws.getCell(r, c).value = null;
@@ -332,6 +366,7 @@ export async function exportCubeWorkbook(projectId: string) {
         const avg7 = average(d7.map((r) => r.strength7 ?? r.strength));
         const avg28 = average(d28.map((r) => r.strength28 ?? r.strength));
         const head = ordered[0];
+        const startRow = excelRow;
         ordered.forEach((r, i) => {
           const is7 = Boolean(r.load7 || r.strength7 != null) || (!r.load28 && i < 3);
           ws.getCell(excelRow, 2).value = i === 0 ? Number(head.srNo) || head.srNo || "" : "";
@@ -350,6 +385,30 @@ export async function exportCubeWorkbook(projectId: string) {
           ws.getCell(excelRow, 13).value = first7 || first28 ? r.result || head.result || "" : "";
           excelRow += 1;
         });
+        // Client layout: group cells span the group; average + result span each phase block.
+        const merge = (c: number, r1: number, r2: number) => {
+          if (r2 > r1) {
+            try {
+              ws.mergeCells(r1, c, r2, c);
+            } catch {
+              /* ignore */
+            }
+          }
+        };
+        const endRow = excelRow - 1;
+        for (const c of [2, 3, 4, 5, 7, 8]) merge(c, startRow, endRow);
+        const n7 = d7.length || (d28.length ? 0 : ordered.length);
+        if (n7) for (const c of [12, 13]) merge(c, startRow, startRow + n7 - 1);
+        if (d28.length) for (const c of [12, 13]) merge(c, startRow + n7, startRow + n7 + d28.length - 1);
+        for (let r = startRow; r <= endRow; r++) {
+          ws.getCell(r, 3).numFmt = "dd-mmm-yy";
+          ws.getCell(r, 7).numFmt = "dd-mmm-yy";
+          ws.getCell(r, 8).numFmt = "dd-mmm-yy";
+        }
+      }
+      // Template sample body below the last real group: drop its borders / fills (its merges are gone).
+      for (let r = excelRow; r <= lastDataRow; r++) {
+        for (let c = 2; c <= 13; c++) ws.getCell(r, c).style = {};
       }
     }
     const buf = await wb.xlsx.writeBuffer();
@@ -398,4 +457,34 @@ function average(vals: Array<number | null | undefined>): number | null {
   const nums = vals.filter((n): n is number => n != null && Number.isFinite(n));
   if (!nums.length) return null;
   return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100;
+}
+
+/** SPDC register: testing dates follow the casting date (=C+7, =C+28). */
+export function cubeTestDates(cast: Date | null | undefined) {
+  if (!cast || Number.isNaN(cast.getTime())) return { testDate7: null, testDate28: null };
+  const add = (n: number) => new Date(cast.getTime() + n * 86400000);
+  return { testDate7: add(7), testDate28: add(28) };
+}
+
+/** Recompute phase averages + PASS / FAIL for the footing group a specimen belongs to. */
+export async function recomputeCubeGroup(projectId: string, row: { srNo: string | null; castDate: Date | null; description: string }) {
+  const { applyCubeGroupPhaseStats, cubeGroupKey } = await import("@sharnam/shared");
+  const key = cubeGroupKey(row);
+  const siblings = await prisma.cubeTest.findMany({ where: { projectId } });
+  const group = siblings.filter((r) => cubeGroupKey(r) === key);
+  const next = applyCubeGroupPhaseStats(group);
+  for (let i = 0; i < group.length; i++) {
+    await prisma.cubeTest.update({
+      where: { id: group[i].id },
+      data: {
+        strength7: next[i].strength7,
+        strength28: next[i].strength28,
+        strength: next[i].strength28 ?? next[i].strength7 ?? next[i].strength,
+        avgStrength: next[i].avgStrength,
+        result: next[i].result || "Pending",
+        grade: next[i].grade || group[i].grade,
+      },
+    });
+  }
+  return group.length;
 }

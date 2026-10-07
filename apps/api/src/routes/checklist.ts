@@ -89,6 +89,15 @@ async function persistChecklistUploads(opts: {
   return itemAttachCount;
 }
 
+/** "29-07-2026 21:28" in IST — the time the site team saw when they submitted. */
+function istStamp(d: Date): string {
+  const p = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(d));
+  const g = (t: string) => p.find((x) => x.type === t)?.value || "";
+  return `${g("day")}-${g("month")}-${g("year")} ${g("hour")}:${g("minute")}`;
+}
+
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 guardProjectParam(checklistRouter);
@@ -1373,7 +1382,7 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
       const answer = typeof ans === "string" ? ans : ans.answer || ans.value || "";
       const remarks = typeof ans === "object" ? ans.remarks || ans.remark || "" : "";
       rows.push({
-        "Submitted At": new Date(s.createdAt).toISOString(),
+        "Submitted At": istStamp(s.createdAt),
         Family: template.checklistType || "",
         Checklist: template.name || "",
         "Item Code": item.itemCode || "",
@@ -1394,7 +1403,7 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
     }
     if (!template.items.length) {
       rows.push({
-        "Submitted At": new Date(s.createdAt).toISOString(),
+        "Submitted At": istStamp(s.createdAt),
         Family: template.checklistType || "",
         Checklist: template.name || "",
         "Item Code": "",
@@ -1415,11 +1424,19 @@ checklistRouter.get("/project/:projectId/export-filled.xlsx", requireRoles("admi
     }
   }
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Note: "No filled checklists yet" }]);
-  XLSX.utils.book_append_sheet(wb, ws, "Filled Schedules");
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const fname = `filled-checklists-${req.params.projectId}${type ? `-${type}` : ""}.xlsx`;
+  const { workbookBuffer } = await import("../services/brandedExport.js");
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  const headers = rows.length ? Object.keys(rows[0]) : ["Note"];
+  const buf = await workbookBuffer(
+    [
+      {
+        name: "Filled Schedules",
+        rows: [headers, ...(rows.length ? rows.map((r) => headers.map((h) => r[h])) : [["No filled checklists yet"]])],
+      },
+    ],
+    { title: `Filled checklists${type ? ` — ${type}` : ""}`, projectCode: project?.code || req.params.projectId }
+  );
+  const fname = `filled-checklists-${project?.code || req.params.projectId}${type ? `-${type}` : ""}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
   res.send(buf);
@@ -2816,10 +2833,16 @@ checklistRouter.patch(
       const merged = {
         ...existing,
         ...body,
-        formDataJson:
-          body.formDataJson && typeof body.formDataJson === "object"
-            ? JSON.stringify(body.formDataJson)
-            : body.formDataJson ?? existing.formDataJson,
+        // Saved form + this request's close-out fields (a close that only sends the close-out fields
+        // must still see the contractor response and action already on the form).
+        formDataJson: JSON.stringify({
+          ...parseNcrFormObject(existing.formDataJson || "{}"),
+          ...(body.formDataJson && typeof body.formDataJson === "object"
+            ? (body.formDataJson as Record<string, unknown>)
+            : body.formDataJson
+              ? parseNcrFormObject(String(body.formDataJson))
+              : {}),
+        }),
         plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : existing.plannedClosure,
         actualClosure: body.actualClosure ? new Date(body.actualClosure) : existing.actualClosure,
       };
@@ -3465,7 +3488,9 @@ checklistRouter.post(
       grade: b.grade ? String(b.grade) : null,
       result: b.result ? String(b.result) : null,
     });
-    const row = await prisma.cubeTest.create({
+    const { cubeTestDates, recomputeCubeGroup } = await import("../services/cubeRegisterImport.js");
+    const autoDates = cubeTestDates(b.castDate ? new Date(b.castDate) : null);
+    const created = await prisma.cubeTest.create({
       data: {
         projectId: req.params.projectId,
         srNo: b.srNo ? String(b.srNo) : null,
@@ -3473,8 +3498,9 @@ checklistRouter.post(
         description: String(b.description || "Cube test"),
         grade: b.grade ? String(b.grade) : null,
         cubeWeight: b.cubeWeight != null && b.cubeWeight !== "" ? Number(b.cubeWeight) : null,
-        testDate7: b.testDate7 ? new Date(b.testDate7) : null,
-        testDate28: b.testDate28 ? new Date(b.testDate28) : null,
+        // Testing dates follow the casting date (SPDC register =C+7 / =C+28) unless entered.
+        testDate7: b.testDate7 ? new Date(b.testDate7) : autoDates.testDate7,
+        testDate28: b.testDate28 ? new Date(b.testDate28) : autoDates.testDate28,
         load7,
         load28,
         strength7: computed.strength7,
@@ -3486,6 +3512,9 @@ checklistRouter.post(
         source: "portal",
       },
     });
+    // The new specimen joins its footing group — refresh the group's average and PASS / FAIL.
+    await recomputeCubeGroup(req.params.projectId, created);
+    const row = await prisma.cubeTest.findUnique({ where: { id: created.id } });
     res.status(201).json(row);
   }
 );
@@ -3543,6 +3572,11 @@ checklistRouter.patch(
     if (b.castDate !== undefined) data.castDate = b.castDate ? new Date(b.castDate) : null;
     if (b.testDate7 !== undefined) data.testDate7 = b.testDate7 ? new Date(b.testDate7) : null;
     if (b.testDate28 !== undefined) data.testDate28 = b.testDate28 ? new Date(b.testDate28) : null;
+    if (b.castDate && b.testDate7 === undefined && b.testDate28 === undefined) {
+      // New casting date → testing dates move with it (=C+7 / =C+28).
+      const { cubeTestDates } = await import("../services/cubeRegisterImport.js");
+      Object.assign(data, cubeTestDates(new Date(b.castDate)));
+    }
     if (b.cubeWeight !== undefined) data.cubeWeight = b.cubeWeight === null || b.cubeWeight === "" ? null : Number(b.cubeWeight);
     if (b.load7 !== undefined) data.load7 = b.load7 === null || b.load7 === "" ? null : Number(b.load7);
     if (b.load28 !== undefined) data.load28 = b.load28 === null || b.load28 === "" ? null : Number(b.load28);

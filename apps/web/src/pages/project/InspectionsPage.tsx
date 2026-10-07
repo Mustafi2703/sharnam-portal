@@ -136,10 +136,11 @@ export default function InspectionsPage() {
         id: projRes.id,
         name: projRes.name,
         code: projRes.code,
-        clientName: projRes.clientName,
-        designConsultant: projRes.designConsultant,
-        contractorName: projRes.contractorName,
-        pmcName: (projRes as { pmcName?: string | null }).pmcName,
+        // Register header: project card, else the project directory parties.
+        clientName: projRes.clientName || (projRes as any).parties?.client || null,
+        designConsultant: projRes.designConsultant || (projRes as any).parties?.consultant || null,
+        contractorName: projRes.contractorName || (projRes as any).parties?.vendor || null,
+        pmcName: (projRes as { pmcName?: string | null }).pmcName || (projRes as any).parties?.pmc || null,
         location: (projRes as { location?: string | null }).location,
         clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
       });

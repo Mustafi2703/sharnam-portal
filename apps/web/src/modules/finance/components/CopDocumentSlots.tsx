@@ -134,6 +134,7 @@ export function CopDocumentSlots({
 
   const xlsxUrl = `${apiBase()}/api/finance/${projectId}/cop/${copId}/download.xlsx?token=${encodeURIComponent(token || "")}`;
   const printUrl = `${apiBase()}/api/finance/${projectId}/cop/${copId}/print.html?token=${encodeURIComponent(token || "")}`;
+  const pdfUrl = `${apiBase()}/api/finance/${projectId}/cop/${copId}/download.pdf?token=${encodeURIComponent(token || "")}`;
   const dmsUrl = trail?.cop.attachmentUrl || latestCopStage("Draft")?.sharePointUrl || latestCopStage("Draft")?.fileUrl;
 
   const extraDocs =
@@ -144,6 +145,9 @@ export function CopDocumentSlots({
   return (
     <div className={`ra-bill-files cop-doc-files ${compact ? "ra-bill-files--compact" : ""}`}>
       <div className="cop-doc-files__system flex flex-wrap gap-1 mb-1.5">
+        <a href={pdfUrl} className="ra-bill-files__open !inline-flex" title="Download the Sharnam-branded COP (PDF)">
+          PDF ↓
+        </a>
         <a href={xlsxUrl} className="ra-bill-files__open !inline-flex" title="Download Sharnam Viatrix XLSX">
           XLSX ↓
         </a>

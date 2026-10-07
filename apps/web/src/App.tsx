@@ -43,6 +43,7 @@ import RfisPage from "./pages/project/RfisPage";
 import InspectionsPage from "./pages/project/InspectionsPage";
 import InspectionRegisterPage from "./pages/project/InspectionRegisterPage";
 import NcrFormPage from "./pages/project/NcrFormPage";
+import VendorActionsPage from "./pages/VendorActionsPage";
 import NcrFillLogPage from "./pages/project/NcrFillLogPage";
 import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
@@ -270,6 +271,7 @@ export default function App() {
                   <Route path="inspection-register" element={<InspectionRegisterPage />} />
                   <Route path="qap" element={<QapPage />} />
                   <Route path="safety" element={<SafetyPage />} />
+                  <Route path="actions" element={<VendorActionsPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="audit-kpi" element={<AuditKpiPage />} />
@@ -336,6 +338,7 @@ export default function App() {
                 <Route path="/stakeholder" element={<StakeholderDeskPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />
                 <Route path="/vendor-desk" element={<VendorDeskPage />} />
+                <Route path="/vendor-actions" element={<VendorActionsPage />} />
                 <Route path="/vouchers" element={<ExpenseVouchersPage />} />
               </Routes>
             </AppShell>

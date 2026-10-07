@@ -6,7 +6,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { computeDpr, type DprLine, type DprSnapshot } from "./dprXlsx.js";
 import { MS_PROJECT_SCURVE_PACKAGE } from "./msProjectSchedule.js";
-import { activityWeekRollup, normActivity, qualityWeekStats } from "./wprWeekRollup.js";
+import { activityWeekRollup, qualityWeekStats, rollupFor } from "./wprWeekRollup.js";
 
 export type WprBarPoint = { label: string; planned: number; actual: number };
 export type WprScurvePoint = { date: string; label: string; planned: number; actual: number };
@@ -296,7 +296,7 @@ export async function loadWprChartPack(
       label: (a.activity || "").slice(0, 28),
       planned: Number(a.weeklyPlanned || 0),
       actual: pvaRollup
-        ? pvaRollup.get(normActivity(a.activity))?.weekQty ?? 0
+        ? rollupFor(pvaRollup, a.activity, a.unit)?.weekQty ?? 0
         : Number(a.weeklyActual || a.executedQty || 0),
     }))
     .filter((p) => p.label && (p.planned || p.actual))

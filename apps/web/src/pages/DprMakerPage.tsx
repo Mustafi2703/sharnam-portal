@@ -120,7 +120,8 @@ type Approval = { refNo: string; description?: string; raisedOn?: string | null;
 type Issue = { description: string; severity?: "Critical" | "High" | "Medium" | "Low"; owner?: string };
 type Photo = { path: string; caption?: string; takenAt?: string | null; kind?: "photo" | "signature" | "pdf"; url?: string };
 
-type ScurveEntry = { date: string; label?: string; planned: number; actual: number };
+/** actual null = planned-only (future) point. */
+type ScurveEntry = { date: string; label?: string; planned: number; actual: number | null };
 
 type Snap = {
   projectId: string;
@@ -157,7 +158,7 @@ type Snap = {
       spi: number;
       overallStatus: string;
     };
-    scurve: { label: string; planned: number; actual: number }[];
+    scurve: { label: string; planned: number; actual: number | null; date?: string }[];
     boqProgress: { label: string; planned: number; actual: number }[];
     manpower: { label: string; planned: number; actual: number }[];
   };
@@ -361,7 +362,7 @@ export default function DprMakerPage() {
             date: p.date,
             label: p.label || p.date,
             planned: num(p.planned),
-            actual: num(p.actual),
+            actual: p.actual == null ? null : num(p.actual),
           }))
         : api?.scurve?.length
           ? api.scurve
@@ -381,11 +382,11 @@ export default function DprMakerPage() {
       spi: Math.round(computed.spi * 100) / 100,
       overallStatus: computed.actualPct >= computed.plannedPct ? "On programme" : "Behind",
     };
-    const scurveLast = scurve.length ? scurve[scurve.length - 1] : null;
+    const scurveLast = [...scurve].reverse().find((p) => p.actual != null) ?? null;
     let plannedPct = summaryBase.plannedPct;
     let actualPct = summaryBase.actualPct;
     if (plannedPct === 0 && scurveLast && scurveLast.planned > 0) plannedPct = scurveLast.planned;
-    if (actualPct === 0 && scurveLast && scurveLast.actual > 0) actualPct = scurveLast.actual;
+    if (actualPct === 0 && scurveLast && (scurveLast.actual ?? 0) > 0) actualPct = scurveLast.actual ?? 0;
     const variance = Math.round((actualPct - plannedPct) * 10) / 10;
     const spi = plannedPct > 0 ? Math.round((actualPct / plannedPct) * 100) / 100 : 0;
 
@@ -1579,16 +1580,21 @@ function formatScurveAxisLabel(label: string, date?: string): string {
   return raw.slice(0, 10);
 }
 
-function DprScurveChart({ points }: { points: { label: string; planned: number; actual: number; date?: string }[] }) {
+function DprScurveChart({ points }: { points: { label: string; planned: number; actual: number | null; date?: string }[] }) {
   if (!points.length) return <p className="text-sm text-steel-muted">Add S-curve rows below or import MS Project XML.</p>;
   const w = 640;
   const h = 220;
   const pad = 32;
-  const maxY = Math.max(10, ...points.flatMap((p) => [p.planned, p.actual])) * 1.15;
+  const maxY = Math.max(10, ...points.flatMap((p) => [p.planned, p.actual ?? 0])) * 1.15;
   const step = points.length > 1 ? (w - pad * 2) / (points.length - 1) : 0;
   const y = (v: number) => h - pad - (v / maxY) * (h - pad * 2);
   const planned = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.planned)}`).join(" ");
-  const actual = points.map((p, i) => `${i ? "L" : "M"} ${pad + i * step} ${y(p.actual)}`).join(" ");
+  // Actual runs up to today; later points are planned only.
+  const actual = points
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.actual != null)
+    .map(({ p, i }, k) => `${k ? "L" : "M"} ${pad + i * step} ${y(p.actual ?? 0)}`)
+    .join(" ");
   return (
     <div className="min-h-[240px]">
       <div className="text-sm font-semibold mb-2">S-curve · cumulative %</div>

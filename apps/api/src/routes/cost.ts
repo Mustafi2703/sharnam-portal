@@ -151,7 +151,16 @@ const CASHFLOW_SHEET_TOOLS = [
 
 export const costRouter = Router();
 costRouter.use(requireAuth);
-costRouter.use(requireModuleView("cost"));
+/**
+ * Site employees record measurements at site: Measurement Book, BBS and BOQ achieved / GFC quantities (and
+ * the sheet view they need). Budget, cashflow, rates, bills and money columns stay office-only.
+ */
+const SITE_MEASUREMENT_PATH =
+  /^\/(shape-masters(\/.*)?|[^/]+\/(mb|bbs)(\/.*)?|[^/]+\/monitoring\/[^/]+|[^/]+\/summary|[^/]+\/download\/(mb|bbs)\.(xlsx|csv))$/;
+costRouter.use((req: AuthedRequest, res, next) => {
+  if (req.user?.role === "site_employee" && SITE_MEASUREMENT_PATH.test(req.path)) return next();
+  return requireModuleView("cost")(req, res, next);
+});
 costRouter.param("projectId", async (req: AuthedRequest, res, next, projectId) => {
   try {
     const ok = await userCanAccessProject(req, String(projectId));
@@ -618,6 +627,28 @@ async function buildCostDownload(kind: string, projectId: string, pkg: string) {
   return null;
 }
 
+/** Cost summary for a site employee: quantities (BOQ / MB / BBS) without budget, cashflow, rates or money. */
+function siteMeasurementView<T extends Record<string, unknown>>(out: T) {
+  const money = /rate|cost|amount|^ev|^etc|^eac|^vac|^cpi|budget|certifiedInvoice|^var|overrun/i;
+  const monitoring = (out.monitoring as Record<string, unknown>[]).map((m) =>
+    Object.fromEntries(Object.entries(m).filter(([k]) => !money.test(k) || /qty/i.test(k)))
+  );
+  const totals = out.totals as Record<string, number>;
+  return {
+    ...out,
+    totals: { mbLines: totals.mbLines, bbsLines: totals.bbsLines, mbQty: totals.mbQty, bbsWeightKg: totals.bbsWeightKg, monitoringLines: totals.monitoringLines },
+    financeBridge: null,
+    budget: [],
+    monitoring,
+    cashflow: [],
+    cashflowChart: [],
+    cashflowForecast: [],
+    cashflowTracking: [],
+    rateDiffs: [],
+    siteView: true,
+  };
+}
+
 costRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
   const pkg = String(req.query.package || "").trim();
@@ -718,7 +749,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     bbsWeightKg: bbsByPackage[name]?.weightKg || 0,
   }));
 
-  res.json({
+  const siteView = (req as AuthedRequest).user?.role === "site_employee";
+  const out = {
     totals: {
       budgeted,
       certified,
@@ -772,7 +804,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       })),
     mbLines,
     bbsLines,
-  });
+  };
+  res.json(siteView ? siteMeasurementView(out) : out);
 });
 
 /** Download BOQ / monitoring / MB / BBS / cashflow — CSV or XLSX, scoped to projectId (+ optional package). */

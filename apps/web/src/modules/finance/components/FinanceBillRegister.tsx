@@ -8,6 +8,7 @@ import {
   sheetColumnsForPackage,
 } from "@sharnam/finance/disciplines";
 import { api } from "../../../api";
+import { saveExportToSharePoint } from "../../../lib/saveExport";
 import { downloadAuthFile } from "../../../lib/downloadReport";
 import { ReferenceSheetToolbar } from "../../../components/ReferenceSheetToolbar";
 import { RegisterEmptyRow, RegisterSheetFrame } from "../../../components/RegisterSheetFrame";
@@ -204,6 +205,17 @@ export function FinanceBillRegister({
           void downloadAuthFile(`/api/finance/${projectId}/payment-summary/download.xlsx`, token, `Payment-Summary-${activePkg.key}.xlsx`).catch((e) =>
             setMsg(e instanceof Error ? e.message : "Download failed")
           )
+        }
+        onPublishSharePoint={
+          canWrite
+            ? async () => {
+                try {
+                  setMsg(await saveExportToSharePoint(projectId, token, `/api/finance/${projectId}/payment-summary/download.xlsx`, "finance"));
+                } catch (e) {
+                  setMsg(e instanceof Error ? e.message : "Save to SharePoint failed");
+                }
+              }
+            : undefined
         }
         busy={busy}
       />

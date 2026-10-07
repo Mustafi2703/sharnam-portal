@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES } from "./interviewFramework.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { restoreTemplateCharts } from "../lib/xlsxCharts.js";
 
 export { INTERVIEW_PARAMS, INTERVIEW_ROLES };
 
@@ -190,7 +191,7 @@ export async function scorecardWorkbook(
     ws.getCell(`H${row}`).value = null;
   }
   const out = await wb.xlsx.writeBuffer();
-  return Buffer.from(out);
+  return restoreTemplateCharts(fs.readFileSync(template), Buffer.from(out));
 }
 
 export function compositePercent(rounds: { round: string; percent: number }[]) {
