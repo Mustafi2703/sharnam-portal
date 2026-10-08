@@ -105,11 +105,12 @@ export class MockOneDriveService {
         // Always call Graph. Local folder rows can exist from an earlier attempt that never
         // reached SharePoint (for example a rejected folder name). ensureDriveFolder leaves
         // folders that are already there.
-        const sp = await withTimeout(ensureProjectSharePointTree(project.code), 180_000, "SharePoint project tree");
+        const sp = await withTimeout(ensureProjectSharePointTree(project.code), 600_000, "SharePoint project tree");
         sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
       } catch (err) {
         console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);
-        if (!sharePointAlreadyProvisioned) throw err;
+        // A slow or partial SharePoint folder tree must not stop a data load: files create their own folders on upload.
+        if (!sharePointAlreadyProvisioned && !/timed out/i.test(err instanceof Error ? err.message : String(err))) throw err;
       }
     }
 

@@ -565,10 +565,13 @@ export async function ensureProjectSharePointTree(projectCode: string) {
   await ensureDriveFolder(drive.driveId, rootFolder);
   created.push(rootFolder);
 
-  for (const rel of PROJECT_LIBRARY_FOLDERS) {
-    const full = `${rootFolder}/${rel}`;
-    await ensureDriveFolder(drive.driveId, full);
-    created.push(full);
+  // Each call re-checks every ancestor, so one-by-one takes minutes for the full tree. Run a few at a time
+  // (ensureDriveFolder re-reads on a create race, so siblings under one parent are safe).
+  const todo = PROJECT_LIBRARY_FOLDERS.map((rel) => `${rootFolder}/${rel}`);
+  const CONCURRENCY = 6;
+  for (let i = 0; i < todo.length; i += CONCURRENCY) {
+    await Promise.all(todo.slice(i, i + CONCURRENCY).map((full) => ensureDriveFolder(drive.driveId, full)));
+    created.push(...todo.slice(i, i + CONCURRENCY));
   }
 
   return { drive, rootFolder, folders: created };
