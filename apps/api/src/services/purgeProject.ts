@@ -132,6 +132,8 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
   await tx.projectPhoto.deleteMany({ where });
   await tx.submittal.deleteMany({ where });
   await tx.safetyRecord.deleteMany({ where });
+  await tx.safetyDailyLog.deleteMany({ where });
+  await tx.safetyOpeningBalance.deleteMany({ where });
   await tx.qapActivity.deleteMany({ where });
   await tx.cubeTest.deleteMany({ where });
   await tx.qualitySiteRecord.deleteMany({ where });
@@ -242,6 +244,8 @@ export async function purgeQualitySafetyModuleData(tx: Db, projectId: string) {
   await tx.qapActivity.deleteMany({ where });
   await tx.cubeTest.deleteMany({ where });
   await tx.safetyRecord.deleteMany({ where });
+  await tx.safetyDailyLog.deleteMany({ where });
+  await tx.safetyOpeningBalance.deleteMany({ where });
 }
 
 /**
