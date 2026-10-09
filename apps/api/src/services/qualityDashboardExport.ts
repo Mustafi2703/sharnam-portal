@@ -79,7 +79,7 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
         lines = [];
       }
       for (const l of lines) {
-        if (/cum|m3|m³|cu\.?\s?m/i.test(l.unit || "") && /concret|rcc|pcc|pour|slab|column|footing|raft|beam/i.test(l.description || "")) concreteM3 += Number(l.qtyToday) || 0;
+        if (/cum|cmt|m3|m³|cu\.?\s?m/i.test(l.unit || "") && /concret|rcc|pcc|pour|slab|column|footing|raft|beam/i.test(l.description || "")) concreteM3 += Number(l.qtyToday) || 0;
       }
     }
     const lastWeekCubes = cubes.filter((c) => c.castDate && c.castDate >= weekStart && c.castDate <= weekEnd);

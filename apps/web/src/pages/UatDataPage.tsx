@@ -70,6 +70,76 @@ function MailSwitchCard({ token }: { token: string | null }) {
   );
 }
 
+/** Simulated working days: every register gets a day's activity; removable in one click. */
+function SimulateCard({ token }: { token: string | null }) {
+  const [projects, setProjects] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [projectId, setProjectId] = useState("");
+  const [days, setDays] = useState(5);
+  const [confirm, setConfirm] = useState("");
+  const [state, setState] = useState<{ status: string; done: number; total: number; summary: Record<string, number>; error?: string; projectCode?: string } | null>(null);
+  const [note, setNote] = useState("");
+  const project = projects.find((p) => p.id === projectId);
+  useEffect(() => {
+    void api<{ id: string; code: string; name: string }[]>("/api/uat-data/projects", { token }).then(setProjects).catch(() => undefined);
+    void api<any>("/api/uat-data/simulate/status", { token }).then(setState).catch(() => undefined);
+  }, [token]);
+  useEffect(() => {
+    if (state?.status !== "running") return;
+    const t = setInterval(() => void api<any>("/api/uat-data/simulate/status", { token }).then(setState).catch(() => undefined), 3000);
+    return () => clearInterval(t);
+  }, [state?.status, token]);
+  async function run(path: "simulate" | "simulate/remove") {
+    setNote("");
+    try {
+      const out = await api<any>(`/api/uat-data/${path}`, { method: "POST", token, body: JSON.stringify({ projectId, days, confirm }), headers: { "Content-Type": "application/json" } });
+      if (path === "simulate") setState(out);
+      else setNote(`Removed: ${Object.entries(out.removed).map(([k, v]) => `${v} ${k}`).join(", ") || "nothing to remove"}.`);
+      setConfirm("");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Failed");
+    }
+  }
+  return (
+    <Card className="space-y-3">
+      <h3 className="font-semibold">5. Simulate Working Days</h3>
+      <p className="text-xs text-steel-muted">
+        Fills the project as a running site would, one day at a time (Sundays skipped): site observations and instructions with photos, NCR / CAR raised and closed, cube groups with 7- and 28-day results, quality / site / safety checklist fills with photos, F-01 requests,
+        daily safety log and safety records, and Civil DPR lines that carry forward day to day. Everything is tagged [SIM] — "Remove simulated data" takes out only that. Use a UAT project, not live work.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs font-semibold text-steel-muted">
+          Project
+          <select className="block mt-1 rounded-lg border border-line bg-white px-3 py-2 text-sm" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <option value="">Choose…</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} — {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Input label="Days (ending today, max 30)" type="number" min={1} max={30} value={days} onChange={(e) => setDays(Number(e.target.value))} />
+        <Input label={project ? `Type ${project.code} to confirm` : "Type the project code"} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" disabled={!projectId || !confirm || state?.status === "running"} onClick={() => void run("simulate")}>
+          Simulate days
+        </Button>
+        <Button type="button" variant="danger" disabled={!projectId || !confirm} onClick={() => void run("simulate/remove")}>
+          Remove simulated data
+        </Button>
+      </div>
+      {state && state.status !== "idle" ? (
+        <p className="text-sm">
+          {state.status === "running" ? `Simulating ${state.projectCode}… ${state.done}/${state.total} days` : state.status === "done" ? `Done — ${state.projectCode}:` : `Failed: ${state.error}`}{" "}
+          {Object.entries(state.summary || {}).map(([k, v]) => `${v} ${k}`).join(" · ")}
+        </p>
+      ) : null}
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Admin · UAT data — load the Arvind data SPDC shared, then clear test projects and test logins. */
 export default function UatDataPage() {
   const { token, user } = useAuth();
@@ -239,6 +309,8 @@ export default function UatDataPage() {
       </Card>
 
       <MailSwitchCard token={token} />
+
+      <SimulateCard token={token} />
     </div>
   );
 }

@@ -159,6 +159,61 @@ uatDataRouter.post("/mail/test", async (req: AuthedRequest, res) => {
   res.json({ ok: true });
 });
 
+/** ── Simulate working days (UAT) — fills every register as a running site would; removable in one click. ── */
+type SimState = { status: "idle" | "running" | "done" | "failed"; projectCode?: string; done: number; total: number; summary: Record<string, number>; error?: string };
+let simState: SimState = { status: "idle", done: 0, total: 0, summary: {} };
+
+uatDataRouter.get("/projects", async (_req, res) => {
+  res.json(await prisma.project.findMany({ select: { id: true, code: true, name: true }, orderBy: { code: "asc" } }));
+});
+
+uatDataRouter.get("/simulate/status", (_req, res) => res.json(simState));
+
+uatDataRouter.post("/simulate", async (req: AuthedRequest, res) => {
+  if (simState.status === "running") return res.status(409).json({ error: "A simulation is already running.", state: simState });
+  const project = await prisma.project.findUnique({ where: { id: String(req.body?.projectId || "") }, select: { id: true, code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found." });
+  if (String(req.body?.confirm || "").trim().toUpperCase() !== project.code.toUpperCase()) {
+    return res.status(400).json({ error: `Type the project code ${project.code} to confirm.` });
+  }
+  const days = Math.min(30, Math.max(1, Math.round(Number(req.body?.days) || 1)));
+  simState = { status: "running", projectCode: project.code, done: 0, total: days, summary: {} };
+  await audit("uat.simulate", { userId: req.user!.id, meta: { project: project.code, days } });
+  res.status(202).json(simState);
+  void (async () => {
+    try {
+      const { simulateDay, simDayKey } = await import("../services/simulateDay.js");
+      const today = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+        if (d.getDay() === 0) {
+          simState.done += 1; // Sunday: site closed
+          continue;
+        }
+        const out = await simulateDay({ projectId: project.id, dateKey: simDayKey(d), userId: req.user!.id, today });
+        for (const [k, v] of Object.entries(out)) simState.summary[k] = (simState.summary[k] || 0) + v;
+        simState.done += 1;
+      }
+      simState.status = "done";
+    } catch (err) {
+      simState.status = "failed";
+      simState.error = err instanceof Error ? err.message : String(err);
+    }
+  })();
+});
+
+uatDataRouter.post("/simulate/remove", async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: String(req.body?.projectId || "") }, select: { id: true, code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found." });
+  if (String(req.body?.confirm || "").trim().toUpperCase() !== project.code.toUpperCase()) {
+    return res.status(400).json({ error: `Type the project code ${project.code} to confirm.` });
+  }
+  const { removeSimulation } = await import("../services/simulateDay.js");
+  const out = await removeSimulation(project.id);
+  await audit("uat.simulate_remove", { userId: req.user!.id, meta: { project: project.code, ...out } });
+  res.json({ ok: true, removed: out });
+});
+
 /** What the clean-up would touch: every project except Arvind, and test-looking logins. Nothing is changed here. */
 uatDataRouter.get("/cleanup-preview", async (req: AuthedRequest, res) => {
   const projects = await prisma.project.findMany({

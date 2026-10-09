@@ -2129,7 +2129,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         lines = [];
       }
       for (const l of lines) {
-        if (/cum|m3|m³|cu\.?\s?m/i.test(l.unit || "") && /concret|rcc|pcc|pour|slab|column|footing|raft|beam/i.test(l.description || "")) m3 += Number(l.qtyToday) || 0;
+        if (/cum|cmt|m3|m³|cu\.?\s?m/i.test(l.unit || "") && /concret|rcc|pcc|pour|slab|column|footing|raft|beam/i.test(l.description || "")) m3 += Number(l.qtyToday) || 0;
       }
     }
     return Math.round(m3 * 10) / 10;
