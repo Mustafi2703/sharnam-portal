@@ -290,3 +290,33 @@ function signName(p?: { caption?: string | null } | null): string {
   const i = cap.indexOf(" · ");
   return i >= 0 ? cap.slice(i + 3).trim() : "";
 }
+
+export type EvidencePhoto = { itemId: string | null; caption: string; name: string; buffer: Buffer; dataUri: string; ext: "png" | "jpeg" };
+
+/** Site photographs on a fill (not signatures), as embeddable images. Skips links, oversized files and non-PNG/JPEG formats. */
+export function collectEvidencePhotos(
+  photos: { kind?: string | null; fileUrl?: string | null; caption?: string | null; itemId?: string | null }[] | undefined,
+  max = 36
+): EvidencePhoto[] {
+  const out: EvidencePhoto[] = [];
+  for (const p of photos || []) {
+    if (out.length >= max) break;
+    if (!p.fileUrl || isSignPhoto(p)) continue;
+    const kind = String(p.kind || "photo").toLowerCase();
+    if (kind !== "photo" && !/\.(png|jpe?g)$/i.test(p.fileUrl)) continue;
+    const buffer = resolveLocalMedia(p.fileUrl);
+    if (!buffer || buffer.length < 8 || buffer.length > 6_000_000) continue;
+    const png = buffer[0] === 0x89 && buffer[1] === 0x50;
+    const jpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+    if (!png && !jpeg) continue;
+    out.push({
+      itemId: p.itemId || null,
+      caption: String(p.caption || "").trim(),
+      name: String(p.fileUrl).split("/").pop() || "photo",
+      buffer,
+      dataUri: toDataUri(buffer),
+      ext: png ? "png" : "jpeg",
+    });
+  }
+  return out;
+}

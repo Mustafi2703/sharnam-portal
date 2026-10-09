@@ -98,6 +98,9 @@ function istStamp(d: Date): string {
   return `${g("day")}-${g("month")}-${g("year")} ${g("hour")}:${g("minute")}`;
 }
 
+/** Photos needed on every checklist line marked "photo required". */
+const ITEM_PHOTO_MIN = Number(process.env.CHECKLIST_ITEM_PHOTOS_MIN) || 3;
+
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 guardProjectParam(checklistRouter);
@@ -571,6 +574,44 @@ checklistRouter.post(
           (prior.status === "Draft" &&
             ["employee", "site_employee", "vendor"].includes(req.user!.role || "")));
       if (canEditPrior) existingDraft = prior;
+    }
+
+    // Lines marked "photo required" need ITEM_PHOTO_MIN photos each (new uploads + links + photos already saved on a draft).
+    if (submitStatus === "Submitted" && assignment.template.checklistType !== "DrawingCheck") {
+      const flagged = await prisma.checklistItem.findMany({
+        where: { templateId: assignment.templateId, requirePhoto: true },
+        select: { id: true, itemCode: true, description: true },
+        orderBy: { sortOrder: "asc" },
+      });
+      if (flagged.length) {
+        const counts = new Map<string, number>();
+        const bump = (id: string, n = 1) => counts.set(id, (counts.get(id) || 0) + n);
+        for (const f of files) {
+          const m = /^item_([^_]+)_photo$/.exec(f.fieldname);
+          if (m && (f.mimetype?.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(f.originalname))) bump(m[1]);
+        }
+        const parsedForPhotos = parseResponsesJson(typeof responses === "string" ? responses : JSON.stringify(responses));
+        for (const [itemId, row] of Object.entries(parsedForPhotos)) {
+          bump(itemId, row.evidenceLinks?.filter((u) => String(u).trim()).length || 0);
+        }
+        if (existingDraft) {
+          const saved = await prisma.checklistPhoto.groupBy({
+            by: ["itemId"],
+            where: { submissionId: existingDraft.id, kind: "photo", itemId: { not: null } },
+            _count: { _all: true },
+          });
+          for (const g of saved) if (g.itemId) bump(g.itemId, g._count._all);
+        }
+        const short = flagged.filter((it) => (counts.get(it.id) || 0) < ITEM_PHOTO_MIN);
+        if (short.length) {
+          return res.status(400).json({
+            error: `Each line marked "photo required" needs at least ${ITEM_PHOTO_MIN} photos. Missing on ${short.length} line(s): ${short
+              .slice(0, 4)
+              .map((it) => `${it.itemCode || ""} ${String(it.description || "").slice(0, 40)} (${counts.get(it.id) || 0}/${ITEM_PHOTO_MIN})`.trim())
+              .join("; ")}${short.length > 4 ? "…" : ""}`,
+          });
+        }
+      }
     }
 
     const submission = existingDraft

@@ -468,7 +468,9 @@ export function ChecklistFillForm({
                           </div>
                         )}
                         {item.requirePhoto && (
-                          <p className="text-[11px] font-semibold text-amber-800">Photo required for this line</p>
+                          <p className={`text-[11px] font-semibold ${(line.photos?.length || 0) >= 3 ? "text-emerald-700" : "text-amber-800"}`}>
+                            Photos required for this line: at least 3 ({line.photos?.length || 0} added now)
+                          </p>
                         )}
                         <div className="flex flex-wrap gap-2">
                           {["Yes", "No", "N.A."].map((ans) => {

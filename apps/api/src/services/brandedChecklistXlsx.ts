@@ -10,6 +10,7 @@
 import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
+import { collectEvidencePhotos } from "./checklistSignoff.js";
 import { checklistLogoPath, collectChecklistSignSlots, type SignSlot } from "./checklistSignoff.js";
 import type { DirectorySignMap } from "./directorySignatures.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
@@ -20,6 +21,7 @@ type Item = {
   itemCode?: string | null;
   description?: string | null;
   instruction?: string | null;
+  instructionFileName?: string | null;
   sortOrder?: number | null;
 };
 
@@ -32,7 +34,7 @@ export type BrandedChecklistSubmission = {
   revisionNumber?: string | null;
   submittedBy?: { fullName?: string | null; email?: string | null } | null;
   drawing?: { drawingNumber?: string | null; title?: string | null } | null;
-  photos?: { kind?: string | null; fileUrl?: string | null; caption?: string | null }[];
+  photos?: { kind?: string | null; fileUrl?: string | null; caption?: string | null; itemId?: string | null }[];
   reviewedAt?: Date | string | null;
   revision?: {
     revisionNumber?: string | null;
@@ -792,7 +794,7 @@ async function fillInspectionRequest(
     const it = items[i];
     const { answer, remark } = getAnswer(responses, it);
     const kind = classifyAnswer(answer);
-    const vals = [i + 1, it.description || "", it.instruction || "", normalizeAnswer(answer), remark];
+    const vals = [i + 1, it.description || "", [it.instruction || "", it.instructionFileName ? `File: ${it.instructionFileName}` : ""].filter(Boolean).join("\n"), normalizeAnswer(answer), remark];
     for (let c = 0; c < vals.length; c++) {
       const cell = ws.getCell(r, c + 2);
       cell.value = vals[c] === "" ? null : vals[c];
@@ -1081,6 +1083,66 @@ async function fillDrawingCheckSheet(
 /**
  * Build branded SPDC-format XLSX for a checklist submission fill.
  */
+/** Evidence photographs on their own sheet: grouped by checklist item, three to a row, with the attached count against the minimum. */
+function addPhotographsSheet(wb: ExcelJS.Workbook, submission: BrandedChecklistSubmission) {
+  const tpl = submission.assignment?.template as
+    | { items?: { id: string; itemCode?: string | null; description?: string | null }[]; requirePhotosMin?: number | null; name?: string | null }
+    | undefined;
+  const minPhotos = Number(tpl?.requirePhotosMin) || 0;
+  const photos = collectEvidencePhotos(submission.photos);
+  if (!photos.length && !minPhotos) return;
+  const ws = wb.addWorksheet("Photographs", { views: [{ showGridLines: false }] });
+  ws.columns = [{ width: 38 }, { width: 38 }, { width: 38 }];
+  const bandRow = (row: number, text: string, color = "FF1F3864") => {
+    ws.mergeCells(row, 1, row, 3);
+    const c = ws.getCell(row, 1);
+    c.value = text;
+    c.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: color } };
+    c.alignment = { vertical: "middle", wrapText: true };
+    ws.getRow(row).height = 20;
+  };
+  let r = 1;
+  bandRow(r, `EVIDENCE PHOTOGRAPHS — ${tpl?.name || "Checklist"}`);
+  r += 1;
+  ws.mergeCells(r, 1, r, 3);
+  const countOk = photos.length >= minPhotos;
+  ws.getCell(r, 1).value = `${photos.length} photograph(s) attached${minPhotos ? ` · minimum required ${minPhotos}${countOk ? "" : " — NOT MET"}` : ""}`;
+  ws.getCell(r, 1).font = { bold: true, color: { argb: countOk ? "FF006100" : "FF9C0006" } };
+  r += 2;
+  const items = tpl?.items || [];
+  const groups: { label: string; photos: typeof photos }[] = [];
+  for (const [i, it] of items.entries()) {
+    const mine = photos.filter((p) => p.itemId === it.id);
+    if (mine.length) groups.push({ label: `Item ${it.itemCode || i + 1} — ${it.description || ""}`, photos: mine });
+  }
+  const general = photos.filter((p) => !p.itemId || !items.some((it) => it.id === p.itemId));
+  if (general.length) groups.push({ label: "General — whole checklist", photos: general });
+  for (const g of groups) {
+    bandRow(r, `${g.label}  (${g.photos.length} photo${g.photos.length === 1 ? "" : "s"})`, "FF305496");
+    r += 1;
+    for (let i = 0; i < g.photos.length; i += 3) {
+      ws.getRow(r).height = 128;
+      ws.getRow(r + 1).height = 16;
+      g.photos.slice(i, i + 3).forEach((ph, k) => {
+        try {
+          const id = wb.addImage({ base64: ph.buffer.toString("base64"), extension: ph.ext });
+          ws.addImage(id, { tl: { col: k + 0.04, row: r - 1 + 0.04 }, ext: { width: 262, height: 164 }, editAs: "oneCell" });
+        } catch {
+          /* skip unreadable image */
+        }
+        const cap = ws.getCell(r + 1, k + 1);
+        cap.value = ph.caption || ph.name;
+        cap.font = { size: 8, color: { argb: "FF555555" } };
+        cap.alignment = { wrapText: true, vertical: "top" };
+      });
+      r += 2;
+    }
+    r += 1;
+  }
+  ws.pageSetup = { orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+}
+
 export async function buildBrandedChecklistXlsxBuffer(
   submission: BrandedChecklistSubmission,
   project?: ProjectMeta
@@ -1126,6 +1188,11 @@ export async function buildBrandedChecklistXlsxBuffer(
     }
   }
 
+  try {
+    addPhotographsSheet(wb, submission);
+  } catch (err) {
+    console.warn("[checklist-xlsx] photographs sheet skipped:", err instanceof Error ? err.message : err);
+  }
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
 }

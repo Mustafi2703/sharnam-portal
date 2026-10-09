@@ -1,5 +1,5 @@
 /** Branded checklist fill HTML — SPDC form colours (navy bands, yellow inputs, OK/Fail/NA coding) */
-import { checklistLogoDataUri, collectChecklistSignSlots } from "./checklistSignoff.js";
+import { checklistLogoDataUri, collectChecklistSignSlots, collectEvidencePhotos } from "./checklistSignoff.js";
 import type { DirectorySignMap } from "./directorySignatures.js";
 
 function escapeHtml(s: string) {
@@ -43,7 +43,7 @@ export function buildBrandedChecklistHtml(
     submittedBy?: { fullName?: string | null } | null;
     drawing?: { drawingNumber?: string | null; title?: string | null } | null;
     reviewedAt?: Date | string | null;
-    photos?: { kind?: string | null; fileUrl?: string | null; caption?: string | null }[];
+    photos?: { kind?: string | null; fileUrl?: string | null; caption?: string | null; itemId?: string | null }[];
     revision?: {
       revisionNumber?: string | null;
       clientSignName?: string | null;
@@ -126,6 +126,31 @@ export function buildBrandedChecklistHtml(
       </tr>`;
     })
     .join("");
+
+  const evidence = collectEvidencePhotos(submission.photos);
+  const minPhotos = Number((template as { requirePhotosMin?: number | null } | undefined)?.requirePhotosMin) || 0;
+  const photoGroups: { label: string; shots: typeof evidence }[] = [];
+  items.forEach((it, i) => {
+    const shots = evidence.filter((p) => p.itemId === it.id);
+    if (shots.length) photoGroups.push({ label: `Item ${i + 1} — ${it.description || it.itemCode || ""}`, shots });
+  });
+  const general = evidence.filter((p) => !p.itemId || !items.some((it) => it.id === p.itemId));
+  if (general.length) photoGroups.push({ label: "General — whole checklist", shots: general });
+  const photoHtml =
+    evidence.length || minPhotos
+      ? `<div class="sign-band">EVIDENCE PHOTOGRAPHS</div>
+    <p style="margin:6px 0;font-weight:bold;color:${evidence.length >= minPhotos ? "#006100" : "#9c0006"}">${evidence.length} photograph(s) attached${
+          minPhotos ? ` · minimum required ${minPhotos}${evidence.length >= minPhotos ? "" : " — NOT MET"}` : ""
+        }</p>
+    ${photoGroups
+      .map(
+        (g) => `<div style="page-break-inside:avoid;margin-bottom:10px"><div style="font-weight:bold;font-size:11px;margin:4px 0">${escapeHtml(g.label)} (${g.shots.length})</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${g.shots
+        .map((p) => `<figure style="margin:0"><img src="${p.dataUri}" style="width:100%;height:150px;object-fit:cover;border:1px solid #bbb"/><figcaption style="font-size:9px;color:#555">${escapeHtml(p.caption || p.name)}</figcaption></figure>`)
+        .join("")}</div></div>`
+      )
+      .join("")}`
+      : "";
 
   const when = submission.createdAt ? new Date(submission.createdAt).toLocaleString("en-GB") : "—";
   const filledBy = submission.submittedBy?.fullName || "—";
@@ -234,6 +259,7 @@ export function buildBrandedChecklistHtml(
       <thead><tr><th>#</th><th>Check description</th><th>Status</th><th>Actual observation / remarks</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4" style="text-align:center;padding:20px;">No line items</td></tr>`}</tbody>
     </table>
+    ${photoHtml}
     <div class="sign-band">8. SIGNATURES</div>
     <div class="signs">${signHtml}</div>
     <div class="legend">
