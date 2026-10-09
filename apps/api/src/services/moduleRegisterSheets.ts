@@ -156,6 +156,7 @@ async function qualitySheets(projectId: string): Promise<SheetSpec[]> {
   return [
     {
       name: "CAR Register",
+      chart: { title: "NCR / CAR by status", breakdown: "Status" },
       rows: [
         ["No.", "NCR / CAR Issue Date", "Type", "Contractor", "Brief Description of Non Conformance", "Location", "Planned Closure Date", "Actual Closure Date", "Status"],
         ...ncrs.map((x) => [x.number ?? "", d(x.issueDate), x.ncrType ?? "", x.contractor ?? "", x.description, x.location ?? "", d(x.plannedClosure), d(x.actualClosure), x.status]),
@@ -163,6 +164,7 @@ async function qualitySheets(projectId: string): Promise<SheetSpec[]> {
     },
     {
       name: "Cube Test",
+      chart: { title: "Average strength by sample (N/mm²)", category: "Sample #", values: "Average Strength", type: "column" },
       rows: [
         ["Sample #", "Cast Date", "Description / Location", "Grade", "7-Day Test Date", "Strength at 7 Days (N/mm²)", "28-Day Test Date", "Strength at 28 Days (N/mm²)", "Average Strength", "Result", "Test Agency"],
         ...cubes.map((c) => [c.srNo ?? "", d(c.castDate), c.description, c.grade ?? "", d(c.testDate7), n(c.strength7), d(c.testDate28), n(c.strength28), n(c.avgStrength), c.result ?? "", c.testAgency ?? ""]),
@@ -177,6 +179,7 @@ async function qualitySheets(projectId: string): Promise<SheetSpec[]> {
     },
     {
       name: "SOR Log",
+      chart: { title: "Site observations — open vs closed", category: "Observation", planned: "Open", actual: "Close", type: "column" },
       rows: [
         ["Observation", "Total", "Open", "Close", "Closure Rate"],
         ...sor.map((s) => [s.observation, n(s.total), n(s.openCount), n(s.closedCount), pct(s.closureRate)]),
@@ -184,6 +187,7 @@ async function qualitySheets(projectId: string): Promise<SheetSpec[]> {
     },
     {
       name: "Checklist Fills",
+      chart: { title: "Checklist fills by status", breakdown: "Status" },
       rows: [
         ["Checklist", "Type", "Filled By", "Status", "Submitted"],
         ...fills.map((f) => [f.assignment.template.name, f.assignment.template.checklistType, f.submittedBy?.fullName ?? "", f.status, d(f.createdAt)]),
