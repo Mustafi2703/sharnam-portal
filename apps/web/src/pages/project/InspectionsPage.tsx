@@ -19,6 +19,7 @@ import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { CHECKLIST_FILLED_MESSAGE } from "../../lib/inPageOverlay";
 import { StatusNote } from "../../components/StatusNote";
+import { SpdcInspectionFormPanel } from "../../components/SpdcInspectionFormPanel";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
@@ -46,6 +47,8 @@ export default function InspectionsPage() {
   const [drawings, setDrawings] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
+  const [qiAssignments, setQiAssignments] = useState<any[]>([]);
+  const [irBusy, setIrBusy] = useState(false);
   const [projectVendors, setProjectVendors] = useState<any[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [ncrForm, setNcrForm] = useState({
@@ -150,6 +153,9 @@ export default function InspectionsPage() {
     const list = Array.isArray(t) ? t : [];
     setTemplates(list.slice(0, 50));
     setProjectVendors(Array.isArray(vendorsRes) ? vendorsRes : []);
+    api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=QualityInspection`, { token })
+      .then((r) => setQiAssignments(r.assignments || []))
+      .catch(() => setQiAssignments([]));
     if (!active && insp.inspections?.[0]) setActive(insp.inspections[0].id);
   };
 
@@ -1002,6 +1008,46 @@ export default function InspectionsPage() {
       />
 
       {canManage && (
+        <SpdcInspectionFormPanel
+          key={`qi-ir-${project?.id || "loading"}-${project?.clientName || ""}-${project?.contractorName || ""}`}
+          formKind="QualityIR"
+          users={users}
+          checklistAssignments={qiAssignments}
+          masterHref={`/projects/${id}/quality/checklist-master`}
+          project={project || undefined}
+          busy={irBusy}
+          onSubmit={async (payload) => {
+            setIrBusy(true);
+            setMsg("");
+            try {
+              await api(`/api/rfis/project/${id}`, {
+                method: "POST",
+                token,
+                body: JSON.stringify({
+                  subject: payload.subject,
+                  question: payload.question,
+                  rfiKind: payload.rfiKind,
+                  irNumber: payload.irNumber || null,
+                  formDataJson: payload.formDataJson,
+                  assignedToId: payload.assignedToId || null,
+                  linkedAssignmentId: payload.linkedAssignmentId || null,
+                  linkedChecklistItemId: qiAssignments.find((a) => a.id === payload.linkedAssignmentId)?.template?.id || null,
+                  linkedDrawingId: null,
+                }),
+              });
+              setMsg("Request for Inspection (SPDC/QA/F-01) raised — it is in the Inspection register.");
+              await load();
+            } finally {
+              setIrBusy(false);
+            }
+          }}
+        />
+      )}
+      <StatusNote msg={msg} className="mt-2" />
+
+      {canManage && (
+        <details className="rounded-xl border border-line bg-white">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-steel-muted select-none">Quick checklist inspection (internal, no F-01 form)</summary>
         <Card>
           <h3 className="font-semibold mb-3">Raise inspection</h3>
           <form
@@ -1068,14 +1114,14 @@ export default function InspectionsPage() {
               Create draft inspection
             </Button>
           </form>
-          <StatusNote msg={msg} className="mt-2" />
         </Card>
+        </details>
       )}
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-4 min-h-0">
-        <Card padding={false} className="min-h-0 flex flex-col">
-          <div className="px-4 py-3 border-b font-semibold bg-sand/40 shrink-0">Inspections</div>
-          <ul className="divide-y flex-1 min-h-0 max-h-[55vh] lg:max-h-[calc(100vh-14rem)] overflow-y-auto">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-4 items-start">
+        <Card padding={false}>
+          <div className="px-4 py-3 border-b font-semibold bg-sand/40">Inspections</div>
+          <ul className="divide-y max-h-[60vh] overflow-y-auto">
             {data?.inspections?.map((i: any) => (
               <button
                 key={i.id}
@@ -1096,7 +1142,7 @@ export default function InspectionsPage() {
           </ul>
         </Card>
 
-        <Card className="min-h-0 overflow-y-auto lg:max-h-[calc(100vh-10rem)]">
+        <Card>
           {!selected && <p className="text-sm text-steel-muted">Select an inspection</p>}
           {selected && (
             <div className="space-y-4">
@@ -1305,8 +1351,7 @@ export default function InspectionsPage() {
               <li key={f.id} className="flex flex-wrap justify-between gap-2 border-b border-line/60 pb-2">
                 <span>{f.assignment?.template?.name || "Checklist"}</span>
                 <span className="text-steel-muted text-xs">
-                  {f.submittedBy?.fullName} · {new Date(f.createdAt).toLocaleDateString()} · {f.progress?.answered ?? 0}/
-                  {f.progress?.total ?? "?"} lines
+                  {f.submittedBy?.fullName} · {new Date(f.createdAt).toLocaleDateString()} · {f.progress?.answered ?? 0}/{f.progress?.total ?? f.progress?.answered ?? 0} items answered
                 </span>
               </li>
             ))}

@@ -379,169 +379,155 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
               <tr>
                 {canReview && <th className="w-8"></th>}
                 <th>When</th>
-                <th>Family</th>
                 <th>Checklist</th>
-                <th>Progress</th>
-                <th>Evidence</th>
-                <th>Responsible</th>
-                <th>Status</th>
-                <th></th>
+                <th>Progress &amp; evidence</th>
+                <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((s) => (
-                <tr key={s.id}>
-                  {canReview && (
-                    <td className="text-center">
-                      <div className="flex flex-col items-center gap-1">
+              {rows.map((s) => {
+                const drawingCheck = s.assignment?.template?.checklistType === "DrawingCheck";
+                return (
+                  <tr key={s.id} className="align-top">
+                    {canReview && (
+                      <td className="text-center">
                         <input
                           type="checkbox"
                           aria-label="Select fill"
                           checked={selectedIds.includes(s.id)}
                           onChange={(e) => setSelectedIds((prev) => (e.target.checked ? [...prev, s.id] : prev.filter((x) => x !== s.id)))}
                         />
-                        <button type="button" className="text-[10px] font-semibold text-danger cursor-pointer disabled:opacity-50" disabled={deletingId === s.id} onClick={() => void deleteFill(s)}>
-                          {deletingId === s.id ? "…" : "Delete"}
-                        </button>
+                      </td>
+                    )}
+                    <td className="whitespace-nowrap">
+                      {new Date(s.createdAt).toLocaleString()}
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <Badge tone={s.status === "Submitted" || s.status === "Approved" ? "ok" : s.status === "Draft" ? "warn" : "neutral"}>
+                          {s.status}
+                        </Badge>
+                        {s.rfiNumber ? <Badge tone="brand">Request</Badge> : null}
+                      </div>
+                      <div className="mt-1">
+                        <Badge tone="neutral">{s.assignment?.template?.checklistType || "—"}</Badge>
                       </div>
                     </td>
-                  )}
-                  <td className="whitespace-nowrap">{new Date(s.createdAt).toLocaleString()}</td>
-                  <td>
-                    <Badge tone="neutral">{s.assignment?.template?.checklistType || "—"}</Badge>
-                  </td>
-                  <td>{s.assignment?.template?.name || "—"}</td>
-                  <td>
-                    <div className="font-mono text-xs">{s.progress?.progressLabel || "—"}</div>
-                    <div className="text-[10px] text-steel-muted">{s.progress?.answerPct ?? 0}% · {s.progress?.statusHint || ""}</div>
-                    <div className="w-20 h-1 bg-line rounded-full mt-1 overflow-hidden">
-                      <div className="h-full bg-brand" style={{ width: `${s.progress?.answerPct || 0}%` }} />
-                    </div>
-                  </td>
-                  <td className="text-xs">
-                    {s.progress?.evidenceCount ?? 0} total
-                    <div className="text-[10px] text-steel-muted">
-                      {s.progress?.linkEvidence || 0} links · {s.progress?.fileEvidence || s.photos?.length || 0} files
-                    </div>
-                  </td>
-                  <td>
-                    {s.submittedBy?.fullName || "—"}
-                    <div className="text-[11px] text-steel-muted capitalize">{s.submittedBy?.role || "—"}</div>
-                    <div className="text-[10px] font-mono text-steel-muted">{s.drawing?.drawingNumber || "No drawing"}</div>
-                    {s.rfiNumber ? <div className="text-[10px] font-semibold text-brand mt-0.5">{s.rfiNumber}</div> : null}
-                  </td>
-                  <td>
-                    <Badge tone={s.status === "Submitted" || s.status === "Approved" ? "ok" : s.status === "Draft" ? "warn" : "neutral"}>
-                      {s.status}
-                    </Badge>
-                    {s.rfiNumber ? <div className="mt-1"><Badge tone="brand">Request</Badge></div> : null}
-                  </td>
-                  <td className="text-right">
-                    {id && s.assignment?.id && canFill && (
-                      <Button
-                        type="button"
-                        className="!text-xs !py-1.5 mr-1"
-                        onClick={() =>
-                          openChecklistFillWindow(
-                            id,
-                            s.assignment.id,
-                            s.assignment?.template?.checklistType || family || "SiteExecution",
-                            {
-                              resumeDraft: s.status === "Draft",
-                              submissionId: s.id,
-                              drawingId: s.drawingId || s.drawing?.id || undefined,
-                              revisionId: s.revisionId || s.revision?.id || undefined,
-                              rfi: s.rfiNumber || undefined,
-                            }
-                          )
-                        }
-                      >
-                        {s.status === "Draft" ? "Resume fill" : "Open fill"}
-                      </Button>
-                    )}
-                    {s.status !== "Draft" && (
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void downloadBranded(s.id)}>
-                          {s.assignment?.template?.checklistType === "DrawingCheck" ? "Checklist PDF" : "Branded PDF"}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          className="!text-xs !py-1.5"
-                          onClick={async () => {
-                            try {
-                              await downloadBrandedChecklistXlsx(s.id, token);
-                              setMsg(
-                                s.assignment?.template?.checklistType === "DrawingCheck"
-                                  ? "Drawing check Excel downloaded — each Yes / No / N.A. line is filled."
-                                  : "Branded Excel downloaded."
-                              );
-                            } catch (err) {
-                              setMsg(err instanceof Error ? err.message : "Excel download failed");
-                            }
-                          }}
-                        >
-                          {s.assignment?.template?.checklistType === "DrawingCheck" ? "Checklist Excel" : "Branded Excel"}
-                        </Button>
-                        {s.rfiId && (
-                          <>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="!text-xs !py-1.5"
-                              onClick={() =>
-                                void downloadAuthFile(
-                                  `/api/rfis/${s.rfiId}/download.xlsx`,
-                                  token,
-                                  `${s.rfiNumber || "RFI"}-Form.xlsx`,
-                                ).catch((err) => setMsg(err instanceof Error ? err.message : "RFI Excel failed"))
-                              }
-                            >
-                              RFI form Excel
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="!text-xs !py-1.5"
-                              onClick={() =>
-                                void downloadAuthFile(
-                                  `/api/rfis/${s.rfiId}/download.html`,
-                                  token,
-                                  `${s.rfiNumber || "RFI"}-Form.html`,
-                                ).catch((err) => setMsg(err instanceof Error ? err.message : "RFI form failed"))
-                              }
-                            >
-                              RFI form PDF
-                            </Button>
-                          </>
-                        )}
-                        {canReview && (s.status === "Submitted" || s.status === "Reviewed") && (
-                          <>
-                            <Button
-                              type="button"
-                              className="!text-xs !py-1.5"
-                              onClick={() => void reviewSubmission(s.id, "Approved", true)}
-                            >
-                              Approve + close RFI
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="!text-xs !py-1.5"
-                              onClick={() => void reviewSubmission(s.id, "Rejected", false)}
-                            >
-                              Reject
-                            </Button>
-                          </>
-                        )}
+                    <td className="min-w-[10rem] max-w-[16rem]">
+                      <div className="break-words">{s.assignment?.template?.name || "—"}</div>
+                      <div className="text-[10px] font-mono text-steel-muted">{s.drawing?.drawingNumber || "No drawing"}</div>
+                      {s.rfiNumber ? <div className="text-[10px] font-semibold text-brand mt-0.5">{s.rfiNumber}</div> : null}
+                      <div className="text-[11px] text-steel-muted mt-1">
+                        {s.submittedBy?.fullName || "—"} · <span className="capitalize">{s.submittedBy?.role || "—"}</span>
                       </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="min-w-[8rem]">
+                      <div className="font-mono text-xs">{s.progress?.progressLabel || "—"}</div>
+                      <div className="text-[10px] text-steel-muted">{s.progress?.answerPct ?? 0}% · {s.progress?.statusHint || ""}</div>
+                      <div className="w-20 h-1 bg-line rounded-full mt-1 overflow-hidden">
+                        <div className="h-full bg-brand" style={{ width: `${s.progress?.answerPct || 0}%` }} />
+                      </div>
+                      <div className="text-[10px] text-steel-muted mt-1">
+                        {s.progress?.evidenceCount ?? 0} evidence · {s.progress?.linkEvidence || 0} links · {s.progress?.fileEvidence || s.photos?.length || 0} files
+                      </div>
+                    </td>
+                    <td className="w-[11rem]">
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {id && s.assignment?.id && canFill && (
+                            <Button
+                              type="button"
+                              className="!text-xs !py-1.5"
+                              onClick={() =>
+                                openChecklistFillWindow(id, s.assignment.id, s.assignment?.template?.checklistType || family || "SiteExecution", {
+                                  resumeDraft: s.status === "Draft",
+                                  submissionId: s.id,
+                                  drawingId: s.drawingId || s.drawing?.id || undefined,
+                                  revisionId: s.revisionId || s.revision?.id || undefined,
+                                  rfi: s.rfiNumber || undefined,
+                                })
+                              }
+                            >
+                              {s.status === "Draft" ? "Resume fill" : "Open fill"}
+                            </Button>
+                          )}
+                          {canReview && (s.status === "Submitted" || s.status === "Reviewed") && (
+                            <>
+                              <Button type="button" className="!text-xs !py-1.5" onClick={() => void reviewSubmission(s.id, "Approved", true)}>
+                                Approve
+                              </Button>
+                              <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => void reviewSubmission(s.id, "Rejected", false)}>
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                        <details className="w-full text-xs">
+                          <summary className="cursor-pointer text-right text-brand font-semibold select-none">More ▾</summary>
+                          <div className="mt-1 flex flex-col items-stretch gap-1">
+                            {s.status !== "Draft" && (
+                              <>
+                                <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => void downloadBranded(s.id)}>
+                                  {drawingCheck ? "Checklist PDF" : "Branded PDF"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="!text-xs !py-1"
+                                  onClick={async () => {
+                                    try {
+                                      await downloadBrandedChecklistXlsx(s.id, token);
+                                      setMsg(drawingCheck ? "Drawing check Excel downloaded — each Yes / No / N.A. line is filled." : "Branded Excel downloaded.");
+                                    } catch (err) {
+                                      setMsg(err instanceof Error ? err.message : "Excel download failed");
+                                    }
+                                  }}
+                                >
+                                  {drawingCheck ? "Checklist Excel" : "Branded Excel"}
+                                </Button>
+                                {s.rfiId && (
+                                  <>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      className="!text-xs !py-1"
+                                      onClick={() =>
+                                        void downloadAuthFile(`/api/rfis/${s.rfiId}/download.xlsx`, token, `${s.rfiNumber || "RFI"}-Form.xlsx`).catch((err) =>
+                                          setMsg(err instanceof Error ? err.message : "RFI Excel failed"),
+                                        )
+                                      }
+                                    >
+                                      RFI form Excel
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      className="!text-xs !py-1"
+                                      onClick={() =>
+                                        void downloadAuthFile(`/api/rfis/${s.rfiId}/download.html`, token, `${s.rfiNumber || "RFI"}-Form.html`).catch((err) =>
+                                          setMsg(err instanceof Error ? err.message : "RFI form failed"),
+                                        )
+                                      }
+                                    >
+                                      RFI form PDF
+                                    </Button>
+                                  </>
+                                )}
+                              </>
+                            )}
+                            {canReview && (
+                              <Button type="button" variant="danger" className="!text-xs !py-1" disabled={deletingId === s.id} onClick={() => void deleteFill(s)}>
+                                {deletingId === s.id ? "Deleting…" : "Delete fill"}
+                              </Button>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {!rows.length && !busy && (
                 <tr>
-                  <td colSpan={canReview ? 9 : 8} className="empty">
+                  <td colSpan={canReview ? 5 : 4} className="empty">
                     No fills logged yet for this filter.
                   </td>
                 </tr>
