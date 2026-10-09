@@ -40,7 +40,6 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
   await wb.xlsx.readFile(tpl);
 
   detachSharedStyles(wb);
-  const pass7 = cubes.filter((c) => c.strength7 != null && /pass/i.test(c.result || "")).length;
   const samples = cubes.filter((c) => c.strength7 != null || c.strength28 != null || c.strength != null).length;
 
   const dash = wb.worksheets.find((s) => /dashboard/i.test(s.name)) || wb.worksheets[0];
@@ -64,9 +63,55 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
         }
       });
     }
-    // KPI value row under Dashboard labels (template R7)
-    dash.getCell("G7").value = samples;
-    dash.getCell("L7").value = pass7 || samples;
+    // KPI value row under Dashboard labels (template R7) — every cell from this project, none from the sample sheet.
+    const weekEnd = new Date();
+    const weekStart = new Date(weekEnd.getTime() - 7 * 86400000);
+    const dprWeek = await prisma.dprSnapshot.findMany({
+      where: { projectId, logDate: { gte: weekStart, lte: weekEnd } },
+      select: { linesJson: true },
+    });
+    let concreteM3 = 0;
+    for (const sn of dprWeek) {
+      let lines: { description?: string; unit?: string; qtyToday?: number }[] = [];
+      try {
+        lines = JSON.parse(sn.linesJson || "[]");
+      } catch {
+        lines = [];
+      }
+      for (const l of lines) {
+        if (/cum|m3|m³|cu\.?\s?m/i.test(l.unit || "") && /concret|rcc|pcc|pour|slab|column|footing|raft|beam/i.test(l.description || "")) concreteM3 += Number(l.qtyToday) || 0;
+      }
+    }
+    const lastWeekCubes = cubes.filter((c) => c.castDate && c.castDate >= weekStart && c.castDate <= weekEnd);
+    const pass7Week = lastWeekCubes.filter((c) => c.strength7 != null && /pass/i.test(c.result || "")).length;
+    const fail7n = lastWeekCubes.filter((c) => c.strength7 != null && c.result && /fail/i.test(c.result)).length;
+    const fail28n = cubes.filter((c) => c.strength28 != null && c.result && /fail/i.test(c.result)).length;
+    dash.getCell("A7").value = `${Math.round(concreteM3 * 10) / 10} m3`;
+    dash.getCell("G7").value = lastWeekCubes.length;
+    dash.getCell("L7").value = pass7Week;
+    dash.getCell("Q7").value = fail7n ? `${fail7n} sample(s) cast last week have not passed the 7-day strength — PMC to review.` : "No 7-day failures among the samples cast last week.";
+    dash.getCell("V7").value = fail28n;
+    // Quality performance index: average closure rate of site observations, instructions and NCRs.
+    const closureOf = (open: number, total: number) => (total > 0 ? (total - open) / total : null);
+    const obsAll = siteRecords.filter((r) => !/instruct/i.test(`${r.recordType || ""} ${r.title || ""}`));
+    const insAll = siteRecords.filter((r) => /instruct/i.test(`${r.recordType || ""} ${r.title || ""}`));
+    const isOpen = (r: { status?: string | null }) => !/close|closed|done/i.test(r.status || "");
+    const rates = [
+      closureOf(obsAll.filter(isOpen).length, obsAll.length),
+      closureOf(insAll.filter(isOpen).length, insAll.length),
+      closureOf(ncrs.filter((n) => !/close/i.test(n.status || "")).length, ncrs.length),
+    ].filter((v): v is number => v != null);
+    const wk = (() => {
+      const t = new Date(Date.UTC(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate()));
+      t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+      return Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+    })();
+    dash.getCell("A25").value = wk ? `QPI Week ${wk}` : "QPI this week";
+    dash.getCell("E25").value = rates.length ? Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 100) / 100 : null;
+    for (const r of [26, 27]) {
+      dash.getCell(`A${r}`).value = null;
+      dash.getCell(`E${r}`).value = null;
+    }
     dash.getCell("A1").value = `Quality Performance Report — ${project.name}`;
     dash.getCell("A1").note = `Portal sync ${drawingRegisterWeekStamp()} · QI fills ${qiFills} · QAP lines ${qapCount} · Cubes ${cubes.length} · NCR ${ncrs.length}`;
   }
@@ -145,6 +190,67 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
       cubeSheet.getCell(r, 2).value = c.strength7 ?? c.strength ?? c.strength28 ?? "";
       cubeSheet.getCell(r, 3).value = 17;
     });
+  }
+
+  // Checklist summary (pivot): filled QI checklists by discipline / category — replaces the client's sample counts.
+  const sheet2 = wb.worksheets.find((x) => x.name === "Sheet2");
+  if (sheet2) {
+    const filled = await prisma.checklistSubmission.findMany({
+      where: { assignment: { projectId, template: { checklistType: { in: ["QualityInspection", "SiteExecution", "Safety"] } } }, status: { in: ["Submitted", "Approved", "Reviewed"] } },
+      select: { assignment: { select: { template: { select: { category: true } } } } },
+    });
+    const byCat = new Map<string, number>();
+    for (const f of filled) {
+      const c = (f.assignment?.template?.category || "Other").trim() || "Other";
+      byCat.set(c, (byCat.get(c) || 0) + 1);
+    }
+    for (let r = 2; r <= 40; r++) {
+      sheet2.getCell(r, 1).value = null;
+      sheet2.getCell(r, 2).value = null;
+    }
+    let r = 2;
+    for (const [cat, n] of [...byCat.entries()].sort()) {
+      sheet2.getCell(r, 1).value = cat;
+      sheet2.getCell(r, 2).value = n;
+      r++;
+    }
+    sheet2.getCell(r, 1).value = "Grand Total";
+    sheet2.getCell(r, 2).value = filled.length;
+  }
+
+  // QAP detail: project header and this project's activity lines (never the client's sample plan).
+  const qapSheet = wb.worksheets.find((x) => /quality assurance plan/i.test(x.name));
+  if (qapSheet) {
+    qapSheet.getCell("C2").value = project.name;
+    qapSheet.getCell("C3").value = project.clientName || "";
+    qapSheet.getCell("C4").value = (project as { designConsultant?: string | null }).designConsultant || "";
+    qapSheet.getCell("C5").value = project.pmcName || SPDC_PMC_NAME;
+    qapSheet.getCell("C6").value = (project as { contractorName?: string | null }).contractorName || "";
+    for (const m of [...((qapSheet.model as unknown as { merges?: string[] }).merges || [])]) {
+      const top = Number(m.match(/\d+/)?.[0] || 0);
+      if (top >= 10) qapSheet.unMergeCells(m);
+    }
+    const last = Math.max(qapSheet.rowCount, 12);
+    for (let r = 10; r <= last; r++) for (let c = 1; c <= 12; c++) qapSheet.getCell(r, c).value = null;
+    const qapRows = await prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }] });
+    const latestWeek = qapRows[0]?.weekLabel;
+    qapRows
+      .filter((q) => q.weekLabel === latestWeek)
+      .forEach((q, i) => {
+        const r = 10 + i;
+        qapSheet.getCell(r, 1).value = q.srNo || "";
+        qapSheet.getCell(r, 2).value = q.section || q.activity || "";
+        qapSheet.getCell(r, 3).value = q.description || "";
+        qapSheet.getCell(r, 4).value = q.frequency || "";
+        qapSheet.getCell(r, 5).value = q.codeOfConformance || "";
+        qapSheet.getCell(r, 6).value = q.testAgency || "";
+        qapSheet.getCell(r, 7).value = q.contractorPerformer || "";
+        qapSheet.getCell(r, 8).value = q.contractorChecker || "";
+        qapSheet.getCell(r, 9).value = q.pmcRole || "";
+        qapSheet.getCell(r, 10).value = q.clientRole || "";
+        qapSheet.getCell(r, 11).value = q.records || "";
+        qapSheet.getCell(r, 12).value = q.remarks || "";
+      });
   }
 
   const buf = await restoreTemplateCharts(fs.readFileSync(tpl), Buffer.from(await wb.xlsx.writeBuffer()));

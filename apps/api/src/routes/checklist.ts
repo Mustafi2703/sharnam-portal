@@ -1982,7 +1982,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     prisma.checklistSubmission.count({
       where: { assignment: { projectId, template: { checklistType: "SiteExecution" } }, status: COUNTED },
     }),
-    prisma.qualityInspection.count({ where: { projectId, status: { in: ["Open", "Failed", "Rework"] } } }),
+    prisma.rfi.count({ where: { projectId, rfiKind: "QualityIR", status: { in: ["Open", "Answered"] } } }),
     prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }] }),
     prisma.rfi.count({
       where: {

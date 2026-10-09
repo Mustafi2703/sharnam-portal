@@ -72,7 +72,6 @@ export default function InspectionsPage() {
   const [pack, setPack] = useState<any>(null);
   const ncrAddFormRef = useRef<HTMLFormElement>(null);
   const [cubeAddOpen, setCubeAddOpen] = useState(false);
-  const [cubeSharePointUrl, setCubeSharePointUrl] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "Site quality inspection",
     drawingId: "",
@@ -158,6 +157,11 @@ export default function InspectionsPage() {
       .catch(() => setQiAssignments([]));
     if (!active && insp.inspections?.[0]) setActive(insp.inspections[0].id);
   };
+
+  useEffect(() => {
+    // The QI sheet was the same F-01 request as the Inspection register — one place now.
+    if (sheetKey === "qi" && id) navigate(`/projects/${id}/inspection-register`, { replace: true });
+  }, [sheetKey, id, navigate]);
 
   useEffect(() => {
     if (qualityLegacyQapRedirect(searchParams) && id) {
@@ -283,30 +287,16 @@ export default function InspectionsPage() {
       />
       </div>
 
-      {sheetKey !== "cube-test" && !isQualityRegister && (
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between border-b border-line pb-3 -mt-1 shrink-0">
-        <div className="flex flex-wrap gap-1.5">
-          <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open QI</Badge>
-          <Link to={`/projects/${id}/qap`}>
-            <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
-          </Link>
-          <Link to={`/projects/${id}/qap`}>
-            <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
-          </Link>
-          {id ? <ReportExportButtons projectId={id} kind="quality" compact /> : null}
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-brand shrink-0">
-          <button
-            type="button"
-            className="text-brand font-semibold"
-            onClick={() => id && void openFamilyChecklistFill(id, "QualityInspection", token)}
-          >
-            Fill quality checklist →
-          </button>
-          <Link to={`/projects/${id}/quality/checklist-master`}>Checklist master →</Link>
-          <Link to={`/projects/${id}/quality/checklist-logs`}>QI fill log →</Link>
-          <Link to={`/projects/${id}/qap`}>Quality Assurance Plan →</Link>
-        </div>
+      {sheetKey === "" && (
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line pb-3 -mt-1 shrink-0">
+        <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open F-01 requests</Badge>
+        <Link to={`/projects/${id}/qap`}>
+          <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
+        </Link>
+        <Link to={`/projects/${id}/qap`}>
+          <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
+        </Link>
+        {id ? <ReportExportButtons projectId={id} kind="quality" compact label="Quality pack" /> : null}
       </div>
       )}
 
@@ -918,7 +908,7 @@ export default function InspectionsPage() {
             steps={[
               { label: "Cast & register", hint: "Footing groups + 7D/28D" },
               { label: "Lab results", hint: "Inline edit strength" },
-              { label: "Export pack", hint: "XLSX / PDF / SharePoint" },
+              { label: "Download", hint: "XLSX / PDF" },
               { label: "DPR link", hint: "Cube stats on quality dashboard" },
             ]}
           />
@@ -929,7 +919,7 @@ export default function InspectionsPage() {
             canEdit={canManage}
             message={msg || undefined}
             onAddRow={canManage ? () => setCubeAddOpen(true) : undefined}
-            uploadHint="Import client SPDC CUBE REGISTER .xlsx (cols B–M). Publish writes live + Weekly pack."
+            uploadHint="Import the client SPDC CUBE REGISTER .xlsx (columns B–M)."
             onUpload={
               canManage
                 ? async (file) => {
@@ -957,26 +947,6 @@ export default function InspectionsPage() {
               if (!id) return;
               await downloadAuthFile(`/api/checklist/project/${id}/cubes/download.html`, token, `Cube-Register-${project?.code || id}.html`);
             }}
-            onPublishSharePoint={
-              canManage
-                ? async () => {
-                    if (!id) return;
-                    try {
-                      const out = await api<{ url?: string; sharePointUrl?: string; files?: unknown[] }>(
-                        `/api/checklist/project/${id}/qap/publish`,
-                        { method: "POST", token, body: JSON.stringify({}) }
-                      );
-                      const link = out.sharePointUrl || out.url || null;
-                      setCubeSharePointUrl(link);
-                      setMsg("Quality pack published (QAP + Cube + Dashboard + NCRs) with weekly copy");
-                    } catch (err) {
-                      setMsg(err instanceof Error ? err.message : "Publish failed");
-                    }
-                  }
-                : undefined
-            }
-            publishLabel="Publish quality pack"
-            sharePointUrl={cubeSharePointUrl}
           />
           </div>
           <div className="cube-page__register flex flex-col min-w-0">

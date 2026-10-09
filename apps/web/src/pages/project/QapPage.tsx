@@ -407,6 +407,7 @@ export default function QapPage() {
               }
             : undefined
         }
+        publishLabel="Publish quality pack"
         sharePointUrl={sharePointUrl}
         onDownloadHtml={async () => {
           if (!id) return;

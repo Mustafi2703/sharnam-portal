@@ -212,17 +212,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Quality Assurance Plan Week 50 · Detail",
     },
     {
-      to: "inspections",
-      label: "QI & checklist fills",
-      query: "sheet=qi",
-      blurb: "Raise QI, fill checklists → DPR Quality section.",
-    },
-    {
-      to: "checklist",
-      label: "Site checklists",
-      blurb: "Final Index site execution — assign, partial fill, SharePoint export.",
-    },
-    {
       to: "quality/checklist-master",
       label: "Quality IR master",
       roles: ["admin", "office", "employee", "client"],
@@ -262,9 +251,9 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "inspection-register",
-      label: "Quality IR register",
+      label: "Request for Inspection (F-01)",
       roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "SPDC/QA/F-01 Request for Inspection — text drawing ref, live register.",
+      blurb: "Raise the SPDC/QA/F-01 Request for Inspection, assign it, track the register and download the branded form.",
       sheet: "SPDC_Request_for_Inspection_Form.xlsx",
     },
   ],
