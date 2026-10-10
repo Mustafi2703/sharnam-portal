@@ -322,9 +322,47 @@ export default function DrawingsPage() {
       setBusy(false);
     }
   }
+  function importGfcLog(f: File) {
+    if (!id) return;
+    setDumpBusy(true);
+    setMsg("Importing Approval & GFC log…");
+    const fd = new FormData();
+    fd.append("file", f);
+    void api<{ drawings: number; revisions: number }>(`/api/drawings/project/${id}/gfc-log/import`, {
+      method: "POST",
+      token,
+      body: fd,
+      timeoutMs: 180_000,
+    })
+      .then(async (out) => {
+        setMsg(`Imported ${out.drawings} drawing rows and ${out.revisions} revision dates. The drawing files are added later, row by row — each upload needs its Drawing Check completed.`);
+        await load();
+      })
+      .catch((err) => setMsg(err instanceof Error ? err.message : "GFC import failed"))
+      .finally(() => setDumpBusy(false));
+  }
+  const [rowFilter, setRowFilter] = useState<"all" | "nofile" | "nocheck">("all");
+  const hasDrawingFile = (d: any) =>
+    (d.revisions || []).some((r: any) => {
+      const u = revisionUploadStatus(r);
+      return u.pdf || u.dwg;
+    });
+  const completeness = useMemo(() => {
+    const total = drawings.length;
+    const withFile = drawings.filter(hasDrawingFile).length;
+    const withCheck = drawings.filter((d) => drawingCheckFilled(d)).length;
+    return { total, withFile, withCheck };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawings]);
   const filtered = useMemo(
-    () => (filter === "All" ? drawings : drawings.filter((d) => d.discipline === filter)),
-    [drawings, filter]
+    () => {
+      const byDiscipline = filter === "All" ? drawings : drawings.filter((d) => d.discipline === filter);
+      if (rowFilter === "nofile") return byDiscipline.filter((d) => !hasDrawingFile(d));
+      if (rowFilter === "nocheck") return byDiscipline.filter((d) => !drawingCheckFilled(d));
+      return byDiscipline;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [drawings, filter, rowFilter]
   );
   const revSlots = useMemo(() => gfcRevSlots(drawings), [drawings]);
   const uploadTarget = drawings.find((d) => d.id === uploadForId);
@@ -689,8 +727,24 @@ export default function DrawingsPage() {
               }}>
                 + Add row
               </Button>
+              {user?.role === "admin" || user?.role === "office" ? (
+                <label className="inline-flex cursor-pointer items-center rounded-lg border border-brand/40 bg-paper px-3 py-2 text-sm font-semibold text-brand hover:bg-sand/60" title="Import the Approval & GFC Drawing Log Excel — the register rows now, drawing files later">
+                  {dumpBusy ? "Importing…" : "Upload GFC log (Excel)"}
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="sr-only"
+                    disabled={dumpBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) importGfcLog(f);
+                    }}
+                  />
+                </label>
+              ) : null}
               <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
-                Upload GFC
+                Upload drawing
               </Button>
             </>
           ) : undefined
@@ -765,23 +819,7 @@ export default function DrawingsPage() {
                       const f = e.target.files?.[0];
                       e.target.value = "";
                       (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-                      if (!f || !id) return;
-                      setDumpBusy(true);
-                      setMsg("Importing Approval & GFC log…");
-                      const fd = new FormData();
-                      fd.append("file", f);
-                      void api<{ drawings: number; revisions: number }>(`/api/drawings/project/${id}/gfc-log/import`, {
-                        method: "POST",
-                        token,
-                        body: fd,
-                        timeoutMs: 180_000,
-                      })
-                        .then(async (out) => {
-                          setMsg(`Imported ${out.drawings} drawings, ${out.revisions} new revision dates.`);
-                          await load();
-                        })
-                        .catch((err) => setMsg(err instanceof Error ? err.message : "GFC import failed"))
-                        .finally(() => setDumpBusy(false));
+                      if (f) importGfcLog(f);
                     }}
                   />
                 </label>
@@ -805,6 +843,26 @@ export default function DrawingsPage() {
       </div>
 
       <StatusNote msg={msg} />
+
+      {canUpload && completeness.total > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-paper px-3 py-2 text-xs">
+          <span className="font-semibold text-ink">{completeness.total} register rows</span>
+          <Badge tone={completeness.withFile === completeness.total ? "ok" : "warn"}>{completeness.withFile}/{completeness.total} have the drawing file</Badge>
+          <Badge tone={completeness.withCheck === completeness.total ? "ok" : "warn"}>{completeness.withCheck}/{completeness.total} checklists filled</Badge>
+          <span className="ml-auto flex gap-1">
+            {([["all", "All rows"], ["nofile", "Awaiting drawing file"], ["nocheck", "Checklist pending"]] as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setRowFilter(k)}
+                className={`rounded-full border px-2.5 py-1 font-medium ${rowFilter === k ? "bg-procore-navy text-white border-procore-navy" : "bg-paper text-ink border-line"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
 
       {canUpload && precheckOpen && !unlockToken && precheckMode === "register" && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">
@@ -1021,8 +1079,11 @@ export default function DrawingsPage() {
                         ) : (
                           <span className="text-xs text-steel-muted">—</span>
                         )}
-                        {drawingCheckFilled(d) && (
-                          <div className="text-[10px] text-steel-muted mt-0.5">Checklist logged</div>
+                        {!hasDrawingFile(d) && <div className="text-[10px] font-semibold text-amber-700 mt-0.5">Awaiting drawing file</div>}
+                        {drawingCheckFilled(d) ? (
+                          <div className="text-[10px] text-emerald-700 mt-0.5">Checklist logged</div>
+                        ) : (
+                          <div className="text-[10px] text-amber-700 mt-0.5">Checklist pending</div>
                         )}
                       </td>
                       {revSlots.map((slot) => {
@@ -1072,8 +1133,8 @@ export default function DrawingsPage() {
                             {open ? "Hide log" : "Log"}
                           </Button>
                           {canUpload && (
-                            <Button type="button" variant="secondary" className="!px-2 !py-1 !text-xs" onClick={() => openUploadRev(d)}>
-                              Upload rev
+                            <Button type="button" variant={hasDrawingFile(d) ? "secondary" : "primary"} className="!px-2 !py-1 !text-xs" onClick={() => openUploadRev(d)}>
+                              {hasDrawingFile(d) ? "Upload rev" : "Upload drawing"}
                             </Button>
                           )}
                           {canUpload && (
