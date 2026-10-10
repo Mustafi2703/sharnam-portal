@@ -332,6 +332,90 @@ uatDataRouter.post("/logins-cleanup", async (req: AuthedRequest, res) => {
   res.json({ ok: true, removed, kept: plan.keep.length });
 });
 
+/** ── Role map: the UAT logins and the role / party link each must have. ── */
+const ROLE_MAP_TARGETS: { email: string; label: string; role: string; partyType?: string }[] = [
+  { email: "nirav@spdc.in", label: "SPDC admin", role: "admin" },
+  { email: "baibhabmustafi@gmail.com", label: "SPDC site engineer", role: "site_employee" },
+  { email: "hello@twinoxis.com", label: "Voltamp client (read-only)", role: "client", partyType: "Client" },
+  { email: "admin@twinoxis.com", label: "Design consultant", role: "employee", partyType: "Consultant" },
+  { email: "hello@qryxtech.com", label: "Contractor", role: "vendor", partyType: "Contractor" },
+];
+const PARTY_ROLES = ["client", "employee", "vendor"];
+
+async function roleMapRows() {
+  const out = [];
+  for (const t of ROLE_MAP_TARGETS) {
+    const user = await prisma.user.findFirst({
+      where: { email: t.email },
+      include: {
+        vendor: { select: { id: true, name: true, partyType: true, isActive: true } },
+        memberships: { include: { project: { select: { code: true } } } },
+      },
+    });
+    const issues: string[] = [];
+    if (!user) issues.push("No login with this e-mail — create it (staff: HRMS; client / consultant / contractor: CRM directory → Activate portal).");
+    else {
+      if (!user.isActive) issues.push("Login is switched off.");
+      if (user.role !== t.role) issues.push(`Role is "${user.role}", should be "${t.role}".`);
+      if (PARTY_ROLES.includes(t.role) && t.role !== "employee" || t.role === "employee") {
+        if (!user.vendorId) issues.push("Not linked to a company in the CRM directory — party logins need that link.");
+        else if (user.vendor && user.vendor.isActive === false) issues.push(`Company "${user.vendor.name}" is switched off, so this login is hidden from lists.`);
+      }
+      if (!PARTY_ROLES.includes(t.role) && user.vendorId) issues.push("Staff login is still linked to a company — the link should be cleared.");
+      if (t.role !== "admin" && !user.memberships.length) issues.push("Not a member of any project yet.");
+    }
+    out.push({
+      email: t.email,
+      label: t.label,
+      expectedRole: t.role,
+      expectedParty: t.partyType || null,
+      found: Boolean(user),
+      role: user?.role || null,
+      portal: user?.portal || null,
+      isActive: user?.isActive ?? null,
+      company: user?.vendor ? `${user.vendor.name} (${user.vendor.partyType}${user.vendor.isActive === false ? ", off" : ""})` : null,
+      projects: user?.memberships.map((m) => m.project.code) || [],
+      ok: issues.length === 0,
+      issues,
+    });
+  }
+  return out;
+}
+
+uatDataRouter.get("/role-map", async (_req, res) => {
+  res.json(await roleMapRows());
+});
+
+uatDataRouter.post("/role-map/apply", async (req: AuthedRequest, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const target = ROLE_MAP_TARGETS.find((t) => t.email === email);
+  if (!target) return res.status(400).json({ error: "That e-mail is not on the role map." });
+  const user = await prisma.user.findFirst({ where: { email } });
+  if (!user) return res.status(404).json({ error: "No login with that e-mail yet — create it first." });
+  if (user.role === "admin" && target.role !== "admin") return res.status(400).json({ error: "An admin login's role is not changed here." });
+  const { portalForRole } = await import("@sharnam/shared");
+  const data: Record<string, unknown> = { isActive: true, role: target.role, portal: portalForRole(target.role as never) };
+  if (user.fullName.startsWith("[Removed]")) data.fullName = user.fullName.replace(/^\[Removed\]\s*/, "") || user.email;
+  let linked = "";
+  if (PARTY_ROLES.includes(target.role)) {
+    // Party logins hang off a CRM directory company — link by the company's e-mail when the link is missing.
+    let vendorId = user.vendorId;
+    if (!vendorId) {
+      const v = await prisma.vendor.findFirst({ where: { email } });
+      if (!v) return res.status(400).json({ error: "No CRM directory company has this e-mail. Add the company in CRM → Directory with this e-mail, then Activate portal." });
+      vendorId = v.id;
+      linked = v.name;
+    }
+    data.vendorId = vendorId;
+    await prisma.vendor.update({ where: { id: vendorId }, data: { isActive: true } });
+  } else {
+    data.vendorId = null;
+  }
+  await prisma.user.update({ where: { id: user.id }, data });
+  await audit("uat.role_map_apply", { userId: req.user!.id, meta: { email, role: target.role, linked: linked || undefined } });
+  res.json({ ok: true, email, role: target.role, linked: linked || undefined });
+});
+
 /** ── Find any login by e-mail and, if needed, bring it back (switch on, drop "[Removed]", set role / password). ── */
 const STAFF_ROLES = ["admin", "office", "hr", "site_employee"];
 const RESTORE_ROLES = ["site_employee", "employee", "hr", "office", "client", "vendor"];

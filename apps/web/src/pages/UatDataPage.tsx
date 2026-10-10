@@ -166,6 +166,64 @@ function EnvironmentCard({ token }: { token: string | null }) {
   );
 }
 
+/** Role map — the UAT logins against the role and company link each must have. */
+function RoleMapCard({ token }: { token: string | null }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [note, setNote] = useState("");
+  async function load() {
+    try {
+      setRows(await api<any[]>("/api/uat-data/role-map", { token }));
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not load");
+    }
+  }
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+  async function fix(email: string) {
+    setNote("");
+    try {
+      const out = await api<any>("/api/uat-data/role-map/apply", { method: "POST", token, body: JSON.stringify({ email }), headers: { "Content-Type": "application/json" } });
+      setNote(`${email} is now ${out.role}${out.linked ? `, linked to ${out.linked}` : ""}.`);
+      await load();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not fix");
+    }
+  }
+  return (
+    <Card className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">8. Role Map</h3>
+        <Button type="button" variant="secondary" onClick={() => void load()}>Re-check</Button>
+      </div>
+      <p className="text-xs text-steel-muted">
+        The role comes from the company type in the CRM directory: Client → client (read-only), Consultant / Designer / PMC → employee linked to the company, Contractor / vendor → vendor, SPDC staff → site_employee / hr / office, SPDC admin → admin.
+        Anything that does not match is listed with the reason; <strong>Fix</strong> sets the role, switches the login on and links the company by e-mail.
+      </p>
+      <div className="divide-y divide-line border border-line rounded-lg">
+        {(rows || []).map((r) => (
+          <div key={r.email} className="px-3 py-2 text-sm space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={r.ok ? "ok" : "warn"}>{r.ok ? "OK" : "Check"}</Badge>
+              <strong>{r.label}</strong>
+              <span className="font-mono text-xs text-steel-muted">{r.email}</span>
+              <span className="text-xs">expects <strong>{r.expectedRole}</strong>{r.expectedParty ? ` · ${r.expectedParty} company` : ""}</span>
+              {!r.ok && r.found ? <Button type="button" className="!text-xs !py-1" onClick={() => void fix(r.email)}>Fix</Button> : null}
+            </div>
+            <div className="text-xs text-steel-muted">
+              {r.found ? `now: ${r.role} · ${r.portal} portal · ${r.isActive ? "active" : "off"}${r.company ? ` · ${r.company}` : ""} · ${r.projects.length ? r.projects.join(", ") : "no projects"}` : "not created yet"}
+            </div>
+            {r.issues.length ? <ul className="list-disc pl-5 text-xs text-steel-muted">{r.issues.map((i: string) => <li key={i}>{i}</li>)}</ul> : null}
+          </div>
+        ))}
+        {!rows ? <p className="px-3 py-2 text-sm text-steel-muted">Loading…</p> : null}
+      </div>
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Remove every login except Voltamp members, admins, protected accounts and you — preview first. */
 function CleanLoginsCard({ token }: { token: string | null }) {
   type Row = { id: string; email: string; fullName: string; role: string; why: string };
@@ -496,6 +554,8 @@ export default function UatDataPage() {
       <FindLoginCard token={token} />
 
       <CleanLoginsCard token={token} />
+
+      <RoleMapCard token={token} />
     </div>
   );
 }
