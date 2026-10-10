@@ -1,6 +1,7 @@
 import { FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button, Input, Select, TextArea } from "./ui";
+import { DEFAULT_PICKLISTS, withCurrent, type DrawingPicklists } from "../lib/drawingPicklists";
 import {
   MASTER_REGISTER_DELAY_RESP,
   drawingDisciplineOptions,
@@ -51,7 +52,9 @@ export function MasterDrawingRegisterForm({
   onSubmit,
   editingId = null,
   onCancelEdit,
+  picklists,
 }: {
+  picklists?: DrawingPicklists;
   projectId: string;
   form: MasterRegisterForm;
   onChange: (next: MasterRegisterForm) => void;
@@ -115,7 +118,7 @@ export function MasterDrawingRegisterForm({
           </Field>
           <Field label="Discipline">
             <Select value={form.discipline} onChange={(e) => set({ discipline: e.target.value })}>
-              {drawingDisciplineOptions([], form.discipline).map((d) => (
+              {drawingDisciplineOptions([], form.discipline, (picklists || DEFAULT_PICKLISTS).disciplines).map((d) => (
                 <option key={d}>{d}</option>
               ))}
             </Select>
@@ -139,7 +142,7 @@ export function MasterDrawingRegisterForm({
           </Field>
           <Field label="Drawing type">
             <Select value={form.drawingType} onChange={(e) => set({ drawingType: e.target.value })}>
-              {MASTER_REGISTER_DRAWING_TYPES.map((t) => (
+              {withCurrent((picklists || DEFAULT_PICKLISTS).drawingTypes, form.drawingType).map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </Select>
@@ -207,7 +210,7 @@ export function MasterDrawingRegisterForm({
           <Field label="Delay responsibility">
             <Select value={form.delayResponsibility} onChange={(e) => set({ delayResponsibility: e.target.value })}>
               <option value="">Select…</option>
-              {MASTER_REGISTER_DELAY_RESP.map((d) => (
+              {withCurrent((picklists || DEFAULT_PICKLISTS).delayResponsibility, form.delayResponsibility).map((d) => (
                 <option key={d}>{d}</option>
               ))}
             </Select>
@@ -218,7 +221,7 @@ export function MasterDrawingRegisterForm({
           <Field label="Issued to">
             <Select value={form.issuedTo} onChange={(e) => set({ issuedTo: e.target.value })}>
               <option value="">Select…</option>
-              {MASTER_REGISTER_ISSUED_TO.map((t) => (
+              {withCurrent((picklists || DEFAULT_PICKLISTS).issuedTo, form.issuedTo).map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </Select>

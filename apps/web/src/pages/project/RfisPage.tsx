@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams, useLocation } from "reac
 import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
+import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { StatusNote } from "../../components/StatusNote";
 import { SearchableSelect } from "../../components/SearchableSelect";
@@ -41,6 +42,7 @@ export default function RfisPage() {
   const [search] = useSearchParams();
   const navigate = useNavigate();
   const { token, user } = useAuth();
+  const picklists = useDrawingPicklists(id, token);
   const [rfis, setRfis] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
@@ -540,27 +542,28 @@ export default function RfisPage() {
                   SPDC/QMS/F-RFI-01 — same fields as SPDC_RFI_Form_and_Register.xlsx
                 </p>
                 <Select value={form.package} onChange={(e) => setForm({ ...form, package: e.target.value })}>
-                  {["P1-CIVIL", "P2-PEB", "Package A", "Package B"].map((p) => (
+                  {withCurrent(picklists.used.packages.length ? picklists.used.packages : ["P1-CIVIL", "P2-PEB", "Package A", "Package B"], form.package).map((p) => (
                     <option key={p}>{p}</option>
                   ))}
                 </Select>
                 <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
-                  {["Structural", "Architectural", "Civil", "MEP", "PEB"].map((d) => (
+                  {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
                     <option key={d}>{d}</option>
                   ))}
                 </Select>
-                <Input
-                  placeholder="Category (e.g. Drawing discrepancy)"
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                />
+                <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  <option value="">Category</option>
+                  {withCurrent(picklists.lists.rfiCategories, form.category).map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
                 <Input
                   placeholder="Location / grid"
                   value={form.location}
                   onChange={(e) => setForm({ ...form, location: e.target.value })}
                 />
                 <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                  {["CRITICAL", "HIGH", "NORMAL"].map((p) => (
+                  {withCurrent(picklists.lists.rfiPriorities, form.priority).map((p) => (
                     <option key={p}>{p}</option>
                   ))}
                 </Select>
@@ -647,7 +650,7 @@ export default function RfisPage() {
                 />
                 {!moduleScoped && (
                 <Select value={form.scheduleImpact} onChange={(e) => setForm({ ...form, scheduleImpact: e.target.value })}>
-                  {["None", "Low", "Medium", "High"].map((x) => (
+                  {picklists.lists.impactLevels.map((x) => (
                     <option key={x}>{x}</option>
                   ))}
                 </Select>

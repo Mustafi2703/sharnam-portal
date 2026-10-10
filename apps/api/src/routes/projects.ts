@@ -1846,6 +1846,42 @@ drawingsRouter.get("/project/:projectId", async (req, res) => {
   res.json(drawings);
 });
 
+/** Pick-lists for this project's drawing register, GFC upload, RFIs and design coordination. */
+drawingsRouter.get("/project/:projectId/picklists", async (req, res) => {
+  const { loadPicklists, defaultPicklists } = await import("../services/drawingPicklists.js");
+  const { lists, custom } = await loadPicklists(req.params.projectId);
+  // Values already on this project's drawings stay selectable even if they are not in the list.
+  const used = await prisma.drawingRegisterLine.findMany({
+    where: { projectId: req.params.projectId },
+    select: { discipline: true, drawingType: true, delayResponsibility: true, projectPackage: true },
+  });
+  const usedBy = (pick: (l: (typeof used)[number]) => string | null) => [...new Set(used.map(pick).map((v) => (v || "").trim()).filter(Boolean))];
+  res.json({
+    lists,
+    defaults: defaultPicklists(),
+    custom,
+    used: {
+      disciplines: usedBy((l) => l.discipline),
+      drawingTypes: usedBy((l) => l.drawingType),
+      delayResponsibility: usedBy((l) => l.delayResponsibility),
+      packages: usedBy((l) => l.projectPackage),
+    },
+  });
+});
+
+drawingsRouter.put("/project/:projectId/picklists", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { savePicklists } = await import("../services/drawingPicklists.js");
+  const out = await savePicklists(req.params.projectId, req.body?.lists || {}, req.user!.id);
+  await audit("drawing.picklists.save", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { custom: out.custom } });
+  res.json({ ...out });
+});
+
+drawingsRouter.delete("/project/:projectId/picklists", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  await prisma.appSetting.deleteMany({ where: { key: `drawingPicklists:${req.params.projectId}` } });
+  await audit("drawing.picklists.reset", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId });
+  res.json({ ok: true });
+});
+
 drawingsRouter.get("/project/:projectId/gate", async (req, res) => {
   const published = await prisma.drawing.count({
     where: { projectId: req.params.projectId, isPublished: true },

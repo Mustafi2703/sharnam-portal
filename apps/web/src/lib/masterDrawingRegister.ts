@@ -48,8 +48,12 @@ export const MASTER_REGISTER_DISCIPLINES = [
 ] as const;
 
 /** The full list plus anything already used on this project (older or custom disciplines stay selectable). */
-export function drawingDisciplineOptions(used: (string | null | undefined)[] = [], current?: string | null): string[] {
-  const out = new Set<string>(MASTER_REGISTER_DISCIPLINES);
+export function drawingDisciplineOptions(
+  used: (string | null | undefined)[] = [],
+  current?: string | null,
+  base?: readonly string[],
+): string[] {
+  const out = new Set<string>(base && base.length ? base : MASTER_REGISTER_DISCIPLINES);
   for (const u of used) if (u && u.trim()) out.add(u.trim());
   if (current && current.trim()) out.add(current.trim());
   return [...out];

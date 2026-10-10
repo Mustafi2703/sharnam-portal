@@ -12,6 +12,7 @@ import {
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { StatusNote } from "../../components/StatusNote";
 import { downloadAuthFile } from "../../lib/downloadReport";
+import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
 
 export function CoordinationPage() {
   const { id } = useParams();
@@ -19,6 +20,7 @@ export function CoordinationPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focusDrawingId = searchParams.get("drawingId") || "";
   const { token, user } = useAuth();
+  const picklists = useDrawingPicklists(id, token);
   const [rows, setRows] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
   const [matrixPeople, setMatrixPeople] = useState<any[]>([]);
@@ -40,6 +42,14 @@ export function CoordinationPage() {
   const [msg, setMsg] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const docRef = useRef<HTMLInputElement>(null);
+  // New issues start on the project's first discipline once its pick-list has loaded.
+  useEffect(() => {
+    const first = picklists.lists.disciplines[0];
+    if (picklists.loaded && first && form.discipline === "MEP" && !picklists.lists.disciplines.includes("MEP")) {
+      setForm((f) => ({ ...f, discipline: first }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picklists.loaded]);
   const canEdit =
     user?.role === "admin" ||
     user?.role === "office" ||
@@ -363,31 +373,13 @@ export function CoordinationPage() {
             <label className="block">
               <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Drawing type</span>
             <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value, linkedDrawingId: "" })}>
-              <optgroup label="Civil / Architecture">
-                <option>Architectural</option>
-                <option>Structural</option>
-                <option>Civil</option>
-                <option>Landscape</option>
-              </optgroup>
-              <optgroup label="MEP / Services">
-                <option>MEP</option>
-                <option>Electrical</option>
-                <option>Plumbing</option>
-                <option>HVAC</option>
-                <option>Fire</option>
-                <option>ELV / IBMS</option>
-              </optgroup>
-              <optgroup label="Special">
-                <option>PEB</option>
-                <option>Interior / Finishes</option>
-                <option>Facade</option>
-                <option>Vertical Transportation</option>
-                <option>Other</option>
-              </optgroup>
+              {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
+                <option key={d}>{d}</option>
+              ))}
             </Select>
             </label>
             <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-              {["Low", "Medium", "High"].map((p) => (
+              {withCurrent(picklists.lists.coordinationPriorities, form.priority).map((p) => (
                 <option key={p}>{p}</option>
               ))}
             </Select>

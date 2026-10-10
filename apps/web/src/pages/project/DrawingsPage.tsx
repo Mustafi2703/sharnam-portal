@@ -33,6 +33,7 @@ import {
   revisionUploadStatus,
 } from "../../lib/gfcRegister";
 import { drawingDisciplineOptions } from "../../lib/masterDrawingRegister";
+import { useDrawingPicklists } from "../../lib/drawingPicklists";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { StatusNote } from "../../components/StatusNote";
 
@@ -88,6 +89,7 @@ export default function DrawingsPage() {
   const [drawings, setDrawings] = useState<any[]>([]);
   const [drawingsLoaded, setDrawingsLoaded] = useState(false);
   const [filter, setFilter] = useState("All");
+  const picklists = useDrawingPicklists(id, token);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<DrawingRevisionPreview | null>(null);
@@ -899,7 +901,7 @@ export default function DrawingsPage() {
               value={addRowForm.discipline}
               onChange={(e) => setAddRowForm({ ...addRowForm, discipline: e.target.value })}
             >
-              {drawingDisciplineOptions(drawings.map((d) => d.discipline), addRowForm.discipline).map((d) => (
+              {drawingDisciplineOptions(drawings.map((d) => d.discipline), addRowForm.discipline, picklists.lists.disciplines).map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </Select>
@@ -970,7 +972,7 @@ export default function DrawingsPage() {
               label: "Discipline",
               value: form.discipline,
               onChange: (v) => setForm({ ...form, discipline: v }),
-              options: drawingDisciplineOptions(drawings.map((d) => d.discipline), form.discipline),
+              options: drawingDisciplineOptions(drawings.map((d) => d.discipline), form.discipline, picklists.lists.disciplines),
             },
             {
               kind: "text",
@@ -1640,7 +1642,7 @@ export default function DrawingsPage() {
             <label className="block text-xs text-steel-muted">
               Discipline
               <Select className="mt-1" value={editRow.discipline} onChange={(e) => setEditRow({ ...editRow, discipline: e.target.value })}>
-                {drawingDisciplineOptions(drawings.map((d) => d.discipline), editRow.discipline).map((d) => (
+                {drawingDisciplineOptions(drawings.map((d) => d.discipline), editRow.discipline, picklists.lists.disciplines).map((d) => (
                   <option key={d}>{d}</option>
                 ))}
               </Select>

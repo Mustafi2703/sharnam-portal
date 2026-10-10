@@ -10,6 +10,8 @@ import {
   type RegisterDashLine,
 } from "../../components/DrawingRegisterCharts";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
+import { DrawingPicklistSetup } from "../../components/DrawingPicklistSetup";
+import { useDrawingPicklists } from "../../lib/drawingPicklists";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
 import { Badge, Button, Card, PageHeader } from "../../components/ui";
 import { downloadAuthFile } from "../../lib/downloadReport";
@@ -122,6 +124,7 @@ export default function DrawingRegisterPage() {
     : drawingRegisterSheetFromParams(searchParams);
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
+  const picklists = useDrawingPicklists(id, token);
   const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState<MasterRegisterForm>(emptyMasterRegisterForm);
@@ -364,8 +367,20 @@ export default function DrawingRegisterPage() {
       )}
 
       {sheetKey === "master" && canEdit && (
+        <details className="shrink-0 rounded-xl border border-line bg-paper">
+          <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-semibold text-ink">
+            Set up pick-lists — disciplines, drawing types, delay responsibility, RFI and coordination options
+          </summary>
+          <div className="p-3 pt-0">
+            <DrawingPicklistSetup projectId={id!} token={token} state={picklists} onSaved={picklists.reload} />
+          </div>
+        </details>
+      )}
+
+      {sheetKey === "master" && canEdit && (
         <div className="shrink-0">
         <MasterDrawingRegisterForm
+          picklists={picklists.lists}
           projectId={id!}
           form={form}
           onChange={setForm}
