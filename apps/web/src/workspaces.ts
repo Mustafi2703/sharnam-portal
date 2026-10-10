@@ -56,6 +56,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Master Drawing Register",
     },
     {
+      to: "drawings/settings",
+      label: "Drawing settings",
+      roles: ["admin", "office"],
+      blurb: "Pick-lists for the register, RFIs and design coordination; load DRAWING REGISTER, GFC log and RFI register workbooks; save to SharePoint.",
+      sheet: "DRAWING REGISTER · Input",
+    },
+    {
       to: "drawings/coordination",
       label: "Design coordination",
       blurb: "Assign an issue — the assignee is emailed. Follow up up to 5 times; escalate to RFI any time.",
