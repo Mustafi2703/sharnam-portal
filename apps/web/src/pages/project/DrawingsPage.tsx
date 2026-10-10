@@ -34,6 +34,7 @@ import {
 } from "../../lib/gfcRegister";
 import { drawingDisciplineOptions } from "../../lib/masterDrawingRegister";
 import { useDrawingPicklists } from "../../lib/drawingPicklists";
+import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { StatusNote } from "../../components/StatusNote";
 
@@ -775,6 +776,7 @@ export default function DrawingsPage() {
           ))}
         </div>
 
+        <DrawingPackMenu projectId={id!} token={token} onMsg={setMsg} canPublish={canUpload} />
         <details className="relative shrink-0 self-stretch sm:self-auto">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden h-full flex items-center">
             <span className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60">

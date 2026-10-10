@@ -897,6 +897,19 @@ rfiRouter.post("/project/:projectId/register/import", requireRoles("admin", "off
   res.json({ ok: true, ...out });
 });
 
+/** The RFI register workbook for a project — used by the register download and the drawing pack. */
+export async function buildRfiRegisterXlsxForProject(projectId: string): Promise<{ buffer: Buffer; code: string } | null> {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return null;
+  const rfis = await prisma.rfi.findMany({
+    where: { projectId: project.id, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
+    include: rfiDetailInclude,
+    orderBy: { createdAt: "asc" },
+  });
+  const { buildSpdcRfiXlsxBuffer } = await import("../services/spdcRfiForm.js");
+  return { buffer: await buildSpdcRfiXlsxBuffer({ project, rfis }), code: String(project.code) };
+}
+
 rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Project not found" });

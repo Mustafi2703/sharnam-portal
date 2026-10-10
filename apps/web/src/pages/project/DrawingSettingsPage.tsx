@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { DrawingPicklistSetup } from "../../components/DrawingPicklistSetup";
+import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { StatusNote } from "../../components/StatusNote";
 import { Button, Card, PageHeader } from "../../components/ui";
 import { useDrawingPicklists } from "../../lib/drawingPicklists";
@@ -76,7 +77,7 @@ export default function DrawingSettingsPage() {
     setMsg("Generating the registers and saving them to SharePoint…");
     try {
       await api(`/api/drawings/project/${id}/publish-registers`, { method: "POST", token, timeoutMs: 180_000 });
-      setMsg("Master register, GFC log, drawing dashboard and RFI register saved to the project's SharePoint folders.");
+      setMsg("Master register, GFC log, drawing dashboard and RFI register generated and saved to the project's SharePoint folders.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not save to SharePoint");
     } finally {
@@ -147,14 +148,10 @@ export default function DrawingSettingsPage() {
       </section>
 
       <section className="space-y-2">
-        <h3 className="font-semibold">4. Generate and save to SharePoint</h3>
-        <Card className="space-y-2">
-          <p className="text-sm text-steel-muted">Generates the master register, the Approval &amp; GFC log, the drawing dashboard and the RFI register from the database and files them in this project's SharePoint folders.</p>
-          {canManage ? (
-            <Button type="button" disabled={Boolean(busy)} onClick={() => void save()}>
-              {busy === "sync" ? "Saving…" : "Generate and save to SharePoint"}
-            </Button>
-          ) : null}
+        <h3 className="font-semibold">4. Generate the sheets</h3>
+        <Card className="space-y-3">
+          <p className="text-sm text-steel-muted">Generated fresh from the database in the client's formats. The same menu sits in the GFC log, the master register, the dashboard and the RFI register — take one sheet, or the whole pack.</p>
+          <DrawingPackMenu projectId={id} token={token} onMsg={setMsg} canPublish={canManage} panel />
         </Card>
       </section>
     </div>

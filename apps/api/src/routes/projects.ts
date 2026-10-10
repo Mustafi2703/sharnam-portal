@@ -2189,6 +2189,37 @@ drawingsRouter.get("/project/:projectId/gfc-log/export.xlsx", async (req, res) =
   res.send(buf);
 });
 
+/** The whole drawing pack in one ZIP: master register, Approval & GFC log, dashboard and the RFI register. */
+drawingsRouter.get("/project/:projectId/pack.zip", async (req, res) => {
+  const projectId = req.params.projectId;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const JSZip = (await import("jszip")).default;
+  const exp = await import("../services/drawingRegisterExport.js");
+  const zip = new JSZip();
+  const notes: string[] = [];
+  const add = async (name: string, make: () => Promise<Buffer | null>) => {
+    try {
+      const buf = await make();
+      if (buf) zip.file(name, buf);
+    } catch (err) {
+      notes.push(`${name}: ${err instanceof Error ? err.message : "could not be generated"}`);
+    }
+  };
+  await add("01_Master-Drawing-Register.xlsx", () => exp.buildDrawingRegisterWorkbookXlsx(projectId));
+  await add("02_Approval-GFC-Drawing-Log.xlsx", () => exp.buildApprovalGfcLogXlsx(projectId));
+  await add("03_RFI-Register.xlsx", async () => (await (await import("./procore.js")).buildRfiRegisterXlsxForProject(projectId))?.buffer || null);
+  await add("04_Drawing-Register-Dashboard.pdf", () => exp.buildDrawingRegisterDashboardPdf(projectId));
+  await add("05_Master-Drawing-Register.pdf", () => exp.buildMasterRegisterPdf(projectId));
+  await add("06_Approval-GFC-Drawing-Log.pdf", () => exp.buildApprovalGfcLogPdf(projectId));
+  if (notes.length) zip.file("_not-generated.txt", `These sheets could not be generated:\n${notes.join("\n")}\n`);
+  const out = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${String(project.code).replace(/[^\w.-]+/g, "_")}-Drawing-Pack-${stamp}.zip"`);
+  res.send(out);
+});
+
 /** Publish DRAWING REGISTER-01.xlsx, Dashboard PDF, and Approval-GFC log to SharePoint (non-blocking after DB writes). */
 drawingsRouter.post(
   "/project/:projectId/publish-registers",

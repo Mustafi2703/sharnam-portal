@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -11,8 +10,8 @@ import {
   type RegisterDashLine,
 } from "../../components/DrawingRegisterCharts";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
-import { DrawingPicklistSetup } from "../../components/DrawingPicklistSetup";
 import { useDrawingPicklists } from "../../lib/drawingPicklists";
+import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
 import { Badge, Button, Card, PageHeader } from "../../components/ui";
 import { downloadAuthFile } from "../../lib/downloadReport";
@@ -126,7 +125,6 @@ export default function DrawingRegisterPage() {
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
   const picklists = useDrawingPicklists(id, token);
-  const [picklistOpen, setPicklistOpen] = useState(false);
   const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState<MasterRegisterForm>(emptyMasterRegisterForm);
@@ -305,6 +303,7 @@ export default function DrawingRegisterPage() {
                 </Button>
               </>
             )}
+            {id && <DrawingPackMenu projectId={id} token={token} onMsg={setMsg} canPublish={canEdit} />}
             {canEdit && id && (
               <>
                 {isOffice ? (
@@ -368,40 +367,6 @@ export default function DrawingRegisterPage() {
         <DrawingRegisterDashboard data={data} />
       )}
 
-      {sheetKey === "master" && canEdit && (
-        <div className="shrink-0 flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" onClick={() => setPicklistOpen(true)}>
-            Set up pick-lists
-          </Button>
-          <span className="text-xs text-steel-muted">Disciplines, drawing types, delay responsibility, RFI and coordination options.</span>
-        </div>
-      )}
-
-      {picklistOpen &&
-        createPortal(
-          <div className="register-modal" role="dialog" aria-modal="true" onClick={() => setPicklistOpen(false)}>
-            <div className="register-modal__panel register-modal__panel--xl" onClick={(e) => e.stopPropagation()}>
-              <div className="register-modal__head register-modal__head--brand">
-                <h3 className="font-semibold text-ink text-base sm:text-lg">Set up pick-lists</h3>
-                <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={() => setPicklistOpen(false)} aria-label="Close">
-                  ×
-                </button>
-              </div>
-              <div className="register-modal__body">
-                <DrawingPicklistSetup
-                  projectId={id!}
-                  token={token}
-                  state={picklists}
-                  onSaved={async () => {
-                    await picklists.reload();
-                    setPicklistOpen(false);
-                  }}
-                />
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
 
       {sheetKey === "master" && canEdit && (
         <div className="shrink-0">

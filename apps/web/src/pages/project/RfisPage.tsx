@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
+import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { StatusNote } from "../../components/StatusNote";
 import { SearchableSelect } from "../../components/SearchableSelect";
@@ -364,6 +365,7 @@ export default function RfisPage() {
               >
                 Download SPDC form + register
               </Button>
+              {id ? <DrawingPackMenu projectId={id} token={token} canPublish={user?.role === "admin" || user?.role === "office"} /> : null}
               <Link to={`/projects/${id}/rfis?kind=RequestForInformation&compose=1`}>
                 <Button type="button">Ask (PMC RFI)</Button>
               </Link>
