@@ -223,6 +223,47 @@ uatDataRouter.post("/simulate/remove", async (req: AuthedRequest, res) => {
   res.json({ ok: true, removed: out });
 });
 
+/** Which environment is this? Commit, database (host + name only — never credentials), live row counts, storage and mail state. */
+uatDataRouter.get("/environment", async (_req, res) => {
+  let commit = "local";
+  try {
+    const fs = await import("fs");
+    const path = await import("path");
+    commit = fs.readFileSync(path.resolve(process.cwd(), ".deploy-revision"), "utf8").trim().slice(0, 7) || "local";
+  } catch {
+    /* local run */
+  }
+  let host = "";
+  let name = "";
+  try {
+    const u = new URL(process.env.DATABASE_URL || "");
+    host = u.hostname.length > 10 ? `${u.hostname.slice(0, 4)}…${u.hostname.slice(-6)}` : u.hostname;
+    name = u.pathname.replace(/^\//, "");
+  } catch {
+    /* no mysql url */
+  }
+  const [users, activeUsers, projects, candidates, offers, employees] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.project.count(),
+    prisma.candidate.count(),
+    prisma.offer.count(),
+    prisma.employeeProfile.count(),
+  ]);
+  const { graphConfig } = await import("../services/graph.js");
+  const { mailSwitchState } = await import("../services/mailSwitch.js");
+  const cfg = graphConfig();
+  res.json({
+    commit,
+    nodeEnv: process.env.NODE_ENV || "",
+    database: { host, name },
+    counts: { users, activeUsers, projects, candidates, offers, employees },
+    sharePoint: { live: cfg.configured && !cfg.mock, site: process.env.SHAREPOINT_SITE_URL || process.env.GRAPH_SHAREPOINT_SITE_URL || "" },
+    mail: mailSwitchState(),
+    serverTime: new Date().toISOString(),
+  });
+});
+
 /** ── Find any login by e-mail and, if needed, bring it back (switch on, drop "[Removed]", set role / password). ── */
 const STAFF_ROLES = ["admin", "office", "hr", "site_employee"];
 const RESTORE_ROLES = ["site_employee", "employee", "hr", "office", "client", "vendor"];

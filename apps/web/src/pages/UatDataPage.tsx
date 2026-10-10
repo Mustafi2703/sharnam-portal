@@ -140,6 +140,32 @@ function SimulateCard({ token }: { token: string | null }) {
   );
 }
 
+/** Which environment am I on? */
+function EnvironmentCard({ token }: { token: string | null }) {
+  const [env, setEnv] = useState<any>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    void api<any>("/api/uat-data/environment", { token }).then(setEnv).catch((e) => setErr(e instanceof Error ? e.message : "Could not load"));
+  }, [token]);
+  const live = env && env.sharePoint?.live;
+  return (
+    <Card className="space-y-2">
+      <h3 className="font-semibold">0. Environment</h3>
+      {err ? <p className="text-sm text-danger">{err}</p> : null}
+      {env ? (
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+          <p><span className="text-steel-muted">Commit</span> <strong className="font-mono">{env.commit}</strong> · {env.nodeEnv || "—"}</p>
+          <p><span className="text-steel-muted">Database</span> <strong className="font-mono">{env.database.name || "—"}</strong> on {env.database.host || "—"}</p>
+          <p><span className="text-steel-muted">Rows</span> {env.counts.users} logins ({env.counts.activeUsers} active) · {env.counts.projects} projects · {env.counts.candidates} candidates · {env.counts.offers} offers · {env.counts.employees} employee files</p>
+          <p><span className="text-steel-muted">SharePoint</span> {live ? <Badge tone="ok">live</Badge> : <Badge tone="warn">local copy only</Badge>} {env.sharePoint?.site ? env.sharePoint.site.replace(/^https?:\/\//, "") : ""}</p>
+          <p><span className="text-steel-muted">Email</span> {env.mail?.live ? <Badge tone="ok">on ({env.mail.source})</Badge> : <Badge tone="neutral">held</Badge>}</p>
+          <p><span className="text-steel-muted">Server time</span> {new Date(env.serverTime).toLocaleString()}</p>
+        </div>
+      ) : !err ? <p className="text-sm text-steel-muted">Loading…</p> : null}
+    </Card>
+  );
+}
+
 /** Find any login by e-mail (even one hidden from the lists) and bring it back. */
 function FindLoginCard({ token }: { token: string | null }) {
   const [email, setEmail] = useState("");
@@ -300,6 +326,8 @@ export default function UatDataPage() {
   return (
     <div className="space-y-5">
       <PageHeader eyebrow="Office admin" title="UAT Data" subtitle="Load the Arvind week data SPDC shared, then clear leftover test projects and test logins before the client UAT." />
+
+      <EnvironmentCard token={token} />
       <StatusNote msg={msg} onClose={() => setMsg("")} />
 
       <Card className="space-y-3">
