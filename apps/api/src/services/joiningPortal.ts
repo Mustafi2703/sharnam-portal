@@ -17,6 +17,17 @@ export function isPreJoinReadyForAppointmentLetter(preJoin: PreJoiningChecklist 
   ].every(Boolean);
 }
 
+/** What still blocks the appointment letter, in plain words. */
+export function missingForAppointmentLetter(preJoin: PreJoiningChecklist | null | undefined): string[] {
+  if (!preJoin) return ["pre-joining checklist not started"];
+  const out: string[] = [];
+  if (!preJoin.docCollectionDone) out.push("document collection not marked done");
+  if (preJoin.bgvStatus !== "Cleared") out.push(`background check is "${preJoin.bgvStatus || "not started"}" — must be Cleared`);
+  if (preJoin.medicalStatus !== "Cleared" && preJoin.medicalStatus !== "Not-Applicable") out.push(`medical is "${preJoin.medicalStatus || "not started"}" — must be Cleared or Not-Applicable`);
+  if (!preJoin.empCodeGenerated) out.push("employee code not generated");
+  return out;
+}
+
 /** Full section 2 complete — opens Day 1 onboarding (section 3). */
 export function isPreJoinComplete(preJoin: PreJoiningChecklist | null | undefined) {
   if (!preJoin) return false;
