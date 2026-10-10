@@ -22,6 +22,15 @@ type LoadState = {
 let loadState: LoadState = { status: "idle" };
 
 const KEEP_CODES = ["SPDC-ARVIND-NTX", "SPDC-ARVIND-01"];
+
+/** Clean-up keeps the Voltamp project(s) once they exist; until then it keeps the two Arvind UAT projects. */
+async function cleanupKeepCodes(): Promise<string[]> {
+  const volt = await prisma.project.findMany({
+    where: { OR: [{ code: { contains: "VOLTAMP" } }, { name: { contains: "Voltamp" } }] },
+    select: { code: true },
+  });
+  return volt.length ? volt.map((p) => p.code) : KEEP_CODES;
+}
 /** Logins created by tests / demos — never real SPDC people. */
 const TEST_EMAIL = /(\.test$|@example\.(com|org)$|@local\.test$|^test[._-]|\.demo$|@no-login\.)/i;
 
@@ -216,8 +225,9 @@ uatDataRouter.post("/simulate/remove", async (req: AuthedRequest, res) => {
 
 /** What the clean-up would touch: every project except Arvind, and test-looking logins. Nothing is changed here. */
 uatDataRouter.get("/cleanup-preview", async (req: AuthedRequest, res) => {
+  const keepCodes = await cleanupKeepCodes();
   const projects = await prisma.project.findMany({
-    where: { code: { notIn: KEEP_CODES } },
+    where: { code: { notIn: keepCodes } },
     select: {
       id: true,
       code: true,
@@ -235,12 +245,12 @@ uatDataRouter.get("/cleanup-preview", async (req: AuthedRequest, res) => {
   });
   // Logins on the Arvind projects are the UAT parties — never offered for switch-off.
   const arvindMembers = await prisma.projectMember.findMany({
-    where: { project: { code: { in: KEEP_CODES } } },
+    where: { project: { code: { in: keepCodes } } },
     select: { userId: true },
   });
   const keepIds = new Set(arvindMembers.map((m) => m.userId));
   res.json({
-    keep: KEEP_CODES,
+    keep: keepCodes,
     projects,
     testLogins: users.filter((u) => TEST_EMAIL.test(u.email) && !keepIds.has(u.id) && u.email !== "office@sharnam.demo"),
   });
@@ -248,11 +258,12 @@ uatDataRouter.get("/cleanup-preview", async (req: AuthedRequest, res) => {
 
 /** Deactivate test logins (reversible — they can be re-activated under Users). */
 uatDataRouter.post("/deactivate-logins", async (req: AuthedRequest, res) => {
+  const keepCodes = await cleanupKeepCodes();
   const ids: string[] = Array.isArray(req.body?.userIds) ? req.body.userIds.map(String) : [];
   if (String(req.body?.confirm || "") !== "DEACTIVATE") return res.status(400).json({ error: 'Type DEACTIVATE to confirm.' });
   const targets = await prisma.user.findMany({ where: { id: { in: ids }, NOT: { id: req.user!.id } }, select: { id: true, email: true } });
   const keepIds = new Set(
-    (await prisma.projectMember.findMany({ where: { project: { code: { in: KEEP_CODES } } }, select: { userId: true } })).map((m) => m.userId),
+    (await prisma.projectMember.findMany({ where: { project: { code: { in: keepCodes } } }, select: { userId: true } })).map((m) => m.userId),
   );
   const safe = targets.filter((u) => TEST_EMAIL.test(u.email) && !keepIds.has(u.id) && u.email !== "office@sharnam.demo");
   await prisma.user.updateMany({ where: { id: { in: safe.map((u) => u.id) } }, data: { isActive: false } });
