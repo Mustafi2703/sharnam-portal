@@ -223,6 +223,66 @@ uatDataRouter.post("/simulate/remove", async (req: AuthedRequest, res) => {
   res.json({ ok: true, removed: out });
 });
 
+/** ── Find any login by e-mail and, if needed, bring it back (switch on, drop "[Removed]", set role / password). ── */
+const STAFF_ROLES = ["admin", "office", "hr", "site_employee"];
+const RESTORE_ROLES = ["site_employee", "employee", "hr", "office", "client", "vendor"];
+
+uatDataRouter.get("/user", async (req, res) => {
+  const email = String(req.query.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "Enter an e-mail address." });
+  const user = await prisma.user.findFirst({
+    where: { email },
+    include: { memberships: { include: { project: { select: { code: true } } } } },
+  });
+  if (!user) return res.json({ found: false, email });
+  const { isHiddenPortalListUser } = await import("../services/keepPortalUsers.js");
+  const reasons: string[] = [];
+  if (!user.isActive) reasons.push("The login is switched off, so Access and the staff pickers skip it.");
+  if (user.fullName.startsWith("[Removed]")) reasons.push('The name starts with "[Removed]" — an earlier clean-up marked it removed.');
+  if (user.email.startsWith("deleted.")) reasons.push('The address starts with "deleted." — it was soft-deleted.');
+  if (isHiddenPortalListUser(user.email)) reasons.push("It is a seeded demo login, hidden on purpose.");
+  if (!STAFF_ROLES.includes(user.role) && !(user.role === "employee" && !user.vendorId)) {
+    reasons.push(`Role "${user.role}" is not a staff role, so it is not on the HRMS Users page — it lists under Office → Access (client / vendor / consultant logins).`);
+  }
+  res.json({
+    found: true,
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role,
+    portal: user.portal,
+    isActive: user.isActive,
+    vendorId: user.vendorId,
+    projects: user.memberships.map((m) => m.project.code),
+    hiddenBecause: reasons,
+  });
+});
+
+uatDataRouter.post("/user/restore", async (req: AuthedRequest, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const user = email ? await prisma.user.findFirst({ where: { email } }) : null;
+  if (!user) return res.status(404).json({ error: "No login with that e-mail." });
+  const role = req.body?.role ? String(req.body.role) : "";
+  if (role && !RESTORE_ROLES.includes(role)) return res.status(400).json({ error: `Role must be one of: ${RESTORE_ROLES.join(", ")}.` });
+  if (role && user.role === "admin") return res.status(400).json({ error: "An admin login's role is not changed here." });
+  const password = String(req.body?.password || "");
+  if (password && password.length < 8) return res.status(400).json({ error: "Password needs at least 8 characters." });
+  const data: Record<string, unknown> = { isActive: true };
+  if (user.fullName.startsWith("[Removed]")) data.fullName = user.fullName.replace(/^\[Removed\]\s*/, "") || user.email;
+  if (req.body?.fullName) data.fullName = String(req.body.fullName).trim().slice(0, 200);
+  if (role) {
+    const { portalForRole } = await import("@sharnam/shared");
+    data.role = role;
+    data.portal = portalForRole(role as never);
+    // Staff roles are not tied to a client / vendor organisation.
+    if (["site_employee", "hr", "office"].includes(role)) data.vendorId = null;
+  }
+  if (password) data.passwordHash = await (await import("bcryptjs")).hash(password, 10);
+  const updated = await prisma.user.update({ where: { id: user.id }, data });
+  await audit("uat.user_restore", { userId: req.user!.id, meta: { email, role: role || undefined, passwordSet: Boolean(password) } });
+  res.json({ ok: true, email: updated.email, fullName: updated.fullName, role: updated.role, isActive: updated.isActive });
+});
+
 /** What the clean-up would touch: every project except Arvind, and test-looking logins. Nothing is changed here. */
 uatDataRouter.get("/cleanup-preview", async (req: AuthedRequest, res) => {
   const keepCodes = await cleanupKeepCodes();

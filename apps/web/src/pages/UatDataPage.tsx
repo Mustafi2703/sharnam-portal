@@ -140,6 +140,73 @@ function SimulateCard({ token }: { token: string | null }) {
   );
 }
 
+/** Find any login by e-mail (even one hidden from the lists) and bring it back. */
+function FindLoginCard({ token }: { token: string | null }) {
+  const [email, setEmail] = useState("");
+  const [found, setFound] = useState<any>(null);
+  const [role, setRole] = useState("");
+  const [password, setPassword] = useState("");
+  const [note, setNote] = useState("");
+  async function find() {
+    setNote("");
+    setFound(null);
+    try {
+      const out = await api<any>(`/api/uat-data/user?email=${encodeURIComponent(email.trim())}`, { token });
+      setFound(out);
+      setRole("");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Lookup failed");
+    }
+  }
+  async function restore() {
+    setNote("");
+    try {
+      const out = await api<any>("/api/uat-data/user/restore", { method: "POST", token, body: JSON.stringify({ email, role: role || undefined, password: password || undefined }), headers: { "Content-Type": "application/json" } });
+      setNote(`Done — ${out.email} is ${out.isActive ? "active" : "off"} as ${out.role}. Reload Users to see it.`);
+      setPassword("");
+      await find();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not restore");
+    }
+  }
+  return (
+    <Card className="space-y-3">
+      <h3 className="font-semibold">6. Find A Login</h3>
+      <p className="text-xs text-steel-muted">Says "email already has a login" but you cannot see it in Users? Look it up here: it shows the role, whether it is switched off or marked removed, and why the lists skip it. Then bring it back.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input label="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
+        <Button type="button" variant="secondary" disabled={!email.trim()} onClick={() => void find()}>Find</Button>
+      </div>
+      {found && !found.found ? <p className="text-sm">No login with {found.email}. If "add user" still refuses it, the address is on a candidate or a vendor record instead.</p> : null}
+      {found?.found ? (
+        <div className="space-y-2 text-sm">
+          <p>
+            <strong>{found.fullName}</strong> · {found.email} · role <strong>{found.role}</strong> · {found.isActive ? "active" : "switched off"}
+            {found.projects?.length ? ` · projects: ${found.projects.join(", ")}` : " · no projects"}
+          </p>
+          {found.hiddenBecause?.length ? (
+            <ul className="list-disc pl-5 text-steel-muted">{found.hiddenBecause.map((r: string) => <li key={r}>{r}</li>)}</ul>
+          ) : (
+            <p className="text-steel-muted">Nothing hides this login — it should be on the lists.</p>
+          )}
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs font-semibold text-steel-muted">
+              Set role (optional)
+              <select className="block mt-1 rounded-lg border border-line bg-white px-3 py-2 text-sm" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="">Keep {found.role}</option>
+                {["site_employee", "employee", "hr", "office", "client", "vendor"].map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <Input label="New password (optional, 8+ characters)" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Button type="button" onClick={() => void restore()}>Switch on / restore</Button>
+          </div>
+        </div>
+      ) : null}
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Admin · UAT data — load the Arvind data SPDC shared, then clear test projects and test logins. */
 export default function UatDataPage() {
   const { token, user } = useAuth();
@@ -311,6 +378,8 @@ export default function UatDataPage() {
       <MailSwitchCard token={token} />
 
       <SimulateCard token={token} />
+
+      <FindLoginCard token={token} />
     </div>
   );
 }
