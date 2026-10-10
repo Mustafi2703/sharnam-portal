@@ -1893,12 +1893,19 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const existing = await prisma.user.findUnique({ where: { email: String(email).trim().toLowerCase() } });
   if (existing) return res.status(409).json({ error: "Email already has a login" });
   const hash = await bcrypt.hash(password || process.env.SEED_PASSWORD || "Demo@1234", 10);
-  const linkedVendorId =
+  let linkedVendorId: string | null =
     roleKey === "client" || roleKey === "vendor" || roleKey === "employee"
       ? vendorIdRaw
         ? String(vendorIdRaw)
         : null
       : null;
+  // A consultant / stakeholder is `employee` + a CRM company. Link (or create) the company from the firm name.
+  if (roleKey === "employee" && !linkedVendorId) {
+    const { ensureConsultantCompany, isStaffDepartment } = await import("../services/consultantCompany.js");
+    if (!isStaffDepartment(department)) {
+      linkedVendorId = await ensureConsultantCompany({ firm: designation, fullName: String(fullName), email: String(email), trade: department });
+    }
+  }
   const user = await prisma.user.create({
     data: {
       email: String(email).trim().toLowerCase(),
@@ -2917,7 +2924,7 @@ hrmRouter.delete("/departments/:id", hrmDesk, async (req, res) => {
 
 /* ---------- Roles / designations master ---------- */
 
-const LOGIN_ROLE_VALUES = new Set(["office", "hr", "site_employee", "employee", "admin"]);
+const LOGIN_ROLE_VALUES = new Set(["office", "hr", "site_employee", "admin"]);
 
 hrmRouter.get("/designations", hrmStaff, async (req, res) => {
   const { ensureSpdcDesignationMasters } = await import("../services/spdcOrgSeed.js");

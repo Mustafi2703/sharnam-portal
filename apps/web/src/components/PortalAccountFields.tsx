@@ -25,7 +25,6 @@ const STAFF_ROLES = [
   { value: "office", label: "Login: SPDC office — /login/office" },
   { value: "hr", label: "Login: HR desk — /login/hr" },
   { value: "site_employee", label: "Login: SPDC site — /login/site (project modules)" },
-  { value: "employee", label: "Login: SPDC employee — /login/office" },
   { value: "admin", label: "Login: Admin — /login/office" },
 ] as const;
 

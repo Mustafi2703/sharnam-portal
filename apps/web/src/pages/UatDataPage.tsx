@@ -166,6 +166,65 @@ function EnvironmentCard({ token }: { token: string | null }) {
   );
 }
 
+/** Every `employee` login is a consultant (needs a company) or SPDC staff — decide each one. */
+function EmployeeRoleCard({ token }: { token: string | null }) {
+  type Row = { id: string; email: string; fullName: string; department: string; designation: string; company: string; linked: boolean; suggestion: string };
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [choice, setChoice] = useState<Record<string, string>>({});
+  const [note, setNote] = useState("");
+  async function load() {
+    try {
+      const r = await api<Row[]>("/api/uat-data/employee-role-audit", { token });
+      setRows(r);
+      setChoice(Object.fromEntries(r.map((x) => [x.id, x.suggestion])));
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not load");
+    }
+  }
+  async function apply() {
+    const items = (rows || []).filter((r) => choice[r.id] && choice[r.id] !== "keep").map((r) => ({ userId: r.id, action: choice[r.id] }));
+    if (!items.length) return setNote("Nothing to change.");
+    try {
+      const out = await api<any>("/api/uat-data/employee-role-audit/apply", { method: "POST", token, body: JSON.stringify({ items }), headers: { "Content-Type": "application/json" } });
+      setNote(`Updated ${out.done}.${out.failed?.length ? ` Failed: ${out.failed.join("; ")}` : ""}`);
+      await load();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Failed");
+    }
+  }
+  return (
+    <Card className="space-y-3">
+      <h3 className="font-semibold">9. Employee Role Cleanup</h3>
+      <p className="text-xs text-steel-muted">
+        "Employee" is only for consultants / stakeholders, and they must be linked to a company. Anything else is SPDC staff and should be Office, HR or Site. Each login below is either a consultant, SPDC staff, or already linked. Pick what each should be, then apply.
+        Job titles are separate (the designation field) — they never change the login role.
+      </p>
+      <Button type="button" variant="secondary" onClick={() => void load()}>{rows ? "Refresh" : "Check employee logins"}</Button>
+      {rows ? (
+        <div className="divide-y divide-line border border-line rounded-lg max-h-80 overflow-y-auto">
+          {rows.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+              <strong>{r.fullName}</strong>
+              <span className="font-mono text-xs text-steel-muted">{r.email}</span>
+              <span className="text-xs text-steel-muted">{r.company || [r.designation, r.department].filter(Boolean).join(" · ") || "no details"}</span>
+              <select className="ml-auto rounded-lg border border-line bg-white px-2 py-1 text-xs" value={choice[r.id] || "keep"} onChange={(e) => setChoice({ ...choice, [r.id]: e.target.value })}>
+                <option value="keep">Leave as is</option>
+                <option value="link-consultant">Consultant — link to company</option>
+                <option value="office">SPDC office</option>
+                <option value="site_employee">SPDC site</option>
+                <option value="hr">SPDC HR</option>
+              </select>
+            </div>
+          ))}
+          {!rows.length ? <p className="px-3 py-2 text-sm text-steel-muted">No `employee` logins.</p> : null}
+        </div>
+      ) : null}
+      {rows?.length ? <Button type="button" onClick={() => void apply()}>Apply choices</Button> : null}
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Role map — the UAT logins against the role and company link each must have. */
 function RoleMapCard({ token }: { token: string | null }) {
   const [rows, setRows] = useState<any[] | null>(null);
@@ -556,6 +615,8 @@ export default function UatDataPage() {
       <CleanLoginsCard token={token} />
 
       <RoleMapCard token={token} />
+
+      <EmployeeRoleCard token={token} />
     </div>
   );
 }

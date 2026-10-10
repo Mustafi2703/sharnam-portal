@@ -226,7 +226,8 @@ export async function createPortalLoginForOffer(offerId: string) {
   const role = await prisma.hrmDesignation
     .findUnique({ where: { title: offer.designation }, select: { loginRole: true } })
     .catch(() => null);
-  const loginRole = role?.loginRole || "site_employee";
+  const { suggestedLoginRoleForCompanyRole } = await import("@sharnam/shared");
+  const loginRole = !role?.loginRole || role.loginRole === "employee" ? suggestedLoginRoleForCompanyRole(offer.designation) : role.loginRole;
   const inputs = ctcInputsFrom(offer.ctcInputsJson, { candidateName: offer.candidate.fullName, designation: offer.designation, fixedCtcAnnual: offer.ctcAnnual });
   let basicMonthly = offer.basicMonthly ?? null;
   let hraMonthly = offer.hraMonthly ?? null;

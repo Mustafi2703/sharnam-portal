@@ -332,6 +332,62 @@ uatDataRouter.post("/logins-cleanup", async (req: AuthedRequest, res) => {
   res.json({ ok: true, removed, kept: plan.keep.length });
 });
 
+/** ── "employee" role audit: every `employee` login is either a consultant (needs a company link) or SPDC staff (office / hr / site). ── */
+uatDataRouter.get("/employee-role-audit", async (_req, res) => {
+  const { isStaffDepartment } = await import("../services/consultantCompany.js");
+  const users = await prisma.user.findMany({
+    where: { role: "employee", isActive: true, NOT: { email: { startsWith: "deleted." } } },
+    include: { vendor: { select: { name: true, partyType: true } } },
+    orderBy: { fullName: "asc" },
+  });
+  const profiles = await prisma.employeeProfile.findMany({ where: { userId: { in: users.map((u) => u.id) } }, select: { userId: true, department: true, designation: true } });
+  const by = new Map(profiles.map((p) => [p.userId, p]));
+  res.json(
+    users.map((u) => {
+      const p = by.get(u.id);
+      const linked = Boolean(u.vendorId);
+      const staffLike = !linked && isStaffDepartment(p?.department);
+      return {
+        id: u.id,
+        email: u.email,
+        fullName: u.fullName,
+        department: p?.department || "",
+        designation: p?.designation || "",
+        company: u.vendor ? `${u.vendor.name} (${u.vendor.partyType})` : "",
+        linked,
+        suggestion: linked ? "keep" : staffLike ? "office" : "link-consultant",
+      };
+    }),
+  );
+});
+
+uatDataRouter.post("/employee-role-audit/apply", async (req: AuthedRequest, res) => {
+  const items: { userId: string; action: string }[] = Array.isArray(req.body?.items) ? req.body.items : [];
+  const { ensureConsultantCompany } = await import("../services/consultantCompany.js");
+  const { portalForRole } = await import("@sharnam/shared");
+  let done = 0;
+  const failed: string[] = [];
+  for (const it of items) {
+    const user = await prisma.user.findUnique({ where: { id: String(it.userId) } });
+    if (!user || user.role !== "employee") continue;
+    try {
+      if (it.action === "link-consultant") {
+        const profile = await prisma.employeeProfile.findUnique({ where: { userId: user.id } });
+        const vendorId = await ensureConsultantCompany({ firm: profile?.designation, fullName: user.fullName, email: user.email, trade: profile?.department });
+        await prisma.user.update({ where: { id: user.id }, data: { vendorId } });
+        done++;
+      } else if (["office", "hr", "site_employee"].includes(it.action)) {
+        await prisma.user.update({ where: { id: user.id }, data: { role: it.action, portal: portalForRole(it.action as never), vendorId: null } });
+        done++;
+      }
+    } catch (err) {
+      failed.push(`${user.email}: ${err instanceof Error ? err.message : "failed"}`);
+    }
+  }
+  await audit("uat.employee_role_audit", { userId: req.user!.id, meta: { done, failed: failed.length } });
+  res.json({ ok: true, done, failed });
+});
+
 /** ── Role map: the UAT logins and the role / party link each must have. ── */
 const ROLE_MAP_TARGETS: { email: string; label: string; role: string; partyType?: string }[] = [
   { email: "nirav@spdc.in", label: "SPDC admin", role: "admin" },

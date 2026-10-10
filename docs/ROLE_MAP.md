@@ -12,7 +12,7 @@
 | `client` | client | Client representative — read-only | CRM directory → Client company → **Activate portal** |
 | `vendor` | vendor | **Contractor** / supplier | CRM directory → company → **Activate portal** |
 
-`employee` has two meanings: with **no** company link it is plain SPDC office staff; **with** a company link (a consultant / designer / PMC party) it is an external consultant limited to RFIs, design coordination, drawing mark-ups and meeting actions. There is no separate "consultant" role.
+`employee` means one thing only: an **external consultant / stakeholder** (designer, partner PMC) linked to a CRM company, limited to RFIs, design coordination, drawing mark-ups and meeting actions. SPDC staff are never `employee` — they are `office`, `hr`, `site_employee` or `admin`. A job title (Site engineer, Planning engineer, Accountant…) is the **designation** field and never changes the login role. Creating a consultant from Access links (or creates) the company automatically; existing ones are sorted in **UAT data → 9. Employee Role Cleanup**.
 
 **The company type decides the role:** Client → `client` · Consultant, Designer, PMC → `employee` (linked) · everything else (contractor, supplier) → `vendor`. A party login made by hand without the company link is the usual source of "can't see it / wrong screens".
 
