@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -125,6 +126,7 @@ export default function DrawingRegisterPage() {
   const sheetKey = sheetView.key;
   const { token, user } = useAuth();
   const picklists = useDrawingPicklists(id, token);
+  const [picklistOpen, setPicklistOpen] = useState(false);
   const [data, setData] = useState<any>(null);
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState<MasterRegisterForm>(emptyMasterRegisterForm);
@@ -367,15 +369,39 @@ export default function DrawingRegisterPage() {
       )}
 
       {sheetKey === "master" && canEdit && (
-        <details className="shrink-0 rounded-xl border border-line bg-paper">
-          <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-semibold text-ink">
-            Set up pick-lists — disciplines, drawing types, delay responsibility, RFI and coordination options
-          </summary>
-          <div className="p-3 pt-0">
-            <DrawingPicklistSetup projectId={id!} token={token} state={picklists} onSaved={picklists.reload} />
-          </div>
-        </details>
+        <div className="shrink-0 flex flex-wrap items-center gap-2">
+          <Button type="button" variant="secondary" onClick={() => setPicklistOpen(true)}>
+            Set up pick-lists
+          </Button>
+          <span className="text-xs text-steel-muted">Disciplines, drawing types, delay responsibility, RFI and coordination options.</span>
+        </div>
       )}
+
+      {picklistOpen &&
+        createPortal(
+          <div className="register-modal" role="dialog" aria-modal="true" onClick={() => setPicklistOpen(false)}>
+            <div className="register-modal__panel register-modal__panel--xl" onClick={(e) => e.stopPropagation()}>
+              <div className="register-modal__head register-modal__head--brand">
+                <h3 className="font-semibold text-ink text-base sm:text-lg">Set up pick-lists</h3>
+                <button type="button" className="text-steel-muted hover:text-ink text-2xl leading-none px-2" onClick={() => setPicklistOpen(false)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <div className="register-modal__body">
+                <DrawingPicklistSetup
+                  projectId={id!}
+                  token={token}
+                  state={picklists}
+                  onSaved={async () => {
+                    await picklists.reload();
+                    setPicklistOpen(false);
+                  }}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {sheetKey === "master" && canEdit && (
         <div className="shrink-0">
