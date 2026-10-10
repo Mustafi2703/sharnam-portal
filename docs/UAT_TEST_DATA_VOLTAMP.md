@@ -12,14 +12,15 @@ Everything here is invented test data for **SPDC-VOLTAMP-01**. Type or paste it 
 
 | Email | Role in the portal | Why |
 |---|---|---|
-| baibhabmustafi@gmail.com | **SPDC office / admin** (you) | creates everything, approves, publishes |
+| nirav@spdc.in | **SPDC admin** (stays admin) | creates the project, approves, publishes |
+| baibhabmustafi@gmail.com | **SPDC site engineer** (employee) | Baibhab, onboarded through HRMS |
 | hello@twinoxis.com | **Client** (read-only + sign + raise concern) | Voltamp client PM |
 | admin@twinoxis.com | **Design consultant** | RFIs, design coordination, drawing mark-ups |
 | hello@qryxtech.com | **Contractor** (site in-charge) | fills checklists, safety, RFIs |
 
-**Baibhab as the site engineer:** onboard `baibhabmustafi+site@gmail.com` through HRMS (Recruitment → offer → accepted → pre-joining → **Create portal login**) as "Baibhab Mustafi", designation **Site Engineer — Civil**. That makes a separate `site_employee` login (the one-time password shows once on screen; mail is held). Do **not** use the plain gmail address for this: it already has your admin login, and the portal would only attach an employee profile to it and keep your role unchanged.
+**Baibhab as the site engineer:** `baibhabmustafi@gmail.com` already has a login from earlier, so first change that account: admin → **Access · Users** → edit it → role **Site employee**, active, and set a new password you know. Then run the HR flow on the same address (Recruitment → offer → accepted → pre-joining → **Create portal login**). Because the account exists, that last step reuses it: it attaches the employee profile (employee code, CTC, leave balances) but does **not** create a new login or password, so you sign in with the password you set above. If you would rather start clean, delete the old account first and "Create portal login" will make a fresh `site_employee` login and show its one-time password once.
 
-Need more logins (HR, planning, QA)? Gmail delivers `baibhabmustafi+site@gmail.com`, `+hr`, `+planning`, `+qa` to the same inbox, and the portal treats each as a separate login. If your other domains support plus-addressing, `hello+mep@qryxtech.com` works the same way.
+Need more logins (HR, planning, QA)? Gmail delivers `baibhabmustafi+hr@gmail.com`, `+planning`, `+qa` to the same inbox, and the portal treats each as a separate login. If your other domains support plus-addressing, `hello+mep@qryxtech.com` works the same way.
 
 ## 1. Project card
 
@@ -43,8 +44,8 @@ Need more logins (HR, planning, QA)? Gmail delivers `baibhabmustafi+site@gmail.c
 | Client | Aarav Shah | Client PM | hello@twinoxis.com |
 | Design consultant | Meera Kapoor | Principal architect | admin@twinoxis.com |
 | Contractor | Rohan Desai | Site in-charge | hello@qryxtech.com |
-| SPDC | Baibhab Mustafi | Project manager | baibhabmustafi@gmail.com |
-| SPDC | Baibhab Mustafi (site) | Site engineer — civil | baibhabmustafi+site@gmail.com |
+| SPDC | Nirav Parekh | Project manager (admin) | nirav@spdc.in |
+| SPDC | Baibhab Mustafi (site) | Site engineer — civil | baibhabmustafi@gmail.com |
 | SPDC | Planning (test) | Planning engineer | baibhabmustafi+planning@gmail.com |
 | SPDC | QA (test) | Quality engineer | baibhabmustafi+qa@gmail.com |
 
@@ -76,7 +77,7 @@ Expected totals: **Bhavana Test Co. ₹ 1,16,58,000 (L1)** · Qryx Infra ₹ 1,1
 | Departments | Civil, Quality, Safety, Planning, HR (add two, delete one to test delete) |
 | Roles | Site Engineer — Civil, Quality Engineer, Safety Officer, Planning Engineer |
 | Requisition | Site Engineer — Civil · 1 opening · Department Civil |
-| Candidate 1 (becomes the site login) | Baibhab Mustafi · **baibhabmustafi+site@gmail.com** · 4 yrs experience · designation Site Engineer — Civil |
+| Candidate 1 (becomes the site login) | Baibhab Mustafi · **baibhabmustafi@gmail.com** · 4 yrs experience · designation Site Engineer — Civil |
 | Candidate 2 (reject / hold path) | Test Candidate Two · baibhabmustafi+cand2@gmail.com · mark Rejected after R2 |
 | Interview | R1, R2, R3 — score 7 / 8 / 8 on the SPDC scorecard |
 | Offer | Joining 02 Nov 2026 · fixed CTC ₹ 6,00,000 a year · performance pay 10 % |
