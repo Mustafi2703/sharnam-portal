@@ -257,6 +257,21 @@ commsRouter.post("/contacts/:projectId/sync-from-directory", requireRoles("admin
   res.json({ ok: true, roleFlows, ...contacts });
 });
 
+/** Open the portal for everyone in this project's communication matrix (logins + project team seats; no e-mail). */
+commsRouter.post("/contacts/:projectId/open-portal", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true, code: true } });
+  if (!project) return res.status(404).json({ error: "Not found" });
+  const { openPortalForMatrix } = await import("../services/matrixPortal.js");
+  const out = await openPortalForMatrix(project.id);
+  await audit("comms.matrix.open_portal", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: project.id,
+    meta: { project: project.code, opened: out.opened.length, created: out.opened.filter((o) => o.created).length, skipped: out.skipped.length },
+  });
+  res.json({ ok: true, ...out });
+});
+
 /** Seed exact BPCL TECHNICAL + COMMERCIAL matrices from Communication Matrix_BPCL (2).xlsx */
 commsRouter.post("/contacts/:projectId/seed-bpcl", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;

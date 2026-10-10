@@ -50,6 +50,7 @@ import DrawingsPage from "./pages/project/DrawingsPage";
 import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/ExtraToolsPages";
 import SafetyPage from "./pages/project/SafetyPage";
 import DrawingRegisterPage from "./pages/project/DrawingRegisterPage";
+import DrawingSettingsPage from "./pages/project/DrawingSettingsPage";
 import ProjectClosurePage from "./pages/project/ProjectClosurePage";
 import ProgressPage from "./pages/project/ProgressPage";
 import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
@@ -244,6 +245,7 @@ export default function App() {
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />
+                  <Route path="drawings/settings" element={<DrawingSettingsPage />} />
                   <Route path="drawings/register/master" element={<DrawingRegisterPage />} />
                   <Route path="drawings/register" element={<DrawingRegisterPage />} />
                   <Route path="drawings/upload-revision" element={<RevisionUploadPage />} />

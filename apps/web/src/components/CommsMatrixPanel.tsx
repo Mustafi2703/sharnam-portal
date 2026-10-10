@@ -72,6 +72,7 @@ export function CommsMatrixPanel({
   const [users, setUsers] = useState<MatrixUser[]>([]);
   const [vendors, setVendors] = useState<MatrixVendor[]>([]);
   const [assignedVendors, setAssignedVendors] = useState<AssignedVendor[]>([]);
+  const [portalResult, setPortalResult] = useState<{ opened: any[]; skipped: any[]; contacts: number } | null>(null);
 
   const loadDirectory = useCallback(async () => {
     const [u, v, overview] = await Promise.all([
@@ -244,6 +245,27 @@ export function CommsMatrixPanel({
           </Button>
         ))}
         {canEdit && (
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              if (!window.confirm("Open the portal for everyone in this matrix? Each person with an e-mail gets a login (role by company type) and a seat on this project. No e-mail is sent.")) return;
+              setBusy(true);
+              try {
+                const r = await api<{ opened: any[]; skipped: any[]; contacts: number }>(`/api/comms/contacts/${projectId}/open-portal`, { method: "POST", token, timeoutMs: 120_000 });
+                setPortalResult(r);
+                onMsg(`Portal opened for ${r.opened.length} of ${r.contacts} contacts${r.skipped.length ? ` — ${r.skipped.length} skipped` : ""}.`);
+              } catch (err) {
+                onMsg(err instanceof Error ? err.message : "Could not open the portal");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Open portal for everyone
+          </Button>
+        )}
+        {canEdit && (
           <Button type="button" variant="secondary" disabled={busy} onClick={() => void seedBpcl(contacts.length > 0)}>
             {contacts.length ? "Reload From BPCL Excel" : "Load BPCL Excel"}
           </Button>
@@ -308,6 +330,33 @@ export function CommsMatrixPanel({
           Open PDF in SharePoint
         </Button>
       </div>
+
+      {portalResult ? (
+        <Card className="!p-4 border border-brand/30 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-semibold text-sm">Portal access — {portalResult.opened.length} open · {portalResult.skipped.length} skipped</h4>
+            <button type="button" className="text-xs text-steel-muted" onClick={() => setPortalResult(null)}>Close</button>
+          </div>
+          <p className="text-xs text-steel-muted">New logins show their one-time password here once. Nothing was e-mailed. Everyone is now on the project team and can be assigned RFIs and design coordination issues.</p>
+          <div className="max-h-56 overflow-y-auto divide-y divide-line border border-line rounded-lg text-xs">
+            {portalResult.opened.map((o) => (
+              <div key={o.email} className="flex flex-wrap gap-x-3 px-3 py-1.5">
+                <strong>{o.name}</strong>
+                <span className="font-mono text-steel-muted">{o.email}</span>
+                <span>{o.role}</span>
+                <span className="text-steel-muted">{o.company}</span>
+                <span className="ml-auto">{o.created ? <>new · password <code>{o.password}</code></> : "already had a login"}</span>
+              </div>
+            ))}
+            {portalResult.skipped.map((o) => (
+              <div key={o.email} className="flex flex-wrap gap-x-3 px-3 py-1.5 text-amber-800">
+                <span className="font-mono">{o.email}</span>
+                <span>{o.reason}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="!p-4 border border-line">
         <div className="flex flex-wrap items-center justify-between gap-3">

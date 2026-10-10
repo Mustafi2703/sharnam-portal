@@ -885,6 +885,18 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
 /** SPDC RFI register = design queries only (Request for Information). Inspection / checklist requests have their own registers. */
 const SPDC_RFI_REGISTER_KINDS = ["RequestForInformation", "Manual"];
 
+/** Load the SPDC RFI register (SPDC_RFI_Form_and_Register.xlsx → 04_RFI_REGISTER) as RFIs, with responses. */
+rfiRouter.post("/project/:projectId/register/import", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
+  if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload SPDC_RFI_Form_and_Register.xlsx" });
+  const { importSpdcRfiRegister } = await import("../services/spdcRfiImport.js");
+  const out = await importSpdcRfiRegister(req.params.projectId, req.file.buffer, req.user!.id, req.file.originalname);
+  if (!out.created && !out.updated) {
+    return res.status(400).json({ error: "No RFI rows found — the sheet needs the 04_RFI_REGISTER header (RFI NO, SUBJECT, QUERY RAISED …).", ...out });
+  }
+  await audit("rfi.register.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: out });
+  res.json({ ok: true, ...out });
+});
+
 rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
   if (!project) return res.status(404).json({ error: "Project not found" });

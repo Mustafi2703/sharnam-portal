@@ -26,6 +26,7 @@ export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
     label: "Checklist fill log",
     to: "drawings/checklist-logs",
   },
+  { key: "settings", label: "Drawing settings", to: "drawings/settings", roles: ["admin", "office"] },
   {
     key: "rfi-register",
     label: "RFI register",
@@ -62,6 +63,8 @@ export function drawingsNavActive(key: string, pathname: string, search: string)
       return rest === "drawings/checklist-master";
     case "fill-log":
       return rest === "drawings/checklist-logs";
+    case "settings":
+      return rest === "drawings/settings";
     case "rfi-register":
       return rest === "rfis" && search.includes("view=register");
     case "rfi-ask":

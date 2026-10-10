@@ -307,13 +307,14 @@ export async function importMasterRegisterFromBuffer(
   projectId: string,
   buffer: Buffer,
   sourceName = "upload.xlsx",
-): Promise<{ lines: number; source: string }> {
+): Promise<{ lines: number; source: string; picklists?: string[] }> {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const picklists = await applyInputSheetPicklists(projectId, wb);
   const master =
     wb.SheetNames.find((n) => /Master Drawing Register/i.test(n)) ||
     wb.SheetNames.find((n) => /master/i.test(n)) ||
     wb.SheetNames[0];
-  if (!master || !wb.Sheets[master]) return { lines: 0, source: sourceName };
+  if (!master || !wb.Sheets[master]) return { lines: 0, source: sourceName, picklists };
 
   const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[master], {
     header: 1,
@@ -393,7 +394,37 @@ export async function importMasterRegisterFromBuffer(
     });
     lines += 1;
   }
-  return { lines, source: sourceName };
+  return { lines, source: sourceName, picklists };
+}
+
+/** The workbook's "Input" sheet (Latest Revision | Drawing Type | Discipline | Delay Responsibility) → this project's pick-lists. */
+async function applyInputSheetPicklists(projectId: string, wb: { SheetNames: string[]; Sheets: Record<string, unknown> }): Promise<string[]> {
+  const name = wb.SheetNames.find((n: string) => /^input$/i.test(n.trim()));
+  if (!name) return [];
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name] as never, { header: 1, defval: "" }) as unknown[][];
+  const head = rows[0] || [];
+  const colOf = (re: RegExp) => head.findIndex((h) => re.test(String(h || "")));
+  const read = (idx: number) => {
+    if (idx < 0) return [] as string[];
+    const out: string[] = [];
+    for (const r of rows.slice(1)) {
+      const v = String(r[idx] ?? "").replace(/\s+/g, " ").trim().replace(/^Strcutural/i, "Structural");
+      if (!v || /^note:?$/i.test(v)) break;
+      out.push(v);
+    }
+    return out;
+  };
+  const found: Partial<Record<"drawingTypes" | "disciplines" | "delayResponsibility", string[]>> = {};
+  const types = read(colOf(/drawing\s*type/i));
+  const disc = read(colOf(/discipline/i));
+  const delay = read(colOf(/delay/i));
+  if (types.length) found.drawingTypes = types;
+  if (disc.length) found.disciplines = disc;
+  if (delay.length) found.delayResponsibility = delay;
+  if (!Object.keys(found).length) return [];
+  const { savePicklists } = await import("./drawingPicklists.js");
+  await savePicklists(projectId, found);
+  return Object.keys(found);
 }
 
 /**
