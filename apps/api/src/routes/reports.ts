@@ -1634,12 +1634,15 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
         .map((v) => String(v.email).trim().toLowerCase())
         .filter(Boolean),
     );
-    rows = rows.filter((u) => {
-      if (u.role !== "vendor" && u.role !== "client") return true;
-      if (u.vendor && u.vendor.isActive === false) return false;
-      if (!u.vendorId && inactiveVendorEmails.has(String(u.email).trim().toLowerCase())) return false;
-      return true;
-    });
+    // Logins of switched-off client / vendor organisations are hidden — unless the caller asked for inactive accounts.
+    if (!includeInactive) {
+      rows = rows.filter((u) => {
+        if (u.role !== "vendor" && u.role !== "client") return true;
+        if (u.vendor && u.vendor.isActive === false) return false;
+        if (!u.vendorId && inactiveVendorEmails.has(String(u.email).trim().toLowerCase())) return false;
+        return true;
+      });
+    }
     res.json(rows);
   } catch (err) {
     pushRuntimeLog({

@@ -41,7 +41,7 @@ export default function RolesPage() {
     const demoQ = showDemoLogins && canManage ? "&includeDemo=1" : "";
     const [r, u] = await Promise.all([
       api<any[]>("/api/roles", { token }),
-      api<UserAccountRow[]>(`/api/hrm/employees?scope=all${demoQ}`, { token }),
+      api<UserAccountRow[]>(`/api/hrm/employees?scope=all&includeInactive=1${demoQ}`, { token }),
     ]);
     setRoles(r);
     setUsers(u);
