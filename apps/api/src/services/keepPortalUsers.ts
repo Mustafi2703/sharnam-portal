@@ -4,6 +4,10 @@ import { LIVE_TEAM } from "./spdcLiveTeamSeed.js";
 export const KEEP_PORTAL_EMAILS = Array.from(
   new Set([
     "baibhabmustafi@gmail.com",
+    // UAT mailboxes SPDC owns — client, consultant and contractor test logins.
+    "hello@twinoxis.com",
+    "admin@twinoxis.com",
+    "hello@qryxtech.com",
     ...LIVE_TEAM.map((t) => t.email.toLowerCase()).filter((e) => e.endsWith("@spdc.in")),
   ])
 );
@@ -31,7 +35,7 @@ export function isDemoSeedLoginEmail(email?: string | null) {
   return DEMO_LOGIN_SUFFIXES.some((suffix) => lower.endsWith(suffix));
 }
 
-/** Hide from Access, HRMS, and project staff pickers — demo seed + Twinoxis UAT duplicates. */
+/** Hide seeded demo logins from Access, HRMS and project staff pickers. Twinoxis addresses are real UAT mailboxes now — shown. */
 export function isHiddenPortalListUser(email?: string | null) {
-  return isDemoSeedLoginEmail(email) || isTwinoxisTestEmail(email);
+  return isDemoSeedLoginEmail(email);
 }

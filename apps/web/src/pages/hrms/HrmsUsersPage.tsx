@@ -181,7 +181,7 @@ export default function HrmsUsersPage() {
 
   const load = useCallback(async () => {
     const [e, p, d] = await Promise.all([
-      api<UserAccountRow[]>("/api/hrm/employees", { token }).catch((err) => {
+      api<UserAccountRow[]>("/api/hrm/employees?includeInactive=1", { token }).catch((err) => {
         setMsgTone("err");
         setMsg(err instanceof Error ? err.message : "Could not load staff");
         return [];

@@ -1599,7 +1599,7 @@ hrmRouter.get("/employees", hrmDesk, async (req: AuthedRequest, res) => {
               NOT: { email: { startsWith: "deleted." } },
               OR: [{ role: { in: [...HRMS_ALL_LOGIN_ROLES] } }, { vendorId: { not: null } }],
             }
-          : { ...staffWhere, isActive: true },
+          : { ...staffWhere, ...activeOnly },
       orderBy: { fullName: "asc" },
       select: {
         id: true,
