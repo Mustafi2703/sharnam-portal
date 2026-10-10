@@ -264,6 +264,74 @@ uatDataRouter.get("/environment", async (_req, res) => {
   });
 });
 
+/** ── Clean logins: keep Voltamp project members, admins, protected SPDC accounts and you; remove the rest (soft-delete, same as HRMS). ── */
+async function loginCleanupPlan(selfId: string) {
+  const { isKeptPortalEmail } = await import("../services/keepPortalUsers.js");
+  const volt = await prisma.project.findMany({
+    where: { OR: [{ code: { contains: "VOLTAMP" } }, { name: { contains: "Voltamp" } }] },
+    select: { id: true, code: true },
+  });
+  const members = volt.length
+    ? await prisma.projectMember.findMany({ where: { projectId: { in: volt.map((p) => p.id) } }, select: { userId: true } })
+    : [];
+  const voltIds = new Set(members.map((m) => m.userId));
+  const users = await prisma.user.findMany({
+    where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+    select: { id: true, email: true, fullName: true, role: true, vendorId: true },
+    orderBy: { fullName: "asc" },
+  });
+  const ids = users.map((u) => u.id);
+  const profiles = await prisma.employeeProfile.findMany({ where: { userId: { in: ids } }, select: { userId: true, empCode: true, ctcAnnual: true, designation: true } });
+  const slips = await prisma.payslip.groupBy({ by: ["userId"], where: { userId: { in: ids } }, _count: { _all: true } });
+  const profileBy = new Map(profiles.map((p) => [p.userId, p]));
+  const slipBy = new Map(slips.map((x) => [x.userId, x._count._all]));
+  const keep: { id: string; email: string; fullName: string; role: string; why: string }[] = [];
+  const hr: typeof keep = [];
+  const other: typeof keep = [];
+  for (const u of users) {
+    const row = { id: u.id, email: u.email, fullName: u.fullName, role: u.role, why: "" };
+    if (u.id === selfId) keep.push({ ...row, why: "you" });
+    else if (u.role === "admin") keep.push({ ...row, why: "admin" });
+    else if (isKeptPortalEmail(u.email)) keep.push({ ...row, why: "protected SPDC / UAT account" });
+    else if (voltIds.has(u.id)) keep.push({ ...row, why: "Voltamp project member" });
+    else {
+      const prof = profileBy.get(u.id);
+      const slipCount = slipBy.get(u.id) || 0;
+      if (slipCount > 0 || prof?.ctcAnnual) hr.push({ ...row, why: `HR record${slipCount ? `, ${slipCount} payslip(s)` : ""}${prof?.designation ? ` · ${prof.designation}` : ""}` });
+      else other.push({ ...row, why: u.vendorId ? "client / vendor / consultant login" : "no HR record" });
+    }
+  }
+  return { voltamp: volt.map((p) => p.code), keep, hr, other };
+}
+
+uatDataRouter.get("/logins-cleanup-preview", async (req: AuthedRequest, res) => {
+  res.json(await loginCleanupPlan(req.user!.id));
+});
+
+uatDataRouter.post("/logins-cleanup", async (req: AuthedRequest, res) => {
+  if (String(req.body?.confirm || "") !== "REMOVE") return res.status(400).json({ error: "Type REMOVE to confirm." });
+  const wanted = new Set<string>(Array.isArray(req.body?.userIds) ? req.body.userIds.map(String) : []);
+  const plan = await loginCleanupPlan(req.user!.id);
+  // Only people the plan classes as removable — kept accounts can never be named here.
+  const targets = [...plan.hr, ...plan.other].filter((u) => wanted.has(u.id));
+  let removed = 0;
+  for (const u of targets) {
+    await prisma.projectMember.deleteMany({ where: { userId: u.id } });
+    await prisma.employeeProfile.deleteMany({ where: { userId: u.id } });
+    await prisma.user.update({
+      where: { id: u.id },
+      data: {
+        isActive: false,
+        email: `deleted.${Date.now()}.${u.email.replace("@", "_at_")}`.slice(0, 180),
+        fullName: `[Removed] ${u.fullName}`.slice(0, 200),
+      },
+    });
+    removed++;
+  }
+  await audit("uat.logins_cleanup", { userId: req.user!.id, meta: { removed, kept: plan.keep.length } });
+  res.json({ ok: true, removed, kept: plan.keep.length });
+});
+
 /** ── Find any login by e-mail and, if needed, bring it back (switch on, drop "[Removed]", set role / password). ── */
 const STAFF_ROLES = ["admin", "office", "hr", "site_employee"];
 const RESTORE_ROLES = ["site_employee", "employee", "hr", "office", "client", "vendor"];

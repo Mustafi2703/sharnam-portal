@@ -166,6 +166,92 @@ function EnvironmentCard({ token }: { token: string | null }) {
   );
 }
 
+/** Remove every login except Voltamp members, admins, protected accounts and you — preview first. */
+function CleanLoginsCard({ token }: { token: string | null }) {
+  type Row = { id: string; email: string; fullName: string; role: string; why: string };
+  const [plan, setPlan] = useState<{ voltamp: string[]; keep: Row[]; hr: Row[]; other: Row[] } | null>(null);
+  const [pick, setPick] = useState<string[]>([]);
+  const [confirm, setConfirm] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function load() {
+    setNote("");
+    try {
+      const p = await api<any>("/api/uat-data/logins-cleanup-preview", { token });
+      setPlan(p);
+      setPick(p.other.map((r: Row) => r.id)); // staff with HR records stay unticked
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Could not load");
+    }
+  }
+  async function run() {
+    if (!window.confirm(`Remove ${pick.length} login(s)? They lose project access and any HR profile; the address becomes free to re-add. Payslips and attendance history stay on file.`)) return;
+    setBusy(true);
+    try {
+      const out = await api<any>("/api/uat-data/logins-cleanup", { method: "POST", token, body: JSON.stringify({ userIds: pick, confirm }), headers: { "Content-Type": "application/json" } });
+      setNote(`Removed ${out.removed} login(s). ${out.kept} kept.`);
+      setConfirm("");
+      await load();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const toggle = (id: string) => setPick((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const list = (title: string, rows: Row[], hint: string) => (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">{title} ({rows.length})</h4>
+        <span className="flex gap-2 text-xs">
+          <button type="button" className="text-brand font-semibold" onClick={() => setPick((p) => [...new Set([...p, ...rows.map((r) => r.id)])])}>Tick all</button>
+          <button type="button" className="text-steel-muted" onClick={() => setPick((p) => p.filter((id) => !rows.some((r) => r.id === id)))}>Clear</button>
+        </span>
+      </div>
+      <p className="text-xs text-steel-muted mb-1">{hint}</p>
+      <div className="max-h-64 overflow-y-auto divide-y divide-line border border-line rounded-lg">
+        {rows.map((r) => (
+          <label key={r.id} className="flex flex-wrap items-center gap-3 px-3 py-1.5 text-sm cursor-pointer">
+            <input type="checkbox" checked={pick.includes(r.id)} onChange={() => toggle(r.id)} />
+            <span className="font-medium">{r.fullName}</span>
+            <span className="font-mono text-xs text-steel-muted">{r.email}</span>
+            <Badge tone="neutral">{r.role}</Badge>
+            <span className="text-xs text-steel-muted">{r.why}</span>
+          </label>
+        ))}
+        {!rows.length ? <p className="px-3 py-2 text-sm text-steel-muted">None.</p> : null}
+      </div>
+    </div>
+  );
+  return (
+    <Card className="space-y-3">
+      <h3 className="font-semibold">7. Clean Logins</h3>
+      <p className="text-xs text-steel-muted">
+        Keeps Voltamp project members, admins, protected SPDC / UAT accounts and you. Everything else is listed below for removal — removed logins lose project access and their HR profile, and the address can be added again. Payslips and attendance history stay on file.
+        Staff with an HR record or payslips are listed separately and start unticked.
+      </p>
+      <Button type="button" variant="secondary" onClick={() => void load()}>{plan ? "Refresh list" : "Preview what would be removed"}</Button>
+      {plan ? (
+        <div className="space-y-3">
+          <p className="text-sm">
+            Keeping <strong>{plan.keep.length}</strong>: {plan.keep.slice(0, 12).map((k) => k.fullName).join(", ")}
+            {plan.keep.length > 12 ? "…" : ""}. Voltamp project: {plan.voltamp.join(", ") || "not found yet — only admins, protected accounts and you are kept"}.
+          </p>
+          {list("Logins with no HR record", plan.other, "Client / vendor / consultant logins, test users and staff without payroll data. Ticked by default.")}
+          {list("Staff with an HR record or payslips", plan.hr, "Real SPDC staff data — review carefully. Unticked by default.")}
+          <div className="flex flex-wrap items-end gap-2">
+            <Input label="Type REMOVE to confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            <Button type="button" variant="danger" disabled={busy || !pick.length || confirm !== "REMOVE"} onClick={() => void run()}>
+              {busy ? "Removing…" : `Remove ${pick.length} login(s)`}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Find any login by e-mail (even one hidden from the lists) and bring it back. */
 function FindLoginCard({ token }: { token: string | null }) {
   const [email, setEmail] = useState("");
@@ -408,6 +494,8 @@ export default function UatDataPage() {
       <SimulateCard token={token} />
 
       <FindLoginCard token={token} />
+
+      <CleanLoginsCard token={token} />
     </div>
   );
 }
