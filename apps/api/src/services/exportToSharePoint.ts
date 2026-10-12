@@ -15,6 +15,35 @@ export function isPublishableExport(path: string, projectId: string) {
   return path.includes(`/${projectId}/`) || path.includes(`/${projectId}?`) || RECORD_EXPORT.test(path.split("?")[0]);
 }
 
+/**
+ * Re-run one of our own download routes. Loopback first; hosted runtimes (Hostinger) may refuse loopback
+ * connections, so fall back to the public origin the portal is served from.
+ */
+async function fetchOwnExport(exportPath: string, token: string): Promise<Response> {
+  const port = Number(process.env.PORT || 4000);
+  const origins = [
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`,
+    ...(process.env.WEB_ORIGIN || "")
+      .split(",")
+      .map((o) => o.trim().replace(/\/$/, ""))
+      .filter((o) => /^https?:\/\//.test(o)),
+  ];
+  let lastErr: unknown = null;
+  for (const origin of origins) {
+    try {
+      return await fetch(`${origin}${exportPath}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(240_000),
+      });
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  const cause = lastErr instanceof Error ? (lastErr as Error & { cause?: { code?: string } }).cause?.code || lastErr.message : String(lastErr);
+  throw new Error(`Could not regenerate the export on the server (${cause}). Set WEB_ORIGIN so the portal can reach itself.`);
+}
+
 export async function saveExportToSharePoint(opts: {
   projectId: string;
   userId: string;
@@ -25,8 +54,7 @@ export async function saveExportToSharePoint(opts: {
 }): Promise<PublishResult> {
   if (!(opts.moduleKey in MODULE_TO_ISO_FOLDER)) throw new Error(`Unknown module folder: ${opts.moduleKey}`);
   if (!isPublishableExport(opts.path, opts.projectId)) throw new Error("Not a downloadable export of this project");
-  const port = Number(process.env.PORT || 4000);
-  const res = await fetch(`http://127.0.0.1:${port}${opts.path}`, { headers: { Authorization: `Bearer ${opts.token}` } });
+  const res = await fetchOwnExport(opts.path, opts.token);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Export failed (${res.status})${text ? `: ${text.slice(0, 200)}` : ""}`);

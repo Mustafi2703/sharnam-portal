@@ -33,7 +33,7 @@ import {
 import { buildWprPptx, wprTemplateFillEnabled } from "../services/wprPptx.js";
 import { nextReportNumber } from "../services/wprWeekRollup.js";
 import { seedWprSections } from "../services/wprSeedSections.js";
-import { weekEndingOf } from "../services/wprDemoSeed.js";
+import { snapWeekEnding, weekEndingOf } from "../services/wprDemoSeed.js";
 import { loadWprChartPack } from "../services/wprCharts.js";
 import { mergeWprChartsForExport } from "../services/wprChartMerge.js";
 

@@ -109,8 +109,14 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
     orderBy: { logDate: "asc" },
   });
 
-  let cumManDays = 0;
-  let cumSafeHours = 0;
+  // Man-days / safe hours: each DPR already carries the cumulative up to the previous day in its
+  // header, so the running total is the LAST report's "previous + today" — summing every report's
+  // header would count earlier days once per later report. The plain sum of all reports' manpower is
+  // the floor (covers older reports saved without a header cumulative).
+  let totalManDays = 0;
+  let totalSafeHours = 0;
+  let lastManDays = 0;
+  let lastSafeHours = 0;
   const lineCum = new Map<string, number>();
   /** Running cumulative on the latest prior DPR (its cum prev + qty today) — the next day continues from here. */
   const lastCum = new Map<string, number>();
@@ -119,8 +125,12 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
 
   for (const snap of prior) {
     const { header, extras } = splitHeaderJson(snap.headerJson);
-    cumManDays += Number(header.cumManDaysPrev || 0) + sumManDays(extras?.manpower);
-    cumSafeHours += Number(header.cumSafeManHoursPrev || 0) + Number(extras?.safety?.safeManHoursToday || 0);
+    const manDaysToday = sumManDays(extras?.manpower);
+    const safeHoursToday = Number(extras?.safety?.safeManHoursToday || 0);
+    totalManDays += manDaysToday;
+    totalSafeHours += safeHoursToday;
+    lastManDays = Number(header.cumManDaysPrev || 0) + manDaysToday;
+    lastSafeHours = Number(header.cumSafeManHoursPrev || 0) + safeHoursToday;
 
     const lines: DprLine[] = JSON.parse(snap.linesJson || "[]");
     for (const ln of lines) {
@@ -131,6 +141,8 @@ async function previousDprCumulative(projectId: string, logDate: Date, disciplin
     }
   }
 
+  const cumManDays = Math.max(totalManDays, lastManDays);
+  const cumSafeHours = Math.max(totalSafeHours, lastSafeHours);
   return { lineCum, lastCum, lastDates, cumManDays, cumSafeHours, priorCount: prior.length };
 }
 

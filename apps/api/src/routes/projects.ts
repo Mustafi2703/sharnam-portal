@@ -2251,7 +2251,12 @@ drawingsRouter.post(
     const projectId = req.params.projectId;
     try {
       const { reconcileProjectSharePoint } = await import("../services/sharePointReconcile.js");
-      const out = await reconcileProjectSharePoint(projectId);
+      // Rewrites every drawing / RFI / quality register in SharePoint — on a live tenant this can outlast
+      // the hosting gateway, so answer within 25 s and let the rewrite finish in the background.
+      const run = reconcileProjectSharePoint(projectId);
+      run.catch((err) => console.warn("[sharepoint] publish-registers failed:", err instanceof Error ? err.message : err));
+      const out = await Promise.race([run, new Promise<null>((resolve) => setTimeout(() => resolve(null), 25_000))]);
+      if (!out) return res.status(202).json({ ok: true, pending: true, note: "Registers are being written to SharePoint — refresh the library in a minute." });
       res.json({ ok: true, ...out });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

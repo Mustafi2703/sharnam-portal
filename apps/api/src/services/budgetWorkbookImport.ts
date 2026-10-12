@@ -5,7 +5,6 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { pathToFileURL } from "url";
 import { prisma } from "../prisma.js";
 import { findWorkbook } from "../lib/excelRoot.js";
 import { isFullSpdcWorkbook } from "./costSheetParser.js";
@@ -27,29 +26,9 @@ export function resolveBudgetWorkbookPath(opts?: { projectCode?: string | null; 
   return findWorkbook(["SPDC_Budget_Arvind 49.xls", "SPDC_Budget_Arvind 52.xls"]);
 }
 
-async function loadSeedModule(): Promise<{
-  seedCostFromBudgetWorkbook: (
-    prisma: typeof import("../prisma.js").prisma,
-    projectId: string,
-    excelRoot: string,
-    opts?: { fileName?: string }
-  ) => Promise<void>;
-}> {
-  const candidates = [
-    path.join(process.cwd(), "seed", "costFromBudget.js"),
-    path.join(process.cwd(), "seed", "costFromBudget.ts"),
-    path.join(process.cwd(), "..", "..", "seed", "costFromBudget.js"),
-    path.join(process.cwd(), "..", "..", "seed", "costFromBudget.ts"),
-  ];
-  for (const p of candidates) {
-    if (!fs.existsSync(p)) continue;
-    if (p.endsWith(".ts")) {
-      const { register } = await import("tsx/esm/api");
-      register();
-    }
-    return import(pathToFileURL(p).href) as any;
-  }
-  throw new Error("seed/costFromBudget.ts not found");
+/** The importer is compiled with the API (no runtime tsx / seed lookup on the server). */
+async function loadSeedModule() {
+  return import("./costFromBudgetWorkbook.js");
 }
 
 export async function syncBudgetWorkbookTemplate(projectId: string, opts?: { projectCode?: string | null }) {

@@ -1,0 +1,733 @@
+{
+  "base": "https://portal.spdc.in",
+  "date": "2026-10-12",
+  "weekEnding": "2026-10-17",
+  "project": "SHAR/SNT/26-27/Voltamp Transformers Ltd.",
+  "projectId": "cmu13i0h00012551fbs9si8fm",
+  "commit": "56ff1c5",
+  "passed": 38,
+  "failed": 14,
+  "total": 52,
+  "results": [
+    {
+      "id": "SYS-1",
+      "title": "Portal health and database",
+      "role": "office",
+      "ok": true,
+      "note": "commit 56ff1c5 · 977 users",
+      "ms": 208
+    },
+    {
+      "id": "SYS-2",
+      "title": "SharePoint connected (Sharnam Projects drive)",
+      "role": "office",
+      "ok": true,
+      "note": "Sharnam Projects · https://spdcsmb.sharepoint.com/sites/SharnamProjects · drive Documents",
+      "ms": 815
+    },
+    {
+      "id": "LOG-office",
+      "title": "office login",
+      "role": "office",
+      "ok": true,
+      "note": "Saurabh Prajapati · office · operations@spdc.in",
+      "ms": 111
+    },
+    {
+      "id": "LOG-site",
+      "title": "site login",
+      "role": "site",
+      "ok": true,
+      "note": "Jaideep Parmar · site_employee · jaideep.parmar@spdc.in",
+      "ms": 114
+    },
+    {
+      "id": "LOG-planning",
+      "title": "planning login",
+      "role": "planning",
+      "ok": true,
+      "note": "Planning & Estimation · site_employee · planning.estimation@spdc.in",
+      "ms": 147
+    },
+    {
+      "id": "LOG-vendor",
+      "title": "vendor login",
+      "role": "vendor",
+      "ok": true,
+      "note": "Sanjay Thakor · vendor · sanjaythakor.reeca@gmail.com",
+      "ms": 118
+    },
+    {
+      "id": "LOG-client",
+      "title": "client login",
+      "role": "client",
+      "ok": true,
+      "note": "Deven Mody · client · deven_mktg@voltamptransformers.com",
+      "ms": 167
+    },
+    {
+      "id": "LOG-consultant",
+      "title": "consultant login",
+      "role": "consultant",
+      "ok": true,
+      "note": "Ashish Chobe · employee · ashish.chobe@shahntalati.com",
+      "ms": 123
+    },
+    {
+      "id": "SET-1",
+      "title": "Voltamp project, team and contractor link",
+      "role": "office",
+      "ok": true,
+      "note": "SHAR/SNT/26-27/Voltamp Transformers Ltd. · 5 members · Reeca linked now",
+      "ms": 260
+    },
+    {
+      "id": "SET-2",
+      "title": "Site pin for attendance geofence",
+      "role": "office",
+      "ok": true,
+      "note": "pin set 22.0528, 73.1223 · 500 m (Karjan)",
+      "ms": 62
+    },
+    {
+      "id": "ATT-1",
+      "title": "Jaideep checks in at the Voltamp site (selfie + GPS)",
+      "role": "site",
+      "ok": true,
+      "note": "checked in 03:03 · Auto-verified · Karjan , Vadodara",
+      "ms": 175
+    },
+    {
+      "id": "DWG-1",
+      "title": "Import client drawing register (DRAWING REGISTER - 01)",
+      "role": "office",
+      "ok": true,
+      "note": "{\"lines\":41,\"source\":\"DRAWING REGISTER - 01.xlsx\",\"picklists\":[\"drawingTypes\",\"disciplines\",\"delayResponsibility\"]}",
+      "ms": 268
+    },
+    {
+      "id": "DWG-2",
+      "title": "Import Approval & GFC drawing log",
+      "role": "office",
+      "ok": true,
+      "note": "{\"drawings\":28,\"revisions\":51,\"skipped\":20}",
+      "ms": 646
+    },
+    {
+      "id": "DWG-3",
+      "title": "Add a register line and publish revision R1 (PDF)",
+      "role": "office",
+      "ok": false,
+      "note": "revision 400 {\"error\":\"Complete the Drawing Check Master checklist before uploading. Unlock token missing.\"}",
+      "ms": 300
+    },
+    {
+      "id": "DWG-4",
+      "title": "Register dashboard, Excel and PDF exports",
+      "role": "office",
+      "ok": true,
+      "note": "67 register lines · register 69KB · GFC log xlsx 28KB · GFC log pdf 32KB · register dashboard pdf 30KB",
+      "ms": 1341
+    },
+    {
+      "id": "DWG-5",
+      "title": "Drawing registers written to SharePoint 04.02",
+      "role": "office",
+      "ok": false,
+      "note": "The operation was aborted due to timeout",
+      "ms": 300016
+    },
+    {
+      "id": "DWG-6",
+      "title": "Design coordination register import (DCI)",
+      "role": "office",
+      "ok": true,
+      "note": "created 51 · updated 7",
+      "ms": 225
+    },
+    {
+      "id": "DWG-7",
+      "title": "Site opens the Drawing Check gate",
+      "role": "site",
+      "ok": true,
+      "note": "ARCHITECTURAL DRAWING REVIEW CHECKLIST · 15 checks",
+      "ms": 74
+    },
+    {
+      "id": "DWG-8",
+      "title": "Client sees drawings, cannot add one",
+      "role": "client",
+      "ok": true,
+      "note": "sees 27 drawings · add refused 403",
+      "ms": 161
+    },
+    {
+      "id": "RFI-1",
+      "title": "Office raises two SPDC RFIs to the consultant",
+      "role": "office",
+      "ok": true,
+      "note": "SPDC-RFI-002 · SPDC-RFI-003",
+      "ms": 167416
+    },
+    {
+      "id": "RFI-2",
+      "title": "Consultant answers the first RFI",
+      "role": "consultant",
+      "ok": true,
+      "note": "answered and closed by consultant",
+      "ms": 44125
+    },
+    {
+      "id": "RFI-3",
+      "title": "Client raises a concern",
+      "role": "client",
+      "ok": true,
+      "note": "CON-004 · ClientConcern",
+      "ms": 34711
+    },
+    {
+      "id": "RFI-4",
+      "title": "RFI register Excel and form exports",
+      "role": "office",
+      "ok": true,
+      "note": "? RFIs · register 113KB · form 113KB (forms auto-filed in 03.06)",
+      "ms": 1423
+    },
+    {
+      "id": "QA-1",
+      "title": "Import client QAP sheet (Week 50)",
+      "role": "office",
+      "ok": true,
+      "note": "imported 295 lines · Week 50",
+      "ms": 41912
+    },
+    {
+      "id": "QA-2",
+      "title": "Add this week's QAP line, download, publish to SharePoint",
+      "role": "office",
+      "ok": true,
+      "note": "excel 31KB · publish {\"status\":\"running\",\"startedAt\":\"2026-10-12T21:43:07.787Z\",\"weekLabel\":null,\"files\":[]}",
+      "ms": 259
+    },
+    {
+      "id": "QA-3",
+      "title": "Import client cube register, then site adds a cube group",
+      "role": "office",
+      "ok": false,
+      "note": "cube import 500 {\"error\":\"Unexpected end of form\"}",
+      "ms": 60390
+    },
+    {
+      "id": "QA-4",
+      "title": "Site logs a quality observation",
+      "role": "site",
+      "ok": true,
+      "note": "UAT 2026-10-12 cover blocks missing at P3",
+      "ms": 43
+    },
+    {
+      "id": "QA-5",
+      "title": "Site raises NCR to Reeca",
+      "role": "site",
+      "ok": false,
+      "note": "ncr 504 <html>\r",
+      "ms": 60031
+    },
+    {
+      "id": "QA-6",
+      "title": "Vendor answers from the action desk, cannot close",
+      "role": "vendor",
+      "ok": false,
+      "note": "answer 404 {\"error\":\"NCR not found\"}",
+      "ms": 112
+    },
+    {
+      "id": "QA-7",
+      "title": "Office closes the NCR; NCR form PDF",
+      "role": "office",
+      "ok": false,
+      "note": "close 404 {\"error\":\"NCR not found\"}",
+      "ms": 35
+    },
+    {
+      "id": "QA-8",
+      "title": "Quality dashboard Excel saved to SharePoint 08.01",
+      "role": "office",
+      "ok": false,
+      "note": "SharePoint save (Quality dashboard (6 charts)) 400 {\"error\":\"fetch failed\"}",
+      "ms": 1096
+    },
+    {
+      "id": "SAF-1",
+      "title": "Site logs today's safety day",
+      "role": "site",
+      "ok": true,
+      "note": "manpower 42 · TBT 1 · inductions 3",
+      "ms": 31
+    },
+    {
+      "id": "SAF-2",
+      "title": "Site issues a safety NCR to Reeca",
+      "role": "site",
+      "ok": true,
+      "note": "UAT 2026-10-12 edge protection missing at mezzanine",
+      "ms": 36802
+    },
+    {
+      "id": "SAF-3",
+      "title": "Vendor records action, cannot close",
+      "role": "vendor",
+      "ok": true,
+      "note": "action saved · close refused 403",
+      "ms": 10567
+    },
+    {
+      "id": "SAF-4",
+      "title": "Office closes safety NCR; week filed to SharePoint",
+      "role": "office",
+      "ok": false,
+      "note": "SharePoint save (Safety module Excel) 400 {\"error\":\"fetch failed\"}",
+      "ms": 19728
+    },
+    {
+      "id": "PRG-1",
+      "title": "Import client Planned vs Actual dashboard",
+      "role": "office",
+      "ok": true,
+      "note": "{\"manpower\":11,\"cashflow\":8}",
+      "ms": 4815
+    },
+    {
+      "id": "PRG-2",
+      "title": "Site adds milestone + hindrance; office adds risk + legal + PvA week",
+      "role": "site",
+      "ok": true,
+      "note": "milestone · hindrance · risk · legal · PvA week saved",
+      "ms": 273
+    },
+    {
+      "id": "PRG-3",
+      "title": "Planning generates the S-curve",
+      "role": "planning",
+      "ok": true,
+      "note": "19 points from 68 activities",
+      "ms": 79
+    },
+    {
+      "id": "PRG-4",
+      "title": "Progress Excel saved to SharePoint 07.08",
+      "role": "office",
+      "ok": false,
+      "note": "SharePoint save (Planned vs Actual Excel (charts)) 400 {\"error\":\"fetch failed\"}",
+      "ms": 1190
+    },
+    {
+      "id": "CST-1",
+      "title": "Import SPDC budget workbook (all tabs)",
+      "role": "office",
+      "ok": false,
+      "note": "workbook import 500 {\"error\":\"Cannot require() ES Module /home/u252873650/domains/portal.spdc.in/hbuilds/versions/01a131db-c5b9-731c-9824-be7f00c38d3b/nodejs/seed/costFromBudget.ts in a cycle. A cycle involving require(esm) is not allowed to maintain invariants mandated by the ECMAScript specificati",
+      "ms": 2930
+    },
+    {
+      "id": "CST-2",
+      "title": "Office adds budget heading + line and a BOQ item",
+      "role": "office",
+      "ok": true,
+      "note": "package Civil",
+      "ms": 146
+    },
+    {
+      "id": "CST-3",
+      "title": "Site MB measurement (nos × nos) and BBS weight",
+      "role": "site",
+      "ok": true,
+      "note": "MB 12 × 4 = 48 · BBS 16 mm × 2.4 m × 18 = 68.27 kg",
+      "ms": 94
+    },
+    {
+      "id": "CST-4",
+      "title": "Cashflow period; cost Excels; site cannot take the budget",
+      "role": "office",
+      "ok": true,
+      "note": "budget 29KB · boq 28KB · mb 27KB · bbs 27KB · cashflow 29KB · site budget 403, MB 200",
+      "ms": 512
+    },
+    {
+      "id": "CST-5",
+      "title": "Cost sheets saved to SharePoint (02.05 / 05.01 / 09.02 / 02.07)",
+      "role": "office",
+      "ok": false,
+      "note": "SharePoint save (Budget WBS) 400 {\"error\":\"fetch failed\"}",
+      "ms": 1089
+    },
+    {
+      "id": "FIN-1",
+      "title": "Office adds a work order / PO for Reeca",
+      "role": "office",
+      "ok": true,
+      "note": "UAT-PO-REECA-01",
+      "ms": 68
+    },
+    {
+      "id": "FIN-2",
+      "title": "Vendor raises RA bill (refused without workbook, then submitted)",
+      "role": "vendor",
+      "ok": true,
+      "note": "RA-UAT-7779 Submitted · no-file 400 · vendor sees 1 bills",
+      "ms": 5992
+    },
+    {
+      "id": "FIN-3",
+      "title": "Office: Certified blocked before Corrected; then Corrected → Certified → COP + PDF",
+      "role": "office",
+      "ok": true,
+      "note": "01/REECA.INFRASTRUCTURE/2026-27 · PO UAT-PO-REECA-01 dt 01 Oct 2026 · net ₹16,38,500 · PDF 33KB",
+      "ms": 10324
+    },
+    {
+      "id": "FIN-4",
+      "title": "Payment summary import; COPs and trackers to SharePoint 09.01",
+      "role": "office",
+      "ok": false,
+      "note": "SharePoint save (All COPs (PDF register)) 400 {\"error\":\"fetch failed\"}",
+      "ms": 1343
+    },
+    {
+      "id": "DPR-1",
+      "title": "Jaideep saves and publishes today's DPR (→ SharePoint 07.02)",
+      "role": "site",
+      "ok": true,
+      "note": "1 lines · Published · 07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/CIVIL/DPR-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-CIVIL-2026-10-12.xlsx · excel 55KB",
+      "ms": 5083
+    },
+    {
+      "id": "WPR-1",
+      "title": "Office generates WPR Excel / client workbook / PPTX and publishes (→ 10.01)",
+      "role": "office",
+      "ok": false,
+      "note": "download.xlsx 500 {\"error\":\"snapWeekEnding is not defined\"}",
+      "ms": 147
+    },
+    {
+      "id": "CLI-1",
+      "title": "Client: read-only, sees only Voltamp, can open the WPR",
+      "role": "client",
+      "ok": false,
+      "note": "client wpr 500",
+      "ms": 78
+    },
+    {
+      "id": "SP-1",
+      "title": "SharePoint library sync and folder listing",
+      "role": "office",
+      "ok": true,
+      "note": "23 files written today across 15 ISO folders (see REPORT.md)",
+      "ms": 638314
+    }
+  ],
+  "sharepoint": [
+    {
+      "label": "QAP workbook",
+      "path": "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans",
+      "url": null
+    },
+    {
+      "label": "Safety week pack",
+      "path": "Sharnam Portal/SHAR_SNT_26-27_Voltamp_Transformers_Ltd/08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment/Weekly/2026-10-12_to_2026-10-12/Safety-Dashboard-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-2026-10-12.xlsx",
+      "url": null
+    },
+    {
+      "label": "Planned vs Actual (client upload archived)",
+      "path": "07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve/2026-10-12-Planned_Vs._Actual_Dashboard.xlsx",
+      "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B99BD7664-24C1-4893-AE2E-79EC20F06164%7D&file=2026-10-12-Planned_Vs._Actual_Dashboard.xlsx&action=default&mobileredirect=true"
+    },
+    {
+      "label": "DPR 2026-10-12 CIVIL",
+      "path": "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/CIVIL/DPR-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-CIVIL-2026-10-12.xlsx",
+      "url": "/uploads/onedrive/SHAR/SNT/26-27/Voltamp Transformers Ltd./07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/CIVIL/DPR-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-CIVIL-2026-10-12.xlsx"
+    }
+  ],
+  "listing": [
+    {
+      "folder": "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications",
+      "provider": "sharepoint",
+      "files": 10,
+      "folders": 1,
+      "today": [
+        "Approval-GFC-Drawing-Log.pdf",
+        "Approval-GFC-Drawing-Log.xlsx",
+        "Design-Coordination-Register.pdf",
+        "Design-Coordination-Register.xlsx",
+        "Drawing-Check-Master-Log.csv",
+        "DRAWING-REGISTER.csv",
+        "DRAWING-REGISTER-01.xlsx",
+        "DRAWING-REGISTER-Dashboard.pdf",
+        "Master-Drawing-Register.pdf"
+      ],
+      "all": [
+        {
+          "name": "Approval-GFC-Drawing-Log.csv",
+          "modifiedAt": "2026-09-29T18:10:58Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B91B17799-FA0D-46F6-8FEB-4F5C79E6E0C2%7D&file=Approval-GFC-Drawing-Log.csv&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Approval-GFC-Drawing-Log.pdf",
+          "modifiedAt": "2026-10-12T21:37:47Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/Shared%20Documents/Sharnam%20Portal/SHAR_SNT_26-27_Voltamp_Transformers_Ltd/04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications/Approval-GFC-Drawing-Log.pdf"
+        },
+        {
+          "name": "Approval-GFC-Drawing-Log.xlsx",
+          "modifiedAt": "2026-10-12T21:39:16Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B12B1BC82-03C4-4071-B86E-DCBF62CBC74C%7D&file=Approval-GFC-Drawing-Log.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Design-Coordination-Register.pdf",
+          "modifiedAt": "2026-10-12T21:38:59Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/Shared%20Documents/Sharnam%20Portal/SHAR_SNT_26-27_Voltamp_Transformers_Ltd/04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications/Design-Coordination-Register.pdf"
+        },
+        {
+          "name": "Design-Coordination-Register.xlsx",
+          "modifiedAt": "2026-10-12T21:38:38Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B840C901E-C3F7-417B-8E32-BDB865F8FEF2%7D&file=Design-Coordination-Register.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Drawing-Check-Master-Log.csv",
+          "modifiedAt": "2026-10-12T21:39:54Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7BDDD3706B-E2D9-43D4-9EC7-12A7F94D2E79%7D&file=Drawing-Check-Master-Log.csv&action=default&mobileredirect=true"
+        },
+        {
+          "name": "DRAWING-REGISTER.csv",
+          "modifiedAt": "2026-10-12T21:39:36Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B1EBD7FBE-CA32-4B1B-AAE6-E9DF470F2D7A%7D&file=DRAWING-REGISTER.csv&action=default&mobileredirect=true"
+        },
+        {
+          "name": "DRAWING-REGISTER-01.xlsx",
+          "modifiedAt": "2026-10-12T21:38:36Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B32D27BFC-B087-4E57-81B3-9B2E65E1D0F0%7D&file=DRAWING-REGISTER-01.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "DRAWING-REGISTER-Dashboard.pdf",
+          "modifiedAt": "2026-10-12T21:38:57Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/Shared%20Documents/Sharnam%20Portal/SHAR_SNT_26-27_Voltamp_Transformers_Ltd/04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications/DRAWING-REGISTER-Dashboard.pdf"
+        },
+        {
+          "name": "Master-Drawing-Register.pdf",
+          "modifiedAt": "2026-10-12T21:37:32Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/Shared%20Documents/Sharnam%20Portal/SHAR_SNT_26-27_Voltamp_Transformers_Ltd/04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications/Master-Drawing-Register.pdf"
+        }
+      ]
+    },
+    {
+      "folder": "03_SUPPORT_AND_RESOURCES/03.06_Correspondence_Control/_Registers",
+      "provider": "sharepoint",
+      "files": 6,
+      "folders": 1,
+      "today": [
+        "SPDC_RFI_Form_and_Register.xlsx",
+        "SPDC_RFI_Form_and_Register-1791841147254.xlsx",
+        "SPDC_RFI_Form_and_Register-1791841199486.xlsx",
+        "SPDC_RFI_Form_and_Register-1791841248969.xlsx",
+        "SPDC_RFI_Form_and_Register-1791841295924.xlsx",
+        "SPDC_RFI_Form_and_Register-1791841333873.xlsx"
+      ],
+      "all": [
+        {
+          "name": "SPDC_RFI_Form_and_Register.xlsx",
+          "modifiedAt": "2026-10-12T21:42:47Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B37179317-BF8D-44D3-BBC6-3744679259EC%7D&file=SPDC_RFI_Form_and_Register.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "SPDC_RFI_Form_and_Register-1791841147254.xlsx",
+          "modifiedAt": "2026-10-12T21:39:28Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B8955B003-B619-46B4-B596-0D1066B45E15%7D&file=SPDC_RFI_Form_and_Register-1791841147254.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "SPDC_RFI_Form_and_Register-1791841199486.xlsx",
+          "modifiedAt": "2026-10-12T21:40:17Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7BEB1C496A-FDDC-450F-9D15-642BC8867736%7D&file=SPDC_RFI_Form_and_Register-1791841199486.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "SPDC_RFI_Form_and_Register-1791841248969.xlsx",
+          "modifiedAt": "2026-10-12T21:41:06Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7BD2E06788-2713-417A-A7BE-817FA6BE6538%7D&file=SPDC_RFI_Form_and_Register-1791841248969.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "SPDC_RFI_Form_and_Register-1791841295924.xlsx",
+          "modifiedAt": "2026-10-12T21:41:49Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B00D986C5-DAE0-492E-B44F-D7FC41025B5E%7D&file=SPDC_RFI_Form_and_Register-1791841295924.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "SPDC_RFI_Form_and_Register-1791841333873.xlsx",
+          "modifiedAt": "2026-10-12T21:42:24Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B3BD0D8E5-79DD-4286-9A87-92C4BB427742%7D&file=SPDC_RFI_Form_and_Register-1791841333873.xlsx&action=default&mobileredirect=true"
+        }
+      ]
+    },
+    {
+      "folder": "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans",
+      "provider": "sharepoint",
+      "files": 5,
+      "folders": 1,
+      "today": [
+        "2026-10-12-Quality_Assurance_Plan_Week_50.xlsx",
+        "Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-42.xlsx",
+        "Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-50.xlsx",
+        "Quality-Dashboard-SHAR_SNT_26-27_Voltamp_Transformers_Ltd..xlsx"
+      ],
+      "all": [
+        {
+          "name": "2026-10-12-Quality_Assurance_Plan_Week_50.xlsx",
+          "modifiedAt": "2026-10-12T21:43:07Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B116A7C4B-402E-40CF-B6DB-7FF5514ED0C2%7D&file=2026-10-12-Quality_Assurance_Plan_Week_50.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-42.xlsx",
+          "modifiedAt": "2026-10-12T21:43:18Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B2BD9839E-633F-4C53-9D66-F3CCEE1CDB23%7D&file=Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-42.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-50.xlsx",
+          "modifiedAt": "2026-10-12T21:42:34Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B565075D5-EB69-409B-B749-0E2B5104A398%7D&file=Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-50.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-51.xlsx",
+          "modifiedAt": "2026-10-07T13:31:26Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B570F85C3-50E2-4EFB-B1EF-E885ABE83E04%7D&file=Quality-Assurance-Plan-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-Week-51.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "Quality-Dashboard-SHAR_SNT_26-27_Voltamp_Transformers_Ltd..xlsx",
+          "modifiedAt": "2026-10-12T21:44:01Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B2E8843EF-B56C-436E-A9A6-0F9AD8908E9A%7D&file=Quality-Dashboard-SHAR_SNT_26-27_Voltamp_Transformers_Ltd..xlsx&action=default&mobileredirect=true"
+        }
+      ]
+    },
+    {
+      "folder": "08_QUALITY_HSE_AND_ENVIRONMENT/08.03_Testing_Test_Report_Control",
+      "provider": "sharepoint",
+      "files": 2,
+      "folders": 1,
+      "today": [
+        "2026-10-12-SPDC_CUBE_REGISTER__1_.xlsx",
+        "SPDC-Cube-Register-SHAR_SNT_26-27_Voltamp_Transformers_Ltd..xlsx"
+      ],
+      "all": [
+        {
+          "name": "2026-10-12-SPDC_CUBE_REGISTER__1_.xlsx",
+          "modifiedAt": "2026-10-12T21:45:42Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7BC59E5A51-25B7-4D4F-B923-AC887EB93D63%7D&file=2026-10-12-SPDC_CUBE_REGISTER__1_.xlsx&action=default&mobileredirect=true"
+        },
+        {
+          "name": "SPDC-Cube-Register-SHAR_SNT_26-27_Voltamp_Transformers_Ltd..xlsx",
+          "modifiedAt": "2026-10-12T21:43:39Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B0E4E8BC1-F108-411A-9DAA-2A53FEFAA0AF%7D&file=SPDC-Cube-Register-SHAR_SNT_26-27_Voltamp_Transformers_Ltd..xlsx&action=default&mobileredirect=true"
+        }
+      ]
+    },
+    {
+      "folder": "08_QUALITY_HSE_AND_ENVIRONMENT/08.06_Control_of_Nonconforming_Output",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 2,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 1,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "07_EXECUTION_AND_DELIVERY/07.08_Progress_Measurement_SCurve",
+      "provider": "sharepoint",
+      "files": 1,
+      "folders": 0,
+      "today": [
+        "2026-10-12-Planned_Vs._Actual_Dashboard.xlsx"
+      ],
+      "all": [
+        {
+          "name": "2026-10-12-Planned_Vs._Actual_Dashboard.xlsx",
+          "modifiedAt": "2026-10-12T21:46:21Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B99BD7664-24C1-4893-AE2E-79EC20F06164%7D&file=2026-10-12-Planned_Vs._Actual_Dashboard.xlsx&action=default&mobileredirect=true"
+        }
+      ]
+    },
+    {
+      "folder": "02_PLANNING/02.05_Cost_Estimates_Budget_Development",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 0,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "02_PLANNING/02.07_Cash_Flow_Forecast_Monitoring",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 0,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "05_PROCUREMENT_AND_CONTRACTS/05.01_Procurement_Strategy_and_Packages",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 0,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "09_COMMERCIAL_AND_CHANGE/09.02_Joint_Measurement",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 0,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "09_COMMERCIAL_AND_CHANGE/09.01_Interim_Bill_Verification_Certification",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 1,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 1,
+      "today": [],
+      "all": []
+    },
+    {
+      "folder": "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records/CIVIL",
+      "provider": "sharepoint",
+      "files": 1,
+      "folders": 0,
+      "today": [
+        "DPR-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-CIVIL-2026-10-12.xlsx"
+      ],
+      "all": [
+        {
+          "name": "DPR-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-CIVIL-2026-10-12.xlsx",
+          "modifiedAt": "2026-10-12T21:46:51Z",
+          "url": "https://spdcsmb.sharepoint.com/sites/SharnamProjects/_layouts/15/Doc.aspx?sourcedoc=%7B32823CA2-5507-467D-BAA8-9A44AE5528AC%7D&file=DPR-SHAR_SNT_26-27_Voltamp_Transformers_Ltd.-CIVIL-2026-10-12.xlsx&action=default&mobileredirect=true"
+        }
+      ]
+    },
+    {
+      "folder": "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS",
+      "provider": "sharepoint",
+      "files": 0,
+      "folders": 0,
+      "today": [],
+      "all": []
+    }
+  ]
+}

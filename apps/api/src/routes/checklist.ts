@@ -2736,20 +2736,18 @@ checklistRouter.post(
       plannedClosure: row.plannedClosure,
     });
     if (project?.code) {
-      try {
-        const { syncQualityNcrToDrive, publishQualityNcrRegisterToDrive } = await import(
-          "../services/syncNcrToDrive.js"
-        );
+      // File the form + register in SharePoint, but never hold the browser past the gateway timeout:
+      // after 20 s the NCR is returned and the upload finishes in the background.
+      const { syncQualityNcrToDrive, publishQualityNcrRegisterToDrive } = await import("../services/syncNcrToDrive.js");
+      const sync = (async () => {
         const drive = await syncQualityNcrToDrive(project, row);
         const register = await publishQualityNcrRegisterToDrive(req.params.projectId);
-        return res.status(201).json({
-          ...row,
-          fillPhase: drive.phase,
-          sharePointExports: [...drive.exports, ...register],
-        });
-      } catch {
-        /* optional */
-      }
+        return { fillPhase: drive.phase, sharePointExports: [...drive.exports, ...register] };
+      })();
+      sync.catch((err) => console.warn("[ncr] SharePoint sync failed:", err instanceof Error ? err.message : err));
+      const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 20_000));
+      const done = await Promise.race([sync.catch(() => null), timeout]);
+      return res.status(201).json(done ? { ...row, ...done } : { ...row, sharePointExports: [], sharePointPending: true });
     }
     res.status(201).json(row);
   }
