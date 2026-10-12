@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
 import { Button } from "./ui";
 import { downloadAuthFile } from "../lib/downloadReport";
@@ -33,7 +34,30 @@ export function DrawingPackMenu({
   panel?: boolean;
 }) {
   const [busy, setBusy] = useState("");
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const say = (m: string) => onMsg?.(m);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  function toggle() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.right - 288, window.innerWidth - 296)) });
+    setOpen((v) => !v);
+  }
 
   async function one(sh: Sheet) {
     setBusy(sh.key);
@@ -114,11 +138,31 @@ export function DrawingPackMenu({
 
   if (panel) return body;
   return (
-    <details className="relative shrink-0">
-      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60">Sheets &amp; pack ▾</span>
-      </summary>
-      <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-line bg-paper shadow-lg p-2">{body}</div>
-    </details>
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        className="inline-flex shrink-0 items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60"
+        aria-expanded={open}
+      >
+        Sheets &amp; pack ▾
+      </button>
+      {open && pos
+        ? createPortal(
+            <>
+              <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />
+              <div
+                className="fixed z-[91] w-72 max-h-[70vh] overflow-y-auto rounded-xl border border-line bg-paper p-2 shadow-2xl"
+                style={{ top: pos.top, left: pos.left }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {body}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }

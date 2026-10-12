@@ -307,16 +307,16 @@ export function MasterDrawingRegisterTable({
                         variant="danger"
                         className="!text-[10px] !px-2 !py-1"
                         onClick={() => {
-                          if (!window.confirm(`Delete master line ${cleanDrawingNumber(r.drawingNumber)}?`)) return;
-                          const withDrawing =
-                            Boolean(r.drawing?.id) &&
-                            window.confirm("Also delete the linked GFC drawing and its revisions?");
+                          const linked = Boolean(r.drawing?.id);
+                          if (
+                            !window.confirm(
+                              `Delete ${cleanDrawingNumber(r.drawingNumber)}?${linked ? " This also removes its row on the Approval & GFC log and its revisions — they are one record." : ""} SharePoint files stay.`,
+                            )
+                          )
+                            return;
                           void (async () => {
                             try {
-                              await api(
-                                `/api/drawings/register-lines/${r.id}${withDrawing ? "?drawing=1" : ""}`,
-                                { method: "DELETE", token },
-                              );
+                              await api(`/api/drawings/register-lines/${r.id}`, { method: "DELETE", token });
                               await onLinePatched?.();
                             } catch (err) {
                               window.alert(err instanceof Error ? err.message : "Could not delete line");

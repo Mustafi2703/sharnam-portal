@@ -2394,7 +2394,15 @@ async function unlinkAndDeleteDrawings(
     where: { linkedDrawingId: { in: drawingIds } },
     data: { linkedDrawingId: null },
   });
-  await tx.drawingRegisterLine.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null } });
+  // The GFC row and its master-register line are one record — the line goes with the drawing (matched by link or number).
+  const numbers = (
+    await tx.drawing.findMany({ where: { id: { in: drawingIds }, projectId }, select: { drawingNumber: true } })
+  )
+    .map((d) => d.drawingNumber)
+    .filter(Boolean);
+  await tx.drawingRegisterLine.deleteMany({
+    where: { projectId, OR: [{ drawingId: { in: drawingIds } }, ...(numbers.length ? [{ drawingNumber: { in: numbers } }] : [])] },
+  });
   await tx.drawing.deleteMany({ where: { id: { in: drawingIds }, projectId } });
 }
 
@@ -2434,7 +2442,7 @@ drawingsRouter.post(
   },
 );
 
-/** Delete one GFC drawing (and its revisions). Linked master-register line is unlinked, not removed. */
+/** Delete one GFC drawing (and its revisions) together with its master-register line — they are one record. */
 drawingsRouter.delete(
   "/drawing/:id",
   requireRoles("admin", "office", "employee"),
@@ -2631,7 +2639,8 @@ drawingsRouter.delete(
   async (req: AuthedRequest, res) => {
     const line = await prisma.drawingRegisterLine.findUnique({ where: { id: req.params.id } });
     if (!line) return res.status(404).json({ error: "Register line not found" });
-    const alsoDrawing = String(req.query.drawing || "") === "1";
+    // A master line and its GFC row are one record: deleting the line removes the drawing too (?drawing=0 keeps it).
+    const alsoDrawing = String(req.query.drawing ?? "1") !== "0";
     try {
       await prisma.$transaction(async (tx) => {
         if (alsoDrawing && line.drawingId) {

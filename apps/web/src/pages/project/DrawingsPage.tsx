@@ -1167,7 +1167,7 @@ export default function DrawingsPage() {
                               className="!px-2 !py-1 !text-xs"
                               disabled={clearBusy}
                               onClick={() => {
-                                if (!window.confirm(`Delete drawing ${d.drawingNumber}? Revisions on this row are removed. SharePoint files stay.`)) {
+                                if (!window.confirm(`Delete ${d.drawingNumber}? This removes the GFC row, its revisions and its master register line — they are one record. SharePoint files stay.`)) {
                                   return;
                                 }
                                 void (async () => {
