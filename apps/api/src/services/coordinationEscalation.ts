@@ -81,12 +81,10 @@ export async function createRfiFromCoordinationIssue(opts: {
     ccOverride: cc.join(", ") || undefined,
   });
 
-  try {
-    const { syncRfiToDrive } = await import("./syncRfiToDrive.js");
-    await syncRfiToDrive(rfi.id);
-  } catch (err) {
-    console.warn("[coordination] RFI SharePoint sync:", err instanceof Error ? err.message : err);
-  }
+  // File the escalated RFI in SharePoint without holding the request (the gateway drops slow responses).
+  import("./syncRfiToDrive.js")
+    .then(({ syncRfiToDrive }) => syncRfiToDrive(rfi.id))
+    .catch((err) => console.warn("[coordination] RFI SharePoint sync:", err instanceof Error ? err.message : err));
 
   return rfi;
 }

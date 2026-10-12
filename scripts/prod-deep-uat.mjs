@@ -218,7 +218,19 @@ async function login(who) {
   tokens.set(who, { token: body.token, user: body.user });
   return tokens.get(who);
 }
-async function call(who, method, url, payload, { form, timeoutMs = 180000 } = {}) {
+async function call(who, method, url, payload, opts = {}) {
+  let last;
+  // Multipart uploads are occasionally cut by the gateway before the last boundary ("Unexpected end of form");
+  // the server has not processed anything in that case, so the same upload is sent again.
+  for (let attempt = 1; attempt <= (opts.form ? 3 : 1); attempt++) {
+    last = await callOnce(who, method, url, payload, opts);
+    const cut = last.status === 500 && /unexpected end of form/i.test(noteOf(last.body?.error || last.body));
+    if (!cut) return last;
+    await new Promise((r) => setTimeout(r, 1500 * attempt));
+  }
+  return last;
+}
+async function callOnce(who, method, url, payload, { form, timeoutMs = 180000 } = {}) {
   const { token } = await login(who);
   const headers = { authorization: `Bearer ${token}` };
   let body;
@@ -258,9 +270,10 @@ function form(fields = {}, files = []) {
 }
 async function toSharePoint(who, label, exportPath, moduleKey) {
   const r = await call(who, "POST", `/api/projects/${pid()}/save-export`, { path: exportPath, module: moduleKey }, { timeoutMs: 300000 });
-  assert(r.status === 200 && r.body?.path, `SharePoint save (${label}) ${r.status} ${noteOf(r.body?.error || r.body)}`);
-  state.sharepoint.push({ label, path: r.body.path, url: r.body.sharePointUrl || r.body.url || null });
-  return r.body.path;
+  assert((r.status === 200 && r.body?.path) || (r.status === 202 && r.body?.pending), `SharePoint save (${label}) ${r.status} ${noteOf(r.body?.error || r.body)}`);
+  const path = r.body.path || `${r.body.folder} (filed in background)`;
+  state.sharepoint.push({ label, path, url: r.body.sharePointUrl || r.body.url || null });
+  return path;
 }
 async function step(id, title, who, fn) {
   const t0 = Date.now();
@@ -494,12 +507,24 @@ async function sectionCoordination() {
     }
     const sixth = await call("office", "POST", `/api/directory/coordination/${state.dci1}/follow-up`, {});
     assert(sixth.status === 400, `6th follow-up returned ${sixth.status}`);
-    const esc = ok(await call("office", "POST", `/api/directory/coordination/${state.dci1}/escalate-rfi`, {}), "escalate");
-    state.escalatedRfiId = esc.rfi?.id;
-    assert(state.escalatedRfiId, "no RFI returned");
+    // Escalate once (allowed any time, only once). If the issue was already escalated, read the RFI off the issue.
+    let how = "escalated by office";
+    let rfi = null;
+    const esc = await call("office", "POST", `/api/directory/coordination/${state.dci1}/escalate-rfi`, {});
+    if (esc.status === 201) rfi = esc.body.rfi;
+    else {
+      assert(esc.status === 400 && /already escalated/i.test(noteOf(esc.body?.error)), `escalate ${esc.status} ${noteOf(esc.body)}`);
+      how = "already escalated";
+      const overview = ok(await call("office", "GET", `/api/directory/project/${pid()}/overview`), "overview");
+      const issue = (overview.coordination || []).find((x) => x.id === state.dci1);
+      const rfis = ok(await call("office", "GET", `/api/rfis/project/${pid()}`), "rfis");
+      rfi = rfis.find((x) => x.id === issue?.escalatedRfiId);
+    }
+    state.escalatedRfiId = rfi?.id;
+    assert(state.escalatedRfiId, "no escalated RFI found");
     const again = await call("office", "POST", `/api/directory/coordination/${state.dci1}/escalate-rfi`, {});
     assert(again.status === 400, `second escalation returned ${again.status}`);
-    return `follow-ups ${counts.join(",")} · 6th refused · escalated to ${esc.rfi.number} (assigned ${esc.rfi.assignedToId === state.consultantId ? "to consultant" : "unassigned"}) · re-escalation refused`;
+    return `follow-ups ${counts.join(",")} · 6th refused · ${how} → ${rfi.number} (assigned ${rfi.assignedToId === state.consultantId ? "to consultant" : "unassigned"}) · re-escalation refused`;
   });
   await step("DCI-3", "Consultant answers the escalated RFI with a markup; office closes it and the coordination issue", "consultant", async () => {
     const mk = ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, {
@@ -770,7 +795,7 @@ async function sectionSafety() {
       n++;
     }
     const list = ok(await call("site", "GET", `/api/safety/project/${pid()}`), "list");
-    return `${n} records · project total ${list.length}`;
+    return `${n} records · project total ${list.stats?.total ?? list.records?.length}`;
   });
   await step("SAF-3", "Week 2 safety NCR: site issues → Reeca records root cause / actions (cannot close) → office closes; form PDF", "site", async () => {
     const w = WEEKS[1];

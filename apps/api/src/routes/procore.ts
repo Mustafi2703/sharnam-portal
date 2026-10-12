@@ -828,12 +828,17 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
     },
   });
   await audit("rfi.create", { userId: req.user!.id, entity: "Rfi", entityId: rfi.id });
+  // File the RFI form + register in SharePoint, but answer within the gateway limit: the sync keeps
+  // running in the background when SharePoint is slow (the row is already saved).
   let sharePointExports: Array<{ kind: string; path: string; url?: string | null }> = [];
-  try {
-    const { syncRfiToDrive } = await import("../services/syncRfiToDrive.js");
-    sharePointExports = (await syncRfiToDrive(rfi.id)).exports;
-  } catch (err) {
-    console.warn("[RFI] SharePoint fill sync failed:", err instanceof Error ? err.message : err);
+  let sharePointPending = false;
+  {
+    const sync = import("../services/syncRfiToDrive.js").then(({ syncRfiToDrive }) => syncRfiToDrive(rfi.id));
+    sync.catch((err) => console.warn("[RFI] SharePoint fill sync failed:", err instanceof Error ? err.message : err));
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 20_000));
+    const done = await Promise.race([sync.catch(() => null), timeout]);
+    if (done) sharePointExports = done.exports;
+    else sharePointPending = true;
   }
   try {
     const [project, assignment] = await Promise.all([
@@ -880,7 +885,7 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       console.warn("[RFI] fill-request draft:", err instanceof Error ? err.message : err);
     }
   }
-  res.status(201).json({ ...rfi, sharePointExports });
+  res.status(201).json({ ...rfi, sharePointExports, sharePointPending });
 });
 
 /** SPDC RFI register = design queries only (Request for Information). Inspection / checklist requests have their own registers. */
@@ -1084,12 +1089,10 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
   } catch {
     /* email optional */
   }
-  try {
-    const { syncRfiToDrive } = await import("../services/syncRfiToDrive.js");
-    await syncRfiToDrive(existing.id);
-  } catch (err) {
-    console.warn("[RFI] SharePoint respond sync failed:", err instanceof Error ? err.message : err);
-  }
+  // Re-file the answered form in SharePoint in the background — the response is already saved.
+  import("../services/syncRfiToDrive.js")
+    .then(({ syncRfiToDrive }) => syncRfiToDrive(existing.id))
+    .catch((err) => console.warn("[RFI] SharePoint respond sync failed:", err instanceof Error ? err.message : err));
   res.status(201).json(response);
 });
 
@@ -1136,12 +1139,10 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
   });
   if (req.body.status && req.body.status !== existing.status) {
     if (req.body.status === "Closed") {
-      try {
-        const { archiveClosedRfiReport } = await import("../services/archiveClosedRfiReport.js");
-        await archiveClosedRfiReport({ projectId: existing.projectId, rfiId: rfi.id });
-      } catch (err) {
-        console.warn("[RFI] SharePoint archive failed:", err instanceof Error ? err.message : err);
-      }
+      // Move the form to the Closed folder in the background (SharePoint can take longer than the gateway allows).
+      import("../services/archiveClosedRfiReport.js")
+        .then(({ archiveClosedRfiReport }) => archiveClosedRfiReport({ projectId: existing.projectId, rfiId: rfi.id }))
+        .catch((err) => console.warn("[RFI] SharePoint archive failed:", err instanceof Error ? err.message : err));
       const [project, closedRfi, assignment] = await Promise.all([
         prisma.project.findUnique({
           where: { id: existing.projectId },
@@ -1172,12 +1173,9 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
           ...rfiEmailContextFromRecord(closedRfi, project, assignment?.template?.name || null),
         });
       }
-      try {
-        const { refreshQualityPackAfterChange } = await import("../services/checklistWeekAdvance.js");
-        await refreshQualityPackAfterChange(existing.projectId, req.user!.id);
-      } catch (err) {
-        console.warn("[RFI] quality pack refresh:", err instanceof Error ? err.message : err);
-      }
+      import("../services/checklistWeekAdvance.js")
+        .then(({ refreshQualityPackAfterChange }) => refreshQualityPackAfterChange(existing.projectId, req.user!.id))
+        .catch((err) => console.warn("[RFI] quality pack refresh:", err instanceof Error ? err.message : err));
     } else {
       const { notifyRfiStatus } = await import("../services/ncrNotify.js");
       await notifyRfiStatus({
@@ -2116,13 +2114,9 @@ safetyRouter.post(
         select: { name: true, code: true, clientName: true },
       });
       if (project?.code) {
-        try {
-          const { syncSafetyNcrToDrive } = await import("../services/syncNcrToDrive.js");
-          const drive = await syncSafetyNcrToDrive(project, row);
-          return res.status(201).json({ ...row, sharePointExports: drive.exports });
-        } catch {
-          /* optional */
-        }
+        const { boundedSync } = await import("../services/boundedWait.js");
+        const waited = await boundedSync("safety ncr", import("../services/syncNcrToDrive.js").then(({ syncSafetyNcrToDrive }) => syncSafetyNcrToDrive(project, row)));
+        return res.status(201).json({ ...row, sharePointExports: waited.result?.exports || [], sharePointPending: waited.pending });
       }
     }
     res.status(201).json(row);
@@ -2339,16 +2333,14 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
     select: { name: true, code: true, clientName: true },
   });
   let sharePointExports: { kind: string; path: string; url?: string | null }[] = [];
+  let sharePointPending = false;
   if (row.recordType === "NCR" && project?.code) {
-    try {
-      const { syncSafetyNcrToDrive } = await import("../services/syncNcrToDrive.js");
-      const drive = await syncSafetyNcrToDrive(project, row);
-      sharePointExports = drive.exports;
-    } catch {
-      /* optional */
-    }
+    const { boundedSync } = await import("../services/boundedWait.js");
+    const waited = await boundedSync("safety ncr update", import("../services/syncNcrToDrive.js").then(({ syncSafetyNcrToDrive }) => syncSafetyNcrToDrive(project, row)));
+    if (waited.result) sharePointExports = waited.result.exports;
+    sharePointPending = waited.pending;
   }
-  res.json({ ...row, sharePointExports });
+  res.json({ ...row, sharePointExports, sharePointPending });
 });
 
 safetyRouter.post("/:id/follow-up", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

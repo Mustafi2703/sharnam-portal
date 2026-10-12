@@ -29,14 +29,15 @@ export function SaveToSharePointButton({
   async function save() {
     setState({ busy: true });
     try {
-      const out = await api<{ url?: string; sharePointUrl?: string; path: string }>(`/api/projects/${projectId}/save-export`, {
+      const out = await api<{ url?: string; sharePointUrl?: string; path: string | null; pending?: boolean; folder?: string }>(`/api/projects/${projectId}/save-export`, {
         method: "POST",
         token,
         body: JSON.stringify({ path, module, fileName }),
         // The server regenerates the file and uploads it to SharePoint — allow it the time.
         timeoutMs: 180_000,
       });
-      setState({ url: out.sharePointUrl || out.url || out.path });
+      // Slow exports are finished in the background (202) — the file lands in the module folder shortly.
+      setState({ url: out.sharePointUrl || out.url || out.path || out.folder || "SharePoint" });
     } catch (err) {
       setState({ error: err instanceof Error ? err.message : "Save failed" });
     }

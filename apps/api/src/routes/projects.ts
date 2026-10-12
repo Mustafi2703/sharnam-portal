@@ -474,7 +474,8 @@ projectsRouter.post(
     if (!path || !moduleKey) return res.status(400).json({ error: "path and module required" });
     try {
       const { saveExportToSharePoint } = await import("../services/exportToSharePoint.js");
-      const out = await saveExportToSharePoint({
+      const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
+      const work = saveExportToSharePoint({
         projectId: req.params.id,
         userId: req.user!.id,
         token,
@@ -482,7 +483,18 @@ projectsRouter.post(
         moduleKey,
         fileName: req.body?.fileName ? String(req.body.fileName) : undefined,
       });
-      res.json(out);
+      // Heavy exports (chart dashboards, packs) can outlive the hosting gateway; answer 202 and finish in the background.
+      let failure: unknown = null;
+      work.catch((err) => {
+        failure = err;
+        console.warn("[save-export] SharePoint save failed:", err instanceof Error ? err.message : err);
+      });
+      const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 45_000));
+      const out = await Promise.race([work.catch(() => null), timeout]);
+      if (out) return res.json(out);
+      if (failure) throw failure;
+      const folder = (MODULE_TO_ISO_FOLDER as Record<string, string>)[moduleKey] || moduleKey;
+      res.status(202).json({ pending: true, path: null, folder, message: `Saving to SharePoint (${folder}) in the background — refresh the folder in a minute.` });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Could not save to SharePoint" });
     }

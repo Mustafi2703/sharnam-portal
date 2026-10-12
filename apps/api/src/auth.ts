@@ -55,6 +55,7 @@ const STAKEHOLDER_WRITE_ALLOW: RegExp[] = [
   /^\/api\/directory\/project\/[^/]+\/coordination\/?$/,
   /^\/api\/directory\/coordination\/[^/]+(\/follow-up)?\/?$/,
   /^\/api\/drawings\/revision\/[^/]+\/markup-pages\/?$/,
+  /^\/api\/drawings\/project\/[^/]+\/markups\/?$/, // branded markup PDF on an RFI / coordination issue they are answering
   /^\/api\/comms\/meetings\/[^/]+\/items\/?$/,
 ];
 

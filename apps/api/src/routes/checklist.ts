@@ -779,11 +779,13 @@ checklistRouter.post(
     let driveExports: Awaited<ReturnType<typeof import("../services/syncChecklistSubmissionToDrive.js").syncChecklistSubmissionToDrive>> = {
       exports: [],
     };
-    try {
-      const { syncChecklistSubmissionToDrive } = await import("../services/syncChecklistSubmissionToDrive.js");
-      driveExports = await syncChecklistSubmissionToDrive(submission.id);
-    } catch (err) {
-      console.warn("[checklist] drive sync on submit:", err instanceof Error ? err.message : err);
+    let sharePointPending = false;
+    {
+      const { boundedSync } = await import("../services/boundedWait.js");
+      const sync = import("../services/syncChecklistSubmissionToDrive.js").then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id));
+      const waited = await boundedSync("checklist submit", sync);
+      if (waited.result) driveExports = waited.result;
+      sharePointPending = waited.pending;
     }
 
     let cubeGroup: { created: number } | null = null;
@@ -838,6 +840,7 @@ checklistRouter.post(
     res.status(existingDraft ? 200 : 201).json({
       ...attachProgress(withPhotos || submission, itemCount),
       sharePointExports: driveExports.exports,
+      sharePointPending,
       cubeGroup,
       week,
     });
@@ -1038,16 +1041,19 @@ checklistRouter.post(
     let driveExports: Awaited<ReturnType<typeof import("../services/syncChecklistSubmissionToDrive.js").syncChecklistSubmissionToDrive>> = {
       exports: [],
     };
-    try {
-      const { syncChecklistSubmissionToDrive } = await import("../services/syncChecklistSubmissionToDrive.js");
-      driveExports = await syncChecklistSubmissionToDrive(submission.id);
-    } catch (err) {
-      console.warn("[checklist] drive sync on draft:", err instanceof Error ? err.message : err);
+    let sharePointPending = false;
+    {
+      const { boundedSync } = await import("../services/boundedWait.js");
+      const sync = import("../services/syncChecklistSubmissionToDrive.js").then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id));
+      const waited = await boundedSync("checklist draft", sync);
+      if (waited.result) driveExports = waited.result;
+      sharePointPending = waited.pending;
     }
 
     res.status(existingDraft ? 200 : 201).json({
       ...attachProgress(withPhotos || submission, assignment.template.items.length),
       sharePointExports: driveExports.exports,
+      sharePointPending,
     });
   }
 );
@@ -1954,11 +1960,10 @@ checklistRouter.post(
       meta: { projectId, unlockToken, files: files.length, itemAttachments: itemAttachCount },
     });
 
-    try {
-      const { syncChecklistSubmissionToDrive } = await import("../services/syncChecklistSubmissionToDrive.js");
-      await syncChecklistSubmissionToDrive(submission.id);
-    } catch (err) {
-      console.warn("[checklist] drive sync on drawing precheck:", err instanceof Error ? err.message : err);
+    {
+      // The unlock token is usable now; the signed check is filed in SharePoint in the background when slow.
+      const { boundedSync } = await import("../services/boundedWait.js");
+      await boundedSync("drawing precheck", import("../services/syncChecklistSubmissionToDrive.js").then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id)));
     }
 
     res.status(201).json({
@@ -2998,16 +3003,14 @@ checklistRouter.patch(
       select: { name: true, code: true, clientName: true },
     });
     let sharePointExports: { kind: string; path: string; url?: string | null }[] = [];
+    let sharePointPending = false;
     if (project?.code) {
-      try {
-        const { syncQualityNcrToDrive } = await import("../services/syncNcrToDrive.js");
-        const drive = await syncQualityNcrToDrive(project, row);
-        sharePointExports = drive.exports;
-      } catch {
-        /* optional */
-      }
+      const { boundedSync } = await import("../services/boundedWait.js");
+      const waited = await boundedSync("ncr update", import("../services/syncNcrToDrive.js").then(({ syncQualityNcrToDrive }) => syncQualityNcrToDrive(project, row)));
+      if (waited.result) sharePointExports = waited.result.exports;
+      sharePointPending = waited.pending;
     }
-    res.json({ ...row, sharePointExports });
+    res.json({ ...row, sharePointExports, sharePointPending });
   }
 );
 
@@ -3513,6 +3516,10 @@ checklistRouter.post(
   requireRoles("admin", "office", "employee", "site_employee", "vendor"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
+    // Site instructions are issued by the PMC; contractors can only log observations.
+    if (req.user?.role === "vendor" && /instruction/i.test(String(body.recordType || ""))) {
+      return res.status(403).json({ error: "Site instructions are issued by the Sharnam team. Contractors can log site observations." });
+    }
     const row = await prisma.qualitySiteRecord.create({
       data: {
         projectId: req.params.projectId,

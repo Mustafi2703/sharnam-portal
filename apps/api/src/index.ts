@@ -79,6 +79,31 @@ app.use("/api", (_req, res, next) => {
   next();
 });
 
+/**
+ * The hosting gateway drops requests that take longer than ~60 s (the browser sees a bare 504 and the work
+ * that did finish looks lost). For writes that are still running at 50 s, answer 202 "pending" — the handler
+ * keeps running to completion (SharePoint filing, emails, packs) and later responses are swallowed.
+ */
+const SLOW_WRITE_GUARD_MS = Number(process.env.SLOW_WRITE_GUARD_MS || 50_000);
+app.use("/api", (req, res, next) => {
+  if (!/^(POST|PATCH|PUT|DELETE)$/.test(req.method) || SLOW_WRITE_GUARD_MS <= 0) return next();
+  const timer = setTimeout(() => {
+    if (res.headersSent || res.writableEnded) return;
+    console.warn(`[slow-guard] ${req.method} ${String(req.originalUrl).split("?")[0]} still running after ${SLOW_WRITE_GUARD_MS}ms — answering 202, finishing in background`);
+    res.status(202).json({
+      pending: true,
+      message: "Saved — the SharePoint filing is finishing in the background. Refresh in a minute to see the files.",
+    });
+    const swallow = () => res;
+    for (const k of ["json", "send", "end", "status", "setHeader", "sendFile", "sendStatus", "write", "redirect", "type", "attachment", "download", "contentType"] as const) {
+      (res as unknown as Record<string, unknown>)[k] = swallow;
+    }
+  }, SLOW_WRITE_GUARD_MS);
+  res.on("finish", () => clearTimeout(timer));
+  res.on("close", () => clearTimeout(timer));
+  next();
+});
+
 app.use((req, res, next) => {
   if (!req.path.startsWith("/api")) return next();
   res.on("finish", () => {

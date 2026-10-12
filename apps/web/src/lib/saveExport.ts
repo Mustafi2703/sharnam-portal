@@ -12,9 +12,10 @@ export async function saveExportToSharePoint(
   module: string,
   fileName?: string
 ): Promise<string> {
-  const out = await api<{ url?: string; sharePointUrl?: string | null; path: string; fileName: string }>(
+  const out = await api<{ url?: string; sharePointUrl?: string | null; path: string | null; fileName?: string; pending?: boolean; folder?: string }>(
     `/api/projects/${projectId}/save-export`,
     { method: "POST", token, body: JSON.stringify({ path, module, fileName }) }
   );
+  if (out.pending || !out.path) return `Saving to SharePoint (${out.folder || "project folder"}) in the background — refresh the folder in a minute.`;
   return `Saved ${out.fileName} to SharePoint (${out.path.split("/").slice(0, -1).pop() || "project folder"}) — live copy + this week's copy.`;
 }
