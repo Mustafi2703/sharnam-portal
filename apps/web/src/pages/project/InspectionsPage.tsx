@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api, mediaUrl } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { projectWeekNumber } from "@sharnam/shared";
+import { ProjectWeekPicker } from "../../components/ProjectWeekPicker";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { CHART_COLORS, ColumnChart, LineChart } from "../../components/ColumnChart";
@@ -415,28 +416,7 @@ export default function InspectionsPage() {
                   </div>
                 ) : null}
               </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => shiftWeek(-1)}>
-                  ← Previous week
-                </Button>
-                <label className="text-xs text-steel-muted">
-                  Week starting
-                  <input
-                    type="date"
-                    className="mt-1 block rounded-lg border border-line bg-white px-2 py-1 text-sm text-ink"
-                    value={weekStart}
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      const d = new Date(`${e.target.value}T00:00:00`);
-                      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-                      setWeekStart(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-                    }}
-                  />
-                </label>
-                <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => shiftWeek(1)}>
-                  Next week →
-                </Button>
-              </div>
+              <ProjectWeekPicker weekStart={weekStart} onChange={setWeekStart} projectStart={project?.startDate} />
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               {[

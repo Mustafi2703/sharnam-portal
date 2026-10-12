@@ -64,3 +64,28 @@ export function guardProjectParam(router: Router, param = "projectId"): void {
     }
   });
 }
+
+/**
+ * Record-level project isolation: for routes that reach a record by its own id (no project in the URL), look up the
+ * record's project first and answer "not found" unless this user may access that project. Registered before the routes.
+ * A path segment that is not a record id (e.g. "project") resolves to nothing and passes through to the route.
+ */
+export function guardRecord(
+  router: Router,
+  path: string,
+  resolve: (id: string) => Promise<string | null | undefined>,
+  param = "id",
+): void {
+  router.use(path, async (req, res, next) => {
+    try {
+      const id = String((req.params as Record<string, string>)[param] || "");
+      if (!id) return next();
+      const projectId = await resolve(id);
+      if (!projectId) return next();
+      if (await userCanAccessProject(req as AuthedRequest, projectId)) return next();
+      return res.status(404).json({ error: "Not found" });
+    } catch {
+      return next();
+    }
+  });
+}

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { guardProjectParam } from "../modules/_shared/projectAccess.js";
+import { guardProjectParam, guardRecord } from "../modules/_shared/projectAccess.js";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
@@ -7,6 +7,7 @@ import { audit } from "../services/audit.js";
 export const diaryRouter = Router();
 diaryRouter.use(requireAuth);
 guardProjectParam(diaryRouter);
+guardRecord(diaryRouter, "/:id", async (id) => (await prisma.dailyLog.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 function dayStart(d: string | Date) {
   const x = new Date(d);

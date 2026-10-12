@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { guardProjectParam } from "../modules/_shared/projectAccess.js";
+import { guardProjectParam, guardRecord } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
@@ -602,6 +602,7 @@ vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office")
 export const rfiRouter = Router();
 rfiRouter.use(requireAuth);
 guardProjectParam(rfiRouter);
+guardRecord(rfiRouter, "/:id", async (id) => (await prisma.rfi.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 const rfiDetailInclude = {
   assignedTo: { select: { id: true, fullName: true } },
@@ -1218,6 +1219,8 @@ rfiRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequ
 export const inspectionsRouter = Router();
 inspectionsRouter.use(requireAuth);
 guardProjectParam(inspectionsRouter);
+guardRecord(inspectionsRouter, "/items/:itemId", async (id) => (await prisma.inspectionItem.findUnique({ where: { id }, select: { inspection: { select: { projectId: true } } } }))?.inspection.projectId, "itemId");
+guardRecord(inspectionsRouter, "/:id", async (id) => (await prisma.qualityInspection.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 inspectionsRouter.get("/project/:projectId", async (req, res) => {
   const rows = await prisma.qualityInspection.findMany({
@@ -1450,6 +1453,9 @@ inspectionsRouter.post("/:id/complete", requireRoles("admin", "office", "site_em
 export const directoryRouter = Router();
 directoryRouter.use(requireAuth);
 guardProjectParam(directoryRouter);
+guardRecord(directoryRouter, "/coordination/:id", async (id) => (await prisma.designCoordinationIssue.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
+guardRecord(directoryRouter, "/submittals/:id", async (id) => (await prisma.submittal.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
+guardRecord(directoryRouter, "/photos/:id", async (id) => (await prisma.projectPhoto.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 directoryRouter.get("/project/:projectId/overview", async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
@@ -1982,6 +1988,7 @@ directoryRouter.post(
 export const safetyRouter = Router();
 safetyRouter.use(requireAuth);
 guardProjectParam(safetyRouter);
+guardRecord(safetyRouter, "/:id", async (id) => (await prisma.safetyRecord.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 safetyRouter.get("/project/:projectId", async (req, res) => {
   const records = await prisma.safetyRecord.findMany({

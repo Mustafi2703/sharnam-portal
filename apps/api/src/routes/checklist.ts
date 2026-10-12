@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { guardProjectParam } from "../modules/_shared/projectAccess.js";
+import { guardProjectParam, guardRecord } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import PDFDocument from "pdfkit";
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
@@ -117,6 +117,8 @@ const qualityPublishJobs = new Map<string, QualityPublishJob>();
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 guardProjectParam(checklistRouter);
+guardRecord(checklistRouter, "/assignments/:assignmentId", async (id) => (await prisma.checklistAssignment.findUnique({ where: { id }, select: { projectId: true } }))?.projectId, "assignmentId");
+guardRecord(checklistRouter, "/submissions/:id", async (id) => (await prisma.checklistSubmission.findUnique({ where: { id }, select: { assignment: { select: { projectId: true } } } }))?.assignment.projectId);
 
 checklistRouter.post(
   "/project/:projectId/assign",
@@ -3838,6 +3840,62 @@ checklistRouter.get("/checklist-pack/inventory", requireAuth, async (_req, res) 
   const { loadChecklistPackInventory } = await import("../services/checklistPackPaths.js");
   res.json(loadChecklistPackInventory());
 });
+
+/** The client's QAP library (Sheet2 of Quality Assurance Plan Week 50.xlsx): activities and their checks. */
+checklistRouter.get("/project/:projectId/qap/library", async (_req, res) => {
+  const { loadQapLibrary } = await import("../services/qapLibrary.js");
+  res.json(loadQapLibrary());
+});
+
+/** Add several QAP lines under one activity in one go (e.g. ticked from the library). */
+checklistRouter.post(
+  "/project/:projectId/qap/lines",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const b = req.body || {};
+    const section = String(b.section || "").trim();
+    const weekLabel = String(b.weekLabel || "").trim();
+    const lines: { description?: string; frequency?: string; codeOfConformance?: string; testAgency?: string }[] = Array.isArray(b.lines) ? b.lines : [];
+    if (!section || !weekLabel || !lines.length) return res.status(400).json({ error: "Week, activity and at least one line are required." });
+    const t = (v: unknown) => (v == null || String(v).trim() === "" ? null : String(v).trim());
+    const existing = await prisma.qapActivity.count({ where: { projectId: req.params.projectId, weekLabel, section } });
+    const sectionsBefore = new Set((await prisma.qapActivity.findMany({ where: { projectId: req.params.projectId, weekLabel }, select: { section: true } })).map((r) => r.section));
+    const srNo = t(b.srNo) || (existing ? null : String(sectionsBefore.size + 1));
+    let created = 0;
+    for (const [i, l] of lines.entries()) {
+      const description = t(l.description);
+      if (!description) continue;
+      await prisma.qapActivity.create({
+        data: {
+          projectId: req.params.projectId,
+          weekLabel,
+          section,
+          activity: section,
+          discipline: section,
+          srNo: i === 0 && !existing ? srNo : null,
+          description,
+          frequency: t(l.frequency),
+          codeOfConformance: t(l.codeOfConformance),
+          testAgency: t(l.testAgency),
+          contractorPerformer: t(b.contractorPerformer),
+          contractorChecker: t(b.contractorChecker),
+          pmcRole: t(b.pmcRole),
+          clientRole: t(b.clientRole),
+          records: t(b.records),
+          remarks: t(b.remarks),
+          contractorOk: !!(b.contractorPerformer || b.contractorChecker),
+          pmcOk: /review|witness|approve|yes/i.test(String(b.pmcRole || "")),
+          clientOk: /witness|random|approve|yes/i.test(String(b.clientRole || "")),
+          status: "Open",
+        },
+      });
+      created++;
+    }
+    republishQapIso(req.params.projectId, req.user!.id);
+    await audit("qap.lines.bulk", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { weekLabel, section, created } });
+    res.status(201).json({ ok: true, created });
+  },
+);
 
 checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) => {
   const week = req.query.week ? String(req.query.week) : undefined;

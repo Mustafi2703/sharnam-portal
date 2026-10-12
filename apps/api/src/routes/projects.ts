@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { guardProjectParam } from "../modules/_shared/projectAccess.js";
+import { guardProjectParam, guardRecord } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
@@ -1831,6 +1831,10 @@ dmsRouter.post(
 export const drawingsRouter = Router();
 drawingsRouter.use(requireAuth);
 guardProjectParam(drawingsRouter);
+guardRecord(drawingsRouter, "/drawing/:id", async (id) => (await prisma.drawing.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
+guardRecord(drawingsRouter, "/register-lines/:id", async (id) => (await prisma.drawingRegisterLine.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
+guardRecord(drawingsRouter, "/revision/:revId", async (id) => (await prisma.drawingRevision.findUnique({ where: { id }, select: { drawing: { select: { projectId: true } } } }))?.drawing.projectId, "revId");
+guardRecord(drawingsRouter, "/:id", async (id) => (await prisma.drawing.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 drawingsRouter.get("/project/:projectId", async (req, res) => {
   const drawings = await prisma.drawing.findMany({

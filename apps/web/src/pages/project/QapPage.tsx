@@ -5,6 +5,7 @@ import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
 import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDetailRegister";
+import { QapLibraryModal } from "../../components/QapLibraryModal";
 import { QapRegisterAddForm, type QapAddFormState } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { normalizeWeekLabel, preferWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
@@ -21,6 +22,7 @@ export default function QapPage() {
   const [dash, setDash] = useState<any>(null);
   const [project, setProject] = useState<QapProjectMeta | null>(null);
   const [weekFilter, setWeekFilter] = useState("");
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState<QapAddFormState>({
     addMode: "section" as "section" | "line",
@@ -256,6 +258,11 @@ export default function QapPage() {
           ))}
         </Select>
         {canManage && (
+          <Button type="button" className="!text-xs" disabled={busy} onClick={() => setLibraryOpen(true)}>
+            + Add from QAP library
+          </Button>
+        )}
+        {canManage && (
           <Button
             type="button"
             className="!text-xs"
@@ -437,6 +444,21 @@ export default function QapPage() {
           e.target.value = "";
         }}
       />
+
+      {canManage && id && (
+        <QapLibraryModal
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+          projectId={id}
+          token={token}
+          weeks={weeks}
+          defaultWeek={weekFilter || weeks[0] || "Week 1"}
+          onSaved={async (m) => {
+            setMsg(m);
+            await load();
+          }}
+        />
+      )}
 
       {canManage && (
         <QapRegisterAddForm

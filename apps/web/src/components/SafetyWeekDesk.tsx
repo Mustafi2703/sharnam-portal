@@ -3,6 +3,7 @@ import { api } from "../api";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useAuth } from "../auth";
 import { projectWeekNumber } from "@sharnam/shared";
+import { ProjectWeekPicker } from "./ProjectWeekPicker";
 import { CHART_COLORS, ColumnChart } from "./ColumnChart";
 import { PieChart } from "./PieChart";
 import { Button, Card } from "./ui";
@@ -137,21 +138,7 @@ export function SafetyWeekDesk({ projectId, showLog = true }: { projectId: strin
             </h3>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => setWeekStart(addDays(weekStart, -7))}>
-              ← Previous week
-            </Button>
-            <label className="text-xs text-steel-muted">
-              Week starting
-              <input
-                type="date"
-                className="mt-1 block rounded-lg border border-line bg-white px-2 py-1 text-sm text-ink"
-                value={weekStart}
-                onChange={(e) => e.target.value && setWeekStart(mondayKey(new Date(`${e.target.value}T00:00:00`)))}
-              />
-            </label>
-            <Button type="button" variant="secondary" className="!text-xs !py-1.5" disabled={weekStart >= mondayKey()} onClick={() => setWeekStart(addDays(weekStart, 7))}>
-              Next week →
-            </Button>
+            <ProjectWeekPicker weekStart={weekStart} onChange={setWeekStart} projectStart={projectStart} />
             <Button
               type="button"
               variant="secondary"

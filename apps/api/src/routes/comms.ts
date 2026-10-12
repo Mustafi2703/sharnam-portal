@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { guardProjectParam } from "../modules/_shared/projectAccess.js";
+import { guardProjectParam, guardRecord } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
@@ -12,6 +12,9 @@ const meetingItemInclude = { assignedTo: { select: { id: true, fullName: true, e
 export const commsRouter = Router();
 commsRouter.use(requireAuth);
 guardProjectParam(commsRouter);
+guardRecord(commsRouter, "/meetings/items/:itemId", async (id) => (await prisma.meetingItem.findUnique({ where: { id }, select: { meeting: { select: { projectId: true } } } }))?.meeting.projectId, "itemId");
+guardRecord(commsRouter, "/meetings/:id", async (id) => (await prisma.meeting.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
+guardRecord(commsRouter, "/contacts/:id", async (id) => (await prisma.communicationContact.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 commsRouter.get("/matrix/:projectId", async (req, res) => {
   const rows = await prisma.communicationMatrix.findMany({

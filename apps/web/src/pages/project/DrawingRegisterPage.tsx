@@ -10,6 +10,8 @@ import {
   type RegisterDashLine,
 } from "../../components/DrawingRegisterCharts";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
+import { ProjectWeekPicker, addDaysKey, mondayKey, useProjectStart } from "../../components/ProjectWeekPicker";
+import { projectWeekNumber } from "@sharnam/shared";
 import { useDrawingPicklists } from "../../lib/drawingPicklists";
 import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
@@ -24,9 +26,10 @@ import {
 } from "../../lib/masterDrawingRegister";
 import { StatusNote } from "../../components/StatusNote";
 
-function DrawingRegisterDashboard({ data }: { data: any }) {
-  const now = isoWeekNumber();
-  const [week, setWeek] = useState<string>("all");
+function DrawingRegisterDashboard({ data, projectId, token }: { data: any; projectId?: string; token?: string | null }) {
+  const { start: projectStart } = useProjectStart(projectId, token);
+  // null = all dates; otherwise the Monday of the picked project week.
+  const [weekStart, setWeekStart] = useState<string | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const lines = (data.lines || []) as RegisterDashLine[];
@@ -36,12 +39,12 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
       const end = to ? new Date(`${to}T23:59:59`) : new Date("2100-01-01");
       return { start, end, label: `${from || "…"} to ${to || "…"}` };
     }
-    if (week !== "all") {
-      const span = isoWeekRange(now.year, Number(week));
-      return { ...span, label: `Week ${week}` };
+    if (weekStart) {
+      const n = projectWeekNumber(weekStart, projectStart);
+      return { start: new Date(`${weekStart}T00:00:00`), end: new Date(`${addDaysKey(weekStart, 6)}T23:59:59`), label: `Week ${n ?? "—"}` };
     }
-    return { start: null as Date | null, end: null as Date | null, label: `Week ${now.week}` };
-  }, [from, to, week, now.year, now.week]);
+    return { start: null as Date | null, end: null as Date | null, label: "All dates" };
+  }, [from, to, weekStart, projectStart]);
   const shown = useMemo(
     () => filterRegisterLines(lines, range.start, range.end),
     [lines, range.start, range.end],
@@ -53,25 +56,20 @@ function DrawingRegisterDashboard({ data }: { data: any }) {
   return (
     <div className="space-y-4">
       <Card className="!p-4 flex flex-wrap gap-3 items-end">
-        <label className="text-xs text-steel-muted">
-          Week
-          <select
-            className="mt-1 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink"
-            value={week}
-            onChange={(e) => {
-              setWeek(e.target.value);
-              setFrom("");
-              setTo("");
-            }}
-          >
-            <option value="all">All dates · Week {now.week}</option>
-            {Array.from({ length: now.week }, (_, i) => now.week - i).map((n) => (
-              <option key={n} value={String(n)}>
-                Week {n}
-              </option>
-            ))}
-          </select>
-        </label>
+        <ProjectWeekPicker
+          weekStart={weekStart || mondayKey()}
+          onChange={(k) => {
+            setWeekStart(k);
+            setFrom("");
+            setTo("");
+          }}
+          projectStart={projectStart}
+          extra={
+            <Button type="button" variant={weekStart ? "secondary" : "primary"} className="!text-xs !py-1.5" onClick={() => setWeekStart(null)}>
+              All dates
+            </Button>
+          }
+        />
         <label className="text-xs text-steel-muted">
           From
           <input
@@ -364,7 +362,7 @@ export default function DrawingRegisterPage() {
       <StatusNote msg={msg} className="shrink-0" />
 
       {sheetKey === "" && data && (
-        <DrawingRegisterDashboard data={data} />
+        <DrawingRegisterDashboard data={data} projectId={id} token={token} />
       )}
 
 
