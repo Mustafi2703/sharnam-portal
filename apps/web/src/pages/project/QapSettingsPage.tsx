@@ -18,7 +18,7 @@ import {
 const blankItem = (): QapLibraryItem => ({ description: "", frequency: "", codeOfConformance: "", testAgency: "" });
 const inputCls = "w-full rounded-lg border border-line bg-white px-2 py-1.5 text-sm";
 
-/** QAP settings — this project's QAP library (activity → checks) and the pick-lists used when adding QAP lines. */
+/** QAP master — upload the QAP master Excel, this project's QAP library (activity → checks) and the pick-lists used when adding QAP lines. */
 export default function QapSettingsPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
@@ -33,6 +33,29 @@ export default function QapSettingsPage() {
   const [pick, setPick] = useState<Record<string, string[]>>({});
   const [adding, setAdding] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const masterRef = useRef<HTMLInputElement | null>(null);
+
+  const uploadMaster = (f: File) =>
+    run("master", `Uploading ${f.name}`, async () => {
+      const parts: string[] = [];
+      const fd = new FormData();
+      fd.append("file", f);
+      try {
+        const out = await api<{ imported: number; weekLabel: string }>(`/api/checklist/project/${id}/qap/import`, { method: "POST", token, body: fd, timeoutMs: 180_000 });
+        parts.push(`${out.imported} QAP lines loaded for ${out.weekLabel}`);
+      } catch (err) {
+        parts.push(`QAP lines not loaded (${err instanceof Error ? err.message : "error"})`);
+      }
+      const fd2 = new FormData();
+      fd2.append("file", f);
+      try {
+        const lib = await api<{ library: QapLibraryActivity[] }>(`/api/checklist/project/${id}/qap/settings/library/import?strict=1`, { method: "POST", token, body: fd2, timeoutMs: 120_000 });
+        parts.push(`library set from the workbook: ${lib.library.length} activities`);
+      } catch {
+        parts.push("no library sheet in this file — library unchanged");
+      }
+      return `${f.name}: ${parts.join("; ")}.`;
+    });
 
   useEffect(() => {
     if (!data) return;
@@ -173,19 +196,47 @@ export default function QapSettingsPage() {
   return (
     <div className="space-y-4 min-w-0 pb-8">
       <PageHeader
-        eyebrow="Quality module · Settings"
-        title="QAP settings"
-        subtitle="Set up this project's QAP library (activity → checks with frequency, code and test agency) and the pick-lists used on the QAP sheet. Load the client's library Excel, edit it here, and download it in Sharnam format."
+        eyebrow="Quality module · QAP master"
+        title="QAP master"
+        subtitle="Upload the client's QAP master Excel, keep this project's QAP library (activity → checks with frequency, code and test agency) and the pick-lists used on the QAP sheet. Everything downloads in Sharnam format."
       />
       <QapPickerLists />
       <StatusNote msg={msg || error} />
       {!canManage ? (
-        <Card><p className="text-sm text-steel-muted">You can view the QAP settings. Only admin and office can change them.</p></Card>
+        <Card><p className="text-sm text-steel-muted">You can view the QAP master. Only admin and office can change it.</p></Card>
       ) : null}
 
       <section className="space-y-2">
+        <h3 className="font-semibold">1. Upload the QAP master Excel</h3>
+        <Card className="space-y-3">
+          <p className="text-sm text-steel-muted">
+            The client's full QAP workbook (e.g. <span className="font-mono">Quality Assurance Plan Week 50.xlsx</span>). The week sheet loads as QAP lines on the QAP sheet; its library sheet (Sheet2 · Activity · Description · Frequency · Code · Test agency), when present, becomes this project's library. The file is also archived to SharePoint.
+          </p>
+          {canManage ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={masterRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) void uploadMaster(f);
+                }}
+              />
+              <Button type="button" disabled={Boolean(busy)} onClick={() => masterRef.current?.click()}>
+                {busy === "master" ? "Uploading…" : "Upload QAP master Excel"}
+              </Button>
+              <Link to={`/projects/${id}/qap`} className="text-sm font-semibold text-brand">Open the QAP sheet →</Link>
+            </div>
+          ) : null}
+        </Card>
+      </section>
+
+      <section className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold">1. QAP library</h3>
+          <h3 className="font-semibold">2. QAP library</h3>
           {data ? data.libraryCustom ? <Badge tone="brand">project library</Badge> : <Badge tone="neutral">client standard</Badge> : null}
           <span className="text-xs text-steel-muted">{lib.length} activities · {lib.reduce((n, a) => n + a.items.length, 0)} checks</span>
           <div className="ml-auto flex flex-wrap gap-2">
@@ -335,7 +386,7 @@ export default function QapSettingsPage() {
 
       <section className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold">2. Pick-lists</h3>
+          <h3 className="font-semibold">3. Pick-lists</h3>
           <span className="text-xs text-steel-muted">Offered on the QAP sheet, Add QAP line and Add from QAP library. Rows already using an older value keep it.</span>
         </div>
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -400,7 +451,7 @@ export default function QapSettingsPage() {
       </section>
 
       <section className="space-y-2">
-        <h3 className="font-semibold">3. Use it and generate the sheets</h3>
+        <h3 className="font-semibold">4. Use it and generate the sheets</h3>
         <Card className="space-y-3">
           <p className="text-sm text-steel-muted">
             On the QAP sheet, <strong>+ Add from QAP library</strong> lists these activities: pick one, tick its checks, and frequency, code and test agency fill in. Downloads come out in Sharnam branding — logo, navy headers, wrapped text and grid lines.

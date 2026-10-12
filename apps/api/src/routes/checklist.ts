@@ -3911,7 +3911,7 @@ checklistRouter.put("/project/:projectId/qap/settings/library", requireRoles("ad
 checklistRouter.post("/project/:projectId/qap/settings/library/import", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
   if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload an Excel in the library layout (Activity · Description · Frequency · Code · Test agency)." });
   const { parseQapLibraryWorkbook, saveQapLibrary } = await import("../services/qapSettings.js");
-  const parsed = parseQapLibraryWorkbook(req.file.buffer);
+  const parsed = parseQapLibraryWorkbook(req.file.buffer, { strict: req.query.strict === "1" });
   if (!parsed.length) return res.status(400).json({ error: "No activities found — use the Sheet2 layout: Activity · Description · Frequency · Code of Conformance · Test agency." });
   const library = await saveQapLibrary(req.params.projectId, parsed, req.user!.id);
   await audit("qap.library.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { activities: library.length } });

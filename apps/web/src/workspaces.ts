@@ -219,10 +219,10 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Quality Assurance Plan Week 50 · Detail",
     },
     {
-      to: "quality/qap-settings",
-      label: "QAP settings",
-      roles: ["admin", "office"],
-      blurb: "This project's QAP library (activity → checks) and pick-lists; load the client's library Excel; download in Sharnam format.",
+      to: "quality/qap-master",
+      label: "QAP master",
+      roles: ["admin", "office", "employee", "site_employee"],
+      blurb: "Upload the QAP master Excel; this project's QAP library (activity → checks) and pick-lists; download in Sharnam format.",
       sheet: "Quality Assurance Plan Week 50 · Sheet2",
     },
     {

@@ -60,6 +60,8 @@ From `module_prompts/Sharnam_modules_docs 2/` and `module_prompts/`:
 
 | # | Step | Expected | 📸 |
 |---|---|---|---|
+| D3.0 | **Master register** → **+ Add master register line** | Pop-up with every column; Save blocked until the * fields are filled; package/building suggest existing values; saved line appears in the table | D3-add-popup |
+| D3.0b | Edit a line from the table | Same pop-up opens filled; Save changes updates the row | D3-edit-popup |
 | D3.1 | **Master register** → set planned date and criticality on 3 lines | Saves; delay days compute; page scrolls normally (no locked inner box) | D3-master |
 | D3.2 | Sheets / pack menu opens as a popover above the rows (no overlap) → **Download the whole pack (ZIP)** | ZIP has register, GFC log, dashboard, RFI register — all branded | D3-pack |
 | D3.3 | **Dashboard** → week picker: ‹ › arrows, *This week*, labels "Week N" | Charts change with the week; "All dates" shows everything | D3-dashboard |
@@ -107,11 +109,12 @@ From `module_prompts/Sharnam_modules_docs 2/` and `module_prompts/`:
 | Q0.1 | Quality → **Dashboard** before entering data | All counts 0 — no sample weeks, samples or SOR figures | Q0-empty |
 | Q0.2 | Week picker (same control as Drawings/Safety) → this week | Shows "Week N" from the project start | Q0-week |
 
-### Q1. QAP settings (A)
+### Q1. QAP master (A)
 
 | # | Step | Expected | 📸 |
 |---|---|---|---|
-| Q1.1 | Quality → **QAP settings** | Library shows **client standard** with activities from QAP Week 50 · Sheet2 | Q1-settings |
+| Q1.0 | Quality → **QAP master** → **Upload QAP master Excel** (`Quality Assurance Plan Week 50.xlsx`) | Message: N QAP lines loaded for the week; library set from the workbook | Q1-master-upload |
+| Q1.1 | Section 2 *QAP library* | Activities from Sheet2 listed | Q1-settings |
 | Q1.2 | Add activity "Waterproofing" → 2 checks (description, frequency, code, agency) → **Save library** | Badge **project library**; counts update | Q1-library |
 | Q1.3 | **Download library (Excel)** | Branded; Activity / Description / Frequency / Code / Test agency | Q1-library-xlsx |
 | Q1.4 | **Load library Excel** with the file from Q1.3 | Same activities and checks loaded | Q1-library-reload |
@@ -121,7 +124,7 @@ From `module_prompts/Sharnam_modules_docs 2/` and `module_prompts/`:
 
 | # | Step | Expected | 📸 |
 |---|---|---|---|
-| Q2.1 | **Quality Assurance Plan** → **Upload QAP Excel** (`Quality Assurance Plan Week 50.xlsx`) | Rows load by section | Q2-import |
+| Q2.1 | **Quality Assurance Plan** | Rows from Q1.0 shown by section | Q2-import |
 | Q2.2 | **+ Add from QAP library** → pick *Waterproofing* → tick both checks → set roles from drop-downs → add | Two lines added under the section with frequency/code/agency filled; "Third-party lab" offered | Q2-library-add |
 | Q2.3 | Mark a line done for the week (days Yes / remarks Completed) | Done count rises on the Dashboard | Q2-done |
 | Q2.4 | Download QAP Excel and PDF for the week | Branded, readable, week in header | Q2-export |
@@ -182,7 +185,7 @@ Formulas: test date = cast + 7 / + 28 days; strength = load (kN) ÷ 22.5; averag
 
 | # | Step | Expected | 📸 |
 |---|---|---|---|
-| Q8.1 | **C** opens Quality | View only; no QAP settings tab; can sign where asked | Q8-client |
+| Q8.1 | **C** opens Quality | View only; no QAP master upload or edit buttons; can sign where asked | Q8-client |
 | Q8.2 | **V** opens Quality | Can fill checklists and answer NCRs; no settings | Q8-vendor |
 | Q8.3 | Paste a record URL from another project | "Not found" — no data shown | Q8-isolation |
 
@@ -192,7 +195,7 @@ Formulas: test date = cast + 7 / + 28 days; strength = load (kN) ÷ 22.5; averag
 
 | Module | Steps passed | Failed (step numbers) | Tested by | Date |
 |---|---|---|---|---|
-| Drawings | / 30 | | | |
-| Quality | / 39 | | | |
+| Drawings | / 32 | | | |
+| Quality | / 40 | | | |
 
 Next round: Safety → Progress → Cost → Finance → DPR → WPR.

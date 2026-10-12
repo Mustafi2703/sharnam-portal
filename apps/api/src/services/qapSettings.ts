@@ -55,7 +55,7 @@ export async function saveQapLibrary(projectId: string, input: unknown, userId?:
 }
 
 /** A library sheet in the client's Sheet2 layout: Activity · Description · Frequency · Code of Conformance · Test agency. */
-export function parseQapLibraryWorkbook(buffer: Buffer): QapLibraryActivity[] {
+export function parseQapLibraryWorkbook(buffer: Buffer, opts?: { strict?: boolean }): QapLibraryActivity[] {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const name =
     wb.SheetNames.find((n) => /^sheet2$|library/i.test(n)) ||
@@ -63,7 +63,8 @@ export function parseQapLibraryWorkbook(buffer: Buffer): QapLibraryActivity[] {
       const top = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[n], { header: 1, defval: "" }).slice(0, 6) as unknown[][];
       return top.some((r) => /activity/i.test(String(r[0] ?? "")) && /description/i.test(String(r[1] ?? "")));
     }) ||
-    wb.SheetNames[0];
+    (opts?.strict ? "" : wb.SheetNames[0]);
+  if (!name) return [];
   const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, defval: "" }) as unknown[][];
   const out: QapLibraryActivity[] = [];
   let cur: QapLibraryActivity | null = null;

@@ -274,6 +274,7 @@ export default function App() {
                   <Route path="inspection-register" element={<InspectionRegisterPage />} />
                   <Route path="qap" element={<QapPage />} />
                   <Route path="quality/qap-settings" element={<QapSettingsPage />} />
+                  <Route path="quality/qap-master" element={<QapSettingsPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="actions" element={<VendorActionsPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />

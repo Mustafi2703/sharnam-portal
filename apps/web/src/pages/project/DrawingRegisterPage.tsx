@@ -25,6 +25,7 @@ import {
   type MasterRegisterForm,
 } from "../../lib/masterDrawingRegister";
 import { StatusNote } from "../../components/StatusNote";
+import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
 function DrawingRegisterDashboard({ data, projectId, token }: { data: any; projectId?: string; token?: string | null }) {
   const { start: projectStart } = useProjectStart(projectId, token);
@@ -133,6 +134,8 @@ export default function DrawingRegisterPage() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [lineModal, setLineModal] = useState(false);
+  const [savingLine, setSavingLine] = useState(false);
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
   /** Import (bulk overwrite from Excel) is an office task; everyone who can view can export. */
   const isOffice = user?.role === "admin" || user?.role === "office";
@@ -161,6 +164,7 @@ export default function DrawingRegisterPage() {
 
   async function saveLine(e: FormEvent) {
     e.preventDefault();
+    setSavingLine(true);
     try {
       if (editingId) {
         await api(`/api/drawings/register-lines/${editingId}`, {
@@ -179,9 +183,12 @@ export default function DrawingRegisterPage() {
         setMsg(`Master line ${form.drawingNumber} saved`);
       }
       setForm({ ...emptyMasterRegisterForm(), projectPackage: form.projectPackage, building: form.building });
+      setLineModal(false);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setSavingLine(false);
     }
   }
 
@@ -367,7 +374,33 @@ export default function DrawingRegisterPage() {
 
 
       {sheetKey === "master" && canEdit && (
-        <div className="shrink-0">
+        <div className="shrink-0 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => {
+              setEditingId(null);
+              setForm((f) => ({ ...emptyMasterRegisterForm(), projectPackage: f.projectPackage, building: f.building }));
+              setLineModal(true);
+            }}
+          >
+            + Add master register line
+          </Button>
+          <span className="text-xs text-steel-muted">Opens a form with every register column; required fields are marked *.</span>
+        </div>
+      )}
+
+      <RegisterEntryModal
+        open={lineModal}
+        title={editingId ? `Edit master line · ${form.drawingNumber || "…"}` : "Add master register line"}
+        size="3xl"
+        saving={savingLine}
+        saveLabel={editingId ? "Save changes" : "Save master line"}
+        onClose={() => {
+          setLineModal(false);
+          setEditingId(null);
+        }}
+        onSave={() => (document.getElementById("master-line-form") as HTMLFormElement | null)?.requestSubmit()}
+      >
         <MasterDrawingRegisterForm
           picklists={picklists.lists}
           projectId={id!}
@@ -375,13 +408,12 @@ export default function DrawingRegisterPage() {
           onChange={setForm}
           onSubmit={saveLine}
           editingId={editingId}
-          onCancelEdit={() => {
-            setEditingId(null);
-            setForm(emptyMasterRegisterForm());
-          }}
+          formId="master-line-form"
+          inModal
+          packageOptions={[...new Set<string>(lines.map((l: any) => l.projectPackage).filter(Boolean))]}
+          buildingOptions={[...new Set<string>(lines.map((l: any) => l.building).filter(Boolean))]}
         />
-        </div>
-      )}
+      </RegisterEntryModal>
 
       {sheetKey === "master" && (
         <div className="flex flex-col min-w-0">
@@ -395,7 +427,7 @@ export default function DrawingRegisterPage() {
           onEditLine={(row) => {
             setEditingId(row.id);
             setForm(lineToMasterRegisterForm(row));
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            setLineModal(true);
           }}
           filterPackage={filterPackage}
           filterBuilding={filterBuilding}

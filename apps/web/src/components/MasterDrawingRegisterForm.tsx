@@ -53,7 +53,16 @@ export function MasterDrawingRegisterForm({
   editingId = null,
   onCancelEdit,
   picklists,
+  formId,
+  inModal = false,
+  packageOptions = [],
+  buildingOptions = [],
 }: {
+  /** Pop-up mode: no header or buttons — the dialog's Save submits the form (formId) so required fields are enforced. */
+  formId?: string;
+  inModal?: boolean;
+  packageOptions?: string[];
+  buildingOptions?: string[];
   picklists?: DrawingPicklists;
   projectId: string;
   form: MasterRegisterForm;
@@ -79,8 +88,17 @@ export function MasterDrawingRegisterForm({
     onChange(next);
   };
 
+  const req = inModal;
   return (
-    <div className="sheet-register overflow-hidden">
+    <div className={inModal ? "" : "sheet-register overflow-hidden"}>
+      <datalist id="master-pick-package">{packageOptions.map((v) => <option key={v} value={v} />)}</datalist>
+      <datalist id="master-pick-building">{buildingOptions.map((v) => <option key={v} value={v} />)}</datalist>
+      {inModal ? (
+        <p className="text-xs text-steel-muted">
+          Fields marked * are required. After saving, upload the PDF/DWG on the{" "}
+          <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">Approval & GFC log</Link> with the same drawing number.
+        </p>
+      ) : (
       <div className="sheet-register__head flex-col sm:flex-row sm:items-start gap-2">
         <div>
           <div className="font-display text-sm text-ink">
@@ -96,28 +114,33 @@ export function MasterDrawingRegisterForm({
           </p>
         </div>
       </div>
+      )}
 
-      <form className="p-4 space-y-4 bg-paper" onSubmit={onSubmit}>
+      <form id={formId} className={inModal ? "space-y-4" : "p-4 space-y-4 bg-paper"} onSubmit={onSubmit}>
         <Section title="Drawing identity" tint="border-line bg-gradient-to-br from-sky-50/80 to-white">
           <Field label="Sr #">
             <Input value={form.srNo} onChange={(e) => set({ srNo: e.target.value })} placeholder="1" />
           </Field>
-          <Field label="Project package">
+          <Field label={req ? "Project package *" : "Project package"}>
             <Input
+              required={req}
+              list="master-pick-package"
               value={form.projectPackage}
               onChange={(e) => set({ projectPackage: e.target.value })}
               placeholder="Package on this project"
             />
           </Field>
-          <Field label="Building">
+          <Field label={req ? "Building *" : "Building"}>
             <Input
+              required={req}
+              list="master-pick-building"
               value={form.building}
               onChange={(e) => set({ building: e.target.value })}
               placeholder="Building / block"
             />
           </Field>
-          <Field label="Discipline">
-            <Select value={form.discipline} onChange={(e) => set({ discipline: e.target.value })}>
+          <Field label={req ? "Discipline *" : "Discipline"}>
+            <Select required={req} value={form.discipline} onChange={(e) => set({ discipline: e.target.value })}>
               {drawingDisciplineOptions([], form.discipline, (picklists || DEFAULT_PICKLISTS).disciplines).map((d) => (
                 <option key={d}>{d}</option>
               ))}
@@ -140,15 +163,16 @@ export function MasterDrawingRegisterForm({
               required
             />
           </Field>
-          <Field label="Drawing type">
-            <Select value={form.drawingType} onChange={(e) => set({ drawingType: e.target.value })}>
+          <Field label={req ? "Drawing type *" : "Drawing type"}>
+            <Select required={req} value={form.drawingType} onChange={(e) => set({ drawingType: e.target.value })}>
               {withCurrent((picklists || DEFAULT_PICKLISTS).drawingTypes, form.drawingType).map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Consultant name">
+          <Field label={req ? "Consultant name *" : "Consultant name"}>
             <Input
+              required={req}
               value={form.consultantName}
               onChange={(e) => set({ consultantName: e.target.value })}
               placeholder="Design Consultants Ltd"
@@ -157,16 +181,17 @@ export function MasterDrawingRegisterForm({
         </Section>
 
         <Section title="Revision" tint="border-line bg-gradient-to-br from-indigo-50/70 to-white">
-          <Field label="Revision number">
+          <Field label={req ? "Revision number *" : "Revision number"}>
             <Input
+              required={req}
               value={form.revisionNumber}
               onChange={(e) => set({ revisionNumber: e.target.value })}
               placeholder="R0"
               className="font-mono"
             />
           </Field>
-          <Field label="Revision date">
-            <Input type="date" value={form.revisionDate} onChange={(e) => set({ revisionDate: e.target.value })} />
+          <Field label={req ? "Revision date *" : "Revision date"}>
+            <Input type="date" required={req} value={form.revisionDate} onChange={(e) => set({ revisionDate: e.target.value })} />
           </Field>
           <Field label="Latest revision">
             <Select value={form.latestRevision} onChange={(e) => set({ latestRevision: e.target.value })}>
@@ -185,9 +210,10 @@ export function MasterDrawingRegisterForm({
         </Section>
 
         <Section title="Submission tracking" tint="border-line bg-gradient-to-br from-amber-50/60 to-white">
-          <Field label="Planned submission date">
+          <Field label={req ? "Planned submission date *" : "Planned submission date"}>
             <Input
               type="date"
+              required={req}
               value={form.plannedSubmissionDate}
               onChange={(e) => onPlannedOrActual({ plannedSubmissionDate: e.target.value })}
             />
@@ -239,8 +265,8 @@ export function MasterDrawingRegisterForm({
               className="font-mono"
             />
           </Field>
-          <Field label="Critical drawing">
-            <Select value={form.criticalDrawing} onChange={(e) => set({ criticalDrawing: e.target.value })}>
+          <Field label={req ? "Critical drawing *" : "Critical drawing"}>
+            <Select required={req} value={form.criticalDrawing} onChange={(e) => set({ criticalDrawing: e.target.value })}>
               <option>No</option>
               <option>Yes</option>
             </Select>
@@ -250,6 +276,7 @@ export function MasterDrawingRegisterForm({
           </Field>
         </Section>
 
+        {inModal ? null : (
         <div className="flex flex-wrap gap-2 pt-1">
           <Button type="submit">{editingId ? "Save changes" : "Save master line"}</Button>
           {editingId && onCancelEdit && (
@@ -274,6 +301,7 @@ export function MasterDrawingRegisterForm({
             Clear drawing fields
           </Button>
         </div>
+        )}
       </form>
     </div>
   );
