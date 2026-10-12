@@ -492,17 +492,19 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
     fs.writeFileSync(tmpPath, buffer);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(tmpPath);
-    const ws = wb.worksheets[0];
-    if (!ws) return buffer;
-    // Already branded (our builders place the logo in a reserved band) — don't paint a second logo over text.
-    if (ws.getImages().length > 0) return buffer;
+    // Sharnam logo top-left on every visible sheet. A sheet that already carries an image (our builders reserve a
+    // logo band) is left alone so a second logo never lands on top of text.
+    const sheets = wb.worksheets.filter((w) => w.state !== "hidden" && w.state !== "veryHidden" && w.getImages().length === 0);
+    if (!sheets.length) return buffer;
     const imgId = wb.addImage({ filename: logo, extension: "png" });
-    ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
-    ws.addImage(imgId, {
-      tl: { col: 0.1, row: 0.05 },
-      ext: { width: 118, height: 38 },
-      editAs: "oneCell",
-    });
+    for (const ws of sheets) {
+      ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
+      ws.addImage(imgId, {
+        tl: { col: 0.1, row: 0.05 },
+        ext: { width: 118, height: 38 },
+        editAs: "oneCell",
+      });
+    }
     const out = await wb.xlsx.writeBuffer();
     // ExcelJS drops charts on save — carry over the ones the incoming workbook had.
     const { restoreTemplateCharts } = await import("../lib/xlsxCharts.js");

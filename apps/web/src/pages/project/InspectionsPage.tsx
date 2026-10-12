@@ -20,6 +20,7 @@ import { RegisterBrandHeader } from "../../components/RegisterBrandHeader";
 import { CHECKLIST_FILLED_MESSAGE } from "../../lib/inPageOverlay";
 import { StatusNote } from "../../components/StatusNote";
 import { SpdcInspectionFormPanel } from "../../components/SpdcInspectionFormPanel";
+import { SaveToSharePointButton } from "../../components/SaveToSharePointButton";
 import { ReportExportButtons } from "../../components/ReportExportButtons";
 
   /** Excel register sheets — inner table scroll; dashboard / QI / checklist summary use page scroll */
@@ -296,7 +297,35 @@ export default function InspectionsPage() {
         <Link to={`/projects/${id}/qap`}>
           <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
         </Link>
-        {id ? <ReportExportButtons projectId={id} kind="quality" compact label="Quality pack" /> : null}
+        {id ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs"
+              onClick={() =>
+                void downloadAuthFile(`/api/checklist/project/${id}/quality-dashboard/download.xlsx`, token, `Quality-Dashboard-${project?.code || id}.xlsx`).catch((err) =>
+                  setMsg(err instanceof Error ? err.message : "Could not download"),
+                )
+              }
+            >
+              Quality Dashboard Excel
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs"
+              onClick={() =>
+                void downloadAuthFile(`/api/reports/module/${id}/quality/download.html`, token, `Quality-Pack-${project?.code || id}.html`).catch((err) =>
+                  setMsg(err instanceof Error ? err.message : "Could not download"),
+                )
+              }
+            >
+              Quality pack PDF
+            </Button>
+            <SaveToSharePointButton projectId={id} path={`/api/checklist/project/${id}/quality-dashboard/download.xlsx`} module="qap" />
+          </>
+        ) : null}
       </div>
       )}
 

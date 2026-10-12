@@ -33,6 +33,8 @@ export function SaveToSharePointButton({
         method: "POST",
         token,
         body: JSON.stringify({ path, module, fileName }),
+        // The server regenerates the file and uploads it to SharePoint — allow it the time.
+        timeoutMs: 180_000,
       });
       setState({ url: out.sharePointUrl || out.url || out.path });
     } catch (err) {

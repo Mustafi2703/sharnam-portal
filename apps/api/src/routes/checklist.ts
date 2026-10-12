@@ -101,6 +101,19 @@ function istStamp(d: Date): string {
 /** Photos needed on every checklist line marked "photo required". */
 const ITEM_PHOTO_MIN = Number(process.env.CHECKLIST_ITEM_PHOTOS_MIN) || 3;
 
+type QualityPublishJob = {
+  status: "running" | "done" | "failed";
+  startedAt: string;
+  finishedAt?: string;
+  weekLabel: string | null;
+  files: unknown[];
+  sharePointUrl?: string | null;
+  url?: string | null;
+  error?: string;
+};
+/** Last quality-pack publish per project (in memory — a restart just shows "idle"). */
+const qualityPublishJobs = new Map<string, QualityPublishJob>();
+
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
 guardProjectParam(checklistRouter);
@@ -2052,7 +2065,8 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     }),
     Promise.resolve(loadQualityDashboardWorkbook()),
   ]);
-  const liveSorLog = buildLiveSorLog(workbook?.sorLog || [], siteRecords, ncrs);
+  // Only this project's records — the client workbook's sample counts (75 / 75 / 1) are never added in.
+  const liveSorLog = buildLiveSorLog([], siteRecords, ncrs);
   const sorEntries = buildLiveSorEntries(siteRecords, ncrs);
   const catalog = workbook?.checklistCatalog || [];
   const catalogStatus = await buildQualityCatalogStatus(projectId, catalog);
@@ -2078,24 +2092,20 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   const latestQapWeek = qap[0]?.weekLabel || "";
   const weekAgo = Date.now() - 7 * 86400000;
   const liveSamples = cubes.filter((c) => c.castDate && new Date(c.castDate).getTime() >= weekAgo).length;
-  const workbookOut = workbook
-    ? {
-        ...workbook,
-        dashboard: {
-          ...(workbook.dashboard || {}),
-          weekLabel: latestQapWeek || workbook.dashboard?.weekLabel || "—",
-          samplesLastWeek: liveSamples || workbook.dashboard?.samplesLastWeek || 0,
-        },
-        sorLog: liveSorLog,
-        checklistByDiscipline: liveDiscipline.length ? liveDiscipline : workbook.checklistByDiscipline,
-      }
-    : {
-        dashboard: { weekLabel: latestQapWeek || "—", concretingM3: 0, samplesLastWeek: liveSamples },
-        sorLog: liveSorLog,
-        checklistByDiscipline: liveDiscipline,
-        checklistCatalog: [],
-        source: "portal",
-      };
+  // Every figure is this project's own; the client workbook only supplies the checklist catalog (names, not counts).
+  const weekLabel = (() => {
+    const q = typeof req.query.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? new Date(`${req.query.from}T00:00:00`) : new Date();
+    const t = new Date(Date.UTC(q.getFullYear(), q.getMonth(), q.getDate()));
+    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+    return `Week ${Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7)}`;
+  })();
+  const workbookOut = {
+    dashboard: { weekLabel, concretingM3: 0, samplesLastWeek: liveSamples, qapWeek: latestQapWeek || null, source: "portal" },
+    sorLog: liveSorLog,
+    checklistByDiscipline: liveDiscipline,
+    checklistCatalog: workbook?.checklistCatalog || [],
+    source: "portal",
+  };
   const byDay: Record<string, number> = {};
   for (const f of allQiFills) {
     const d = new Date(f.createdAt).toISOString().slice(0, 10);
@@ -3778,9 +3788,22 @@ checklistRouter.get("/project/:projectId/qap/download.xlsx", async (req, res) =>
   const week = req.query.week ? String(req.query.week) : undefined;
   const { exportQapWorkbook } = await import("../services/qapImportExport.js");
   const { buffer, weekLabel } = await exportQapWorkbook(req.params.projectId, week);
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="QAP-${weekLabel.replace(/\s+/g, "-")}.xlsx"`);
-  res.send(buffer);
+  res.send(await stampSpdcWorkbookLogo(buffer));
+});
+
+/** Quality Dashboard.xlsx in the client's layout, filled from this project only (Sharnam logo on every sheet). */
+checklistRouter.get("/project/:projectId/quality-dashboard/download.xlsx", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const { exportQualityDashboardWorkbook } = await import("../services/qualityDashboardExport.js");
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
+  const { buffer } = await exportQualityDashboardWorkbook(req.params.projectId);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Quality-Dashboard-${project.code}.xlsx"`);
+  res.send(await stampSpdcWorkbookLogo(buffer));
 });
 
 checklistRouter.post(
@@ -3788,12 +3811,29 @@ checklistRouter.post(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const week = req.body?.week ? String(req.body.week) : req.query.week ? String(req.query.week) : undefined;
-    const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
-    const published = await publishQualityPackToDrive(req.params.projectId, req.user!.id, week);
-    const qap = published.find((p) => /Assurance-Plan/i.test(p.fileName)) || published[0];
-    res.json({ ok: true, weekLabel: week || null, files: published, ...qap });
+    const projectId = req.params.projectId;
+    const running = qualityPublishJobs.get(projectId);
+    if (running?.status === "running") return res.status(202).json(running);
+    // SharePoint uploads for the whole pack take minutes — run them in the background and let the page poll.
+    const job: QualityPublishJob = { status: "running", startedAt: new Date().toISOString(), weekLabel: week || null, files: [] };
+    qualityPublishJobs.set(projectId, job);
+    res.status(202).json(job);
+    void (async () => {
+      try {
+        const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
+        const published = await publishQualityPackToDrive(projectId, req.user!.id, week);
+        const qap = published.find((p) => /Assurance-Plan/i.test(p.fileName)) || published[0];
+        Object.assign(job, { status: "done", finishedAt: new Date().toISOString(), files: published, sharePointUrl: qap?.sharePointUrl || null, url: qap?.url || null });
+      } catch (err) {
+        Object.assign(job, { status: "failed", finishedAt: new Date().toISOString(), error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
   }
 );
+
+checklistRouter.get("/project/:projectId/qap/publish/status", (req, res) => {
+  res.json(qualityPublishJobs.get(req.params.projectId) || { status: "idle" });
+});
 
 checklistRouter.get("/project/:projectId/cubes/download.xlsx", async (req, res) => {
   const { exportCubeWorkbook } = await import("../services/cubeRegisterImport.js");

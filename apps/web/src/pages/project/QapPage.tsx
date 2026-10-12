@@ -388,17 +388,26 @@ export default function QapPage() {
                 if (!id) return;
                 setBusy(true);
                 try {
-                  const out = await api<{ url?: string; sharePointUrl?: string; weekLabel?: string }>(
-                    `/api/checklist/project/${id}/qap/publish`,
-                    {
-                      method: "POST",
-                      token,
-                      body: JSON.stringify({ week: weekFilter || undefined }),
-                    }
-                  );
-                  const link = out.sharePointUrl || out.url || null;
-                  setSharePointUrl(link);
-                  setMsg(`QAP + cube register saved to Drive in the original SPDC Excel format${out.weekLabel ? ` (${out.weekLabel})` : ""}`);
+                  await api(`/api/checklist/project/${id}/qap/publish`, {
+                    method: "POST",
+                    token,
+                    body: JSON.stringify({ week: weekFilter || undefined }),
+                  });
+                  setMsg("Publishing the quality pack to SharePoint in the background (QAP, cube register, dashboard, NCRs)…");
+                  // The upload runs on the server; check every few seconds for up to six minutes.
+                  let out: { status: string; sharePointUrl?: string | null; url?: string | null; weekLabel?: string | null; error?: string } = { status: "running" };
+                  for (let i = 0; i < 120 && out.status === "running"; i++) {
+                    await new Promise((r) => setTimeout(r, 3000));
+                    out = await api(`/api/checklist/project/${id}/qap/publish/status`, { token });
+                  }
+                  if (out.status === "failed") throw new Error(out.error || "Publish failed");
+                  if (out.status === "running") {
+                    setMsg("Still uploading — the files will appear in SharePoint shortly. You can leave this page.");
+                  } else {
+                    const link = out.sharePointUrl || out.url || null;
+                    setSharePointUrl(link);
+                    setMsg(`Quality pack saved to SharePoint in the client's Excel formats${out.weekLabel ? ` (${out.weekLabel})` : ""}.`);
+                  }
                 } catch (err) {
                   setMsg(err instanceof Error ? err.message : "Publish failed");
                 } finally {
