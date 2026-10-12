@@ -480,10 +480,83 @@ export async function sendStampedXlsx(
   res.send(stamped);
 }
 
-/** Stamp the SPDC / Sharnam logo on the first worksheet of an existing XLSX buffer. */
+const BRAND_MARK = "sharnam-branded";
+
+/** True when the workbook already went through stampSpdcWorkbookLogo (marker in docProps/core.xml). */
+async function alreadyBranded(buffer: Buffer): Promise<boolean> {
+  try {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(buffer);
+    const core = await zip.file("docProps/core.xml")?.async("string");
+    return !!core && core.includes(BRAND_MARK);
+  } catch {
+    return false;
+  }
+}
+
+const GRID = { style: "thin" as const, color: { argb: "FFD5DCE4" } };
+
+/**
+ * Readability pass for any worksheet: long text wraps (top-aligned) instead of running across cells, unsized columns
+ * get a width that fits their text, and table rows without lines get light grid borders. Cells a template already
+ * styled (wrap, borders, widths) are left as they are.
+ */
+function polishWorksheet(ws: ExcelJS.Worksheet) {
+  const maxRows = Math.min(ws.rowCount, 5000);
+  const merged = new Set<string>();
+  const mergeList = ((ws as unknown as { model?: { merges?: string[] } }).model?.merges || []) as string[];
+  for (const m of mergeList) {
+    const [a, b] = m.split(":");
+    if (!b) continue;
+    const s0 = ws.getCell(a);
+    const s1 = ws.getCell(b);
+    for (let r = Number(s0.row); r <= Number(s1.row); r++)
+      for (let c = Number(s0.col); c <= Number(s1.col); c++) merged.add(`${r}:${c}`);
+  }
+  const widest = new Map<number, number>();
+  for (let r = 1; r <= maxRows; r++) {
+    const row = ws.getRow(r);
+    let filled = 0;
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      if (cell.value !== null && cell.value !== "") filled++;
+    });
+    const tableRow = filled >= 3;
+    row.eachCell({ includeEmpty: false }, (cell, col) => {
+      const v = cell.value;
+      const text =
+        v == null ? "" : typeof v === "object" && "richText" in (v as object)
+          ? (v as ExcelJS.CellRichTextValue).richText.map((t) => t.text).join("")
+          : typeof v === "object" && "result" in (v as object) ? String((v as ExcelJS.CellFormulaValue).result ?? "")
+          : v instanceof Date ? "dd-mmm-yyyy"
+          : String(v);
+      const isMerged = merged.has(`${r}:${col}`);
+      if (!isMerged) {
+        const longest = Math.max(...text.split("\n").map((l) => l.length), 0);
+        widest.set(col, Math.max(widest.get(col) || 0, longest));
+        if ((text.length > 30 || text.includes("\n")) && !cell.alignment?.wrapText) {
+          cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: cell.alignment?.vertical || "top" };
+        }
+      }
+      if (tableRow && r > 1) {
+        const b = cell.border || {};
+        if (!b.top && !b.bottom && !b.left && !b.right) cell.border = { top: GRID, bottom: GRID, left: GRID, right: GRID };
+      }
+    });
+  }
+  for (const [col, len] of widest) {
+    const column = ws.getColumn(col);
+    if (column.width) continue;
+    column.width = Math.max(10, Math.min(55, Math.ceil(len * 1.1) + 2));
+  }
+}
+
+/**
+ * Sharnam branding for an existing XLSX buffer: logo top-left on every visible sheet (unless the sheet already has an
+ * image) and the readability pass. Runs once per workbook — a marker in the document properties skips repeats.
+ */
 export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
+  if (!buffer?.length || (await alreadyBranded(buffer))) return buffer;
   const logo = sharnamLogoPath();
-  if (!logo) return buffer;
   const tmpPath = path.join(
     os.tmpdir(),
     `spdc-stamp-${Date.now()}-${Math.random().toString(36).slice(2)}.xlsx`
@@ -492,19 +565,29 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
     fs.writeFileSync(tmpPath, buffer);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(tmpPath);
-    // Sharnam logo top-left on every visible sheet. A sheet that already carries an image (our builders reserve a
-    // logo band) is left alone so a second logo never lands on top of text.
-    const sheets = wb.worksheets.filter((w) => w.state !== "hidden" && w.state !== "veryHidden" && w.getImages().length === 0);
-    if (!sheets.length) return buffer;
-    const imgId = wb.addImage({ filename: logo, extension: "png" });
-    for (const ws of sheets) {
-      ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
-      ws.addImage(imgId, {
-        tl: { col: 0.1, row: 0.05 },
-        ext: { width: 118, height: 38 },
-        editAs: "oneCell",
-      });
+    const visible = wb.worksheets.filter((w) => w.state !== "hidden" && w.state !== "veryHidden");
+    if (!visible.length) return buffer;
+    const needLogo = logo ? visible.filter((w) => w.getImages().length === 0) : [];
+    if (needLogo.length && logo) {
+      const imgId = wb.addImage({ filename: logo, extension: "png" });
+      for (const ws of needLogo) {
+        ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
+        ws.addImage(imgId, {
+          tl: { col: 0.1, row: 0.05 },
+          ext: { width: 118, height: 38 },
+          editAs: "oneCell",
+        });
+      }
     }
+    for (const ws of visible) {
+      try {
+        polishWorksheet(ws);
+      } catch {
+        /* leave this sheet as built */
+      }
+    }
+    wb.company = wb.company || "Sharnam Project Development Consultants";
+    wb.keywords = [wb.keywords, BRAND_MARK].filter(Boolean).join(" ");
     const out = await wb.xlsx.writeBuffer();
     // ExcelJS drops charts on save — carry over the ones the incoming workbook had.
     const { restoreTemplateCharts } = await import("../lib/xlsxCharts.js");

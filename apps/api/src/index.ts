@@ -61,6 +61,24 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
 
+/** Every Excel the API sends goes out in Sharnam branding (logo + readable wrap/widths/lines), exactly once. */
+app.use("/api", (_req, res, next) => {
+  const send = res.send.bind(res);
+  res.send = function (body?: unknown) {
+    const ct = String(res.getHeader("Content-Type") || "");
+    if (Buffer.isBuffer(body) && ct.includes("spreadsheetml") && !res.locals.spdcBranding) {
+      res.locals.spdcBranding = true;
+      import("./services/brandedExport.js")
+        .then(({ stampSpdcWorkbookLogo }) => stampSpdcWorkbookLogo(body))
+        .then((out) => send(out))
+        .catch(() => send(body));
+      return res;
+    }
+    return send(body);
+  } as typeof res.send;
+  next();
+});
+
 app.use((req, res, next) => {
   if (!req.path.startsWith("/api")) return next();
   res.on("finish", () => {

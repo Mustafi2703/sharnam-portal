@@ -3842,9 +3842,93 @@ checklistRouter.get("/checklist-pack/inventory", requireAuth, async (_req, res) 
 });
 
 /** The client's QAP library (Sheet2 of Quality Assurance Plan Week 50.xlsx): activities and their checks. */
-checklistRouter.get("/project/:projectId/qap/library", async (_req, res) => {
+checklistRouter.get("/project/:projectId/qap/library", async (req, res) => {
+  const { getQapLibrary } = await import("../services/qapSettings.js");
+  res.json((await getQapLibrary(req.params.projectId)).library);
+});
+
+/** QAP settings tool: this project's library and pick-lists (standard unless customised). */
+checklistRouter.get("/project/:projectId/qap/settings", async (req, res) => {
+  const { getQapLibrary, getQapPickers, QAP_PICKER_EDITABLE } = await import("../services/qapSettings.js");
   const { loadQapLibrary } = await import("../services/qapLibrary.js");
-  res.json(loadQapLibrary());
+  const [lib, pickers] = await Promise.all([getQapLibrary(req.params.projectId), getQapPickers(req.params.projectId)]);
+  res.json({ library: lib.library, libraryCustom: lib.custom, standardLibraryActivities: loadQapLibrary().length, pickers: pickers.lists, pickersCustom: pickers.custom, editablePickers: QAP_PICKER_EDITABLE });
+});
+
+/** This project's QAP library as Excel in the client's Sheet2 layout (re-importable), branded on the way out. */
+checklistRouter.get("/project/:projectId/qap/settings/library/download.xlsx", async (req, res) => {
+  const { getQapLibrary } = await import("../services/qapSettings.js");
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true, name: true } });
+  const { library } = await getQapLibrary(req.params.projectId);
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Sheet2", { views: [{ state: "frozen", ySplit: 3 }] });
+  ws.columns = [{ width: 30 }, { width: 60 }, { width: 22 }, { width: 28 }, { width: 22 }];
+  ws.mergeCells("B1:E1");
+  ws.getCell("B1").value = `QAP library — ${project?.code || ""} ${project?.name || ""}`.trim();
+  ws.getCell("B1").font = { bold: true, size: 14, color: { argb: "FF0B2545" } };
+  ws.getCell("B1").alignment = { vertical: "middle" };
+  ws.getRow(1).height = 36;
+  ws.getRow(2).height = 6;
+  const head = ws.getRow(3);
+  head.values = ["Activity", "Description", "Frequency", "Code of Conformance", "Test agency"];
+  head.eachCell((c) => {
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B2545" } };
+    c.alignment = { vertical: "middle", wrapText: true };
+  });
+  head.height = 22;
+  let band = false;
+  for (const a of library) {
+    band = !band;
+    a.items.forEach((it, i) => {
+      const r = ws.addRow([i === 0 ? a.activity : "", it.description, it.frequency, it.codeOfConformance, it.testAgency]);
+      r.eachCell({ includeEmpty: true }, (c, col) => {
+        if (col > 5) return;
+        c.alignment = { vertical: "top", wrapText: true };
+        if (band) c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F6FA" } };
+      });
+      if (i === 0) r.getCell(1).font = { bold: true, color: { argb: "FF0B6A78" } };
+    });
+  }
+  const buf = Buffer.from(await wb.xlsx.writeBuffer());
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${(project?.code || "project").replace(/[^\w.-]+/g, "_")}_QAP_Library.xlsx"`);
+  res.send(buf);
+});
+
+checklistRouter.put("/project/:projectId/qap/settings/library", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { saveQapLibrary } = await import("../services/qapSettings.js");
+  try {
+    const library = await saveQapLibrary(req.params.projectId, req.body?.library, req.user!.id);
+    await audit("qap.library.save", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { activities: library.length } });
+    res.json({ ok: true, library });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not save" });
+  }
+});
+
+checklistRouter.post("/project/:projectId/qap/settings/library/import", requireRoles("admin", "office"), upload.single("file"), async (req: AuthedRequest, res) => {
+  if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload an Excel in the library layout (Activity · Description · Frequency · Code · Test agency)." });
+  const { parseQapLibraryWorkbook, saveQapLibrary } = await import("../services/qapSettings.js");
+  const parsed = parseQapLibraryWorkbook(req.file.buffer);
+  if (!parsed.length) return res.status(400).json({ error: "No activities found — use the Sheet2 layout: Activity · Description · Frequency · Code of Conformance · Test agency." });
+  const library = await saveQapLibrary(req.params.projectId, parsed, req.user!.id);
+  await audit("qap.library.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { activities: library.length } });
+  res.json({ ok: true, library });
+});
+
+checklistRouter.put("/project/:projectId/qap/settings/pickers", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { saveQapPickers } = await import("../services/qapSettings.js");
+  const out = await saveQapPickers(req.params.projectId, req.body?.pickers || {}, req.user!.id);
+  res.json({ ok: true, pickers: out.lists, pickersCustom: out.custom });
+});
+
+checklistRouter.delete("/project/:projectId/qap/settings", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { resetQapSettings } = await import("../services/qapSettings.js");
+  const what = req.query.what === "library" || req.query.what === "pickers" ? req.query.what : "all";
+  await resetQapSettings(req.params.projectId, what);
+  res.json({ ok: true });
 });
 
 /** Add several QAP lines under one activity in one go (e.g. ticked from the library). */

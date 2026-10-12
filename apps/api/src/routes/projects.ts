@@ -1232,6 +1232,25 @@ projectsRouter.patch("/:id/work-packages", requireRoles("admin", "office"), asyn
   }
 });
 
+/** The project's SharePoint folder for a tool's ISO area (created if missing) — the "Open in SharePoint" button. */
+projectsRouter.get("/:id/sharepoint-folder", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const { graphConfig, MODULE_TO_ISO_FOLDER, resolveDefaultDrive, ensureDriveFolder, SHAREPOINT_SANDBOX_ROOT, sanitizeProjectCode } = await import("../services/graph.js");
+  const cfg = graphConfig();
+  if (!cfg.configured || cfg.mock) return res.status(400).json({ error: "SharePoint is not connected on this server." });
+  const key = String(req.query.module || "");
+  const iso = (MODULE_TO_ISO_FOLDER as Record<string, string>)[key];
+  const folder = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}${iso ? `/${iso}` : ""}`;
+  try {
+    const drive = await resolveDefaultDrive();
+    const out = await ensureDriveFolder(drive.driveId, folder);
+    res.json({ webUrl: out.webUrl || null, folder });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : "Could not reach SharePoint" });
+  }
+});
+
 projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const {
     notificationEmails,

@@ -20,6 +20,7 @@ import { resolveProjectWorkspace } from "../../lib/projectWorkspace";
 import { formatUiText } from "../../lib/formatUiText";
 import { closeToolWindowOrGo, isToolWindow, searchWithToolWindow } from "../../lib/moduleToolWindow";
 import { ToolLink } from "../../components/ToolLink";
+import { OpenInSharePointButton, sharePointKeyFor } from "../../components/OpenInSharePointButton";
 import { isClientPortalUser } from "../../lib/clientPortal";
 
 const TOP_MODULES = (
@@ -228,6 +229,14 @@ export default function ProjectToolsLayout() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {id && activeTool !== "hub" ? (
+              <OpenInSharePointButton
+                projectId={id}
+                moduleKey={sharePointKeyFor(location.pathname, location.search, activeMod)}
+                token={token}
+                role={user?.role}
+              />
+            ) : null}
             {toolWin ? (
               <>
                 <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo(hubHref)}>

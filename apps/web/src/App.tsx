@@ -51,6 +51,7 @@ import { SubmittalsPage, PhotosPage, CoordinationPage } from "./pages/project/Ex
 import SafetyPage from "./pages/project/SafetyPage";
 import DrawingRegisterPage from "./pages/project/DrawingRegisterPage";
 import DrawingSettingsPage from "./pages/project/DrawingSettingsPage";
+import QapSettingsPage from "./pages/project/QapSettingsPage";
 import ProjectClosurePage from "./pages/project/ProjectClosurePage";
 import ProgressPage from "./pages/project/ProgressPage";
 import ChecklistMasterPage from "./pages/project/ChecklistMasterPage";
@@ -272,6 +273,7 @@ export default function App() {
                   <Route path="inspections" element={<InspectionsPage />} />
                   <Route path="inspection-register" element={<InspectionRegisterPage />} />
                   <Route path="qap" element={<QapPage />} />
+                  <Route path="quality/qap-settings" element={<QapSettingsPage />} />
                   <Route path="safety" element={<SafetyPage />} />
                   <Route path="actions" element={<VendorActionsPage />} />
                   <Route path="closure" element={<ProjectClosurePage />} />
