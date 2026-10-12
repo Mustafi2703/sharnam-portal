@@ -75,7 +75,7 @@ export function MasterDrawingRegisterTable({
     filterPackage !== "All" || filterBuilding !== "All" || filterDiscipline !== "All" || filterCritical !== "All";
 
   return (
-    <div className="sheet-register flex flex-col flex-1 min-h-0 overflow-hidden register-panel-fill">
+    <div className="sheet-register flex flex-col min-w-0 rounded-xl border border-line overflow-hidden">
       <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex flex-wrap justify-between gap-2 shrink-0">
         <div>
           <div className="text-sm font-semibold">Master Drawing Register</div>
@@ -143,7 +143,7 @@ export function MasterDrawingRegisterTable({
         </div>
       </div>
 
-      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
+      <div className="overflow-x-auto">
         <table className="sheet-register__table min-w-[1800px]">
           <thead>
             <tr>

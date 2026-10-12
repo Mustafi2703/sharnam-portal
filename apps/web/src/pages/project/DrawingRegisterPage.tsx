@@ -226,7 +226,7 @@ export default function DrawingRegisterPage() {
     <div
       className={`min-w-0 ${
         sheetKey === "master"
-          ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2"
+          ? "flex flex-col gap-3 pb-8"
           : "space-y-5"
       }`}
     >
@@ -386,7 +386,7 @@ export default function DrawingRegisterPage() {
       )}
 
       {sheetKey === "master" && (
-        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col min-w-0">
         <MasterDrawingRegisterTable
           lines={lines}
           filteredLines={filteredLines}
