@@ -101,12 +101,9 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
       closureOf(insAll.filter(isOpen).length, insAll.length),
       closureOf(ncrs.filter((n) => !/close/i.test(n.status || "")).length, ncrs.length),
     ].filter((v): v is number => v != null);
-    const wk = (() => {
-      const t = new Date(Date.UTC(weekEnd.getFullYear(), weekEnd.getMonth(), weekEnd.getDate()));
-      t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-      return Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
-    })();
-    dash.getCell("A25").value = wk ? `QPI Week ${wk}` : "QPI this week";
+    const { projectWeekNumber } = await import("@sharnam/shared");
+    const wk = projectWeekNumber(weekEnd, project.startDate);
+    dash.getCell("A25").value = wk != null ? `QPI Week ${wk}` : "QPI this week";
     dash.getCell("E25").value = rates.length ? Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 100) / 100 : null;
     for (const r of [26, 27]) {
       dash.getCell(`A${r}`).value = null;

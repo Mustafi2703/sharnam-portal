@@ -2093,12 +2093,11 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
   const weekAgo = Date.now() - 7 * 86400000;
   const liveSamples = cubes.filter((c) => c.castDate && new Date(c.castDate).getTime() >= weekAgo).length;
   // Every figure is this project's own; the client workbook only supplies the checklist catalog (names, not counts).
-  const weekLabel = (() => {
-    const q = typeof req.query.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? new Date(`${req.query.from}T00:00:00`) : new Date();
-    const t = new Date(Date.UTC(q.getFullYear(), q.getMonth(), q.getDate()));
-    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-    return `Week ${Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7)}`;
-  })();
+  const { projectWeekLabel } = await import("@sharnam/shared");
+  const projectStart = (await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true } }))?.startDate || null;
+  const weekDate = typeof req.query.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from) ? req.query.from : new Date();
+  // Week numbers count from the project's own start (Week 1 = the week holding the start date; earlier = Week 0).
+  const weekLabel = projectWeekLabel(weekDate, projectStart);
   const workbookOut = {
     dashboard: { weekLabel, concretingM3: 0, samplesLastWeek: liveSamples, qapWeek: latestQapWeek || null, source: "portal" },
     sorLog: liveSorLog,

@@ -60,6 +60,7 @@ export type QapProjectMeta = {
   pmcName?: string | null;
   location?: string | null;
   clientLogoUrl?: string | null;
+  startDate?: string | null;
 };
 
 type Props = {

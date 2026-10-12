@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
+import { projectWeekNumber } from "@sharnam/shared";
 import { useAuth } from "../../auth";
 import { PieChart } from "../../components/PieChart";
 import { CHART_COLORS, ColumnChart, LineChart } from "../../components/ColumnChart";
@@ -99,12 +100,20 @@ export default function InspectionsPage() {
     d.setDate(d.getDate() + 6);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
-  const weekNo = (() => {
-    const d = new Date(`${weekStart}T00:00:00`);
-    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-    return Math.ceil(((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
-  })();
+  // Project week: Week 1 is the week holding the project start date, earlier weeks are Week 0; "—" until it is set.
+  const weekNo = projectWeekNumber(weekStart, project?.startDate) ?? "—";
+  const [startDraft, setStartDraft] = useState("");
+  async function saveProjectStart() {
+    if (!id || !startDraft) return;
+    try {
+      await api(`/api/projects/${id}/settings`, { method: "PATCH", token, body: JSON.stringify({ startDate: startDraft }) });
+      setMsg(`Week 1 now starts the week of ${new Date(`${startDraft}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}.`);
+      setStartDraft("");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not save the start date");
+    }
+  }
   function shiftWeek(n: number) {
     const d = new Date(`${weekStart}T00:00:00`);
     d.setDate(d.getDate() + 7 * n);
@@ -146,6 +155,7 @@ export default function InspectionsPage() {
         pmcName: (projRes as { pmcName?: string | null }).pmcName || (projRes as any).parties?.pmc || null,
         location: (projRes as { location?: string | null }).location,
         clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
+        startDate: (projRes as { startDate?: string | null }).startDate || null,
       });
     }
     setDrawings(d.filter((x) => x.isPublished));
@@ -390,6 +400,20 @@ export default function InspectionsPage() {
                   Quality Performance Report — Week {weekNo}
                   <span className="text-sm text-steel-muted font-sans"> · {new Date(`${weekStart}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} to {new Date(`${weekEnd}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
                 </h3>
+                {project?.startDate ? (
+                  <p className="text-[11px] text-steel-muted mt-0.5">
+                    Project weeks count from the start date — Week 1 is the week of{" "}
+                    {new Date(project.startDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}.
+                  </p>
+                ) : canManage ? (
+                  <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                    <span className="text-xs text-amber-900">Set the project start so weeks read Week 1, 2, 3 … (earlier weeks show Week 0).</span>
+                    <input type="date" className="rounded border border-line bg-white px-2 py-1 text-xs" value={startDraft} onChange={(e) => setStartDraft(e.target.value)} />
+                    <Button type="button" className="!text-xs !py-1" disabled={!startDraft} onClick={() => void saveProjectStart()}>
+                      Set Week 1
+                    </Button>
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 <Button type="button" variant="secondary" className="!text-xs !py-1.5" onClick={() => shiftWeek(-1)}>

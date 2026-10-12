@@ -446,3 +446,29 @@ export {
   cubeGroupKey,
 } from "./cubeStrength.js";
 export { QAP_PICKERS, QAP_LEGENDS, type QapPickerKey } from "./qapPickers.js";
+
+/** Monday (UTC midnight) of the week holding `d`. */
+function mondayUtc(d: Date): number {
+  const t = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = new Date(t).getUTCDay() || 7;
+  return t - (dow - 1) * 86400000;
+}
+
+/**
+ * Project week number: Week 1 is the Monday–Sunday week holding the project start date; any earlier week is Week 0.
+ * Returns null when the project has no start date yet.
+ */
+export function projectWeekNumber(date: Date | string, start?: Date | string | null): number | null {
+  if (!start) return null;
+  const d = typeof date === "string" ? new Date(date.length === 10 ? `${date}T00:00:00` : date) : date;
+  const s = typeof start === "string" ? new Date(start) : start;
+  if (Number.isNaN(d.getTime()) || Number.isNaN(s.getTime())) return null;
+  const diff = Math.round((mondayUtc(d) - mondayUtc(s)) / (7 * 86400000));
+  return diff < 0 ? 0 : diff + 1;
+}
+
+/** "Week 7" / "Week 0" — or "Week —" until the project start date is set. */
+export function projectWeekLabel(date: Date | string, start?: Date | string | null): string {
+  const n = projectWeekNumber(date, start);
+  return n == null ? "Week —" : `Week ${n}`;
+}

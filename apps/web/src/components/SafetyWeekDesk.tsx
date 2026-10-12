@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useAuth } from "../auth";
+import { projectWeekNumber } from "@sharnam/shared";
 import { CHART_COLORS, ColumnChart } from "./ColumnChart";
 import { PieChart } from "./PieChart";
 import { Button, Card } from "./ui";
@@ -42,7 +43,14 @@ const fmt = (n: number) => Math.round(n).toLocaleString("en-IN");
  * inductions, permits, PPE, LTI) and column charts. The daily log feeds the DPR and WPR safety blocks.
  */
 export function SafetyWeekDesk({ projectId, showLog = true }: { projectId: string; showLog?: boolean }) {
+  // Week numbers count from the project start (Week 1 = its first week, earlier = Week 0).
+  const [projectStart, setProjectStart] = useState<string | null>(null);
   const { token, user } = useAuth();
+  useEffect(() => {
+    void api<{ startDate?: string | null }>(`/api/projects/${projectId}`, { token })
+      .then((p) => setProjectStart(p?.startDate || null))
+      .catch(() => undefined);
+  }, [projectId, token]);
   const canLog = ["admin", "office", "employee", "site_employee", "vendor"].includes(user?.role || "");
   const canDelete = user?.role === "admin" || user?.role === "office";
   const [weekStart, setWeekStart] = useState(mondayKey());
@@ -121,7 +129,7 @@ export function SafetyWeekDesk({ projectId, showLog = true }: { projectId: strin
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel-muted">Safety Dashboard.xlsx · One Pager</p>
             <h3 className="font-display text-lg text-ink">
-              Safety Dashboard — Week {isoWeek(weekStart)}
+              Safety Dashboard — Week {projectWeekNumber(weekStart, projectStart) ?? "—"}
               <span className="text-sm text-steel-muted font-sans">
                 {" "}· {new Date(`${weekStart}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} to{" "}
                 {new Date(`${weekEnd}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
