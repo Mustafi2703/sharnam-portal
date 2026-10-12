@@ -46,9 +46,20 @@ export async function syncQualityNcrToDrive(
   const folder = `${MODULE_TO_ISO_FOLDER.ncr}/Quality/${statusFolder}`;
   const base = `${safeName(row.number || "NCR")}_${stamp}`;
   const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
+  // The SharePoint copies carry the same sign-off as the downloads.
+  const signs = await (async () => {
+    try {
+      const { prisma } = await import("../prisma.js");
+      const { qualityNcrSigns } = await import("./ncrFormExport.js");
+      const p = await prisma.project.findFirst({ where: { code: project.code }, select: { id: true } });
+      return p ? await qualityNcrSigns(p.id, row) : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
 
   try {
-    const raw = await buildQualityNcrXlsxFromTemplate(row, project);
+    const raw = await buildQualityNcrXlsxFromTemplate(row, project, signs);
     const xlsxBuf = await stampSpdcWorkbookLogo(raw);
     const xlsx = await mockOneDrive.upload(
       project.code,
@@ -79,7 +90,7 @@ export async function syncQualityNcrToDrive(
   }
 
   try {
-    const pdfBuf = await buildQualityNcrPdf(row, project);
+    const pdfBuf = await buildQualityNcrPdf(row, project, signs);
     const pdf = await mockOneDrive.upload(project.code, folder, `${base}.pdf`, pdfBuf, "application/pdf", {
       replace: true,
     });

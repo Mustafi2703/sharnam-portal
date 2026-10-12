@@ -3373,6 +3373,33 @@ checklistRouter.post(
   }
 );
 
+/** The NCR / CAR register in the client's NCR 01 "NCR REGISTER" sheet (Sharnam logo top-left). */
+checklistRouter.get("/project/:projectId/ncr-register/download.xlsx", async (req, res) => {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const { buildNcrRegisterXlsx } = await import("../services/ncrRegister.js");
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
+  const buf = await stampSpdcWorkbookLogo(await buildNcrRegisterXlsx(req.params.projectId));
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="NCR-Register-${project.code}.xlsx"`);
+  res.send(buf);
+});
+
+/** Load an NCR REGISTER sheet (NCR 01 .xlsx) — rows become NCRs / CARs, kept by number. */
+checklistRouter.post(
+  "/project/:projectId/ncr-register/import",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload NCR 01 .xlsx (NCR REGISTER sheet)" });
+    const { importNcrRegister } = await import("../services/ncrRegister.js");
+    const out = await importNcrRegister(req.params.projectId, req.file.buffer);
+    if (!out.created && !out.updated) return res.status(400).json({ error: "No rows found — the sheet needs the NCR REGISTER header (No., NCR Issue Date, Type …).", ...out });
+    await audit("quality.ncr.register_import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: out });
+    res.json({ ok: true, ...out });
+  },
+);
+
 checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req: AuthedRequest, res) => {
   const row = await prisma.qualityNcr.findFirst({
     where: { id: req.params.ncrId, projectId: req.params.projectId },
@@ -3382,9 +3409,10 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.xlsx", async (req: Au
     where: { id: req.params.projectId },
     select: { name: true, code: true, clientName: true },
   });
-  const { buildQualityNcrXlsxFromTemplate } = await import("../services/ncrFormExport.js");
+  const { buildQualityNcrXlsxFromTemplate, qualityNcrSigns } = await import("../services/ncrFormExport.js");
   const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
-  const buf = await stampSpdcWorkbookLogo(await buildQualityNcrXlsxFromTemplate(row, project || undefined));
+  const signs = await qualityNcrSigns(req.params.projectId, row);
+  const buf = await stampSpdcWorkbookLogo(await buildQualityNcrXlsxFromTemplate(row, project || undefined, signs));
   const name = `${row.number || "NCR"}.xlsx`.replace(/[^\w.-]+/g, "_");
   await audit("quality.ncr.downloaded", {
     userId: req.user?.id,
@@ -3406,9 +3434,9 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req: Au
     where: { id: req.params.projectId },
     select: { name: true, code: true, clientName: true },
   });
-  const { buildQualityNcrHtml } = await import("../services/ncrFormExport.js");
+  const { buildQualityNcrHtml, qualityNcrSigns } = await import("../services/ncrFormExport.js");
   const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
-  const html = buildQualityNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`);
+  const html = buildQualityNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`, await qualityNcrSigns(req.params.projectId, row));
   await audit("quality.ncr.downloaded", {
     userId: req.user?.id,
     entity: "QualityNcr",
@@ -3428,8 +3456,8 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req: Aut
     where: { id: req.params.projectId },
     select: { name: true, code: true, clientName: true },
   });
-  const { buildQualityNcrPdf } = await import("../services/ncrFormExport.js");
-  const buf = await buildQualityNcrPdf(row, project || undefined);
+  const { buildQualityNcrPdf, qualityNcrSigns } = await import("../services/ncrFormExport.js");
+  const buf = await buildQualityNcrPdf(row, project || undefined, await qualityNcrSigns(req.params.projectId, row));
   const name = `${row.number || "NCR"}.pdf`.replace(/[^\w.-]+/g, "_");
   await audit("quality.ncr.downloaded", {
     userId: req.user?.id,
@@ -3443,6 +3471,34 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req: Aut
 });
 
 /** Quality site observation / site instruction — feeds SOR Log */
+/** Site Observation / Site Instruction register as a branded Excel (?type=Site Observation | Site Instruction). */
+checklistRouter.get("/project/:projectId/quality-site-records/download.xlsx", async (req, res) => {
+  const type = /instruction/i.test(String(req.query.type || "")) ? "Site Instruction" : "Site Observation";
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const { buildSiteRecordsXlsx } = await import("../services/qualitySiteRegister.js");
+  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
+  const buf = await stampSpdcWorkbookLogo(await buildSiteRecordsXlsx(req.params.projectId, type));
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${type.replace(/\s+/g, "-")}-Register-${project.code}.xlsx"`);
+  res.send(buf);
+});
+
+checklistRouter.post(
+  "/project/:projectId/quality-site-records/import",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file?.buffer?.length) return res.status(400).json({ error: "Upload the register Excel" });
+    const type = /instruction/i.test(String(req.query.type || req.body?.type || "")) ? "Site Instruction" : "Site Observation";
+    const { importSiteRecords } = await import("../services/qualitySiteRegister.js");
+    const out = await importSiteRecords(req.params.projectId, type, req.file.buffer, req.user!.id);
+    if (!out.created && !out.updated) return res.status(400).json({ error: "No rows found — use the downloaded register layout (Sr, Date, Observation …).", ...out });
+    await audit("quality.site_records.import", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { type, ...out } });
+    res.json({ ok: true, type, ...out });
+  },
+);
+
 checklistRouter.get("/project/:projectId/quality-site-records", async (req, res) => {
   const type = req.query.type ? String(req.query.type) : undefined;
   const rows = await prisma.qualitySiteRecord.findMany({

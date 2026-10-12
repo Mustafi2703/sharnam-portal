@@ -7,6 +7,31 @@ import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
 import { sharnamLogoPath } from "./brandedExport.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
 
+/** One signature box on an NCR / CAR: who signed, as what, when, and their signature image when the directory has one. */
+export type NcrSign = { label: string; name: string; position?: string; date?: string; image?: Buffer | null };
+
+/** NCR 01 sign-offs — "Signed" on the notice and on the follow-up review — with images from the project directory. */
+export async function qualityNcrSigns(
+  projectId: string,
+  row: { formDataJson?: string | null; issueDate?: Date | string | null; actualClosure?: Date | string | null; plannedClosure?: Date | string | null },
+): Promise<NcrSign[]> {
+  const f = parseQualityFormData(row.formDataJson);
+  const { prisma } = await import("../prisma.js");
+  const { listDirectorySignatures } = await import("./directorySignatures.js");
+  const { resolveLocalMedia } = await import("./checklistSignoff.js");
+  const dir = await listDirectorySignatures(prisma as never, projectId).catch(() => []);
+  const imageFor = (name?: string) => {
+    const n = (name || "").trim().toLowerCase();
+    if (!n) return null;
+    const hit = dir.find((d) => d.signatureUrl && (d.name.trim().toLowerCase() === n || (d.email || "").toLowerCase() === n));
+    return hit?.signatureUrl ? resolveLocalMedia(hit.signatureUrl) : null;
+  };
+  return [
+    { label: "Signed — notice issued", name: f.signedContractor || "", position: f.positionContractor || "", date: fmtDate(row.issueDate), image: imageFor(f.signedContractor) },
+    { label: "Signed — follow-up review", name: f.signedReviewer || "", position: f.positionReviewer || "", date: fmtDate(row.actualClosure || row.plannedClosure), image: imageFor(f.signedReviewer) },
+  ];
+}
+
 export type QualityNcrFormData = {
   projectName?: string;
   toParty?: string;
@@ -331,7 +356,8 @@ function setSafetyValue(ws: ExcelJS.Worksheet, row: number, value: string) {
 /** Fill SPDC NCR 01 .xlsx template (Quality Dashboard). */
 export async function buildQualityNcrXlsxFromTemplate(
   row: Parameters<typeof buildQualityNcrXlsxBuffer>[0],
-  project?: Parameters<typeof buildQualityNcrXlsxBuffer>[1]
+  project?: Parameters<typeof buildQualityNcrXlsxBuffer>[1],
+  signs?: NcrSign[]
 ): Promise<Buffer> {
   const tpl = resolveNcrTemplatePath("NCR 01 .xlsx");
   if (!tpl) return buildQualityNcrXlsxBuffer(row, project);
@@ -385,6 +411,20 @@ export async function buildQualityNcrXlsxFromTemplate(
   ws.getCell("A31").value = f.actionByWhom ? `By Whom: ${f.actionByWhom}` : "By Whom:";
   ws.getCell("B31").value =
     f.actionCompleted || (row.status === "Closed" ? fmtDate(row.actualClosure) : "") || "Completed:";
+
+  // Signature images beside the two "Signed:" lines (notice row 19, follow-up row 23).
+  (signs || []).forEach((sg, i) => {
+    if (!sg.image) return;
+    const r = i === 0 ? 19 : 23;
+    try {
+      const png = sg.image[0] === 0x89 && sg.image[1] === 0x50;
+      const id = wb.addImage({ base64: sg.image.toString("base64"), extension: png ? "png" : "jpeg" });
+      ws.getRow(r).height = Math.max(Number(ws.getRow(r).height || 18), 42);
+      ws.addImage(id, { tl: { col: 1.55, row: r - 1 + 0.08 }, ext: { width: 120, height: 36 }, editAs: "oneCell" });
+    } catch {
+      /* signature image optional */
+    }
+  });
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -578,8 +618,19 @@ function ncrHtmlShell(
   logoUrl: string,
   bodyRows: [string, string][],
   status: string,
-  meta?: { projectName?: string; clientName?: string; docNo?: string }
+  meta?: { projectName?: string; clientName?: string; docNo?: string },
+  signs?: NcrSign[]
 ) {
+  const signHtml = signs?.length
+    ? `<h2 style="font-size:13px;color:#1e3a5f;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.06em">Sign-off</h2><div style="display:grid;grid-template-columns:repeat(${signs.length},1fr);gap:10px">${signs
+        .map(
+          (sg) =>
+            `<div style="border:1px solid #cbd5e1;padding:10px;min-height:110px"><div style="font-size:11px;font-weight:700;color:#1e3a5f">${escapeHtml(sg.label)}</div><div style="height:46px;margin:6px 0">${
+              sg.image ? `<img src="data:image/${sg.image[0] === 0x89 ? "png" : "jpeg"};base64,${sg.image.toString("base64")}" style="max-height:46px"/>` : `<div style="border-bottom:1px solid #94a3b8;height:40px"></div>`
+            }</div><div style="font-size:12px"><strong>${escapeHtml(sg.name || "Name")}</strong>${sg.position ? ` · ${escapeHtml(sg.position)}` : ""}</div><div style="font-size:11px;color:#64748b">Date: ${escapeHtml(sg.date || "")}</div></div>`,
+        )
+        .join("")}</div>`
+    : "";
   const projectLine = meta?.projectName ? escapeHtml(meta.projectName) : "";
   const clientLine = meta?.clientName ? escapeHtml(meta.clientName) : "";
   const docNo = escapeHtml(meta?.docNo || "SPDC/QA/NCR-01");
@@ -605,6 +656,7 @@ th{width:32%;background:#eef2f7;color:#1e3a5f;font-weight:600}
 <span class="badge" style="margin-top:8px">${escapeHtml(status)}</span>
 </div></div>
 <table>${rows}</table>
+${signHtml}
 <p class="foot">${escapeHtml(SPDC_OFFICE_FOOTER)} · Branded NCR 01 from Sharnam portal · Print → Save as PDF</p>
 </body></html>`;
 }
@@ -612,7 +664,8 @@ th{width:32%;background:#eef2f7;color:#1e3a5f;font-weight:600}
 export function buildQualityNcrHtml(
   row: Parameters<typeof buildQualityNcrXlsxBuffer>[0],
   project?: Parameters<typeof buildQualityNcrXlsxBuffer>[1],
-  logoUrl = "/logo-transparent.png"
+  logoUrl = "/logo-transparent.png",
+  signs?: NcrSign[]
 ) {
   const f = parseQualityFormData(row.formDataJson);
   const pairs: [string, string][] = [
@@ -639,11 +692,18 @@ export function buildQualityNcrHtml(
   ];
   const isCar = /^CAR/i.test(row.number || "");
   const title = isCar ? "Corrective Action Request (NCR 01)" : "Non-Conformance Report (NCR 01)";
-  return ncrHtmlShell(title, logoUrl, pairs, row.status || "Open", {
-    projectName: f.projectName || project?.name || project?.code || "",
-    clientName: project?.clientName || "",
-    docNo: isCar ? "SPDC/QA/CAR-01" : "SPDC/QA/NCR-01",
-  });
+  return ncrHtmlShell(
+    title,
+    logoUrl,
+    pairs,
+    row.status || "Open",
+    {
+      projectName: f.projectName || project?.name || project?.code || "",
+      clientName: project?.clientName || "",
+      docNo: isCar ? "SPDC/QA/CAR-01" : "SPDC/QA/NCR-01",
+    },
+    signs,
+  );
 }
 
 export function buildSafetyNcrHtml(
@@ -679,7 +739,7 @@ type QualityNcrRow = Parameters<typeof buildQualityNcrXlsxBuffer>[0];
 type QualityNcrProject = Parameters<typeof buildQualityNcrXlsxBuffer>[1];
 
 /** Branded A4 PDF for Quality NCR / CAR (SPDC NCR 01). */
-export async function buildQualityNcrPdf(row: QualityNcrRow, project?: QualityNcrProject): Promise<Buffer> {
+export async function buildQualityNcrPdf(row: QualityNcrRow, project?: QualityNcrProject, signs?: NcrSign[]): Promise<Buffer> {
   const f = parseQualityFormData(row.formDataJson);
   const isCar = /^CAR/i.test(row.number || "");
   const title = isCar ? "Corrective Action Request (NCR 01)" : "Non-Conformance Report (NCR 01)";
@@ -712,6 +772,7 @@ export async function buildQualityNcrPdf(row: QualityNcrRow, project?: QualityNc
     docNo: isCar ? "SPDC/QA/CAR-01" : "SPDC/QA/NCR-01",
     status: row.status || "Open",
     pairs,
+    signs,
   });
 }
 
@@ -749,6 +810,7 @@ async function renderNcrPdf(opts: {
   docNo: string;
   status: string;
   pairs: [string, string][];
+  signs?: NcrSign[];
 }): Promise<Buffer> {
   const PDFDocument = (await import("pdfkit")).default;
   return new Promise((resolve, reject) => {
@@ -798,6 +860,36 @@ async function renderNcrPdf(opts: {
       doc.fillColor("#1a1a1a").font("Helvetica").fontSize(9);
       doc.text(text, 210, y + 6, { width: pageW - 270 });
       y += h;
+    }
+
+    // Sign-off boxes: label, signature image (or a line to sign on), name · position, date.
+    if (opts.signs?.length) {
+      const boxH = 92;
+      if (y + 24 + boxH > doc.page.height - 64) {
+        doc.addPage();
+        y = 48;
+      }
+      y += 12;
+      doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(10).text("SIGN-OFF", 48, y);
+      y += 16;
+      const w = (pageW - 96 - 10 * (opts.signs.length - 1)) / opts.signs.length;
+      opts.signs.forEach((sg, i) => {
+        const x = 48 + i * (w + 10);
+        doc.rect(x, y, w, boxH).strokeColor("#cbd5e1").lineWidth(0.5).stroke();
+        doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(8).text(sg.label, x + 6, y + 6, { width: w - 12 });
+        if (sg.image) {
+          try {
+            doc.image(sg.image, x + 6, y + 20, { fit: [w - 12, 36] });
+          } catch {
+            /* optional */
+          }
+        } else {
+          doc.moveTo(x + 6, y + 54).lineTo(x + w - 6, y + 54).strokeColor("#94a3b8").lineWidth(0.5).stroke();
+        }
+        doc.fillColor("#1a1a1a").font("Helvetica-Bold").fontSize(9).text(`${sg.name || "Name"}${sg.position ? ` · ${sg.position}` : ""}`, x + 6, y + 60, { width: w - 12 });
+        doc.font("Helvetica").fontSize(8).fillColor("#64748b").text(`Date: ${sg.date || ""}`, x + 6, y + 74, { width: w - 12 });
+      });
+      y += boxH;
     }
 
     doc.fillColor("#64748b").font("Helvetica").fontSize(8);

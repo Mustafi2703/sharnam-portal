@@ -595,6 +595,28 @@ export default function InspectionsPage() {
           canEdit={canManage}
           message={msg || undefined}
           onAddRow={canManage ? () => setNcrAddOpen(true) : undefined}
+          uploadTitle="Upload NCR 01 .xlsx (NCR REGISTER sheet)"
+          uploadHint="Rows become NCRs / CARs, kept by number — re-uploading updates them."
+          onUpload={
+            canManage
+              ? async (file) => {
+                  if (!id) return;
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  try {
+                    const out = await api<{ created: number; updated: number }>(`/api/checklist/project/${id}/ncr-register/import`, { method: "POST", token, body: fd });
+                    setMsg(`NCR register loaded — ${out.created} new, ${out.updated} updated.`);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Import failed");
+                  }
+                }
+              : undefined
+          }
+          onDownloadXlsx={async () => {
+            if (!id) return;
+            await downloadAuthFile(`/api/checklist/project/${id}/ncr-register/download.xlsx`, token, `NCR-Register-${project?.code || id}.xlsx`);
+          }}
         />
         </div>
         <Card padding={false} className="register-table-panel spdc-register-panel register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">

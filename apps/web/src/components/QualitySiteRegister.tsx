@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { downloadAuthFile } from "../lib/downloadReport";
 import { api, mediaUrl } from "../api";
 import { Badge, Button, Card, Input, Select, TextArea } from "./ui";
 import { RegisterEntryModal } from "./RegisterEntryModal";
@@ -168,6 +169,34 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
         canEdit={canEdit}
         onAddRow={canEdit ? () => setAddOpen(true) : undefined}
         message={msg || undefined}
+        onDownloadXlsx={async () => {
+          await downloadAuthFile(
+            `/api/checklist/project/${projectId}/quality-site-records/download.xlsx?type=${encodeURIComponent(recordType)}`,
+            token ?? null,
+            `${recordType.replace(/\s+/g, "-")}-Register.xlsx`,
+          );
+        }}
+        uploadTitle={`Upload ${recordType.toLowerCase()} register (Excel)`}
+        uploadHint="Use the downloaded layout — the same title on the same day updates that row."
+        onUpload={
+          canEdit
+            ? async (file) => {
+                const fd = new FormData();
+                fd.append("file", file);
+                try {
+                  const out = await api<{ created: number; updated: number }>(
+                    `/api/checklist/project/${projectId}/quality-site-records/import?type=${encodeURIComponent(recordType)}`,
+                    { method: "POST", token, body: fd },
+                  );
+                  setMsg(`${recordType} register loaded — ${out.created} new, ${out.updated} updated.`);
+                  await load();
+                  onChanged?.();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Import failed");
+                }
+              }
+            : undefined
+        }
       />
 
       <RegisterEntryModal
