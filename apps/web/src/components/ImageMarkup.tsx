@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
  * Tools: pen, shapes (rect, circle, arrow, line), text, erase.
  */
 
-type ShapeKind = "rect" | "ellipse" | "arrow" | "line";
+type ShapeKind = "rect" | "ellipse" | "arrow" | "line" | "cloud";
 
 type Stroke =
   | { kind: "path"; color: string; width: number; points: { x: number; y: number }[] }
@@ -21,6 +21,9 @@ type Props = {
   filename?: string;
   onCancel?: () => void;
   className?: string;
+  /** Lets a parent (PdfMarkup) flatten the current strokes without a button click; resolves null when nothing is drawn. */
+  commitRef?: { current: (() => Promise<File | null>) | null };
+  hideSave?: boolean;
 };
 
 const COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#111827", "#ffffff"];
@@ -32,6 +35,7 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: "arrow", label: "Arrow" },
   { id: "rect", label: "Box" },
   { id: "ellipse", label: "Circle" },
+  { id: "cloud", label: "Cloud" },
   { id: "text", label: "Text" },
   { id: "erase", label: "Erase" },
 ];
@@ -48,6 +52,28 @@ function drawShape(ctx: CanvasRenderingContext2D, s: Extract<Stroke, { kind: "sh
 
   if (s.shape === "rect") {
     ctx.strokeRect(x, y, w, h);
+    return;
+  }
+  if (s.shape === "cloud") {
+    // Revision cloud: scallops along the box edges.
+    const r = Math.max(8, s.width * 3);
+    const edge = (x1: number, y1: number, x2: number, y2: number) => {
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const n = Math.max(1, Math.round(len / (r * 2)));
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      for (let i = 0; i < n; i++) {
+        const cx = x1 + ((i + 0.5) / n) * (x2 - x1);
+        const cy = y1 + ((i + 0.5) / n) * (y2 - y1);
+        const rr = len / n / 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, ang + Math.PI, ang + Math.PI * 2);
+        ctx.stroke();
+      }
+    };
+    edge(x, y, x + w, y);
+    edge(x + w, y, x + w, y + h);
+    edge(x + w, y + h, x, y + h);
+    edge(x, y + h, x, y);
     return;
   }
   if (s.shape === "ellipse") {
@@ -93,7 +119,7 @@ function hitStroke(s: Stroke, p: { x: number; y: number }, radius: number): bool
   const y = Math.min(s.y1, s.y2);
   const w = Math.abs(s.x2 - s.x1);
   const h = Math.abs(s.y2 - s.y1);
-  if (s.shape === "rect" || s.shape === "ellipse") {
+  if (s.shape === "rect" || s.shape === "ellipse" || s.shape === "cloud") {
     return p.x >= x - radius && p.x <= x + w + radius && p.y >= y - radius && p.y <= y + h + radius;
   }
   return distToSegment(p.x, p.y, s.x1, s.y1, s.x2, s.y2) < radius;
@@ -106,6 +132,8 @@ export default function ImageMarkup({
   saveLabel = "Save markup",
   filename = "markup",
   className = "",
+  commitRef,
+  hideSave = false,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -192,7 +220,7 @@ export default function ImageMarkup({
   }
 
   function isShapeTool(t: Tool): t is ShapeKind {
-    return t === "rect" || t === "ellipse" || t === "arrow" || t === "line";
+    return t === "rect" || t === "ellipse" || t === "arrow" || t === "line" || t === "cloud";
   }
 
   function onDown(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -248,22 +276,34 @@ export default function ImageMarkup({
     setStrokes([]);
   }
 
-  async function save() {
+  async function flatten(): Promise<File | null> {
     const base = canvasRef.current;
     const overlay = overlayRef.current;
-    if (!base || !overlay) return;
+    if (!base || !overlay) return null;
     const out = document.createElement("canvas");
     out.width = base.width;
     out.height = base.height;
     const ctx = out.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) return null;
     ctx.drawImage(base, 0, 0);
     ctx.drawImage(overlay, 0, 0);
     const blob = await new Promise<Blob | null>((resolve) => out.toBlob((b) => resolve(b), "image/png"));
-    if (!blob) return;
-    const file = new File([blob], `${filename}-${Date.now()}.png`, { type: "image/png" });
-    onSave?.(file);
+    if (!blob) return null;
+    return new File([blob], `${filename}-${Date.now()}.png`, { type: "image/png" });
   }
+
+  async function save() {
+    const file = await flatten();
+    if (file) onSave?.(file);
+  }
+
+  useEffect(() => {
+    if (!commitRef) return;
+    commitRef.current = async () => (strokes.length ? flatten() : null);
+    return () => {
+      commitRef.current = null;
+    };
+  });
 
   return (
     <div className={`space-y-3 markup-root ${className}`}>
@@ -316,9 +356,11 @@ export default function ImageMarkup({
               Cancel
             </button>
           )}
-          <button type="button" onClick={() => void save()} className="markup-toolbar__btn markup-toolbar__btn--primary">
-            {saveLabel}
-          </button>
+          {!hideSave && (
+            <button type="button" onClick={() => void save()} className="markup-toolbar__btn markup-toolbar__btn--primary">
+              {saveLabel}
+            </button>
+          )}
         </div>
       </div>
 

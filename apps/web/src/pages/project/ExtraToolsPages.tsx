@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DrawingMarkupPanel } from "../../components/DrawingMarkupPanel";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
@@ -665,6 +666,12 @@ export function CoordinationPage() {
                   </ul>
                 </div>
               )}
+
+              {id ? (
+                <div className="mt-4 pt-4 border-t border-line">
+                  <DrawingMarkupPanel projectId={id} targetType="coordination" targetId={selected.id} drawingId={selected.linkedDrawingId} token={token} />
+                </div>
+              ) : null}
 
               {canEdit && (
                 <div className="mt-4 pt-4 border-t border-line grid sm:grid-cols-[1fr_auto] gap-2 items-end">

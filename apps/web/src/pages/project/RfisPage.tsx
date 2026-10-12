@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DrawingMarkupPanel } from "../../components/DrawingMarkupPanel";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import { api } from "../../api";
@@ -793,6 +794,9 @@ export default function RfisPage() {
                 </div>
               )}
               <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
+              {id && selected.linkedDrawingId ? (
+                <DrawingMarkupPanel projectId={id} targetType="rfi" targetId={selected.id} drawingId={selected.linkedDrawingId} token={token} />
+              ) : null}
               {(selected.linkedAssignmentId || selected.linkedChecklistItemId) &&
                 (selected.rfiKind === "DrawingChecklist" ||
                   selected.rfiKind === "QualityInspection" ||
@@ -907,6 +911,9 @@ export default function RfisPage() {
                   {selected.drawing && <Badge tone="neutral">{selected.drawing.drawingNumber}</Badge>}
                 </div>
                 <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
+                {id && selected.linkedDrawingId ? (
+                  <DrawingMarkupPanel projectId={id} targetType="rfi" targetId={selected.id} drawingId={selected.linkedDrawingId} token={token} />
+                ) : null}
                 {(selected.linkedAssignmentId || selected.linkedChecklistItemId) && (
                   <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
                     <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill checklist</div>

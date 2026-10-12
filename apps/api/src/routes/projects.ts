@@ -2856,6 +2856,141 @@ drawingsRouter.patch(
   }
 );
 
+/** Revision PDF bytes for the markup editor (portal copy, else SharePoint). */
+drawingsRouter.get("/revision/:revId/pdf", async (req, res) => {
+  const rev = await prisma.drawingRevision.findUnique({ where: { id: req.params.revId }, include: { drawing: { include: { project: { select: { code: true } } } } } });
+  if (!rev) return res.status(404).json({ error: "Revision not found" });
+  const { readRevisionPdf } = await import("../services/drawingMarkup.js");
+  const file = await readRevisionPdf(rev, rev.drawing.project.code);
+  if (!file) return res.status(404).json({ error: "This revision has no PDF on the portal or in SharePoint." });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${file.name.replace(/"/g, "")}"`);
+  res.send(file.buffer);
+});
+
+/** Open the revision PDF in the SharePoint viewer. */
+drawingsRouter.get("/revision/:revId/sharepoint-link", async (req, res) => {
+  const rev = await prisma.drawingRevision.findUnique({ where: { id: req.params.revId }, include: { drawing: { include: { project: { select: { code: true } } } } } });
+  if (!rev) return res.status(404).json({ error: "Revision not found" });
+  try {
+    const { revisionSharePointLink } = await import("../services/drawingMarkup.js");
+    const webUrl = await revisionSharePointLink(rev, rev.drawing.project.code);
+    if (!webUrl) return res.status(404).json({ error: "This drawing file is not in SharePoint yet." });
+    res.json({ webUrl });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : "Could not reach SharePoint" });
+  }
+});
+
+async function markupTarget(projectId: string, targetType: string, targetId: string) {
+  if (targetType === "rfi") {
+    const r = await prisma.rfi.findFirst({ where: { id: targetId, projectId }, select: { number: true, subject: true, linkedDrawingId: true } });
+    return r ? { label: `RFI ${r.number} — ${r.subject}`, drawingId: r.linkedDrawingId } : null;
+  }
+  if (targetType === "coordination") {
+    const c = await prisma.designCoordinationIssue.findFirst({ where: { id: targetId, projectId }, select: { title: true, linkedDrawingId: true } });
+    return c ? { label: `Design coordination — ${c.title}`, drawingId: c.linkedDrawingId } : null;
+  }
+  return null;
+}
+
+/** Markups on an RFI / coordination issue plus the linked drawing's latest PDF revision. */
+drawingsRouter.get("/project/:projectId/markups", async (req, res) => {
+  const targetType = String(req.query.targetType || "");
+  const targetId = String(req.query.targetId || "");
+  const target = targetId ? await markupTarget(req.params.projectId, targetType, targetId) : null;
+  const drawingId = String(req.query.drawingId || target?.drawingId || "");
+  const { latestPdfRevision } = await import("../services/drawingMarkup.js");
+  const drawing = drawingId
+    ? await prisma.drawing.findFirst({ where: { id: drawingId, projectId: req.params.projectId }, select: { id: true, drawingNumber: true, title: true, currentRev: true } })
+    : null;
+  const rev = drawing ? await latestPdfRevision(drawing.id) : null;
+  const markups = await prisma.drawingMarkup.findMany({
+    where: { projectId: req.params.projectId, ...(targetId ? { targetType, targetId } : drawing ? { drawingId: drawing.id } : { id: "-" }) },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({
+    drawing,
+    revision: rev ? { id: rev.id, revisionNumber: rev.revisionNumber } : null,
+    markups,
+  });
+});
+
+/** Save a markup: marked-up page images → branded markup PDF filed to SharePoint and linked to the RFI / issue. */
+drawingsRouter.post("/project/:projectId/markups", upload.array("files", 40), async (req: AuthedRequest, res) => {
+  const files = (req.files as Express.Multer.File[]) || [];
+  if (!files.length) return res.status(400).json({ error: "Mark up at least one page before saving." });
+  let pageNumbers: number[] = [];
+  try {
+    pageNumbers = JSON.parse(String(req.body.pageNumbers || "[]"));
+  } catch {
+    /* handled below */
+  }
+  if (pageNumbers.length !== files.length) return res.status(400).json({ error: "pageNumbers must match the pages sent" });
+  const targetType = String(req.body.targetType || "drawing");
+  const targetId = String(req.body.targetId || "") || null;
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true, name: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  const target = targetId ? await markupTarget(req.params.projectId, targetType, targetId) : null;
+  if (targetId && !target) return res.status(404).json({ error: "RFI / coordination issue not found on this project" });
+  const drawingId = String(req.body.drawingId || target?.drawingId || "");
+  const drawing = await prisma.drawing.findFirst({ where: { id: drawingId, projectId: req.params.projectId } });
+  if (!drawing) return res.status(400).json({ error: "Link a drawing first." });
+  const revisionId = String(req.body.revisionId || "") || null;
+  const rev = revisionId ? await prisma.drawingRevision.findFirst({ where: { id: revisionId, drawingId: drawing.id } }) : null;
+  const revNo = rev?.revisionNumber || drawing.currentRev || "R0";
+  const note = String(req.body.note || "").trim().slice(0, 4000);
+  const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { fullName: true, email: true } });
+  const byName = me?.fullName || me?.email || "Portal user";
+
+  const { buildMarkupPdf, fileMarkupPdf } = await import("../services/drawingMarkup.js");
+  const pdf = await buildMarkupPdf({
+    projectCode: project.code,
+    projectName: project.name,
+    drawingNumber: drawing.drawingNumber,
+    drawingTitle: drawing.title,
+    revisionNumber: revNo,
+    forLabel: target?.label || "Drawing review",
+    byName,
+    note,
+    pages: files.map((f, i) => ({ pageNumber: Number(pageNumbers[i]) || i + 1, buffer: f.buffer })).sort((a, b) => a.pageNumber - b.pageNumber),
+  });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+  const ref = targetType === "rfi" && target ? target.label.split(" — ")[0].replace(/^RFI\s*/, "RFI-") : targetType === "coordination" ? `DC-${(targetId || "").slice(-6)}` : "REVIEW";
+  const fileName = `${drawing.drawingNumber}_${revNo}_${ref}_Markup_${stamp}.pdf`.replace(/[^\w.-]+/g, "_");
+  const saved = await fileMarkupPdf(project.code, targetType, drawing.drawingNumber, fileName, pdf);
+
+  const row = await prisma.drawingMarkup.create({
+    data: {
+      projectId: req.params.projectId,
+      drawingId: drawing.id,
+      revisionId: rev?.id || null,
+      targetType,
+      targetId,
+      note: note || null,
+      pageNumbers: pageNumbers.join(","),
+      fileUrl: saved.url,
+      fileName,
+      sharePointPath: saved.sharePointPath || null,
+      sharePointUrl: saved.sharePointUrl || null,
+      createdById: req.user!.id,
+      createdByName: byName,
+    },
+  });
+  if (targetType === "coordination" && targetId) {
+    await prisma.coordinationIssueDocument.create({
+      data: { issueId: targetId, fileUrl: saved.sharePointUrl || saved.url, fileName, uploadedById: req.user!.id },
+    });
+  }
+  await audit("drawing.markup", {
+    userId: req.user!.id,
+    entity: "DrawingMarkup",
+    entityId: row.id,
+    meta: { drawingId: drawing.id, revision: revNo, targetType, targetId, pages: pageNumbers, sharePointPath: saved.sharePointPath || null },
+  });
+  res.status(201).json({ markup: row, sharePointError: saved.sharePointError || null });
+});
+
 /** Save annotated PDF pages — each page stored with full history */
 drawingsRouter.post(
   "/revision/:revId/markup-pages",

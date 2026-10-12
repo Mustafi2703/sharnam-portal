@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import ImageMarkup from "./ImageMarkup";
@@ -18,14 +18,32 @@ type Props = {
   onSave?: (pages: MarkupPage[]) => void;
   onCancel?: () => void;
   saveLabel?: string;
+  /** Strokes are kept automatically when moving between pages or saving (no per-page "Keep markup" click). */
+  autoKeep?: boolean;
+  busy?: boolean;
 };
 
-export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save annotated pages" }: Props) {
+export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save annotated pages", autoKeep = false, busy = false }: Props) {
   const [pages, setPages] = useState<string[]>([]);
   const [pageIdx, setPageIdx] = useState(0);
   const [markedUp, setMarkedUp] = useState<Record<number, File>>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const commitRef = useRef<(() => Promise<File | null>) | null>(null);
+
+  /** Flatten the open page's strokes into markedUp; returns the up-to-date map. */
+  async function keepCurrent(): Promise<Record<number, File>> {
+    if (!autoKeep || !commitRef.current) return markedUp;
+    const f = await commitRef.current();
+    if (!f) return markedUp;
+    const next = { ...markedUp, [pageIdx]: f };
+    setMarkedUp(next);
+    return next;
+  }
+  async function goTo(i: number) {
+    await keepCurrent();
+    setPageIdx(Math.max(0, Math.min(pages.length - 1, i)));
+  }
 
   useEffect(() => {
     if (!src) return;
@@ -56,8 +74,9 @@ export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save ann
     })();
   }, [src]);
 
-  function saveAll() {
-    const pagesOut: MarkupPage[] = Object.entries(markedUp)
+  async function saveAll() {
+    const all = await keepCurrent();
+    const pagesOut: MarkupPage[] = Object.entries(all)
       .map(([idx, file]) => ({ pageNumber: Number(idx) + 1, file }))
       .filter((p) => p.file && Number.isFinite(p.pageNumber));
     onSave?.(pagesOut);
@@ -70,13 +89,13 @@ export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save ann
   return (
     <div className="markup-pdf space-y-3">
       <div className="markup-toolbar markup-toolbar--pdf">
-        <button type="button" onClick={() => setPageIdx((i) => Math.max(0, i - 1))} disabled={pageIdx === 0} className="markup-toolbar__btn">‹ Prev</button>
+        <button type="button" onClick={() => void goTo(pageIdx - 1)} disabled={pageIdx === 0} className="markup-toolbar__btn">‹ Prev</button>
         <span className="markup-toolbar__meta">Page {pageIdx + 1} / {pages.length}</span>
-        <button type="button" onClick={() => setPageIdx((i) => Math.min(pages.length - 1, i + 1))} disabled={pageIdx >= pages.length - 1} className="markup-toolbar__btn">Next ›</button>
+        <button type="button" onClick={() => void goTo(pageIdx + 1)} disabled={pageIdx >= pages.length - 1} className="markup-toolbar__btn">Next ›</button>
         <span className="markup-toolbar__meta">Marked: {Object.keys(markedUp).length}</span>
         <div className="markup-toolbar__actions">
           {onCancel && <button type="button" onClick={onCancel} className="markup-toolbar__btn">Cancel</button>}
-          <button type="button" onClick={saveAll} className="markup-toolbar__btn markup-toolbar__btn--primary">{saveLabel}</button>
+          <button type="button" onClick={() => void saveAll()} disabled={busy} className="markup-toolbar__btn markup-toolbar__btn--primary">{saveLabel}</button>
         </div>
       </div>
 
@@ -85,6 +104,8 @@ export default function PdfMarkup({ src, onSave, onCancel, saveLabel = "Save ann
         src={markedUp[pageIdx] || pages[pageIdx]}
         filename={`pdf-page-${pageIdx + 1}`}
         saveLabel="Keep markup"
+        commitRef={autoKeep ? commitRef : undefined}
+        hideSave={autoKeep}
         onSave={(f) => setMarkedUp((prev) => ({ ...prev, [pageIdx]: f }))}
       />
     </div>
