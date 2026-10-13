@@ -779,14 +779,11 @@ checklistRouter.post(
     let driveExports: Awaited<ReturnType<typeof import("../services/syncChecklistSubmissionToDrive.js").syncChecklistSubmissionToDrive>> = {
       exports: [],
     };
-    let sharePointPending = false;
-    {
-      const { boundedSync } = await import("../services/boundedWait.js");
-      const sync = import("../services/syncChecklistSubmissionToDrive.js").then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id));
-      const waited = await boundedSync("checklist submit", sync);
-      if (waited.result) driveExports = waited.result;
-      sharePointPending = waited.pending;
-    }
+    let sharePointPending = true;
+    import("../services/syncChecklistSubmissionToDrive.js")
+      .then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id))
+      .then((out) => { driveExports = out; })
+      .catch((err) => console.warn("[checklist] drive sync on submit:", err instanceof Error ? err.message : err));
 
     let cubeGroup: { created: number } | null = null;
     try {
@@ -1041,14 +1038,11 @@ checklistRouter.post(
     let driveExports: Awaited<ReturnType<typeof import("../services/syncChecklistSubmissionToDrive.js").syncChecklistSubmissionToDrive>> = {
       exports: [],
     };
-    let sharePointPending = false;
-    {
-      const { boundedSync } = await import("../services/boundedWait.js");
-      const sync = import("../services/syncChecklistSubmissionToDrive.js").then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id));
-      const waited = await boundedSync("checklist draft", sync);
-      if (waited.result) driveExports = waited.result;
-      sharePointPending = waited.pending;
-    }
+    let sharePointPending = true;
+    import("../services/syncChecklistSubmissionToDrive.js")
+      .then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id))
+      .then((out) => { driveExports = out; })
+      .catch((err) => console.warn("[checklist] drive sync on draft:", err instanceof Error ? err.message : err));
 
     res.status(existingDraft ? 200 : 201).json({
       ...attachProgress(withPhotos || submission, assignment.template.items.length),
@@ -1960,11 +1954,10 @@ checklistRouter.post(
       meta: { projectId, unlockToken, files: files.length, itemAttachments: itemAttachCount },
     });
 
-    {
-      // The unlock token is usable now; the signed check is filed in SharePoint in the background when slow.
-      const { boundedSync } = await import("../services/boundedWait.js");
-      await boundedSync("drawing precheck", import("../services/syncChecklistSubmissionToDrive.js").then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id)));
-    }
+    // Unlock token is usable now — file the signed check in SharePoint in the background.
+    import("../services/syncChecklistSubmissionToDrive.js")
+      .then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id))
+      .catch((err) => console.warn("[checklist] drive sync on drawing precheck:", err instanceof Error ? err.message : err));
 
     res.status(201).json({
       submissionId: submission.id,

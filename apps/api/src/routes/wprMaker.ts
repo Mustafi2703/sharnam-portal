@@ -554,6 +554,7 @@ wprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
     ok: true,
     id: updated.id,
     status: updated.status,
+    reportNumber: updated.reportNumber,
     publishedAt: updated.publishedAt,
     publishedPath: updated.publishedPath,
     publishedUrl: updated.publishedUrl,

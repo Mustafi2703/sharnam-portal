@@ -178,7 +178,7 @@ export class MockOneDriveService {
     fileName: string,
     buffer: Buffer,
     contentType = "application/octet-stream",
-    opts?: { replace?: boolean; raw?: boolean }
+    opts?: { replace?: boolean; raw?: boolean; /** Wait at most this many ms for SharePoint (default 12 s); the file still lands when the upload finishes. */ sharePointMs?: number }
   ): Promise<{
     path: string;
     url: string;
@@ -186,6 +186,7 @@ export class MockOneDriveService {
     sharePointPath?: string | null;
     sharePointUrl?: string | null;
     sharePointError?: string;
+    sharePointPending?: boolean;
     driveId?: string;
     itemId?: string;
   }> {
@@ -222,24 +223,32 @@ export class MockOneDriveService {
 
     const mime = contentType && contentType !== "application/octet-stream" ? contentType : mimeForFileName(safe);
     if (liveSharePoint()) {
-      try {
-        const sp = await uploadToProjectLibrary(projectCode, relFolder, safe, buffer, mime, {
-          replace: opts?.replace,
-        });
-        return {
+      // The hosting gateway drops requests past ~60 s. Keep a short wait for the live URL, then answer with the
+      // local copy while SharePoint finishes in the background — the file still lands in the project library.
+      const waitMs = opts?.sharePointMs ?? Number(process.env.SHAREPOINT_UPLOAD_WAIT_MS || 12_000);
+      const work = uploadToProjectLibrary(projectCode, relFolder, safe, buffer, mime, { replace: opts?.replace })
+        .then((sp) => ({
           path: sp.path || rel,
           url: local.url,
-          provider: "sharepoint",
-          sharePointPath: sp.sharePointPath,
+          provider: "sharepoint" as const,
+          sharePointPath: sp.sharePointPath as string | null,
           sharePointUrl: sp.url || null,
           driveId: sp.driveId,
           itemId: sp.itemId,
-        };
-      } catch (err) {
-        const sharePointError = err instanceof Error ? err.message : String(err);
-        console.warn("[SharePoint] upload failed, kept local mock:", sharePointError);
-        return { ...local, sharePointError };
+        }))
+        .catch((err) => {
+          const sharePointError = err instanceof Error ? err.message : String(err);
+          console.warn("[SharePoint] upload failed, kept local mock:", sharePointError);
+          return { ...local, sharePointError };
+        });
+      if (waitMs <= 0) {
+        work.catch(() => undefined);
+        return { ...local, sharePointPending: true };
       }
+      const done = await Promise.race([work, new Promise<null>((r) => setTimeout(() => r(null), waitMs))]);
+      if (done) return done;
+      work.catch(() => undefined);
+      return { ...local, sharePointPending: true };
     }
     return local;
   }

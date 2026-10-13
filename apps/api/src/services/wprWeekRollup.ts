@@ -189,7 +189,8 @@ export async function nextReportNumber(
     orderBy: { weekEnding: "desc" },
     select: { weekEnding: true, reportNumber: true },
   });
-  if (!prev?.reportNumber) return undefined;
+  // First weekly report on a project is report no. 1; later weeks continue the sequence.
+  if (!prev?.reportNumber) return 1;
   const weeks = Math.max(1, Math.round((weekEnd.getTime() - prev.weekEnding.getTime()) / (7 * 86400000)));
   return prev.reportNumber + weeks;
 }
