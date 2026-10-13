@@ -81,7 +81,18 @@ function sharnamLogoPath(): string | null {
   return null;
 }
 
+/** Set for the duration of one PPTX build so every slide can co-brand with the client logo. */
+let pptxClientLogoPath: string | null = null;
+
 function addSharnamLogo(slide: PptxSlide, x = 11.55, y = 0.14, w = 1.35, h = 0.42) {
+  // Client logo sits to the left of Sharnam when the project has uploaded one.
+  if (pptxClientLogoPath) {
+    try {
+      slide.addImage({ path: pptxClientLogoPath, x: Math.max(0.2, x - 1.5), y, w, h });
+    } catch {
+      /* optional */
+    }
+  }
   const logo = sharnamLogoPath();
   if (!logo) return;
   try {
@@ -898,6 +909,15 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
     pack.charts ?? mergeWprChartsForExport(pack.sections, null, rangeStart, rangeEnd);
   const fullPack: WprPackInput = { ...pack, charts, sections: cleanSections(pack.sections, pack.header.projectCode) };
 
+  try {
+    const { clientLogoPathForProjectCode } = await import("./clientLogo.js");
+    const chartsMod = await import("./wprPptxCharts.js");
+    pptxClientLogoPath = await clientLogoPathForProjectCode(fullPack.header.projectCode);
+    chartsMod.chartClientLogoPath = pptxClientLogoPath;
+  } catch {
+    pptxClientLogoPath = null;
+  }
+
   const pptx = createPptx();
   // Original SPDC WPR_50 is Office widescreen 13.33 × 7.5" (LAYOUT_WIDE).
   pptx.layout = "LAYOUT_WIDE";
@@ -1062,8 +1082,17 @@ async function buildWprPptxGenerated(pack: WprPackInput): Promise<Buffer> {
     });
   }
 
-  const out = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
-  return Buffer.from(out);
+  try {
+    const out = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
+    return Buffer.from(out);
+  } finally {
+    pptxClientLogoPath = null;
+    try {
+      (await import("./wprPptxCharts.js")).chartClientLogoPath = null;
+    } catch {
+      /* optional */
+    }
+  }
 }
 
 export function estimateWprSlideCount(pack: WprPackInput): number {

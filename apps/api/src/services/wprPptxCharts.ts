@@ -1,7 +1,12 @@
 /**
  * Native PowerPoint chart slides for WPR export — editable in PowerPoint like client deck.
  */
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import type { WprChartPack, WprBarPoint, WprPiePoint } from "./wprCharts.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BRAND = "156082";
 const NAVY = "0E2841";
@@ -47,6 +52,7 @@ type PptxSlide = {
   addText: (text: string | string[] | unknown, opts: Record<string, unknown>) => void;
   addShape: (type: string, opts: Record<string, unknown>) => void;
   addChart: (type: string, data: unknown[], opts?: Record<string, unknown>) => void;
+  addImage: (opts: Record<string, unknown>) => void;
 };
 
 export type PptxDeckCharts = {
@@ -54,6 +60,9 @@ export type PptxDeckCharts = {
   ChartType: { bar: string; line: string; doughnut: string };
   addSlide: () => PptxSlide;
 };
+
+/** Set by the WPR PPTX builder so chart slides carry the same client co-branding. */
+export let chartClientLogoPath: string | null = null;
 
 function slideHeader(slide: PptxSlide, pptx: PptxDeckCharts, title: string, client?: string) {
   slide.background = { color: WHITE };
@@ -71,7 +80,7 @@ function slideHeader(slide: PptxSlide, pptx: PptxDeckCharts, title: string, clie
   slide.addText(title, {
     x: MARGIN,
     y: 0.48,
-    w: CONTENT_W,
+    w: CONTENT_W - 3.2,
     h: 0.4,
     fontSize: 20,
     bold: true,
@@ -84,6 +93,20 @@ function slideHeader(slide: PptxSlide, pptx: PptxDeckCharts, title: string, clie
     h: 0.055,
     fill: { color: ORANGE },
   });
+  // Co-branding: client (left) + Sharnam (right) on every chart slide.
+  try {
+    if (chartClientLogoPath) {
+      slide.addImage({ path: chartClientLogoPath, x: 10.05, y: 0.14, w: 1.35, h: 0.42 });
+    }
+    const candidates = [
+      path.resolve(__dirname, "../../assets/logo-transparent.png"),
+      path.resolve(process.cwd(), "apps/api/assets/logo-transparent.png"),
+    ];
+    const logo = candidates.find((p) => fs.existsSync(p));
+    if (logo) slide.addImage({ path: logo, x: 11.55, y: 0.14, w: 1.35, h: 0.42 });
+  } catch {
+    /* optional */
+  }
 }
 
 function footer(slide: PptxSlide, page: number, total: number, client?: string) {

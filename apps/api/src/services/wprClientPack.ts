@@ -596,7 +596,122 @@ export async function buildWprClientWorkbook(
     });
   }
 
-  return replayOntoStyledTemplate(template, wb);
+  const filled = await replayOntoStyledTemplate(template, wb);
+  // The Arvind week template has no Communication Matrix tab — append one with Sharnam + client logos and the live matrix.
+  return appendCommunicationMatrixSheet(filled, prisma, projectId);
+}
+
+/** Branded Communication Matrix sheet (Sharnam + client logos) so the client week pack carries the same matrix as the PPT. */
+async function appendCommunicationMatrixSheet(buffer: Buffer, prisma: PrismaClient, projectId: string): Promise<Buffer> {
+  try {
+    const ExcelJS = (await import("exceljs")).default;
+    const styled = new ExcelJS.Workbook();
+    await styled.xlsx.load(buffer as unknown as ArrayBuffer);
+    if (styled.getWorksheet("Communication Matrix")) return buffer;
+
+    const [project, contacts] = await Promise.all([
+      prisma.project.findUnique({
+        where: { id: projectId },
+        select: { name: true, code: true, clientName: true, clientLogoUrl: true, designConsultant: true },
+      }),
+      prisma.communicationContact.findMany({
+        where: { projectId, isSectionHeader: false },
+        orderBy: [{ matrixKind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+        take: 80,
+      }),
+    ]);
+    if (!contacts.length) return buffer;
+
+    const ws = styled.addWorksheet("Communication Matrix", { views: [{ showGridLines: false }] });
+    ws.getColumn(1).width = 6;
+    ws.getColumn(2).width = 28;
+    ws.getColumn(3).width = 22;
+    ws.getColumn(4).width = 22;
+    ws.getColumn(5).width = 16;
+    ws.getColumn(6).width = 32;
+    ws.getColumn(7).width = 10;
+    ws.getColumn(8).width = 14;
+    for (const r of [1, 2, 3]) ws.getRow(r).height = r === 1 ? 36 : 18;
+
+    const { sharnamLogoPath } = await import("./brandedExport.js");
+    const { clientLogoPathForProject } = await import("./clientLogo.js");
+    const sharnam = sharnamLogoPath();
+    const clientLogo = await clientLogoPathForProject(projectId);
+    if (sharnam) {
+      try {
+        const id = styled.addImage({ filename: sharnam, extension: "png" });
+        ws.addImage(id, { tl: { col: 0.1, row: 0.1 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+      } catch {
+        /* optional */
+      }
+    }
+    if (clientLogo) {
+      try {
+        const id = styled.addImage({
+          filename: clientLogo,
+          extension: /\.jpe?g$/i.test(clientLogo) ? "jpeg" : "png",
+        });
+        ws.addImage(id, { tl: { col: 6.2, row: 0.1 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+      } catch {
+        /* optional */
+      }
+    }
+
+    ws.mergeCells(1, 1, 1, 8);
+    ws.getCell(1, 1).value = "COMMUNICATION MATRIX";
+    ws.getCell(1, 1).font = { name: "Arial", bold: true, size: 14, color: { argb: "FF0B2545" } };
+    ws.getCell(1, 1).alignment = { vertical: "middle", horizontal: "center" };
+    ws.mergeCells(2, 1, 2, 8);
+    ws.getCell(2, 1).value = `Project: ${project?.name || project?.code || "—"}  ·  Client: ${project?.clientName || "—"}  ·  PMC: Sharnam Project Development Consultants & Co.`;
+    ws.getCell(2, 1).font = { name: "Arial", size: 9, color: { argb: "FF555555" } };
+    ws.getCell(2, 1).alignment = { horizontal: "center" };
+    ws.mergeCells(3, 1, 3, 8);
+    ws.getCell(3, 1).value = `Consultant: ${project?.designConsultant || "—"}  ·  Generated from the portal communication matrix (TECHNICAL + COMMERCIAL)`;
+    ws.getCell(3, 1).font = { name: "Arial", size: 9, color: { argb: "FF555555" } };
+    ws.getCell(3, 1).alignment = { horizontal: "center" };
+
+    const headers = ["Sr", "Organisation", "Name", "Designation", "Mobile", "Email", "TO / CC", "Matrix"];
+    headers.forEach((h, i) => {
+      const cell = ws.getCell(5, i + 1);
+      cell.value = h;
+      cell.font = { name: "Arial", bold: true, size: 10, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B2545" } };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
+    contacts.forEach((c, i) => {
+      const r = 6 + i;
+      const vals = [
+        i + 1,
+        [c.orgSection, c.orgName || c.company].filter(Boolean).join(" · "),
+        c.personName || "",
+        c.designation || c.spoc || "",
+        c.mobile || "",
+        c.email || "",
+        c.mailRole || "CC",
+        c.matrixKind || "TECHNICAL",
+      ];
+      vals.forEach((v, col) => {
+        const cell = ws.getCell(r, col + 1);
+        cell.value = v as string | number;
+        cell.font = { name: "Arial", size: 9 };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFCCCCCC" } },
+          left: { style: "thin", color: { argb: "FFCCCCCC" } },
+          bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
+          right: { style: "thin", color: { argb: "FFCCCCCC" } },
+        };
+        if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7F8FA" } };
+      });
+    });
+
+    const out = Buffer.from(await styled.xlsx.writeBuffer());
+    // ExcelJS drops the template charts — put them back from the already-filled buffer.
+    const { restoreTemplateCharts } = await import("../lib/xlsxCharts.js");
+    return restoreTemplateCharts(buffer, out);
+  } catch (err) {
+    console.warn("[wpr-client] communication matrix sheet skipped:", err instanceof Error ? err.message : err);
+    return buffer;
+  }
 }
 
 /**

@@ -74,7 +74,10 @@ async function persistChecklistUploads(opts: {
     const itemId = scoped?.[1] || null;
     const kind = checklistUploadKind(f, scoped?.[2]);
     if (itemId) itemAttachCount += 1;
-    const saved = await mockOneDrive.upload(opts.projectCode, checklistFolder, f.originalname, f.buffer);
+    // Photos must answer before the hosting gateway (~60 s). File locally now; SharePoint catches up in the background.
+    const saved = await mockOneDrive.upload(opts.projectCode, checklistFolder, f.originalname, f.buffer, f.mimetype || "application/octet-stream", {
+      sharePointMs: 0,
+    });
     await prisma.checklistPhoto.create({
       data: {
         submissionId: opts.submissionId,

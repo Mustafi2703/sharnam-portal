@@ -247,6 +247,8 @@ async function callOnce(who, method, url, payload, { form, timeoutMs = 180000 } 
   }
   const buf = Buffer.from(await res.arrayBuffer());
   const type = res.headers.get("content-type") || "";
+  const binary = /spreadsheetml|octet-stream|pdf|presentationml|zip|image\//i.test(type) || /\.xlsx|\.pptx|\.pdf/i.test(url);
+  if (binary) return { status: res.status, body: null, raw: buf, bytes: buf.length, type };
   let parsed = buf.toString("utf8");
   if (type.includes("json") || /^\s*[[{]/.test(parsed.slice(0, 5))) {
     try {
@@ -256,7 +258,7 @@ async function callOnce(who, method, url, payload, { form, timeoutMs = 180000 } 
     }
   }
   if (typeof parsed === "string" && parsed.startsWith("<!DOCTYPE")) parsed = `HTML ${res.status} (route not found?)`;
-  return { status: res.status, body: parsed, bytes: buf.length, type };
+  return { status: res.status, body: parsed, raw: buf, bytes: buf.length, type };
 }
 const ok = (r, what) => {
   assert(r.status > 0 && r.status < 300, `${what} ${r.status} ${noteOf(r.body?.error || r.body)}`);
@@ -368,6 +370,16 @@ async function sectionSetup() {
     ok(await call("office", "PUT", `/api/hrm/attendance/site/${pid()}`, { siteLat: SITE_PIN.lat, siteLng: SITE_PIN.lng, siteRadiusM: SITE_PIN.radius }), "site pin");
     state.pin = { lat: SITE_PIN.lat, lng: SITE_PIN.lng };
     return `pin set ${SITE_PIN.lat}, ${SITE_PIN.lng} · ${SITE_PIN.radius} m (Karjan)`;
+  });
+  await step("SET-4", "Client logo on the project (Sharnam + client co-branding on every WPR / register)", "office", async () => {
+    const proj = ok(await call("office", "GET", `/api/projects/${pid()}`), "project");
+    if (proj.clientLogoUrl) return `already set · ${String(proj.clientLogoUrl).slice(0, 80)}`;
+    const logoBuf = fs.readFileSync(LOGO);
+    const up = ok(await call("office", "POST", `/api/projects/${pid()}/client-logo`, undefined, {
+      form: form({}, [{ field: "file", buffer: logoBuf, type: "image/png", name: "client-logo.png" }]),
+      timeoutMs: 120000,
+    }), "client logo");
+    return `uploaded · ${up.clientLogoUrl || up.url || "ok"}`;
   });
 }
 
@@ -859,7 +871,15 @@ async function sectionProgress() {
     }
     const ms = [["M1", "Site mobilisation & survey", 0, 2, "Completed", 100], ["M2", "Excavation complete — grid A to K", 0, 9, "Completed", 100], ["M3", "PCC & footing RCC complete", 2, 20, "In progress", 60], ["M4", "Anchor bolts released to PEB vendor", 8, 20, "In progress", 40], ["M5", "PEB erection start", 21, 45, "Planned", 0], ["M6", "Roof sheeting complete", 46, 75, "Planned", 0]];
     for (const [code, activity, s, e, status, pct] of ms) ok(await call("site", "POST", `/api/progress/${pid()}/milestones`, { code, category: "Civil / PEB", activity: `${activity}`, plannedStart: addDays(W1_MONDAY, s), plannedEnd: addDays(W1_MONDAY, e), actualStart: pct > 0 ? addDays(W1_MONDAY, s) : null, actualEnd: pct === 100 ? addDays(W1_MONDAY, e) : null, status, pctComplete: pct, weightage: 10, stakeholder: state.vendorName, zone: "Main plant" }), `milestone ${code}`);
-    return `${ACTIVITIES.length} activities · ${ms.length} milestones`;
+    // Weekly Manpower register feeds the WPR client-pack histogram chart (B4:E23).
+    const trades = [
+      ["Mason", 12, 10], ["Helper", 24, 20], ["Bar bender", 10, 8], ["Carpenter", 8, 6],
+      ["Operator", 4, 3], ["Supervisor", 3, 3], ["Electrician", 4, 2], ["Welder", 6, 4],
+    ];
+    for (const [i, [trade, required, available]] of trades.entries()) {
+      ok(await call("planning", "POST", `/api/progress/${pid()}/manpower`, { trade, required, available, rank: i + 1 }), `manpower ${trade}`);
+    }
+    return `${ACTIVITIES.length} activities · ${ms.length} milestones · ${trades.length} manpower trades`;
   });
   await step("PRG-2", "Hindrances (one per week, site), risks and statutory approvals (office), planned-vs-actual values per week", "site", async () => {
     const hind = [[0, "Excavation", "Hard rock at grid D needs breaker — 2 days", "Site condition", 2], [1, "RCC footings", "Ready-mix supply failed on Thursday (plant breakdown)", "Material", 1], [2, "Anchor bolt fixing", "PEB vendor's template drawing late by 4 days", "Drawing / vendor", 4]];
@@ -1080,11 +1100,37 @@ async function sectionWpr() {
         if (Math.abs(row.prev + row.week - row.tillDate) > 0.01) breaks.push(`${a.activity}: ${row.prev} + ${row.week} ≠ ${row.tillDate}`);
       }
       state.continuity.wpr.push({ week: w.label, rows: till, breaks });
+      const matrixRows = (s.communicationMatrix?.rows || []).length;
+      assert(matrixRows >= 3, `communication matrix has only ${matrixRows} rows — fill the project matrix contacts`);
       const sizes = [];
+      let clientCharts = 0;
       for (const k of ["download.xlsx", "download-client.xlsx", "download.pptx"]) {
         const r = await call("office", "GET", `/api/wpr-maker/${pid()}/${k}?end=${w.sun}`, undefined, { timeoutMs: 300000 });
         assert(r.status === 200 && r.bytes > 1000, `${k} ${r.status} ${typeof r.body === "object" ? noteOf(r.body) : r.bytes}`);
-        sizes.push(`${k.replace("download", "wpr")} ${kb(r.bytes)}`);
+        if (k === "download-client.xlsx" && r.bytes) {
+          // Count embedded classic charts in the client week pack (template has 8).
+          const tmp = path.join(OUT, `_wpr-client-${w.n}.xlsx`);
+          fs.mkdirSync(OUT, { recursive: true });
+          assert(Buffer.isBuffer(r.raw) && r.raw.length > 1000, `client pack raw missing (${r.bytes})`);
+          fs.writeFileSync(tmp, r.raw);
+          try {
+            const { execSync } = await import("node:child_process");
+            clientCharts = Number(execSync(`unzip -l "${tmp}" | grep -cE 'xl/charts/chart[0-9]+\\.xml$' || true`, { encoding: "utf8" }).trim() || 0);
+          } catch { clientCharts = 0; }
+          assert(clientCharts >= 6, `client pack charts ${clientCharts} (need ≥6 — template has 8)`);
+          // Communication Matrix sheet must exist with branding (logos in media).
+          try {
+            const { execSync } = await import("node:child_process");
+            const sheets = execSync(`unzip -p "${tmp}" xl/workbook.xml | grep -oE 'name="[^"]+"' || true`, { encoding: "utf8" });
+            assert(/Communication Matrix/i.test(sheets), "client pack missing Communication Matrix sheet");
+            const media = Number(execSync(`unzip -l "${tmp}" | grep -c 'xl/media/' || true`, { encoding: "utf8" }).trim() || 0);
+            assert(media >= 2, `client pack logos in media=${media} (need Sharnam + client)`);
+          } catch (e) {
+            if (/missing Communication Matrix|logos in media/.test(String(e.message || e))) throw e;
+          }
+        }
+        if (k === "download.pptx") assert(r.bytes > 200_000, `pptx too small ${r.bytes} — charts/photos likely missing`);
+        sizes.push(`${k.replace("download", "wpr")} ${kb(r.bytes)}${k === "download-client.xlsx" ? ` · ${clientCharts} charts · matrix ${matrixRows} rows` : ""}`);
       }
       const pub = await call("office", "POST", `/api/wpr-maker/${pid()}/publish`, { weekEnding: w.sun, reportNumber: pack.reportNumber || pack.header?.reportNumber || w.n }, { timeoutMs: 600000 });
       assert(pub.status < 300 || pub.dropped, `publish ${pub.status} ${noteOf(pub.body)}`);

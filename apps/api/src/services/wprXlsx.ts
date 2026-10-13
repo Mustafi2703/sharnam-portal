@@ -326,6 +326,20 @@ export async function buildWprWorkbook(input: WprPackInput): Promise<Buffer> {
       /* optional logo */
     }
   }
+  // Client logo top-right on the cover (co-branding with Sharnam).
+  try {
+    const { clientLogoPathForProjectCode } = await import("./clientLogo.js");
+    const clientLogo = await clientLogoPathForProjectCode(H.projectCode);
+    if (clientLogo) {
+      const clientId = wb.addImage({
+        filename: clientLogo,
+        extension: /\.jpe?g$/i.test(clientLogo) ? "jpeg" : "png",
+      });
+      coverWs.addImage(clientId, { tl: { col: 4.2, row: 0.05 }, ext: { width: 140, height: 46 }, editAs: "oneCell" });
+    }
+  } catch {
+    /* optional */
+  }
 
   // -------------------- One sheet per section --------------------
   let idx = 1;
