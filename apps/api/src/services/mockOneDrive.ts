@@ -178,7 +178,7 @@ export class MockOneDriveService {
     fileName: string,
     buffer: Buffer,
     contentType = "application/octet-stream",
-    opts?: { replace?: boolean }
+    opts?: { replace?: boolean; raw?: boolean }
   ): Promise<{
     path: string;
     url: string;
@@ -189,6 +189,15 @@ export class MockOneDriveService {
     driveId?: string;
     itemId?: string;
   }> {
+    // Every workbook filed in the project drive carries Sharnam + client co-branding (once; skipped with opts.raw).
+    if (/\.xlsx$/i.test(fileName) && !opts?.raw && buffer?.length) {
+      try {
+        const [{ stampSpdcWorkbookLogo }, { clientLogoPathForProjectCode }] = await Promise.all([import("./brandedExport.js"), import("./clientLogo.js")]);
+        buffer = await stampSpdcWorkbookLogo(buffer, { clientLogoPath: await clientLogoPathForProjectCode(projectCode) });
+      } catch (err) {
+        console.warn("[drive] branding pass skipped:", err instanceof Error ? err.message : err);
+      }
+    }
     const dir = path.join(this.projectRoot(projectCode), relFolder);
     ensureDir(dir);
     let safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");

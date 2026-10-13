@@ -206,7 +206,10 @@ function isHeaderRow(row: SheetSpec["rows"][number] | undefined) {
  * Logo sits in its own reserved band (never on top of text), navy header row, zebra rows, borders,
  * status colour-coding, frozen header, filters, landscape A4 fit-to-width and the SPDC footer.
  */
-export async function workbookBuffer(sheets: SheetSpec[], meta?: { title?: string; projectCode?: string }): Promise<Buffer> {
+export async function workbookBuffer(
+  sheets: SheetSpec[],
+  meta?: { title?: string; projectCode?: string; projectId?: string; clientLogoPath?: string | null }
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Sharnam Project Development Consultants & Co. (SPDC)";
   wb.created = new Date();
@@ -218,6 +221,16 @@ export async function workbookBuffer(sheets: SheetSpec[], meta?: { title?: strin
     } catch {
       logoId = null;
     }
+  }
+  // Client logo (co-branding) — top-right of the letterhead on every sheet when the project has one.
+  let clientLogoId: number | null = null;
+  try {
+    const { clientLogoPathForProject, clientLogoPathForProjectCode } = await import("./clientLogo.js");
+    const clientLogo =
+      meta?.clientLogoPath ?? (meta?.projectId ? await clientLogoPathForProject(meta.projectId) : await clientLogoPathForProjectCode(meta?.projectCode));
+    if (clientLogo) clientLogoId = wb.addImage({ filename: clientLogo, extension: /\.jpe?g$/i.test(clientLogo) ? "jpeg" : "png" });
+  } catch {
+    clientLogoId = null;
   }
   const generated = new Date().toLocaleString("en-IN");
   const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
@@ -234,6 +247,7 @@ export async function workbookBuffer(sheets: SheetSpec[], meta?: { title?: strin
     if (total < 80) ws.getColumn(span).width = (ws.getColumn(span).width || 10) + (80 - total);
     for (const r of [1, 2, 3]) ws.getRow(r).height = r === 1 ? 24 : 18;
     if (logoId !== null) ws.addImage(logoId, { tl: { col: 0.1, row: 0.15 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
+    if (clientLogoId !== null) ws.addImage(clientLogoId, { tl: { col: span + 0.15, row: 0.15 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
     const put = (r: number, text: string, font: Partial<ExcelJS.Font>) => {
       if (span > 1) ws.mergeCells(r, 1, r, span);
       const c = ws.getCell(r, 1);
@@ -554,9 +568,10 @@ function polishWorksheet(ws: ExcelJS.Worksheet) {
  * Sharnam branding for an existing XLSX buffer: logo top-left on every visible sheet (unless the sheet already has an
  * image) and the readability pass. Runs once per workbook — a marker in the document properties skips repeats.
  */
-export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
+export async function stampSpdcWorkbookLogo(buffer: Buffer, opts?: { clientLogoPath?: string | null }): Promise<Buffer> {
   if (!buffer?.length || (await alreadyBranded(buffer))) return buffer;
   const logo = sharnamLogoPath();
+  const clientLogo = opts?.clientLogoPath || null;
   const tmpPath = path.join(
     os.tmpdir(),
     `spdc-stamp-${Date.now()}-${Math.random().toString(36).slice(2)}.xlsx`
@@ -570,6 +585,14 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
     const needLogo = logo ? visible.filter((w) => w.getImages().length === 0) : [];
     if (needLogo.length && logo) {
       const imgId = wb.addImage({ filename: logo, extension: "png" });
+      let clientId: number | null = null;
+      if (clientLogo) {
+        try {
+          clientId = wb.addImage({ filename: clientLogo, extension: /\.jpe?g$/i.test(clientLogo) ? "jpeg" : "png" });
+        } catch {
+          clientId = null;
+        }
+      }
       for (const ws of needLogo) {
         ws.getRow(1).height = Math.max(Number(ws.getRow(1).height || 18), 36);
         ws.addImage(imgId, {
@@ -577,6 +600,11 @@ export async function stampSpdcWorkbookLogo(buffer: Buffer): Promise<Buffer> {
           ext: { width: 118, height: 38 },
           editAs: "oneCell",
         });
+        if (clientId !== null) {
+          // Client logo top-right, just past the last used column so it never covers data.
+          const lastCol = Math.max(ws.actualColumnCount || ws.columnCount || 1, 1);
+          ws.addImage(clientId, { tl: { col: lastCol + 0.15, row: 0.05 }, ext: { width: 118, height: 38 }, editAs: "oneCell" });
+        }
       }
     }
     for (const ws of visible) {

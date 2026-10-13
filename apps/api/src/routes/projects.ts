@@ -1408,6 +1408,7 @@ projectsRouter.post(
       where: { id: project.id },
       data: { clientLogoUrl: logoUrl },
     });
+    import("../services/clientLogo.js").then(({ invalidateClientLogo }) => invalidateClientLogo(project.id)).catch(() => undefined);
     await audit("project.client_logo", {
       userId: req.user!.id,
       entity: "Project",

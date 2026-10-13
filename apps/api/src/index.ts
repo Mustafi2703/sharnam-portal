@@ -68,8 +68,14 @@ app.use("/api", (_req, res, next) => {
     const ct = String(res.getHeader("Content-Type") || "");
     if (Buffer.isBuffer(body) && ct.includes("spreadsheetml") && !res.locals.spdcBranding) {
       res.locals.spdcBranding = true;
-      import("./services/brandedExport.js")
-        .then(({ stampSpdcWorkbookLogo }) => stampSpdcWorkbookLogo(body))
+      // Sharnam logo top-left + the project's client logo top-right (co-branding) on every sheet without its own images.
+      import("./services/clientLogo.js")
+        .then(async ({ projectIdFromRequestPath, clientLogoPathForProject }) => {
+          const projectId = (res.locals.projectId as string | undefined) || (await projectIdFromRequestPath(String(_req.originalUrl || _req.url || "")));
+          return clientLogoPathForProject(projectId);
+        })
+        .catch(() => null)
+        .then((clientLogoPath) => import("./services/brandedExport.js").then(({ stampSpdcWorkbookLogo }) => stampSpdcWorkbookLogo(body, { clientLogoPath })))
         .then((out) => send(out))
         .catch(() => send(body));
       return res;
