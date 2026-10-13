@@ -2,8 +2,11 @@
 
 **Project:** Voltamp Transformers (Karjan) on https://portal.spdc.in  
 **Target handover:** ~15 Oct 2026  
+**Markup review (mark OK / FIX):** [`DELIVERY_REVIEW_MARKUP.md`](./DELIVERY_REVIEW_MARKUP.md)  
 **Deep UAT script:** `UAT_PURGE=1 node scripts/prod-deep-uat.mjs`  
-**Evidence:** `docs/uat-evidence/prod-deep-YYYY-MM-DD/REPORT.md`
+**Evidence:** `docs/uat-evidence/prod-deep-YYYY-MM-DD/REPORT.md`  
+**Client WPR Excel:** July week template (`WPR-Client-Week-Template.xlsx` = `WPR  23 July to 29 July.xlsx`)  
+**Client WPR PPTX:** Arvind deck (`templates/SPDC_WPR_CLIENT_REFERENCE.pptx` = `SPDC_Arvind Limited_WPR_50.pptx`)
 
 This document is the single place for (1) the workflow the UAT covers, (2) what every major page does, and (3) known gaps before client handover. Point out mistakes here; we fix, redeploy, and re-run UAT.
 

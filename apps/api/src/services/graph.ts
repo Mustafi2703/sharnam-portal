@@ -379,6 +379,8 @@ export const MODULE_TO_ISO_FOLDER = {
   drawings: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications",
   drawingSpec: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications",
   designCoordination: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.04_Clash_Detection_Design_Coordination",
+  /** Drawing Check fills (pre-GFC) — kept with design coordination, not Quality 08.02 */
+  drawingChecklist: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.04_Clash_Detection_Design_Coordination/Drawing_Checklists",
   submittals: "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.08_Shop_Drawings_and_Material_Submittals",
   rfiInformation: "03_SUPPORT_AND_RESOURCES/03.06_Correspondence_Control",
   transmittals: "03_SUPPORT_AND_RESOURCES/03.07_Transmittal_Control",

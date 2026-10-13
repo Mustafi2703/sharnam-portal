@@ -54,10 +54,13 @@ export async function syncChecklistSubmissionToDrive(
   const stamp = new Date().toISOString().slice(0, 10);
   const statusFolder = submission.status === "Draft" ? "Drafts" : "Submitted";
   const checklistType = submission.assignment.template.checklistType || "";
+  // Drawing Check → 04.04 Design Coordination; Safety → 08.07 HSE; Quality/Site/Activity → 08.02
   const baseFolder =
-    checklistType === "Safety"
-      ? `${MODULE_TO_ISO_FOLDER.qualityChecklist}/Safety`
-      : MODULE_TO_ISO_FOLDER.qualityChecklist;
+    checklistType === "DrawingCheck"
+      ? MODULE_TO_ISO_FOLDER.drawingChecklist
+      : checklistType === "Safety"
+        ? `${MODULE_TO_ISO_FOLDER.safety}/Checklists`
+        : MODULE_TO_ISO_FOLDER.qualityChecklist;
   const folder = `${baseFolder}/${statusFolder}`;
   const base = `${safeName(templateName)}_${safeName(submission.submittedBy?.fullName || "filler")}_${stamp}`;
 

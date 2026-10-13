@@ -61,6 +61,10 @@ export function resolveWprPptxTemplate(): string | null {
     process.env.WPR_PPTX_TEMPLATE,
     path.resolve(process.cwd(), "templates", TEMPLATE_FILENAME),
     path.resolve(__dirname, "../../../templates", TEMPLATE_FILENAME),
+    process.env.SHARNAM_EXCEL_ROOT
+      ? path.resolve(process.env.SHARNAM_EXCEL_ROOT, TEMPLATE_FILENAME)
+      : "",
+    path.resolve(process.cwd(), "seed/data", TEMPLATE_FILENAME),
     path.resolve(process.cwd(), "module_prompts/Sharnam_modules_docs 2/SPDC_Arvind Limited_WPR_50.pptx"),
   ].filter(Boolean) as string[];
   for (const p of candidates) {

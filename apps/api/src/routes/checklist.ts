@@ -46,6 +46,13 @@ function republishQapIso(projectId: string, userId: string) {
     .catch((err) => console.warn("[qap] ISO republish:", err instanceof Error ? err.message : err));
 }
 
+function checklistUploadFolder(checklistType?: string | null) {
+  const t = String(checklistType || "");
+  if (t === "DrawingCheck") return "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.04_Clash_Detection_Design_Coordination/Drawing_Checklists";
+  if (t === "Safety") return "08_QUALITY_HSE_AND_ENVIRONMENT/08.07_Hazard_Identification_Risk_Assessment/Checklists";
+  return "08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards";
+}
+
 async function persistChecklistUploads(opts: {
   files: Express.Multer.File[];
   submissionId: string;
@@ -54,12 +61,12 @@ async function persistChecklistUploads(opts: {
   /** Request body — signer names + clientSignedByPmc for signature captions. */
   body?: Record<string, unknown>;
   submitterName?: string | null;
+  checklistType?: string | null;
 }) {
   const { signatureCaption } = await import("../services/checklistSignoff.js");
   if (!opts.files.length) return 0;
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
-  const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
-  const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
+  const checklistFolder = checklistUploadFolder(opts.checklistType);
   let itemComments: Record<string, string> = {};
   if (typeof opts.commentsRaw === "string" && opts.commentsRaw) {
     try {
@@ -658,45 +665,17 @@ checklistRouter.post(
           },
         });
 
-    let itemAttachCount = 0;
-    if (files.length) {
-      const { mockOneDrive } = await import("../services/mockOneDrive.js");
-      const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
-      const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
-      const commentsRaw = req.body.itemCommentsJson;
-      let itemComments: Record<string, string> = {};
-      if (typeof commentsRaw === "string" && commentsRaw) {
-        try {
-          itemComments = JSON.parse(commentsRaw);
-        } catch {
-          itemComments = {};
-        }
-      }
-      for (const f of files) {
-        const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
-        const itemId = scoped?.[1] || null;
-        const kind = checklistUploadKind(f, scoped?.[2]);
-        if (itemId) itemAttachCount += 1;
-        const { signatureCaption } = await import("../services/checklistSignoff.js");
-        const signCaption = signatureCaption(f.fieldname, req.body, req.user?.fullName);
-        const saved = await mockOneDrive.upload(
-          assignment.project.code,
-          checklistFolder,
-          f.originalname,
-          f.buffer
-        );
-        await prisma.checklistPhoto.create({
-          data: {
-            submissionId: submission.id,
-            itemId,
-            kind,
-            fileUrl: storedUploadUrl(saved),
-            caption: signCaption || f.originalname,
-            comment: itemId ? itemComments[itemId] || null : null,
-          },
-        });
-      }
-    }
+    const itemAttachCount = files.length
+      ? await persistChecklistUploads({
+          files,
+          submissionId: submission.id,
+          projectCode: assignment.project.code,
+          commentsRaw: req.body.itemCommentsJson,
+          body: req.body,
+          submitterName: req.user?.fullName,
+          checklistType: assignment.template.checklistType,
+        })
+      : 0;
 
     await audit("checklist.submit", {
       userId: req.user!.id,
@@ -868,13 +847,14 @@ checklistRouter.post(
     }
 
     const { mockOneDrive } = await import("../services/mockOneDrive.js");
-    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
-    const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
+    const checklistFolder = checklistUploadFolder(assignment.template.checklistType);
     const saved = await mockOneDrive.upload(
       assignment.project.code,
       checklistFolder,
       file.originalname,
       file.buffer,
+      file.mimetype || "image/png",
+      { sharePointMs: 0 },
     );
     await prisma.checklistPhoto.create({
       data: {
@@ -990,29 +970,15 @@ checklistRouter.post(
 
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length) {
-      const { mockOneDrive } = await import("../services/mockOneDrive.js");
-      const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
-      const checklistFolder = MODULE_TO_ISO_FOLDER.qualityChecklist;
-      for (const f of files) {
-        const scoped = /^item_([^_]+)_(photo|doc)$/.exec(f.fieldname);
-        const itemId = scoped?.[1] || null;
-        const kind = checklistUploadKind(f, scoped?.[2]);
-        const saved = await mockOneDrive.upload(
-          assignment.project.code,
-          checklistFolder,
-          f.originalname,
-          f.buffer
-        );
-        await prisma.checklistPhoto.create({
-          data: {
-            submissionId: submission.id,
-            itemId,
-            kind,
-            fileUrl: storedUploadUrl(saved),
-            caption: f.originalname,
-          },
-        });
-      }
+      await persistChecklistUploads({
+        files,
+        submissionId: submission.id,
+        projectCode: assignment.project.code,
+        commentsRaw: req.body.itemCommentsJson,
+        body: req.body,
+        submitterName: req.user?.fullName,
+        checklistType: assignment.template.checklistType,
+      });
     }
 
     const withPhotos = await prisma.checklistSubmission.findUnique({
@@ -1937,6 +1903,7 @@ checklistRouter.post(
       commentsRaw: req.body?.itemCommentsJson,
       body: req.body,
       submitterName: req.user?.fullName,
+      checklistType: "DrawingCheck",
     });
 
     await audit("checklist.drawing_precheck", {
