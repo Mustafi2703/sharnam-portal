@@ -82,9 +82,15 @@ export async function activityWeekRollup(
       out.set(outKey, row);
     }
   }
+  // One till-date per activity (description · unit). Multiple BOQ rates for the same description must not be summed.
+  const tillByOut = new Map<string, number>();
   for (const [k, cum] of lastCum) {
-    const row = out.get(lineOut.get(k)!);
-    if (row) row.tillDate += cum;
+    const outKey = lineOut.get(k)!;
+    tillByOut.set(outKey, Math.max(tillByOut.get(outKey) || 0, cum));
+  }
+  for (const [outKey, cum] of tillByOut) {
+    const row = out.get(outKey);
+    if (row) row.tillDate = cum;
   }
   for (const row of out.values()) {
     row.weekQty = round3(row.weekQty);

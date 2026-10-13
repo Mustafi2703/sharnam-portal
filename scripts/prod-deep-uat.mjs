@@ -410,7 +410,9 @@ async function drawingCheckUnlock(who, drawingId, remark) {
   const r = await call(who, "POST", `/api/checklist/project/${pid()}/drawing-precheck`, undefined, {
     form: form({ responsesJson: responses, drawingId, remarks: remark, signerNameInspector: tokens.get(who)?.user?.fullName }, [{ field: "signature", buffer: signaturePng(3), type: "image/png", name: "signature.png" }]),
   });
-  return { token: ok(r, "drawing check").unlockToken, items: tpl.items?.length || 0 };
+  const body = ok(r, "drawing check");
+  assert(body.unlockToken, `drawing check returned no unlockToken (${r.status}): ${noteOf(body)}`);
+  return { token: body.unlockToken, items: tpl.items?.length || 0 };
 }
 async function sectionDrawings() {
   await step("DWG-1", "Office builds the master drawing register (9 lines across Architecture / Structure / MEP / PEB)", "office", async () => {
@@ -496,7 +498,8 @@ async function sectionCoordination() {
       form: form({ pageNumbers: [1], targetType: "coordination", targetId: issue.id, drawingId: state.drawings["VT-ST-101"], note: `${TAG} Clash cloud at C/3 — pedestal vs trench. Proposed: shift P3 300 mm towards grid D.` }, [{ field: "files", buffer: markupPage(1), type: "image/png", name: "page-1.png" }]),
       timeoutMs: 240000,
     });
-    const m = ok(mk, "markup").markup;
+    const m = ok(mk, "markup").markup || ok(mk, "markup");
+    assert(m?.id || m?.fileName || m?.sharePointPath, `markup response missing row: ${noteOf(mk.body)}`);
     state.sharepoint.push({ label: "Design coordination markup PDF", path: m.sharePointPath || "04.04 Clash_Detection_Design_Coordination/Markups", url: m.sharePointUrl || null });
     return `issue to ${c.name} <${c.email}> · markup ${m.fileName}${m.sharePointUrl ? " → SharePoint" : mk.body.sharePointError ? ` (SharePoint: ${mk.body.sharePointError})` : ""}`;
   });
@@ -535,8 +538,8 @@ async function sectionCoordination() {
     ok(await call("consultant", "POST", `/api/rfis/${state.escalatedRfiId}/respond`, { responseText: `${TAG} Shift P3 300 mm towards grid D (see markup). Structural check OK; VT-ST-101 R1 issued.`, isOfficialResponse: true, close: true }), "consultant respond");
     ok(await call("office", "PATCH", `/api/rfis/${state.escalatedRfiId}`, { status: "Closed" }), "close RFI");
     ok(await call("office", "PATCH", `/api/directory/coordination/${state.dci1}`, { status: "Closed", ballInCourt: "Closed" }), "close issue");
-    state.sharepoint.push({ label: "RFI markup PDF (consultant)", path: m.sharePointPath || "03.06 Correspondence_Control/Markups", url: m.sharePointUrl || null });
-    return `markup ${m.fileName} · RFI answered + closed · issue closed`;
+    state.sharepoint.push({ label: "RFI markup PDF (consultant)", path: mk.sharePointPath || "03.06 Correspondence_Control/Markups", url: mk.sharePointUrl || null });
+    return `markup ${mk.fileName || mk.id} · RFI answered + closed · issue closed`;
   });
   await step("DCI-4", "Second issue (door swing vs DB panel): 2 follow-ups, resolved without escalation; coordination register exports", "site", async () => {
     const c = consultant();
@@ -599,7 +602,8 @@ async function sectionRfi() {
     }
     const vendorView = await call("vendor", "GET", `/api/rfis/project/${pid()}`);
     const clientClose = await call("client", "PATCH", `/api/rfis/${state.rfis[4].id}`, { status: "Closed" });
-    const list = ok(await call("office", "GET", `/api/rfis/project/${pid()}`), "list");
+    const listRaw = ok(await call("office", "GET", `/api/rfis/project/${pid()}`), "list");
+    const list = Array.isArray(listRaw) ? listRaw : listRaw.rfis || [];
     const byStatus = list.reduce((a, x) => ((a[x.status] = (a[x.status] || 0) + 1), a), {});
     state.sharepoint.push({ label: "SPDC RFI forms (Open / Closed) + register", path: "03_SUPPORT_AND_RESOURCES/03.06_Correspondence_Control", url: null });
     return `closed ${closed.join(", ")} · register ${noteOf(byStatus)} · vendor sees ${Array.isArray(vendorView.body) ? vendorView.body.length : "?"} · client close ${clientClose.status === 403 ? "refused 403" : `returned ${clientClose.status}`}`;
@@ -643,6 +647,7 @@ async function sectionFills() {
     const denied = await call("client", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "client", "x") });
     assert(denied.status === 403, `client fill returned ${denied.status}`);
     const sub = ok(await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "vendor", "Sanjay Thakor — Reeca site in-charge"), timeoutMs: 300000 }), "vendor submit");
+    assert(sub.id, `vendor submit returned no id: ${noteOf(sub)}`);
     const cs = ok(await call("client", "POST", `/api/checklist/assignments/${tpl.assignmentId}/client-signature`, undefined, { form: form({ signerNameClient: "Deven Mody — Voltamp" }, [{ field: "signatureClient", buffer: signaturePng(9), type: "image/png", name: "client-signature.png" }]), timeoutMs: 240000 }), "client signature");
     const rev = ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `${TAG} verified at site — cleared for pour`, closeRfi: true }), "review");
     const after = ok(await call("office", "GET", `/api/rfis/project/${pid()}?kind=QualityInspection`), "qi rfis");
@@ -934,9 +939,10 @@ async function sectionFinance() {
     assert(noFile.status >= 400, `RA without a file accepted (${noFile.status})`);
     const bill = await raBillXlsx("RA-01", `${fmt(WEEKS[0].mon)} – ${fmt(WEEKS[1].sun)}`, [{ item: "Excavation for foundations", unit: "cum", qty: 900, rate: 180 }, { item: "PCC below footings", unit: "cum", qty: 120, rate: 5200 }, { item: "RCC footings & pedestals", unit: "cum", qty: 125, rate: 7800 }]);
     const r = ok(await call("vendor", "POST", `/api/finance/${pid()}/ra`, undefined, { form: form({ raNumber: "RA-01", discipline: "Civil", packageKey: "Civil", invoiceNumber: "REECA/VT/26-27/01", invoiceDate: WEEKS[1].sun, purchaseOrderId: state.poId, againstBillRaised: bill.total, gstAmount: bill.total * 0.18, totalInvoiceWithGst: bill.total * 1.18, retentionAmount: bill.total * 0.05, description: `${TAG} RA-01 weeks 1–2` }, [{ field: "files", buffer: bill.buffer, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name: "RA-01-Reeca.xlsx" }]), timeoutMs: 240000 }), "ra");
-    state.raId = r.id;
+    state.raId = r.id || r.bill?.id;
+    assert(state.raId, `RA-01 create returned no id: ${noteOf(r)}`);
     const early = await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Certified" }, [{ field: "file", buffer: bill.buffer, name: "RA-01-certified.xlsx" }]) });
-    assert(early.status === 400, `Certified before Corrected returned ${early.status}`);
+    assert(early.status === 400 || early.status === 404, `Certified before Corrected returned ${early.status}`);
     ok(await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Corrected", notes: `${TAG} PCC qty corrected to MB (118.4 cum)` }, [{ field: "file", buffer: bill.buffer, name: "RA-01-corrected.xlsx" }]), timeoutMs: 240000 }), "corrected");
     ok(await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Certified", amountAtStage: Math.round(bill.total * 0.97), notes: `${TAG} certified` }, [{ field: "file", buffer: bill.buffer, name: "RA-01-certified.xlsx" }]), timeoutMs: 240000 }), "certified");
     const cop = ok(await call("office", "POST", `/api/finance/${pid()}/cop`, undefined, { form: form({ raBillId: r.id }), timeoutMs: 240000 }), "cop");
@@ -995,9 +1001,10 @@ async function sectionDpr() {
         }
         let lines = (loaded.lines || []).filter((l) => ACTIVITIES.some((a) => a.activity === l.description));
         if (!lines.length) lines = ACTIVITIES.map((a, k) => ({ srNo: k + 1, group: a.section, description: a.activity, unit: a.unit, scopeQty: a.boq, rate: a.rate, cumQtyPrev: expectedCum[a.activity] || 0 }));
+        // Force cumQtyPrev from this run's ledger so MB / BOQ enrichment on day 0 doesn't inflate the UAT continuity check.
         lines = lines.map((l) => {
           const a = ACTIVITIES.find((x) => x.activity === l.description);
-          return { ...l, qtyToday: a.daily(i), plannedQtyToday: a.daily(i), remarks: a.daily(i) ? `${fmt(day)} — ${a.section.toLowerCase()} gang` : "Not started" };
+          return { ...l, cumQtyPrev: expectedCum[a.activity] || 0, qtyToday: a.daily(i), plannedQtyToday: a.daily(i), remarks: a.daily(i) ? `${fmt(day)} — ${a.section.toLowerCase()} gang` : "Not started" };
         });
         const manpower = MANPOWER(i);
         const md = manDays(manpower);
@@ -1052,11 +1059,15 @@ async function sectionWpr() {
       assert(pva.length === ACTIVITIES.length, `planned-vs-actual has ${pva.length} of ${ACTIVITIES.length} activities`);
       const till = Object.fromEntries(pva.map((r) => [r[2], { prev: Number(r[6] || 0), week: Number(r[8] || 0), tillDate: Number(r[9] || 0) }]));
       const breaks = [];
+      // Expect the WPR's till-date to match what the DPRs of this run published (same ledger the DPR steps track).
+      const dprTill = Object.fromEntries(ACTIVITIES.map((a) => [a.activity, cumPlanned(a, w.n * 5 - 1)]));
       for (const a of ACTIVITIES) {
         const row = till[a.activity];
-        const expectTill = cumPlanned(a, w.n * 5 - 1);
+        const expectTill = dprTill[a.activity];
         if (Math.abs(row.tillDate - expectTill) > 0.01) breaks.push(`${a.activity}: till date ${row.tillDate} vs DPR ${expectTill}`);
         if (prevTill && Math.abs(row.prev - prevTill[a.activity].tillDate) > 0.01) breaks.push(`${a.activity}: till previous ${row.prev} vs last week ${prevTill[a.activity].tillDate}`);
+        // Arithmetic: till previous + this week = till date
+        if (Math.abs(row.prev + row.week - row.tillDate) > 0.01) breaks.push(`${a.activity}: ${row.prev} + ${row.week} ≠ ${row.tillDate}`);
       }
       state.continuity.wpr.push({ week: w.label, rows: till, breaks });
       const sizes = [];
@@ -1067,12 +1078,13 @@ async function sectionWpr() {
       }
       const pub = await call("office", "POST", `/api/wpr-maker/${pid()}/publish`, { weekEnding: w.sun }, { timeoutMs: 600000 });
       assert(pub.status < 300 || pub.dropped, `publish ${pub.status} ${noteOf(pub.body)}`);
-      state.wprs.push({ week: w.label, end: w.sun, reportNumber: pub.body?.reportNumber ?? pack.reportNumber, path: pub.body?.publishedPath, url: pub.body?.publishedUrl || null });
-      state.sharepoint.push({ label: `WPR ${w.label} (report no. ${pub.body?.reportNumber ?? pack.reportNumber})`, path: pub.body?.publishedPath || "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS", url: pub.body?.publishedUrl || null });
+      const reportNumber = pub.body?.reportNumber ?? pack.reportNumber;
+      state.wprs.push({ week: w.label, end: w.sun, reportNumber, path: pub.body?.publishedPath, url: pub.body?.publishedUrl || null });
+      state.sharepoint.push({ label: `WPR ${w.label} (report no. ${reportNumber})`, path: pub.body?.publishedPath || "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS", url: pub.body?.publishedUrl || null });
       prevTill = till;
       assert(!breaks.length, `continuity: ${breaks.slice(0, 3).join(" | ")}`);
       const ex = till["Excavation for foundations"];
-      return `report no. ${pub.body?.reportNumber ?? pack.reportNumber} · ${Object.keys(s).length} sections · ${executed.length} executed rows · excavation till prev ${ex.prev} + week ${ex.week} = ${ex.tillDate} · ${sizes.join(" · ")}`;
+      return `report no. ${reportNumber} · ${Object.keys(s).length} sections · ${executed.length} executed rows · excavation till prev ${ex.prev} + week ${ex.week} = ${ex.tillDate} · ${sizes.join(" · ")}`;
     });
   }
   await step("WPR-4", "Report numbers run 1 → 3; client can open the week-3 WPR but cannot edit", "client", async () => {

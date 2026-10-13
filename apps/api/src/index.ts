@@ -86,13 +86,16 @@ app.use("/api", (_req, res, next) => {
 });
 
 /**
- * The hosting gateway drops requests that take longer than ~60 s (the browser sees a bare 504 and the work
- * that did finish looks lost). For writes that are still running at 50 s, answer 202 "pending" — the handler
- * keeps running to completion (SharePoint filing, emails, packs) and later responses are swallowed.
+ * The hosting gateway drops requests that take longer than ~60 s. Only for known-slow "publish / pack /
+ * sync" writes do we answer 202 at 50 s and finish in the background — create routes (checklist submit,
+ * drawing unlock, markups, NCR raise, RFI create, RA stage…) must return their id / token, so they stay
+ * out of this list and use a bounded SharePoint wait instead.
  */
 const SLOW_WRITE_GUARD_MS = Number(process.env.SLOW_WRITE_GUARD_MS || 50_000);
+const SLOW_WRITE_PATH = /\/(publish|publish-registers|save-export|weekly\/publish|sync-sharepoint|recalc-scurve|refresh)(\/|$|\?)/i;
 app.use("/api", (req, res, next) => {
-  if (!/^(POST|PATCH|PUT|DELETE)$/.test(req.method) || SLOW_WRITE_GUARD_MS <= 0) return next();
+  if (!/^(POST|PATCH|PUT)$/.test(req.method) || SLOW_WRITE_GUARD_MS <= 0) return next();
+  if (!SLOW_WRITE_PATH.test(String(req.originalUrl || req.url || ""))) return next();
   const timer = setTimeout(() => {
     if (res.headersSent || res.writableEnded) return;
     console.warn(`[slow-guard] ${req.method} ${String(req.originalUrl).split("?")[0]} still running after ${SLOW_WRITE_GUARD_MS}ms — answering 202, finishing in background`);
