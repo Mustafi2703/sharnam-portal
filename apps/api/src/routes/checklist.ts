@@ -728,8 +728,8 @@ checklistRouter.post(
           data: { status: "Answered", ballInCourt: "Office", closedAt: null },
         });
       }
-      const { notifyChecklistSubmittedForReview } = await import("../services/rfiFlowNotify.js");
-      await notifyChecklistSubmittedForReview({
+      // Mail is slow on Graph — never hold the submit response (gateway ~60 s).
+      const notifyPayload = {
         projectId: assignment.projectId,
         projectCode: assignment.project.code,
         projectName: assignment.project.name,
@@ -740,31 +740,20 @@ checklistRouter.post(
         submittedByName: req.user!.fullName || undefined,
         rfiNumbers: linkedRfis.map((r) => r.number),
         createdById: req.user!.id,
-      });
-      try {
-        const pv = await prisma.projectVendor.findFirst({
-          where: { projectId: assignment.projectId },
-          include: { vendor: { select: { email: true, name: true } } },
-        });
-        const contractorTo = pv?.vendor?.email?.trim() || null;
-        if (contractorTo) {
-          await notifyChecklistSubmittedForReview({
-            projectId: assignment.projectId,
-            projectCode: assignment.project.code,
-            projectName: assignment.project.name,
-            templateName: assignment.template.name,
-            checklistType: assignment.template.checklistType,
-            submissionId: submission.id,
-            assignmentId: assignment.id,
-            submittedByName: req.user!.fullName || undefined,
-            rfiNumbers: linkedRfis.map((r) => r.number),
-            createdById: req.user!.id,
-            toOverride: contractorTo,
+      };
+      import("../services/rfiFlowNotify.js")
+        .then(async ({ notifyChecklistSubmittedForReview }) => {
+          await notifyChecklistSubmittedForReview(notifyPayload);
+          const pv = await prisma.projectVendor.findFirst({
+            where: { projectId: assignment.projectId },
+            include: { vendor: { select: { email: true, name: true } } },
           });
-        }
-      } catch {
-        /* contractor copy optional */
-      }
+          const contractorTo = pv?.vendor?.email?.trim() || null;
+          if (contractorTo) {
+            await notifyChecklistSubmittedForReview({ ...notifyPayload, toOverride: contractorTo });
+          }
+        })
+        .catch((err) => console.warn("[checklist] submit notify:", err instanceof Error ? err.message : err));
     } else {
       // Still move linked RFIs to Answered / Office without closing
       await prisma.rfi.updateMany({

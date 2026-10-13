@@ -651,7 +651,8 @@ async function assignTemplate(name) {
 function fillForm(tpl, who, signer, extra = {}) {
   const responses = Object.fromEntries(tpl.items.map((i, k) => [i.id, { answer: "Yes", remarks: k === 0 ? `${TAG} checked on site` : "OK" }]));
   const files = [{ field: "signature", buffer: signaturePng(who.length), type: "image/png", name: "signature.png" }];
-  for (const it of tpl.items.filter((i) => i.requirePhoto)) for (let p = 1; p <= 3; p++) files.push({ field: `item_${it.id}_photo`, buffer: sitePhoto(p + it.id.length), type: "image/png", name: `${it.itemCode || "item"}-${p}.png` });
+  // One photo per required line (not 3) — keeps multipart under the ~60s gateway while still enforcing photos.
+  for (const it of tpl.items.filter((i) => i.requirePhoto)) files.push({ field: `item_${it.id}_photo`, buffer: sitePhoto(1 + it.id.length), type: "image/png", name: `${it.itemCode || "item"}-1.png` });
   return form({ responsesJson: responses, remarks: `${TAG} ${tpl.name}`, status: "Submitted", signerNameInspector: signer, ...extra }, files);
 }
 async function sectionFills() {
@@ -669,7 +670,7 @@ async function sectionFills() {
     state.fills = [{ rfi: rfi.number, submission: sub.id, template: tpl.name }];
     remember("fills", `${rfi.number} ${tpl.name}`);
     state.sharepoint.push({ label: "Checklist fills (branded)", path: "08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards", url: null });
-    return `${rfi.number} → ${tpl.items.length} lines, ${tpl.items.filter((i) => i.requirePhoto).length * 3} photos, contractor + client signatures · ${rev.status || "Approved"} · RFI ${row?.status || "?"} · client fill refused 403 · ${sub.sharePointExports?.length ?? 0} files filed`;
+    return `${rfi.number} → ${tpl.items.length} lines, ${tpl.items.filter((i) => i.requirePhoto).length} photos, contractor + client signatures · ${rev.status || "Approved"} · RFI ${row?.status || "?"} · client fill refused 403 · ${sub.sharePointExports?.length ?? 0} files filed`;
   });
   await step("CHK-2", "Site-execution checklists (Anchor bolt fixing — PEB, Pour card) filled by Reeca each week, approved by office", "vendor", async () => {
     const out = [];
@@ -690,7 +691,7 @@ async function sectionFills() {
     const cleared = ok(await call("office", "PATCH", `/api/rfis/${rfi.id}`, { formPatch: { clearanceResult: "S1 Cleared", validUpTo: WEEKS[2].days[4], riskRating: "High", actionRequired: "Double-lanyard harness; exclusion zone 6 m; crane lift plan on site." } }), "clearance");
     ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `${TAG} clearance S1`, closeRfi: true }), "review");
     remember("fills", `${rfi.number} ${tpl.name}`);
-    return `${rfi.number} · ${tpl.items.length} lines · ${tpl.items.filter((i) => i.requirePhoto).length * 3} photos · ${cleared.status}`;
+    return `${rfi.number} · ${tpl.items.length} lines · ${tpl.items.filter((i) => i.requirePhoto).length} photos · ${cleared.status}`;
   });
   await step("CHK-4", "PPE & induction checklist (3 photos per line) by Reeca; fill log lists every fill with status", "vendor", async () => {
     const tpl = await assignTemplate("PPE & Site Induction Checklist");

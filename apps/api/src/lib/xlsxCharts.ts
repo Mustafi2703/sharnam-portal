@@ -314,7 +314,10 @@ export async function restoreTemplateCharts(
   let added = 0;
 
   for (const [name, tplSheetPart] of tplSheets) {
-    const outSheetPart = outSheets.get(name);
+    // ExcelJS / SheetJS sometimes trim trailing spaces on sheet names ("Project Cashflow " → "Project Cashflow").
+    const outSheetPart =
+      outSheets.get(name) ||
+      [...outSheets.entries()].find(([n]) => n.trim() === name.trim())?.[1];
     if (!outSheetPart) continue;
     const tplSheetXml = (await tpl.read(tplSheetPart)) || "";
     const drawingRid = tplSheetXml.match(/<drawing\b[^>]*r:id="([^"]+)"/)?.[1];

@@ -26,18 +26,21 @@ function excelSerial(d: Date | null | undefined): number | "" {
 }
 
 /**
- * The client's week workbook ("WPR 23 July to 29 July" = WPR-Client-Week-Template.xlsx) first, then the older
- * combined WPR File — searched across every known folder, so the choice does not depend on the working directory.
+ * Prefer the Arvind-style week pack (8 charts + HSE/Quality Statistic tabs). Never pick the older combined
+ * "WPR File.xlsx" just because SHARNAM_EXCEL_ROOT points at seed/data — that path used to short-circuit
+ * and drop charts on production.
  */
 function resolveWprClientTemplate(): string | null {
+  const preferred = ["WPR-Client-Week-Template.xlsx", "WPR  23 July to 29 July.xlsx"];
+  const fallback = ["WPR-File.xlsx", "WPR File.xlsx"];
   if (process.env.SHARNAM_EXCEL_ROOT) {
-    const own = path.join(process.env.SHARNAM_EXCEL_ROOT, "WPR File.xlsx");
-    if (fs.existsSync(own)) return own;
+    const root = path.resolve(process.env.SHARNAM_EXCEL_ROOT);
+    for (const name of preferred) {
+      const p = path.join(root, name);
+      if (fs.existsSync(p)) return p;
+    }
   }
-  return (
-    findWorkbook(["WPR-Client-Week-Template.xlsx", "WPR  23 July to 29 July.xlsx"]) ||
-    findWorkbook(["WPR-File.xlsx", "WPR File.xlsx"])
-  );
+  return findWorkbook(preferred) || findWorkbook(fallback);
 }
 
 function findSheet(wb: WorkBook, pattern: RegExp) {

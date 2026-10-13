@@ -160,6 +160,7 @@ Mark each: **Fixed** / **Open** / **Won’t fix for 15 Oct**.
 | # | Area | Gap | Status |
 |---|---|---|---|
 | G1 | WPR client pack | Charts invisible after ExcelJS rewrite | **Fixed** — `restoreTemplateCharts` after fill + matrix append |
+| G1b | WPR client pack | Prod used old `WPR File.xlsx` (4 charts) via `SHARNAM_EXCEL_ROOT` | **Fixed** — prefer `WPR-Client-Week-Template.xlsx` (8 charts); copy into `seed/data` |
 | G2 | WPR client pack | No Communication Matrix sheet / weak branding | **Fixed** — append sheet with Sharnam + client logos |
 | G3 | WPR PPTX | Client logo missing on chart slides | **Fixed** — `chartClientLogoPath` in slide headers |
 | G4 | WPR SPDC xlsx | Client logo on cover | **Fixed** — stamp on cover |
