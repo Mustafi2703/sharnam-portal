@@ -588,8 +588,10 @@ async function sectionRfi() {
     const m = state.rfis.find((x) => x.markup);
     const mk = ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, { form: form({ pageNumbers: [1], targetType: "rfi", targetId: m.id, drawingId: state.drawings[m.dwg], note: `${TAG} 8.8 grade bolts — see cloud on the setting plan.` }, [{ field: "files", buffer: markupPage(4), type: "image/png", name: "page-1.png" }]), timeoutMs: 240000 }), "markup").markup;
     const list = ok(await call("office", "GET", `/api/drawings/project/${pid()}/markups?targetType=rfi&targetId=${m.id}`), "markup list");
-    assert((Array.isArray(list) ? list : list.rows || []).length >= 1, "markup not listed on the RFI");
-    return `${n} follow-ups sent · markup ${mk.fileName} on ${m.number}`;
+    const rows = Array.isArray(list) ? list : list.markups || list.rows || [];
+    assert(rows.length >= 1, `markup not listed on the RFI (${rows.length})`);
+    const row = mk.markup || mk;
+    return `${n} follow-ups sent · markup ${row.fileName || row.id} on ${m.number}`;
   });
   await step("RFI-3", "Consultant answers 4 RFIs (official response); office closes 3, one stays answered-open; 2 remain open with reminders", "consultant", async () => {
     const closed = [];
