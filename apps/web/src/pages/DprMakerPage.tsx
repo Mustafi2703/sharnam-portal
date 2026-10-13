@@ -227,7 +227,7 @@ export default function DprMakerPage() {
   const [logDate, setLogDate] = useState<string>(
     () => searchParams.get("date") || new Date().toISOString().slice(0, 10)
   );
-  const [discipline, setDiscipline] = useState<string>("CIVIL");
+  const [discipline, setDiscipline] = useState<string>(() => (searchParams.get("discipline") || "CIVIL").toUpperCase());
   const [snap, setSnap] = useState<Snap | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");

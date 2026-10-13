@@ -10,7 +10,9 @@ export type ModuleFilesKey =
   | "finance"
   | "comms"
   | "auditKpi"
-  | "inspection";
+  | "inspection"
+  | "dpr"
+  | "wpr";
 
 export type ModuleFileConfig = {
   root: string;
@@ -26,6 +28,8 @@ export type ModuleFileConfig = {
   showSafetyNcr?: boolean;
   /** Branded register exports (XLSX) filed to this module's ISO folder */
   registerExports?: { label: string; downloadPath: string; isoSubfolder?: string }[];
+  /** Show the published report register (DPR / WPR snapshots) above the folder browser */
+  reportKind?: "dpr" | "wpr";
 };
 
 export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
@@ -136,6 +140,22 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     hubPath: "hub/auditKpi",
     subtitle: "Site audit pack, KPI dashboard workbooks, findings register exports.",
   },
+  dpr: {
+    root: "07_EXECUTION_AND_DELIVERY/07.02_Daily_Site_Records",
+    title: "DPR files",
+    eyebrow: "Reports · DPR · ISO 07.02",
+    hubPath: "hub/reports",
+    subtitle: "Every published Daily Progress Report (one Sharnam-branded workbook per discipline per day) with its SharePoint copy — review, download or reopen in the DPR maker.",
+    reportKind: "dpr",
+  },
+  wpr: {
+    root: "10_PERFORMANCE_HANDOVER_AND_IMPROVEMENT/10.01_Progress_Reporting_MIS",
+    title: "WPR files",
+    eyebrow: "Reports · WPR · ISO 10.01",
+    hubPath: "hub/reports",
+    subtitle: "Published Weekly Progress Reports — Sharnam workbook, client-format pack, PPTX and PDF per week — with the SharePoint copies.",
+    reportKind: "wpr",
+  },
   inspection: {
     root: "08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards",
     title: "Inspection files",
@@ -158,6 +178,8 @@ export function moduleFilesKeyFromRoute(segment: string): ModuleFilesKey | null 
     comms: "comms",
     "audit-kpi": "auditKpi",
     inspection: "inspection",
+    dpr: "dpr",
+    wpr: "wpr",
   };
   return map[segment] || null;
 }

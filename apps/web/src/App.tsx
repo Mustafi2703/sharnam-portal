@@ -257,6 +257,8 @@ export default function App() {
                   <Route path="safety/files" element={<ModuleFilesPage moduleKey="safety" />} />
                   <Route path="progress/files" element={<ModuleFilesPage moduleKey="progress" />} />
                   <Route path="reports/files" element={<ModuleFilesPage moduleKey="reports" />} />
+                  <Route path="dpr/files" element={<ModuleFilesPage moduleKey="dpr" />} />
+                  <Route path="wpr/files" element={<ModuleFilesPage moduleKey="wpr" />} />
                   <Route path="cost/files" element={<ModuleFilesPage moduleKey="cost" />} />
                   <Route path="finance/files" element={<ModuleFilesPage moduleKey="finance" />} />
                   <Route path="comms/files" element={<ModuleFilesPage moduleKey="comms" />} />

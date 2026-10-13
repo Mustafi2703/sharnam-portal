@@ -713,7 +713,7 @@ dprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
 
   const updated = await prisma.dprSnapshot.update({
     where: { id: existing.id },
-    data: { status: "Published", publishedAt: new Date(), publishedPath: saved.path },
+    data: { status: "Published", publishedAt: new Date(), publishedPath: saved.path, publishedUrl: saved.sharePointUrl || saved.url || null },
   });
 
   await audit("dpr.published", {
@@ -724,6 +724,7 @@ dprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
   res.json({
     ok: true, id: updated.id, status: updated.status,
     publishedAt: updated.publishedAt, publishedPath: updated.publishedPath,
+    publishedUrl: updated.publishedUrl, sharePointUrl: saved.sharePointUrl || null,
     provider: saved.provider, url: saved.url,
   });
 });
@@ -738,7 +739,7 @@ dprMakerRouter.get("/:projectId/recent", async (req, res) => {
     take: 60,
     select: {
       id: true, logDate: true, discipline: true,
-      status: true, publishedAt: true, publishedPath: true, updatedAt: true,
+      status: true, publishedAt: true, publishedPath: true, publishedUrl: true, updatedAt: true,
     },
   });
   res.json(rows);

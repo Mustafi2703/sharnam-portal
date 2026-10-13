@@ -718,12 +718,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   ],
   reports: [
     { to: "dpr-maker", label: "DPR maker", blurb: "Fill SPDC INPUT → publish template XLSX per discipline.", sheet: "SPDC_DPR_*_DASHBOARD" },
+    { to: "dpr/files", label: "DPR files", blurb: "Review every published DPR (per discipline, per day) and its SharePoint copy — ISO 07.02." },
+    { to: "wpr-maker", label: "WPR maker", blurb: "24-section weekly pack · photos · sign-off.", sheet: "WPR File" },
+    { to: "wpr/files", label: "WPR files", blurb: "Review every published WPR — Sharnam workbook, client pack, PPTX, PDF — ISO 10.01." },
     {
       to: "reports/files",
       label: "Reports files",
-      blurb: "Published WPR/DPR packs and MIS exports in SharePoint.",
+      blurb: "MIS exports and other report files in SharePoint.",
     },
-    { to: "wpr-maker", label: "WPR maker", blurb: "24-section weekly pack · photos · sign-off.", sheet: "WPR File" },
     { to: "reports", label: "DPR dashboard", query: "kind=dpr", blurb: "Live KPIs + downloadable client pack.", sheet: "DPR-Sharnam PMC" },
     { to: "reports", label: "WPR dashboard", query: "kind=wpr", blurb: "Weekly register + downloadable pack.", sheet: "WPR File" },
   ],
