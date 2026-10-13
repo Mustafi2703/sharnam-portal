@@ -110,89 +110,21 @@ export async function publishQualityNcrRegisterToDrive(projectId: string): Promi
   });
   if (!project?.code) return [];
 
-  const ncrs = await prisma.qualityNcr.findMany({
-    where: { projectId },
-    orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }],
-  });
-
-  const XLSX = (await import("../lib/xlsx.js")).default;
-  const rows: (string | number)[][] = [
-    ["NON CONFORMANCE AND CORRECTIVE ACTION REQUEST (CAR) REGISTER"],
-    [],
-    [
-      "No.",
-      "NCR Issue Date",
-      "Type",
-      "Contractor",
-      "Brief Description of Non Conformance",
-      "Location",
-      "Planned Closure Date",
-      "Actual Closure Date",
-      "Status",
-      "Fill phase",
-    ],
-  ];
-  for (const n of ncrs) {
-    const phase = ncrFillPhase(n);
-    rows.push([
-      n.number || "",
-      day(n.issueDate || n.createdAt),
-      n.ncrType || (/^CAR/i.test(n.number || "") ? "Corrective Action" : "General"),
-      n.contractor || "",
-      n.description || "",
-      n.location || "",
-      day(n.plannedClosure),
-      day(n.actualClosure),
-      n.status || "Open",
-      phase,
-    ]);
-  }
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 16 },
-    { wch: 22 },
-    { wch: 48 },
-    { wch: 16 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 10 },
-  ];
-  XLSX.utils.book_append_sheet(wb, ws, "NCR REGISTER");
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  const stamped = await stampSpdcWorkbookLogo(buf);
-
+  // One register per report type, each in the client's NCR 01 "NCR REGISTER" layout with Sharnam + client logos.
+  const { buildNcrRegisterXlsx } = await import("./ncrRegister.js");
   const liveFolder = `${MODULE_TO_ISO_FOLDER.ncr}/Quality/_Registers`;
   const week = drawingRegisterWeekStamp();
   const weekFolder = `${liveFolder}/Weekly/${week}`;
   const exports: NcrDriveExport[] = [];
 
-  const live = await mockOneDrive.upload(
-    project.code,
-    liveFolder,
-    "SPDC_NCR_CAR_Register.xlsx",
-    stamped,
-    XLSX_MIME,
-    { replace: true }
-  );
-  exports.push({ kind: "register", path: live.sharePointPath || live.path, url: live.sharePointUrl || live.url });
-
-  const weekFile = await mockOneDrive.upload(
-    project.code,
-    weekFolder,
-    "SPDC_NCR_CAR_Register.xlsx",
-    stamped,
-    XLSX_MIME,
-    { replace: true }
-  );
-  exports.push({
-    kind: "register",
-    path: weekFile.sharePointPath || weekFile.path,
-    url: weekFile.sharePointUrl || weekFile.url,
-  });
+  for (const kind of ["NCR", "CAR"] as const) {
+    const buf = await buildNcrRegisterXlsx(projectId, kind);
+    const fileName = `SPDC_${kind}_Register.xlsx`;
+    const live = await mockOneDrive.upload(project.code, liveFolder, fileName, buf, XLSX_MIME, { replace: true });
+    exports.push({ kind: "register", path: live.sharePointPath || live.path, url: live.sharePointUrl || live.url });
+    const weekFile = await mockOneDrive.upload(project.code, weekFolder, fileName, buf, XLSX_MIME, { replace: true });
+    exports.push({ kind: "register", path: weekFile.sharePointPath || weekFile.path, url: weekFile.sharePointUrl || weekFile.url });
+  }
 
   return exports;
 }

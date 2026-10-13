@@ -2646,6 +2646,21 @@ checklistRouter.post(
       }
     }
 
+    // "Attention to": the concerned individual on the communication matrix (by contact id, or name + email).
+    let toName = body.toName ? String(body.toName).trim() : "";
+    let toEmail = body.toEmail ? String(body.toEmail).trim().toLowerCase() : "";
+    if (body.toContactId) {
+      const contact = await prisma.communicationContact.findFirst({
+        where: { id: String(body.toContactId), projectId: req.params.projectId },
+        select: { personName: true, email: true, designation: true, company: true, orgName: true },
+      });
+      if (contact) {
+        toName = [contact.personName, contact.designation, contact.company || contact.orgName].filter(Boolean).join(" · ") || toName;
+        toEmail = (contact.email || toEmail || "").trim().toLowerCase();
+      }
+    }
+    if (toEmail && !toEmail.includes("@")) toEmail = "";
+
     const raiser = await prisma.user.findUnique({
       where: { id: req.user!.id },
       select: { fullName: true },
@@ -2657,11 +2672,16 @@ checklistRouter.post(
             ...body.formDataJson,
             contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
             contractorEmail: contractorEmail || undefined,
+            toName: toName || body.formDataJson.toName || undefined,
+            toEmail: toEmail || body.formDataJson.toEmail || undefined,
+            toParty: body.formDataJson.toParty || (toName ? `${toName} — ${contractorName}` : contractorName),
           }
         : {
             projectName: project?.name || project?.code || "",
             fromParty: "Sharnam Project Development Consultants & Co.",
-            toParty: contractorName,
+            toParty: toName ? `${toName} — ${contractorName}` : contractorName,
+            toName: toName || undefined,
+            toEmail: toEmail || undefined,
             actionRequired: body.actionRequired ? String(body.actionRequired) : "",
             contractorVendorId: body.contractorVendorId ? String(body.contractorVendorId) : undefined,
             contractorEmail: contractorEmail || undefined,
@@ -2737,6 +2757,8 @@ checklistRouter.post(
       event: "created",
       contractorEmail,
       contractorName,
+      attentionEmail: toEmail || null,
+      attentionName: toName || null,
       location: row.location,
       plannedClosure: row.plannedClosure,
     });
@@ -3380,10 +3402,11 @@ checklistRouter.get("/project/:projectId/ncr-register/download.xlsx", async (req
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
   if (!project) return res.status(404).json({ error: "Project not found" });
   const { buildNcrRegisterXlsx } = await import("../services/ncrRegister.js");
-  const { stampSpdcWorkbookLogo } = await import("../services/brandedExport.js");
-  const buf = await stampSpdcWorkbookLogo(await buildNcrRegisterXlsx(req.params.projectId));
+  const kindRaw = String(req.query.kind || "ALL").toUpperCase();
+  const kind = kindRaw === "NCR" || kindRaw === "CAR" ? kindRaw : "ALL";
+  const buf = await buildNcrRegisterXlsx(req.params.projectId, kind);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="NCR-Register-${project.code}.xlsx"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${kind === "ALL" ? "NCR-CAR" : kind}-Register-${project.code}.xlsx"`);
   res.send(buf);
 });
 

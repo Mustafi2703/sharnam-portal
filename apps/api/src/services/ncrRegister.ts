@@ -11,8 +11,26 @@ import { resolveNcrTemplatePath } from "./ncrFormExport.js";
 const FIRST = 5;
 const LAST_SAMPLE = 99;
 
-export async function buildNcrRegisterXlsx(projectId: string): Promise<Buffer> {
-  const ncrs = await prisma.qualityNcr.findMany({ where: { projectId }, orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }] });
+export type NcrRegisterKind = "NCR" | "CAR" | "ALL";
+
+/** CAR rows are the ones numbered CAR-… or typed "Corrective Action"; everything else is an NCR. */
+export function isCarRow(n: { number?: string | null; ncrType?: string | null }): boolean {
+  return /^CAR/i.test(String(n.number || "")) || /corrective/i.test(String(n.ncrType || ""));
+}
+
+export const NCR_REGISTER_TITLE: Record<NcrRegisterKind, string> = {
+  NCR: "NON CONFORMANCE REPORT (NCR) REGISTER",
+  CAR: "CORRECTIVE ACTION REQUEST (CAR) REGISTER",
+  ALL: "NON CONFORMANCE AND CORRECTIVE ACTION REGISTER",
+};
+
+/**
+ * The register in the client's NCR 01 "NCR REGISTER" layout. `kind` picks the report the register is kept for:
+ * NCR register (NCRs only), CAR register (CARs only) or the combined view.
+ */
+export async function buildNcrRegisterXlsx(projectId: string, kind: NcrRegisterKind = "ALL"): Promise<Buffer> {
+  const all = await prisma.qualityNcr.findMany({ where: { projectId }, orderBy: [{ issueDate: "asc" }, { createdAt: "asc" }] });
+  const ncrs = kind === "ALL" ? all : all.filter((n) => (kind === "CAR" ? isCarRow(n) : !isCarRow(n)));
   const tpl = resolveNcrTemplatePath("NCR 01 .xlsx");
   const wb = new ExcelJS.Workbook();
   if (tpl) await wb.xlsx.readFile(tpl);
@@ -27,13 +45,20 @@ export async function buildNcrRegisterXlsx(projectId: string): Promise<Buffer> {
   }
   // The register file carries the register only — the single-NCR form sheet is downloaded per NCR.
   for (const other of [...wb.worksheets]) if (other.id !== ws.id) wb.removeWorksheet(other.id);
+  // Title row (row 2 in the template) names the register being kept.
+  for (let r = 1; r <= 3; r++) {
+    for (let c = 1; c <= 9; c++) {
+      const cell = ws.getCell(r, c);
+      if (typeof cell.value === "string" && /register/i.test(cell.value)) cell.value = NCR_REGISTER_TITLE[kind];
+    }
+  }
   for (let r = FIRST; r <= LAST_SAMPLE; r++) for (let c = 1; c <= 9; c++) ws.getCell(r, c).value = null;
   ncrs.forEach((n, i) => {
     const r = FIRST + i;
     const day = (d?: Date | null) => (d ? new Date(d) : null);
     ws!.getCell(r, 1).value = n.number || i + 1;
     ws!.getCell(r, 2).value = day(n.issueDate);
-    ws!.getCell(r, 3).value = n.ncrType || "";
+    ws!.getCell(r, 3).value = n.ncrType || (isCarRow(n) ? "Corrective Action" : "General");
     ws!.getCell(r, 4).value = n.contractor || "";
     ws!.getCell(r, 5).value = n.description;
     ws!.getCell(r, 6).value = n.location || "";

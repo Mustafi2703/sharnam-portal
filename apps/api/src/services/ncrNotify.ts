@@ -57,6 +57,9 @@ export async function notifyNcrStatus(opts: {
   event: "created" | "updated" | "closed";
   contractorEmail?: string | null;
   contractorName?: string | null;
+  /** Concerned individual on the communication matrix ("Attention to") — gets the action-required notice as well. */
+  attentionEmail?: string | null;
+  attentionName?: string | null;
   location?: string | null;
   plannedClosure?: Date | string | null;
   formParsed?: Record<string, unknown> | null;
@@ -135,22 +138,27 @@ export async function notifyNcrStatus(opts: {
     opts.contractorEmail?.trim() ||
     (await resolveNcrContractorEmail(opts.projectId, opts.formParsed, opts.contractorName));
 
-  if (opts.event === "created" && contractorEmail) {
+  const attention = String(opts.attentionEmail || (opts.formParsed as Record<string, unknown> | null | undefined)?.toEmail || "").trim().toLowerCase();
+  if (opts.event === "created" && (contractorEmail || attention)) {
     const contractorMail = buildNcrRaisedEmail({
       ctx: emailCtx,
       registerUrl,
       formUrl,
       forContractor: true,
     });
+    // The concerned individual (matrix) is addressed directly; the contractor mailbox is copied when different.
+    const to = attention || contractorEmail || "";
+    const cc = contractorEmail && contractorEmail.toLowerCase() !== to ? contractorEmail : undefined;
     try {
       await queueProjectEmail({
         projectId: opts.projectId,
-        subject: `[Action required] ${label} ${opts.number} — ${project?.code || "Project"}`,
+        subject: `[Action required] ${label} ${opts.number} — ${project?.code || "Project"}${opts.attentionName ? ` · Attn: ${opts.attentionName}` : ""}`,
         body: contractorMail.bodyText,
         bodyHtml: contractorMail.bodyHtml,
         context: "ncr.contractor_notice",
         createdById: opts.createdById,
-        toOverride: contractorEmail,
+        toOverride: to,
+        ccOverride: cc,
       });
     } catch {
       /* optional */

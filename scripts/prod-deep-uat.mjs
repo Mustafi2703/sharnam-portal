@@ -332,13 +332,14 @@ async function sectionSetup() {
     assert(reeca, "Reeca Infrastructure not in the vendor directory");
     state.vendorId = reeca.id;
     state.vendorName = reeca.name;
+    state.vendorEmail = String(reeca.email || USERS.vendor.email || "").toLowerCase();
     const dir = ok(await call("office", "GET", `/api/directory/project/${p.id}/overview`), "directory");
     const linked = (dir.vendors || []).some((v) => v.vendorId === reeca.id);
     if (!linked) ok(await call("office", "POST", `/api/vendors/project/${p.id}/assign`, { vendorId: reeca.id, tradeRole: "Civil contractor", packages: ["Civil"] }), "assign Reeca");
     const matrix = ok(await call("office", "GET", `/api/comms/matrix/${p.id}`), "matrix");
     const contacts = ok(await call("office", "GET", `/api/comms/contacts/${p.id}`), "contacts");
     const crows = Array.isArray(contacts) ? contacts : contacts.rows || [];
-    state.matrixPeople = crows.filter((c) => !c.isSectionHeader && c.email).map((c) => ({ org: c.orgSection, name: String(c.personName || "").trim(), email: c.email, designation: String(c.designation || "").trim() }));
+    state.matrixPeople = crows.filter((c) => !c.isSectionHeader && c.email).map((c) => ({ id: c.id, org: c.orgSection, name: String(c.personName || "").trim(), email: c.email, designation: String(c.designation || "").trim() }));
     const consultantOnMatrix = state.matrixPeople.find((c) => c.email === USERS.consultant.email);
     assert(consultantOnMatrix, "Consultant is not on the Voltamp communication matrix (contacts)");
     const rfiRoles = matrix.filter((m) => /rfi|concern/i.test(`${m.communicationType} ${m.channel}`)).flatMap((m) => [m.fromRole, m.toRole]);
@@ -691,8 +692,13 @@ async function sectionFills() {
 // ═══════════════════════════════ 7. Quality ═══════════════════════════════
 const NCR_CLOSE = (who, when) => ({ contractorActed: "Yes", followUpEffective: "Yes", pursueFurtherCosts: "No", siteSetupModification: "No", correctiveActionDetail: `${TAG} re-work verified by PMC on ${fmt(when)}.`, actionByWhom: who, actionCompleted: when, verifiedBy: "Jaideep Parmar (SPDC)", signedPmc: "Jaideep Parmar", positionPmc: "Site engineer — PMC" });
 async function raiseNcr({ kind, description, location, type, week, action }) {
-  const r = await call("site", "POST", `/api/checklist/project/${pid()}/ncr`, { kind, contractorVendorId: state.vendorId, contractor: state.vendorName, description, location, ncrType: type, issueDate: week.days[2], plannedClosure: addDays(week.days[2], 7), actionRequired: action, formDataJson: { raisedBy: "Jaideep Parmar (SPDC site)", weekLabel: week.label, actionRequired: action } }, { timeoutMs: 240000 });
-  if (r.status < 300) return { id: r.body.id, number: r.body.number, filed: r.body.sharePointExports?.length ?? 0, pending: !!r.body.sharePointPending };
+  // "Attention to": the contractor's person on the communication matrix (falls back to any contractor-side contact).
+  const attn = state.matrixPeople.find((c) => /contractor|vendor/i.test(c.org || "") && c.email === (state.vendorEmail || "")) || state.matrixPeople.find((c) => /contractor|vendor/i.test(c.org || "")) || null;
+  const r = await call("site", "POST", `/api/checklist/project/${pid()}/ncr`, { kind, toContactId: attn?.id, contractorVendorId: state.vendorId, contractor: state.vendorName, description, location, ncrType: type, issueDate: week.days[2], plannedClosure: addDays(week.days[2], 7), actionRequired: action, formDataJson: { raisedBy: "Jaideep Parmar (SPDC site)", weekLabel: week.label, actionRequired: action } }, { timeoutMs: 240000 });
+  if (r.status < 300) {
+    const form = (() => { try { return JSON.parse(r.body.formDataJson || "{}"); } catch { return {}; } })();
+    return { id: r.body.id, number: r.body.number, filed: r.body.sharePointExports?.length ?? 0, pending: !!r.body.sharePointPending, attn: form.toName || null };
+  }
   const dash = ok(await call("office", "GET", `/api/checklist/project/${pid()}/quality-dashboard`), "dashboard");
   const found = (dash.ncrs || []).find((n) => n.description === description);
   assert(found, `${kind} ${r.status} ${noteOf(r.body)} and not found in register`);
@@ -763,9 +769,12 @@ async function sectionQuality() {
     const ncr3 = await raiseNcr({ kind: "NCR", description: `${TAG} Anchor bolt projection short by 20 mm at A4 (${WEEKS[2].label})`, location: "Grid A4", type: "Dimensional", week: WEEKS[2], action: "Submit PEB vendor's remedial detail (coupler / extension) for PMC approval before erection." });
     ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr3.id}`, { formDataJson: { workCarriedOutNote: `${TAG} PEB vendor remedial detail (threaded coupler) submitted ${fmt(WEEKS[2].days[4])}; awaiting PMC approval.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: state.vendorName } }), "ncr3 response");
     const log = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-fill-log`);
-    const reg = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-register/download.xlsx`);
+    const regN = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-register/download.xlsx?kind=NCR`);
+    const regC = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-register/download.xlsx?kind=CAR`);
+    assert(regN.status === 200 && regN.bytes > 2000 && regC.status === 200 && regC.bytes > 2000, `registers ${regN.status}/${regC.status}`);
     remember("ncrs", car.number, ncr3.number);
-    return `${car.number} closed · ${ncr3.number} open (contractor answered) · fill log ${log.status} · register xlsx ${kb(reg.bytes)}`;
+    state.sharepoint.push({ label: "NCR register + CAR register (separate, NCR 01 layout)", path: "08_QUALITY_HSE_AND_ENVIRONMENT/08.06_Control_of_Nonconforming_Output/Quality/_Registers (SPDC_NCR_Register.xlsx · SPDC_CAR_Register.xlsx)", url: null });
+    return `${car.number} closed${car.attn ? ` (attn ${car.attn})` : ""} · ${ncr3.number} open (contractor answered) · fill log ${log.status} · NCR register ${kb(regN.bytes)} · CAR register ${kb(regC.bytes)}`;
   });
   await step("QA-6", "Quality dashboard (charts) saved to SharePoint 08.01; vendor sees only its own NCRs", "office", async () => {
     const dash = ok(await call("office", "GET", `/api/checklist/project/${pid()}/quality-dashboard`), "dashboard");

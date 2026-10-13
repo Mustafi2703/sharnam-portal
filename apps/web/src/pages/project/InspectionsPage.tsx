@@ -53,9 +53,12 @@ export default function InspectionsPage() {
   const [qiAssignments, setQiAssignments] = useState<any[]>([]);
   const [irBusy, setIrBusy] = useState(false);
   const [projectVendors, setProjectVendors] = useState<any[]>([]);
+  const [matrixContacts, setMatrixContacts] = useState<any[]>([]);
+  const [ncrRegisterKind, setNcrRegisterKind] = useState<"ALL" | "NCR" | "CAR">("ALL");
   const [active, setActive] = useState<string | null>(null);
   const [ncrForm, setNcrForm] = useState({
     kind: "NCR" as "NCR" | "CAR",
+    toContactId: "",
     number: "",
     ncrType: "",
     description: "",
@@ -90,6 +93,8 @@ export default function InspectionsPage() {
   const canManage =
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
   const isOfficeAdmin = user?.role === "admin" || user?.role === "office";
+  const isCarRow = (n: any) => /^CAR/i.test(String(n?.number || "")) || /corrective/i.test(String(n?.ncrType || ""));
+  const ncrRows: any[] = (dash?.ncrs || []).filter((n: any) => (ncrRegisterKind === "ALL" ? true : ncrRegisterKind === "CAR" ? isCarRow(n) : !isCarRow(n)));
 
   const [weekStart, setWeekStart] = useState(() => {
     const t = new Date();
@@ -141,6 +146,9 @@ export default function InspectionsPage() {
       api(`/api/projects/${id}/sheet-pack`, { token }).catch(() => null),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
     ]);
+    api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token })
+      .then((rows) => setMatrixContacts((Array.isArray(rows) ? rows : []).filter((r) => !r.isSectionHeader && (r.personName || r.email))))
+      .catch(() => setMatrixContacts([]));
     setData(insp);
     setDash(dashRes);
     setPack(packRes);
@@ -227,6 +235,7 @@ export default function InspectionsPage() {
         token,
         body: JSON.stringify({
           kind: ncrForm.kind,
+          toContactId: ncrForm.toContactId || undefined,
           number: ncrForm.number || undefined,
           ncrType: ncrForm.ncrType || (ncrForm.kind === "CAR" ? "Corrective Action" : "General"),
           description: ncrForm.description,
@@ -248,6 +257,7 @@ export default function InspectionsPage() {
       });
       setNcrForm({
         kind: ncrForm.kind,
+        toContactId: "",
         number: "",
         ncrType: "",
         description: "",
@@ -594,8 +604,8 @@ export default function InspectionsPage() {
         <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden gap-2">
           <div className="shrink-0">
         <ReferenceSheetToolbar
-          sheetLabel="NCR / CAR register — Quality Dashboard"
-          rowCount={dash?.ncrs?.length}
+          sheetLabel={ncrRegisterKind === "NCR" ? "NCR register — Quality Dashboard" : ncrRegisterKind === "CAR" ? "CAR register — Quality Dashboard" : "NCR / CAR register — Quality Dashboard"}
+          rowCount={ncrRows.length}
           canEdit={canManage}
           message={msg || undefined}
           onAddRow={canManage ? () => setNcrAddOpen(true) : undefined}
@@ -619,9 +629,48 @@ export default function InspectionsPage() {
           }
           onDownloadXlsx={async () => {
             if (!id) return;
-            await downloadAuthFile(`/api/checklist/project/${id}/ncr-register/download.xlsx`, token, `NCR-Register-${project?.code || id}.xlsx`);
+            await downloadAuthFile(
+              `/api/checklist/project/${id}/ncr-register/download.xlsx?kind=${ncrRegisterKind}`,
+              token,
+              `${ncrRegisterKind === "ALL" ? "NCR-CAR" : ncrRegisterKind}-Register-${project?.code || id}.xlsx`
+            );
           }}
         />
+        </div>
+        {/* NCR and CAR are kept as separate registers (each in the client's NCR 01 register layout, Sharnam + client logos). */}
+        <div className="shrink-0 flex flex-wrap items-stretch gap-2">
+          {(["ALL", "NCR", "CAR"] as const).map((k) => {
+            const rows = (dash?.ncrs || []).filter((n: any) => (k === "ALL" ? true : k === "CAR" ? isCarRow(n) : !isCarRow(n)));
+            const open = rows.filter((n: any) => n.status === "Open").length;
+            const overdue = rows.filter((n: any) => n.status === "Open" && n.plannedClosure && new Date(n.plannedClosure) < new Date()).length;
+            const on = ncrRegisterKind === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setNcrRegisterKind(k)}
+                className={`text-left rounded-lg border px-3 py-2 min-w-[11rem] transition ${on ? "border-brand bg-brand/5 shadow-sm" : "border-line bg-white hover:bg-sand/40"}`}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-steel-muted">
+                  {k === "ALL" ? "All reports" : k === "NCR" ? "NCR register" : "CAR register"}
+                </div>
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <span className="text-xl font-semibold text-ink">{rows.length}</span>
+                  <span className="text-xs text-steel-muted">
+                    {open} open · {rows.length - open} closed{overdue ? ` · ${overdue} overdue` : ""}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+          <div className="flex flex-col justify-center gap-1 ml-auto">
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => id && void downloadAuthFile(`/api/checklist/project/${id}/ncr-register/download.xlsx?kind=NCR`, token, `NCR-Register-${project?.code || id}.xlsx`)}>
+              NCR register (XLSX)
+            </Button>
+            <Button type="button" variant="secondary" className="!text-xs" onClick={() => id && void downloadAuthFile(`/api/checklist/project/${id}/ncr-register/download.xlsx?kind=CAR`, token, `CAR-Register-${project?.code || id}.xlsx`)}>
+              CAR register (XLSX)
+            </Button>
+          </div>
         </div>
         <Card padding={false} className="register-table-panel spdc-register-panel register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-line shrink-0 flex flex-wrap items-start justify-between gap-2">
@@ -675,7 +724,7 @@ export default function InspectionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {(dash?.ncrs || []).map((n: any) => {
+                {ncrRows.map((n: any) => {
                   const compliance = ncrComplianceSummary(n.formDataJson);
                   return (
                   <tr key={n.id}>
@@ -778,10 +827,10 @@ export default function InspectionsPage() {
                   </tr>
                   );
                 })}
-                {!dash?.ncrs?.length && (
+                {!ncrRows.length && (
                   <tr>
-                    <td colSpan={canManage ? 7 : 6} className="empty text-left">
-                      No NCR rows yet — raise one above.
+                    <td colSpan={canManage ? 11 : 10} className="empty text-left">
+                      No {ncrRegisterKind === "ALL" ? "NCR / CAR" : ncrRegisterKind} rows yet — raise one above.
                     </td>
                   </tr>
                 )}
@@ -859,6 +908,18 @@ export default function InspectionsPage() {
                   onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value, toParty: e.target.value })}
                   placeholder="Contractor / agency name"
                 />
+              </label>
+              <label className="ncr01-field sm:col-span-2">
+                <span>Attention to — concerned individual on the communication matrix (receives the {ncrForm.kind} by email)</span>
+                <Select value={ncrForm.toContactId} onChange={(e) => setNcrForm({ ...ncrForm, toContactId: e.target.value })}>
+                  <option value="">Company mailbox only (no individual)</option>
+                  {matrixContacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {[c.personName, c.designation, c.company || c.orgName].filter(Boolean).join(" · ")}
+                      {c.email ? ` — ${c.email}` : " — no email on matrix"}
+                    </option>
+                  ))}
+                </Select>
               </label>
               <label className="ncr01-field">
                 <span>From (PMC)</span>
