@@ -184,7 +184,7 @@ export default function QapPage() {
   }
 
   return (
-    <div className="qap-page flex flex-col gap-3 pb-2 min-w-0 w-full flex-1 min-h-0 overflow-hidden">
+    <div className="qap-page page-scroll-full flex flex-col gap-3 pb-8 min-w-0 w-full">
       <div className="shrink-0">
       <PageHeader
         eyebrow="Quality module"
@@ -383,7 +383,7 @@ export default function QapPage() {
         />
       )}
 
-      <div className="qap-page__register flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
+      <div className="qap-page__register flex flex-col min-w-0 w-full">
         <QapDetailRegister
           projectId={id!}
           token={token}

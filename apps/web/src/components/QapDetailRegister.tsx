@@ -210,7 +210,7 @@ export function QapDetailRegister({
   return (
     <>
       <QapPickerLists rows={rows} />
-      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
+      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col min-w-0 w-full">
         {loading && (
           <div className="spdc-register-loading" aria-live="polite">
             Loading QAP register…
@@ -248,8 +248,8 @@ export function QapDetailRegister({
           Scroll ↔ ↕ inside sheet · project details stay fixed above · saves on blur
         </div>
 
-        <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line min-w-0">
-          <RegisterScrollArea tall className="flex-1 min-h-0 qap-register__scroll sheet-register__scroll">
+        <div className="sheet-register register-sheet-shell flex flex-col min-w-0 w-full border-t border-line">
+          <RegisterScrollArea tall className="qap-register__scroll sheet-register__scroll">
             <table className="qap-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>

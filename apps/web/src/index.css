@@ -2621,57 +2621,70 @@ html.is-tool-window #root {
 }
 
 /*
- * QAP register — same flex scroll chain as RFI.
- * Generic .tool-workspace--window .register-scroll-area { overflow-y: visible; min-height: 0 }
- * collapses the sheet to a tiny strip. Pin outlet → page → panel → sheet → scroll area.
+ * QAP — outlet scrolls the page; sheet body gets an explicit tall viewport.
+ * Flex height:0 chains fail here because header/toolbar chrome can consume the
+ * whole tool window and clip the table (no page scroll + no sheet scroll).
  */
+.tool-main__outlet:has(> .qap-page),
 .tool-workspace--window .tool-main__outlet:has(.qap-page),
-.tool-main__outlet:has(> .qap-page) {
-  overflow: hidden !important;
-  padding-bottom: 0.75rem;
+.tool-main__outlet:has(.qap-page.page-scroll-full) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  padding-bottom: 1.5rem;
 }
-.tool-workspace--window .tool-main__outlet > .qap-page,
 .tool-main__outlet > .qap-page,
-.tool-workspace--window .qap-page {
-  flex: 1 1 0% !important;
-  height: 0 !important;
+.tool-main__outlet > .qap-page.page-scroll-full,
+.tool-workspace--window .tool-main__outlet > .qap-page,
+.tool-workspace--window .qap-page,
+.tool-workspace--window .qap-page.page-scroll-full {
+  flex: none !important;
+  height: auto !important;
   min-height: 0 !important;
   max-height: none !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   display: flex !important;
   flex-direction: column !important;
 }
+.tool-main__outlet > .qap-page .qap-page__register,
+.tool-main__outlet > .qap-page .spdc-register-panel,
+.tool-main__outlet > .qap-page .register-panel-fill,
+.tool-main__outlet > .qap-page .register-sheet-shell,
+.tool-main__outlet > .qap-page .sheet-register,
 .tool-workspace--window .qap-page .qap-page__register,
 .tool-workspace--window .qap-page .spdc-register-panel,
 .tool-workspace--window .qap-page .register-panel-fill,
 .tool-workspace--window .qap-page .register-sheet-shell,
 .tool-workspace--window .qap-page .sheet-register,
-.tool-main__outlet > .qap-page .qap-page__register,
-.tool-main__outlet > .qap-page .spdc-register-panel,
-.tool-main__outlet > .qap-page .register-panel-fill,
-.tool-main__outlet > .qap-page .register-sheet-shell {
-  flex: 1 1 0% !important;
-  height: 0 !important;
+.tool-workspace--window .qap-page .register-table-panel {
+  flex: none !important;
+  height: auto !important;
   min-height: 0 !important;
   max-height: none !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   display: flex !important;
   flex-direction: column !important;
 }
+.tool-main__outlet > .qap-page .register-scroll-area,
+.tool-main__outlet > .qap-page .register-sheet-viewport,
+.tool-main__outlet > .qap-page .qap-register__scroll,
+.tool-main__outlet > .qap-page .sheet-register__scroll,
+.tool-main__outlet > .qap-page .register-sheet-shell > .register-scroll-area,
 .tool-workspace--window .qap-page .register-scroll-area,
 .tool-workspace--window .qap-page .register-sheet-viewport,
 .tool-workspace--window .qap-page .qap-register__scroll,
 .tool-workspace--window .qap-page .sheet-register__scroll,
 .tool-workspace--window .tool-main__outlet .qap-page .register-scroll-area,
-.tool-workspace--window .tool-main__outlet .qap-page .register-sheet-viewport,
-.tool-main__outlet > .qap-page .register-scroll-area,
-.tool-main__outlet > .qap-page .register-sheet-viewport,
-.tool-main__outlet > .qap-page .qap-register__scroll,
-.tool-main__outlet > .qap-page .register-sheet-shell > .register-scroll-area {
-  flex: 1 1 0% !important;
-  height: 0 !important;
+.tool-workspace--window .tool-main__outlet .qap-page .register-sheet-viewport {
+  flex: none !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: min(70dvh, calc(100dvh - 12rem)) !important;
   min-height: min(28rem, 55dvh) !important;
-  max-height: none !important;
+  max-height: min(70dvh, calc(100dvh - 12rem)) !important;
   overflow: auto !important;
   overflow-x: auto !important;
   overflow-y: auto !important;
