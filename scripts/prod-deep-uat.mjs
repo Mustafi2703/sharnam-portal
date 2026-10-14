@@ -786,8 +786,8 @@ async function assignTemplate(name) {
   return { assignmentId: a.id, templateId: t.id, name: t.name, items: full.items || [], type: t.checklistType };
 }
 function fillForm(tpl, who, signer, extra = {}) {
-  // Meet overall requirePhotosMin (often 3) via SharePoint-style evidence links — avoids gateway 504 from huge multipart.
-  // One real photo per "photo required" line still uploaded for realism (ITEM_PHOTO_MIN default is 1).
+  // Evidence links satisfy requirePhotosMin + per-line photo rules without multipart photo spam (gateway 504).
+  // Signature PNG only — keeps submit under the ~60s Hostinger limit.
   const responses = Object.fromEntries(
     tpl.items.map((i, k) => {
       const evidenceLinks = [];
@@ -797,9 +797,6 @@ function fillForm(tpl, who, signer, extra = {}) {
     }),
   );
   const files = [{ field: "signature", buffer: signaturePng(who.length), type: "image/png", name: "signature.png" }];
-  for (const it of tpl.items.filter((i) => i.requirePhoto)) {
-    files.push({ field: `item_${it.id}_photo`, buffer: sitePhoto(1 + it.id.length), type: "image/png", name: `${it.itemCode || "item"}-1.png` });
-  }
   return form({ responsesJson: responses, remarks: `${tpl.name}`, status: "Submitted", signerNameInspector: signer, ...extra }, files);
 }
 async function sectionFills() {
