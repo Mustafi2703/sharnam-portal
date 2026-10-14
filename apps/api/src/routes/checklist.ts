@@ -109,7 +109,8 @@ function istStamp(d: Date): string {
 }
 
 /** Photos needed on every checklist line marked "photo required". */
-const ITEM_PHOTO_MIN = Number(process.env.CHECKLIST_ITEM_PHOTOS_MIN) || 3;
+/** One clear photo (or link) per flagged line is enough for site bandwidth; overall requirePhotosMin still applies. */
+const ITEM_PHOTO_MIN = Number(process.env.CHECKLIST_ITEM_PHOTOS_MIN) || 1;
 
 type QualityPublishJob = {
   status: "running" | "done" | "failed";
@@ -3534,7 +3535,7 @@ checklistRouter.post(
         issuedTo: body.issuedTo ? String(body.issuedTo) : null,
         correctiveAction: body.correctiveAction ? String(body.correctiveAction) : null,
         reportedById: req.user!.id,
-        source: "portal",
+        source: body.source ? String(body.source).slice(0, 64) : "portal",
       },
     });
     res.status(201).json(row);

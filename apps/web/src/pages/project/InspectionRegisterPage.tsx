@@ -477,6 +477,7 @@ export default function InspectionRegisterPage() {
           projectId={id}
           checklistFamily={tabChecklist.family}
           checklistName={checklistByRowId[selected.id]}
+          checklistAssignments={tabChecklist.assignments}
           token={token}
           onUpdated={load}
         />

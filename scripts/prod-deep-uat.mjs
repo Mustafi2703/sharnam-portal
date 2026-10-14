@@ -21,9 +21,11 @@
  *   UAT_OUT=docs/uat-evidence/modules/CRM               write evidence to a specific folder (per-module runners)
  *   UAT_WEEK1_MONDAY=2026-09-21                         pin week 1
  *
- * Per-module entry points (separate scripts + reports):
- *   node scripts/uat-modules/run.mjs CRM
- *   node scripts/uat-modules/run.mjs --all
+ * Order (separate script per module — see scripts/uat-modules/):
+ *   1. CRM then HRMS          node scripts/uat-modules/phase-1-crm-hrm.mjs
+ *   2. Onboard + three weeks  node scripts/uat-modules/phase-2-three-weeks.mjs
+ *   3. Generate every report  node scripts/uat-modules/phase-3-reports.mjs
+ *   One module:               node scripts/uat-modules/run.mjs HRM
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -260,7 +262,7 @@ async function callOnce(who, method, url, payload, { form, timeoutMs = 180000 } 
   }
   const buf = Buffer.from(await res.arrayBuffer());
   const type = res.headers.get("content-type") || "";
-  const binary = /spreadsheetml|octet-stream|pdf|presentationml|zip|image\//i.test(type) || /\.xlsx|\.pptx|\.pdf/i.test(url);
+  const binary = /spreadsheetml|wordprocessingml|octet-stream|pdf|presentationml|zip|image\//i.test(type) || /\.xlsx|\.pptx|\.pdf|\.docx/i.test(url);
   if (binary) return { status: res.status, body: null, raw: buf, bytes: buf.length, type };
   let parsed = buf.toString("utf8");
   if (type.includes("json") || /^\s*[[{]/.test(parsed.slice(0, 5))) {
@@ -766,9 +768,9 @@ async function sectionRfi() {
     return `${a.number} answered + closed · ${b.number} open`;
   });
   await step("RFI-5", "RFI register Excel / HTML and a filled RFI form; fill log shows the test RFIs", "office", async () => {
-    const reg = await call("office", "GET", `/api/rfis/project/${pid()}/register.xlsx`);
-    const html = await call("office", "GET", `/api/rfis/project/${pid()}/register.html`);
-    const frm = await call("office", "GET", `/api/rfis/${state.rfis[0].id}/download.xlsx`);
+    const reg = await call("office", "GET", `/api/rfis/project/${pid()}/register.xlsx`, undefined, { timeoutMs: 300000 });
+    const html = await call("office", "GET", `/api/rfis/project/${pid()}/register.html`, undefined, { timeoutMs: 120000 });
+    const frm = await call("office", "GET", `/api/rfis/${state.rfis[0].id}/download.xlsx`, undefined, { timeoutMs: 300000 });
     assert(reg.status === 200 && reg.bytes > 500 && html.status === 200 && frm.status === 200 && frm.bytes > 500, `exports ${reg.status}/${html.status}/${frm.status}`);
     return `register ${kb(reg.bytes)} · html ${kb(html.bytes)} · form ${state.rfis[0].number} ${kb(frm.bytes)} (forms auto-filed under 03.06 Open / Closed)`;
   });
@@ -784,10 +786,20 @@ async function assignTemplate(name) {
   return { assignmentId: a.id, templateId: t.id, name: t.name, items: full.items || [], type: t.checklistType };
 }
 function fillForm(tpl, who, signer, extra = {}) {
-  const responses = Object.fromEntries(tpl.items.map((i, k) => [i.id, { answer: "Yes", remarks: k === 0 ? `checked on site` : "OK" }]));
+  // Meet overall requirePhotosMin (often 3) via SharePoint-style evidence links — avoids gateway 504 from huge multipart.
+  // One real photo per "photo required" line still uploaded for realism (ITEM_PHOTO_MIN default is 1).
+  const responses = Object.fromEntries(
+    tpl.items.map((i, k) => {
+      const evidenceLinks = [];
+      if (k < 3) evidenceLinks.push(`https://portal.spdc.in/uat-evidence/${encodeURIComponent(tpl.name)}-${k + 1}.jpg`);
+      if (i.requirePhoto) evidenceLinks.push(`https://portal.spdc.in/uat-evidence/line-${i.id}.jpg`);
+      return [i.id, { answer: "Yes", remarks: k === 0 ? `checked on site` : "OK", evidenceLinks }];
+    }),
+  );
   const files = [{ field: "signature", buffer: signaturePng(who.length), type: "image/png", name: "signature.png" }];
-  // One photo per required line (not 3) — keeps multipart under the ~60s gateway while still enforcing photos.
-  for (const it of tpl.items.filter((i) => i.requirePhoto)) files.push({ field: `item_${it.id}_photo`, buffer: sitePhoto(1 + it.id.length), type: "image/png", name: `${it.itemCode || "item"}-1.png` });
+  for (const it of tpl.items.filter((i) => i.requirePhoto)) {
+    files.push({ field: `item_${it.id}_photo`, buffer: sitePhoto(1 + it.id.length), type: "image/png", name: `${it.itemCode || "item"}-1.png` });
+  }
   return form({ responsesJson: responses, remarks: `${tpl.name}`, status: "Submitted", signerNameInspector: signer, ...extra }, files);
 }
 async function sectionFills() {
@@ -1253,9 +1265,18 @@ async function sectionWpr() {
       const s = pack.sections || {};
       const executed = s.weeklyExecuted?.rows || [];
       assert(executed.length > 0, "weekly executed section has no DPR rows");
-      const pva = (s.plannedVsActual?.rows || []).filter((r) => ACTIVITIES.some((a) => a.activity === r[2]));
+      const pvaHeaders = (s.plannedVsActual?.headers || []).map((h) => String(h));
+      const col = (re, fallback) => {
+        const i = pvaHeaders.findIndex((h) => re.test(h));
+        return i >= 0 ? i : fallback;
+      };
+      const iAct = col(/^activity$/i, 2);
+      const iPrev = col(/previous/i, 8);
+      const iWeek = col(/this week actual|wk act/i, 10);
+      const iTill = col(/^cumulative$|till date/i, 11);
+      const pva = (s.plannedVsActual?.rows || []).filter((r) => ACTIVITIES.some((a) => a.activity === r[iAct]));
       assert(pva.length === ACTIVITIES.length, `planned-vs-actual has ${pva.length} of ${ACTIVITIES.length} activities`);
-      const till = Object.fromEntries(pva.map((r) => [r[2], { prev: Number(r[6] || 0), week: Number(r[8] || 0), tillDate: Number(r[9] || 0) }]));
+      const till = Object.fromEntries(pva.map((r) => [r[iAct], { prev: Number(r[iPrev] || 0), week: Number(r[iWeek] || 0), tillDate: Number(r[iTill] || 0) }]));
       const breaks = [];
       // Expect the WPR's till-date to match what the DPRs of this run published (same ledger the DPR steps track).
       const dprTill = Object.fromEntries(ACTIVITIES.map((a) => [a.activity, cumPlanned(a, w.n * 5 - 1)]));
@@ -1338,6 +1359,99 @@ async function sectionWpr() {
   });
 }
 
+// ═══════════════════════════════ HRMS (office, before project weeks) ═══════════════════════════════
+async function sectionHrms() {
+  await step("HRM-1", "HR desk opens: employees, departments, leave types, hiring pipeline", "office", async () => {
+    const dash = ok(await call("office", "GET", "/api/hrm/dashboard"), "dashboard");
+    const employees = ok(await call("office", "GET", "/api/hrm/employees"), "employees");
+    const list = Array.isArray(employees) ? employees : employees.employees || employees.rows || [];
+    assert(Array.isArray(list), "employees payload is not a list");
+    const depts = ok(await call("office", "GET", "/api/hrm/departments"), "departments");
+    const leave = ok(await call("office", "GET", "/api/hrm/leave-types"), "leave types");
+    const pipe = ok(await call("office", "GET", "/api/hrm/hiring-pipeline"), "pipeline");
+    const docs = ok(await call("office", "GET", "/api/hrm/hrms-documents?limit=20"), "letters");
+    return `${list.length} employees · ${Array.isArray(depts) ? depts.length : "?"} departments · ${Array.isArray(leave) ? leave.length : "?"} leave types · pipeline ${Array.isArray(pipe) ? pipe.length : "ok"} · ${Array.isArray(docs) ? docs.length : "?"} letters on file · dashboard ${dash?.headcount ?? dash?.employees ?? "ok"}`;
+  });
+  await step("HRM-2", "Attendance register for this month downloads as Excel", "office", async () => {
+    const [y, m] = TODAY.split("-").map(Number);
+    const from = `${y}-${String(m).padStart(2, "0")}-01`;
+    const to = new Date(y, m, 0);
+    const toIso = `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, "0")}-${String(to.getDate()).padStart(2, "0")}`;
+    const r = await call("office", "GET", `/api/hrm/attendance/register.xlsx?from=${from}&to=${toIso}`, undefined, { timeoutMs: 120000 });
+    assert(r.status === 200 && r.bytes > 500, `register ${r.status} ${r.bytes}`);
+    return `${from} → ${toIso} register ${kb(r.bytes)}`;
+  });
+  await step("HRM-3", "Offer, Appointment and Experience letters generate from the HR templates (preview only — nothing saved)", "office", async () => {
+    const kinds = ["Offer", "Appointment", "Experience"];
+    const sizes = [];
+    for (const kind of kinds) {
+      const r = await call("office", "POST", "/api/hrm/hrms-documents/preview.docx", {
+        kind,
+        employeeName: "Jaideep Parmar",
+        designation: "Site Engineer",
+        department: "Projects",
+        effectiveDate: TODAY,
+        data: { location: "Karjan", joinDate: "2026-04-01", projectName: "Voltamp Transformers", clientName: "Voltamp Transformers Ltd." },
+      }, { timeoutMs: 120000 });
+      assert(r.status === 200 && r.bytes > 2000, `${kind} preview ${r.status} ${r.bytes} ${noteOf(r.body)}`);
+      sizes.push(`${kind} ${kb(r.bytes)}`);
+    }
+    return sizes.join(" · ");
+  });
+}
+
+async function expectDownload(who, url, minBytes, label) {
+  const r = await call(who, "GET", url, undefined, { timeoutMs: 300000 });
+  assert(r.status === 200 && r.bytes > minBytes, `${label} ${r.status} ${typeof r.body === "object" ? noteOf(r.body) : r.bytes}`);
+  return `${label} ${kb(r.bytes)}`;
+}
+
+// ═══════════════════════════════ Reports (after three weeks exist) ═══════════════════════════════
+async function sectionReports() {
+  await step("RPT-1", "Three weeks of DPRs are on the project and each Friday pack downloads", "office", async () => {
+    const recent = ok(await call("office", "GET", `/api/dpr-maker/${pid()}/recent`), "dpr recent");
+    const rows = Array.isArray(recent) ? recent : recent.rows || recent.reports || [];
+    assert(rows.length >= 3, `only ${rows.length} DPRs — run the DPR module (15 working days) before reports`);
+    const fridays = WEEKS.map((w) => w.days[4]);
+    const sizes = [];
+    for (const day of fridays) {
+      sizes.push(await expectDownload("office", `/api/dpr-maker/${pid()}/download.xlsx?date=${day}&discipline=CIVIL`, 1000, day));
+    }
+    return `${rows.length} DPRs on file · ${sizes.join(" · ")}`;
+  });
+  await step("RPT-2", "Each of the three weeks generates WPR xlsx, client pack, PPTX and PDF", "office", async () => {
+    const sizes = [];
+    for (const w of WEEKS) {
+      const end = w.sun;
+      for (const [file, min] of [["download.xlsx", 1000], ["download-client.xlsx", 1000], ["download.pptx", 50_000], ["download.pdf", 1000]]) {
+        sizes.push(await expectDownload("office", `/api/wpr-maker/${pid()}/${file}?end=${end}`, min, `${w.label} ${file.replace("download", "wpr")}`));
+      }
+    }
+    return sizes.join(" · ");
+  });
+  await step("RPT-3", "Module registers export: quality, safety, drawings, progress, cost, RFIs, cubes, QAP, NCR, finance", "office", async () => {
+    const jobs = [
+      [`/api/reports/module/${pid()}/quality/download.xlsx`, "quality"],
+      [`/api/reports/module/${pid()}/safety/download.xlsx`, "safety"],
+      [`/api/reports/module/${pid()}/drawings/download.xlsx`, "drawings"],
+      [`/api/reports/module/${pid()}/progress/download.xlsx`, "progress"],
+      [`/api/reports/module/${pid()}/cost/download.xlsx`, "cost"],
+      [`/api/reports/module/${pid()}/rfis/download.xlsx`, "rfis"],
+      [`/api/checklist/project/${pid()}/qap/download.xlsx`, "qap"],
+      [`/api/checklist/project/${pid()}/cubes/download.xlsx`, "cubes"],
+      [`/api/checklist/project/${pid()}/quality-dashboard/download.xlsx`, "quality dashboard"],
+      [`/api/checklist/project/${pid()}/ncr-register/download.xlsx`, "ncr register"],
+      [`/api/progress/${pid()}/planned-actual/download.xlsx`, "planned vs actual"],
+      [`/api/finance/${pid()}/payment-summary/download.xlsx`, "payment summary"],
+      [`/api/finance/${pid()}/pr-tracker/download.xlsx`, "pr tracker"],
+      [`/api/reports/analytics/${pid()}/download.xlsx`, "analytics"],
+    ];
+    const sizes = [];
+    for (const [url, label] of jobs) sizes.push(await expectDownload("office", url, 400, label));
+    return sizes.join(" · ");
+  });
+}
+
 // ═══════════════════════════════ 14. Verify ═══════════════════════════════
 const FOLDERS = [
   "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications",
@@ -1396,8 +1510,8 @@ async function sectionVerify() {
 }
 
 const SECTIONS = [
-  ["SET", sectionSetup], ["ATT", sectionAttendance], ["DWG", sectionDrawings], ["DCI", sectionCoordination], ["RFI", sectionRfi], ["CHK", sectionFills],
-  ["QA", sectionQuality], ["SAF", sectionSafety], ["PRG", sectionProgress], ["CST", sectionCost], ["FIN", sectionFinance], ["DPR", sectionDpr], ["WPR", sectionWpr], ["VER", sectionVerify],
+  ["SET", sectionSetup], ["HRM", sectionHrms], ["ATT", sectionAttendance], ["DWG", sectionDrawings], ["DCI", sectionCoordination], ["RFI", sectionRfi], ["CHK", sectionFills],
+  ["QA", sectionQuality], ["SAF", sectionSafety], ["PRG", sectionProgress], ["CST", sectionCost], ["FIN", sectionFinance], ["DPR", sectionDpr], ["WPR", sectionWpr], ["RPT", sectionReports], ["VER", sectionVerify],
 ];
 
 function writeReport() {
@@ -1415,6 +1529,8 @@ function writeReport() {
   // Module-wise scorecard for handover review
   const MODULES = [
     ["CRM / Logins", /^(SYS|LOG|CRM|SET)-/],
+    ["HRMS", /^HRM-/],
+    ["Attendance", /^ATT-/],
     ["Drawings", /^DWG-/],
     ["Design coordination", /^DCI-/],
     ["RFIs", /^RFI-/],
@@ -1426,8 +1542,8 @@ function writeReport() {
     ["Finance", /^FIN-/],
     ["DPR", /^DPR-/],
     ["WPR", /^WPR-/],
+    ["Reports", /^RPT-/],
     ["Verify", /^VER-/],
-    ["Attendance", /^ATT-/],
   ];
   md.push("", "## Module scorecard", "", "| Module | Pass | Fail | Result | Failed steps |", "|---|---|---|---|---|");
   for (const [name, re] of MODULES) {
@@ -1471,7 +1587,7 @@ async function main() {
   console.log(`Deep production UAT · ${BASE} · ${TODAY} · weeks ${WEEKS.map((w) => `${w.label} ${w.mon}→${w.sun}`).join(" | ")}${PURGE ? " · PURGE" : ""}\n`);
   for (const [key, fn] of SECTIONS) {
     if (key !== "SET" && !want(key)) continue;
-    if (key !== "SET" && !state.projectId) break;
+    if (key !== "SET" && key !== "HRM" && !state.projectId) break;
     await fn();
   }
   const summary = writeReport();

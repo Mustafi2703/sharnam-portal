@@ -12,6 +12,8 @@ import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 import { FilePickButton } from "../../components/FilePickButton";
 import { StatusNote } from "../../components/StatusNote";
+import { QualitySiteRegister } from "../../components/QualitySiteRegister";
+import { SafetySiteRegister } from "../../components/SafetySiteRegister";
 
 const FAMILIES = [
   { value: "DrawingCheck", label: "Drawing check · RFI (SPDC RFI form)" },
@@ -75,6 +77,10 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   const [createBusy, setCreateBusy] = useState(false);
   const [syncPackBusy, setSyncPackBusy] = useState(false);
   const [catalog, setCatalog] = useState<{ srNo: number; name: string; category: string }[]>([]);
+  const [masterTab, setMasterTab] = useState<"templates" | "site-observation" | "site-instruction">("templates");
+  const showRegisterTabs = Boolean(id && (family === "QualityInspection" || family === "Safety"));
+  const canManageRegisters =
+    user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
 
   const load = async () => {
     const list = await api<any[]>(`/api/checklist/templates?type=${family}`, { token });
@@ -285,6 +291,85 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           ))}
         </div>
       )}
+
+      {showRegisterTabs && (
+        <div className="flex flex-wrap gap-2 border-b border-line pb-2">
+          {(
+            [
+              { key: "templates" as const, label: "Checklist templates" },
+              {
+                key: "site-observation" as const,
+                label: family === "Safety" ? "Observations" : "Site observations",
+              },
+              { key: "site-instruction" as const, label: "Site instructions" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setMasterTab(t.key)}
+              className={`px-3 py-1.5 text-sm font-semibold rounded-md border transition ${
+                masterTab === t.key
+                  ? "bg-brand text-white border-brand"
+                  : "bg-paper border-line text-steel-muted hover:border-brand"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+          <Link
+            to={
+              family === "Safety"
+                ? `/projects/${id}/safety?sheet=site-instruction`
+                : `/projects/${id}/inspections?sheet=site-observation`
+            }
+            className="ml-auto text-xs font-semibold text-brand self-center underline"
+          >
+            Open full register →
+          </Link>
+        </div>
+      )}
+
+      {showRegisterTabs && masterTab === "site-observation" && id && (
+        <div className="min-h-[28rem]">
+          {family === "Safety" ? (
+            <SafetySiteRegister projectId={id} token={token} recordType="Observation" canEdit={!!canManageRegisters} />
+          ) : (
+            <QualitySiteRegister
+              projectId={id}
+              token={token}
+              recordType="Site Observation"
+              canEdit={!!canManageRegisters}
+              source="ChecklistMaster"
+            />
+          )}
+        </div>
+      )}
+
+      {showRegisterTabs && masterTab === "site-instruction" && id && (
+        <div className="min-h-[28rem]">
+          {family === "Safety" ? (
+            <SafetySiteRegister
+              projectId={id}
+              token={token}
+              recordType="Site Instruction"
+              canEdit={!!canManageRegisters}
+            />
+          ) : (
+            <QualitySiteRegister
+              projectId={id}
+              token={token}
+              recordType="Site Instruction"
+              canEdit={!!canManageRegisters}
+              source="ChecklistMaster"
+            />
+          )}
+        </div>
+      )}
+
+      {(!showRegisterTabs || masterTab === "templates") && (
+        <>
+
 
       {effectiveLock === "DrawingCheck" && id && canEdit && (
         <Card className="!p-4 border-brand/20 bg-brand-soft/30">
@@ -765,6 +850,8 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           )}
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -944,17 +944,41 @@ export async function buildRfiRegisterXlsxForProject(projectId: string): Promise
   return { buffer: await buildSpdcRfiXlsxBuffer({ project, rfis }), code: String(project.code) };
 }
 
+/** Lean include for register/form exports — full detail include pulls markups and slows gateway. */
+const rfiExportInclude = {
+  assignedTo: { select: { id: true, fullName: true } },
+  createdBy: { select: { id: true, fullName: true } },
+  vendor: { select: { id: true, name: true } },
+  drawing: { select: { id: true, drawingNumber: true, title: true, currentRev: true } },
+  responses: {
+    orderBy: { createdAt: "asc" as const },
+    take: 20,
+    select: {
+      responseText: true,
+      isOfficialResponse: true,
+      createdAt: true,
+      respondedBy: { select: { fullName: true } },
+    },
+  },
+};
+
 rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
-  const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
-  if (!project) return res.status(404).json({ error: "Project not found" });
-  const rfis = await prisma.rfi.findMany({
-    where: { projectId: project.id, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
-    include: rfiDetailInclude,
-    orderBy: { createdAt: "asc" },
-  });
-  const { buildSpdcRfiXlsxBuffer, safeRfiFilename } = await import("../services/spdcRfiForm.js");
-  const buf = await buildSpdcRfiXlsxBuffer({ project, rfis });
-  sendWorkbook(res, buf, `${String(project.code).replace(/[^\w.-]+/g, "_")}-RFI-Register.xlsx`);
+  try {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const rfis = await prisma.rfi.findMany({
+      where: { projectId: project.id, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
+      include: rfiExportInclude,
+      orderBy: { createdAt: "asc" },
+      take: 500,
+    });
+    const { buildSpdcRfiXlsxBuffer } = await import("../services/spdcRfiForm.js");
+    const buf = await buildSpdcRfiXlsxBuffer({ project, rfis });
+    sendWorkbook(res, buf, `${String(project.code).replace(/[^\w.-]+/g, "_")}-RFI-Register.xlsx`);
+  } catch (err) {
+    console.error("[RFI] register.xlsx failed:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Register export failed" });
+  }
 });
 
 rfiRouter.get("/project/:projectId/register.html", async (req, res) => {
@@ -962,8 +986,9 @@ rfiRouter.get("/project/:projectId/register.html", async (req, res) => {
   if (!project) return res.status(404).json({ error: "Project not found" });
   const rfis = await prisma.rfi.findMany({
     where: { projectId: project.id, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
-    include: rfiDetailInclude,
+    include: rfiExportInclude,
     orderBy: { createdAt: "asc" },
+    take: 500,
   });
   const { renderSpdcRfiFormHtml } = await import("../services/spdcRfiForm.js");
   const latest = rfis[rfis.length - 1];
@@ -1010,19 +1035,104 @@ rfiRouter.get("/:id/inspection.html", async (req, res) => {
   sendWorkbook(res, Buffer.from(html, "utf8"), safeInspectionIrFilename(rfi.number, "html"), true);
 });
 
+/** Photos + site-instruction docs on a Quality/Safety IR → SharePoint Evidence folder. */
+rfiRouter.post(
+  "/:id/attachments",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  upload.any(),
+  async (req: AuthedRequest, res) => {
+    try {
+      const files = ((req as AuthedRequest & { files?: Express.Multer.File[] }).files || []) as Express.Multer.File[];
+      if (!files.length) return res.status(400).json({ error: "Attach at least one photo or document." });
+      const kindHint = /site.?instruction/i.test(String(req.body?.kind || ""))
+        ? ("site_instruction" as const)
+        : /doc/i.test(String(req.body?.kind || ""))
+          ? ("doc" as const)
+          : undefined;
+      const { addIrAttachments } = await import("../services/irEvidence.js");
+      const out = await addIrAttachments({
+        rfiId: req.params.id,
+        userId: req.user!.id,
+        userName: req.user!.fullName,
+        files,
+        kindHint,
+      });
+      await audit("rfi.ir.attachments", {
+        userId: req.user!.id,
+        entity: "Rfi",
+        entityId: req.params.id,
+        meta: { added: out.added.length, folder: out.folder },
+      });
+      res.json({
+        ok: true,
+        attachments: out.attachments,
+        added: out.added,
+        folder: out.folder,
+        rfi: { id: out.rfi.id, attachmentsJson: out.rfi.attachmentsJson },
+      });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Upload failed" });
+    }
+  },
+);
+
+/** Log this IR into Site Observation / Site Instruction register (Quality SOR or Safety). */
+rfiRouter.post(
+  "/:id/log-site-record",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    try {
+      if (req.user?.role === "vendor" && /instruction/i.test(String(req.body?.recordType || ""))) {
+        return res.status(403).json({
+          error: "Site instructions are issued by the Sharnam team. Contractors can log site observations.",
+        });
+      }
+      const recordType = /instruction/i.test(String(req.body?.recordType || ""))
+        ? ("Site Instruction" as const)
+        : ("Site Observation" as const);
+      const { logIrToSiteRegister } = await import("../services/irEvidence.js");
+      const out = await logIrToSiteRegister({
+        rfiId: req.params.id,
+        userId: req.user!.id,
+        recordType,
+        title: req.body?.title ? String(req.body.title) : undefined,
+        description: req.body?.description ? String(req.body.description) : undefined,
+        includeAttachments: req.body?.includeAttachments !== false,
+      });
+      await audit("rfi.ir.log_site_record", {
+        userId: req.user!.id,
+        entity: "Rfi",
+        entityId: req.params.id,
+        meta: { register: out.register, recordType, recordId: out.record.id },
+      });
+      res.status(201).json({ ok: true, ...out });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Could not log to register" });
+    }
+  },
+);
+
 rfiRouter.get("/:id/download.xlsx", async (req, res) => {
-  const rfi = await prisma.rfi.findUnique({ where: { id: req.params.id }, include: rfiDetailInclude });
-  if (!rfi) return res.status(404).json({ error: "RFI not found" });
-  const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
-  if (!project) return res.status(404).json({ error: "Project not found" });
-  const rfis = await prisma.rfi.findMany({
-    where: { projectId: rfi.projectId },
-    include: rfiDetailInclude,
-    orderBy: { createdAt: "asc" },
-  });
-  const { buildSpdcRfiXlsxBuffer, safeRfiFilename } = await import("../services/spdcRfiForm.js");
-  const buf = await buildSpdcRfiXlsxBuffer({ project, rfis, selectRfiId: rfi.id });
-  sendWorkbook(res, buf, safeRfiFilename(rfi.number, "xlsx"));
+  try {
+    const rfi = await prisma.rfi.findUnique({ where: { id: req.params.id }, include: rfiExportInclude });
+    if (!rfi) return res.status(404).json({ error: "RFI not found" });
+    const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    // Register sheet only needs design RFIs; keep payload small for gateway.
+    const rfis = await prisma.rfi.findMany({
+      where: { projectId: rfi.projectId, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
+      include: rfiExportInclude,
+      orderBy: { createdAt: "asc" },
+      take: 500,
+    });
+    const list = rfis.some((x) => x.id === rfi.id) ? rfis : [...rfis, rfi];
+    const { buildSpdcRfiXlsxBuffer, safeRfiFilename } = await import("../services/spdcRfiForm.js");
+    const buf = await buildSpdcRfiXlsxBuffer({ project, rfis: list, selectRfiId: rfi.id });
+    sendWorkbook(res, buf, safeRfiFilename(rfi.number, "xlsx"));
+  } catch (err) {
+    console.error("[RFI] download.xlsx failed:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "RFI form export failed" });
+  }
 });
 
 rfiRouter.get("/:id/download.html", async (req, res) => {
@@ -1155,6 +1265,38 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
     }
     formDataJson = JSON.stringify(form);
   }
+  const fillKinds = new Set([
+    "QualityIR",
+    "SafetyIR",
+    "ActivityInspection",
+    "QualityInspection",
+    "SafetyChecklist",
+    "SiteExecution",
+  ]);
+  const canRelinkChecklist = fillKinds.has(existing.rfiKind);
+  let linkedAssignmentId: string | null | undefined;
+  let linkedChecklistItemId: string | null | undefined;
+  let newlyLinkedAssignmentId: string | null = null;
+  if (canRelinkChecklist && req.body.linkedAssignmentId !== undefined) {
+    const next = req.body.linkedAssignmentId ? String(req.body.linkedAssignmentId) : null;
+    if (next) {
+      const assignment = await prisma.checklistAssignment.findFirst({
+        where: { id: next, projectId: existing.projectId },
+        select: { id: true, templateId: true },
+      });
+      if (!assignment) return res.status(400).json({ error: "Checklist assignment not found on this project." });
+      linkedAssignmentId = assignment.id;
+      linkedChecklistItemId =
+        req.body.linkedChecklistItemId != null
+          ? String(req.body.linkedChecklistItemId)
+          : assignment.templateId;
+      if (assignment.id !== existing.linkedAssignmentId) newlyLinkedAssignmentId = assignment.id;
+    } else {
+      linkedAssignmentId = null;
+      linkedChecklistItemId = null;
+    }
+  }
+
   const rfi = await prisma.rfi.update({
     where: { id: req.params.id },
     data: {
@@ -1162,9 +1304,39 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       ballInCourt: req.body.ballInCourt ?? (clearanceStatus ? "Contractor" : undefined),
       assignedToId: req.body.assignedToId,
       ...(formDataJson ? { formDataJson } : {}),
+      ...(linkedAssignmentId !== undefined ? { linkedAssignmentId } : {}),
+      ...(linkedChecklistItemId !== undefined ? { linkedChecklistItemId } : {}),
       closedAt: req.body.status === "Closed" ? new Date() : undefined,
     },
   });
+  if (newlyLinkedAssignmentId && isChecklistFillRfiKind(existing.rfiKind)) {
+    import("../services/ensureFillRequestDraft.js")
+      .then(({ ensureFillRequestDraft }) =>
+        ensureFillRequestDraft(prisma, {
+          rfiId: rfi.id,
+          rfiNumber: rfi.number,
+          subject: rfi.subject,
+          assignmentId: newlyLinkedAssignmentId!,
+          createdById: req.user!.id,
+          assignedToId: rfi.assignedToId,
+          drawingId: existing.linkedDrawingId,
+        }),
+      )
+      .catch((err) => console.warn("[IR] fill draft after link failed:", err instanceof Error ? err.message : err));
+  }
+  // Not cleared / rejected clearance → log Site Instruction on the owning register (background).
+  if (clearanceStatus === "Rejected" || (req.body.formPatch && /^S[34]/.test(String(req.body.formPatch.clearanceResult || "")))) {
+    import("../services/irEvidence.js")
+      .then(({ logIrToSiteRegister }) =>
+        logIrToSiteRegister({
+          rfiId: rfi.id,
+          userId: req.user!.id,
+          recordType: "Site Instruction",
+          includeAttachments: true,
+        }),
+      )
+      .catch((err) => console.warn("[IR] auto SI log failed:", err instanceof Error ? err.message : err));
+  }
   if (req.body.status && req.body.status !== existing.status) {
     if (req.body.status === "Closed") {
       // Move the form to the Closed folder in the background (SharePoint can take longer than the gateway allows).

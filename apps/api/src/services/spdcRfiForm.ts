@@ -420,13 +420,22 @@ function fillFormSheet(ws: ExcelJS.Worksheet, project: SpdcRfiProject, row: Spdc
   paint(ws, 60, 7, row.status === "Closed" ? `SPDC PMC\n${row.dateClosed}` : "");
 }
 
+/** Cache raw template bytes — re-reading + detachSharedStyles on every export was timing out gateways (~180s). */
+let cachedTemplateBytes: ArrayBuffer | null = null;
+let cachedTemplatePath: string | null = null;
+
 async function loadTemplate(): Promise<ExcelJS.Workbook> {
   const file = resolveTemplate();
   if (!file) throw new Error("SPDC RFI Form template not found (SPDC_RFI_Form_and_Register.xlsx)");
+  if (!cachedTemplateBytes || cachedTemplatePath !== file) {
+    const buf = await fs.promises.readFile(file);
+    cachedTemplateBytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    cachedTemplatePath = file;
+  }
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(file);
+  await wb.xlsx.load(cachedTemplateBytes);
   detachSharedStyles(wb);
-  wb.calcProperties.fullCalcOnLoad = true;
+  if (wb.calcProperties) wb.calcProperties.fullCalcOnLoad = false;
   return wb;
 }
 

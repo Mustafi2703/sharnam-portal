@@ -28,6 +28,7 @@ type Props = {
   token?: string | null;
   recordType: "Site Observation" | "Site Instruction";
   canEdit: boolean;
+  source?: string;
   onChanged?: () => void | Promise<void>;
 };
 
@@ -42,7 +43,7 @@ const emptyForm = (recordType: string) => ({
   correctiveAction: "",
 });
 
-export function QualitySiteRegister({ projectId, token, recordType, canEdit, onChanged }: Props) {
+export function QualitySiteRegister({ projectId, token, recordType, canEdit, source, onChanged }: Props) {
   const [rows, setRows] = useState<QualitySiteRecord[]>([]);
   const [form, setForm] = useState(emptyForm(recordType));
   const [addOpen, setAddOpen] = useState(false);
@@ -110,6 +111,7 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, onC
         body: JSON.stringify({
           ...form,
           title: form.title || `${recordType} — ${form.location || "Site"}`,
+          source: source || "portal",
         }),
       });
       if (photos.length && created?.id) await uploadPhotos(created.id, photos);
