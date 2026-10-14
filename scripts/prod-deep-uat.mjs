@@ -406,15 +406,15 @@ async function sectionAttendance() {
 
 // ═══════════════════════════════ 3. Drawings ═══════════════════════════════
 const DRAWINGS = [
-  { no: "VT-AR-001", title: "Site layout plan", discipline: "Architecture", area: "Site", pkg: "Civil", type: "Plan", upload: 1 },
-  { no: "VT-AR-101", title: "Main plant — ground floor plan", discipline: "Architecture", area: "Main plant", pkg: "Civil", type: "Plan", upload: 1 },
-  { no: "VT-AR-201", title: "Main plant — elevations & sections", discipline: "Architecture", area: "Main plant", pkg: "Civil", type: "Elevation" },
-  { no: "VT-ST-001", title: "Foundation layout — grid A to K", discipline: "Structure", area: "Main plant", pkg: "Civil", type: "Layout", upload: 1 },
-  { no: "VT-ST-101", title: "Pedestal & anchor bolt details", discipline: "Structure", area: "Main plant", pkg: "PEB", type: "Detail", upload: 1, rev1: 2 },
-  { no: "VT-ST-201", title: "Plinth beam & tie beam schedule", discipline: "Structure", area: "Main plant", pkg: "Civil", type: "Schedule" },
-  { no: "VT-ME-001", title: "Electrical single line diagram", discipline: "MEP", area: "Utility block", pkg: "Electrical", type: "Schematic" },
-  { no: "VT-ME-101", title: "Underground services & cable trench", discipline: "MEP", area: "Site", pkg: "Electrical", type: "Layout", upload: 1 },
-  { no: "VT-PEB-001", title: "PEB anchor bolt setting plan", discipline: "PEB", area: "Main plant", pkg: "PEB", type: "Plan" },
+  { no: "VT-AR-001", title: "Site layout plan", discipline: "Architecture", area: "Site", pkg: "Civil", type: "GFC Plan", upload: 1 },
+  { no: "VT-AR-101", title: "Main plant — ground floor plan", discipline: "Architecture", area: "Main plant", pkg: "Civil", type: "GFC Plan", upload: 1 },
+  { no: "VT-AR-201", title: "Main plant — elevations & sections", discipline: "Architecture", area: "Main plant", pkg: "Civil", type: "GFC Elevation", upload: 1 },
+  { no: "VT-ST-001", title: "Foundation layout — grid A to K", discipline: "Structure", area: "Main plant", pkg: "Civil", type: "GFC Layout", upload: 1 },
+  { no: "VT-ST-101", title: "Pedestal & anchor bolt details", discipline: "Structure", area: "Main plant", pkg: "PEB", type: "GFC Detail", upload: 1, rev1: 2 },
+  { no: "VT-ST-201", title: "Plinth beam & tie beam schedule", discipline: "Structure", area: "Main plant", pkg: "Civil", type: "GFC Schedule", upload: 1 },
+  { no: "VT-ME-001", title: "Electrical single line diagram", discipline: "MEP", area: "Utility block", pkg: "Electrical", type: "GFC Schematic", upload: 1 },
+  { no: "VT-ME-101", title: "Underground services & cable trench", discipline: "MEP", area: "Site", pkg: "Electrical", type: "GFC Layout", upload: 1 },
+  { no: "VT-PEB-001", title: "PEB anchor bolt setting plan", discipline: "PEB", area: "Main plant", pkg: "PEB", type: "GFC Plan", upload: 1 },
 ];
 async function drawingCheckUnlock(who, drawingId, remark) {
   const tpl = ok(await call(who, "GET", `/api/checklist/project/${pid()}/drawing-check-template`), "drawing check template");
@@ -436,13 +436,13 @@ async function sectionDrawings() {
     let enriched = 0;
     for (const [i, d] of DRAWINGS.entries()) {
       // Master register pop-up: every column on the line (upsert by drawing number).
-      const r = await call("office", "POST", `/api/drawings/project/${pid()}/register-lines`, { srNo: i + 1, drawingNumber: d.no, drawingTitle: d.title, projectPackage: d.pkg, building: d.area, discipline: d.discipline, drawingType: d.type, consultantName: "Shah & Talati", revisionNumber: "R0", revisionDate: WEEKS[0].days[1], plannedSubmissionDate: WEEKS[0].mon, actualSubmissionDate: d.upload ? WEEKS[0].days[1] : null, submissionDelayDays: d.upload ? 1 : null, issuedTo: state.vendorName, issueDate: d.upload ? WEEKS[0].days[1] : null, copiesCount: 2, criticalDrawing: d.rev1 ? "Yes" : "No", remarks: TAG });
+      const r = await call("office", "POST", `/api/drawings/project/${pid()}/register-lines`, { srNo: i + 1, drawingNumber: d.no, drawingTitle: d.title, projectPackage: d.pkg, building: d.area, discipline: d.discipline, drawingType: d.type, consultantName: "Shah & Talati", revisionNumber: "R0", revisionDate: WEEKS[0].days[1], plannedSubmissionDate: WEEKS[0].mon, actualSubmissionDate: WEEKS[0].days[1], submissionDelayDays: 1, issuedTo: state.vendorName, issueDate: WEEKS[0].days[1], copiesCount: 2, criticalDrawing: d.rev1 ? "Yes" : "No", remarks: TAG });
       if (r.status < 300) enriched++;
     }
     remember("drawings", ...DRAWINGS.map((d) => d.no));
     return `${DRAWINGS.length} register lines · ${enriched} enriched with package / type / consultant / dates`;
   });
-  await step("DWG-2", "Site engineer passes the Drawing Check gate and uploads R0 PDFs for 5 GFC drawings; office publishes", "site", async () => {
+  await step("DWG-2", "Site engineer Drawing-Checks and uploads R0 GFC PDFs for every register line; office publishes (feeds WPR Design status 100%)", "site", async () => {
     const done = [];
     for (const d of DRAWINGS.filter((x) => x.upload)) {
       const { token, items } = await drawingCheckUnlock("site", state.drawings[d.no], `${TAG} ${d.no} R0 check`);
@@ -452,11 +452,18 @@ async function sectionDrawings() {
       });
       ok(rev, `revision ${d.no}`);
       ok(await call("office", "POST", `/api/drawings/${state.drawings[d.no]}/publish`, {}), `publish ${d.no}`);
+      // Keep master register in sync with issued GFC (client Site Drawing Register filters on GFC/issued).
+      await call("office", "POST", `/api/drawings/project/${pid()}/register-lines`, {
+        drawingNumber: d.no, drawingTitle: d.title, projectPackage: d.pkg, building: d.area, discipline: d.discipline,
+        drawingType: d.type, consultantName: "Shah & Talati", revisionNumber: "R0", revisionDate: WEEKS[0].days[1],
+        plannedSubmissionDate: WEEKS[0].mon, actualSubmissionDate: WEEKS[0].days[1], submissionDelayDays: 1,
+        issuedTo: state.vendorName, issueDate: WEEKS[0].days[1], copiesCount: 2, criticalDrawing: d.rev1 ? "Yes" : "No", remarks: `${TAG} issued GFC`,
+      });
       const sp = rev.body?.revisions?.at?.(-1)?.sharePointUrl || rev.body?.sharePointUrl;
       if (sp) state.sharepoint.push({ label: `Drawing ${d.no} R0`, path: "04.02 Drawings", url: sp });
       done.push(`${d.no} (${items} checks)`);
     }
-    return done.join(" · ");
+    return `${done.length}/${DRAWINGS.length} GFC published · ${done.join(" · ")}`;
   });
   await step("DWG-3", "Week 2: VT-ST-101 revised to R1 after the coordination clash (new Drawing Check, R0 superseded)", "site", async () => {
     const d = DRAWINGS.find((x) => x.rev1);
@@ -768,33 +775,46 @@ async function sectionQuality() {
     state.sharepoint.push({ label: "QAP workbook + quality dashboard", path: "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans", url: null });
     return `${n} QAP lines · xlsx ${kb(dl.bytes)} · published`;
   });
-  await step("QA-2", "Cube register: one cast group per week (site), 7-day loads entered for weeks 1–2 (IS 516 strength)", "site", async () => {
+  await step("QA-2", "Cube register: one cast group per week (site), 7-day + 28-day loads (feeds July Cube Test + SPDC WPR)", "site", async () => {
     const out = [];
     state.cubes = [];
     for (const w of WEEKS) {
       const g = ok(await call("site", "POST", `/api/checklist/project/${pid()}/cubes/group`, { srNo: `C-${w.n}`, description: `${TAG} footings F${w.n * 2 - 1}–F${w.n * 2} grid A pour`, grade: "M30", castDate: w.days[1], testAgency: "Site lab" }), `cube group ${w.label}`);
       const specs = g.specimens || g.cubes || [];
       state.cubes.push({ week: w.n, specimens: specs });
-      if (w.n < 3) for (const [i, s] of specs.slice(0, 3).entries()) ok(await call("site", "PATCH", `/api/checklist/project/${pid()}/cubes/${s.id}`, { load7: 510 + i * 12 + w.n * 5 }), "load7");
-      out.push(`${w.label}: ${g.created ?? specs.length} specimens${w.n < 3 ? " · 7-day loads in" : ""}`);
+      for (const [i, s] of specs.slice(0, 3).entries()) {
+        ok(await call("site", "PATCH", `/api/checklist/project/${pid()}/cubes/${s.id}`, { load7: 510 + i * 12 + w.n * 5 }), "load7");
+        if (w.n < 3) ok(await call("site", "PATCH", `/api/checklist/project/${pid()}/cubes/${s.id}`, { load28: 720 + i * 15 + w.n * 8 }), "load28");
+      }
+      out.push(`${w.label}: ${g.created ?? specs.length} specimens · 7-day${w.n < 3 ? " + 28-day" : ""}`);
     }
     const dl = await call("site", "GET", `/api/checklist/project/${pid()}/cubes/download.xlsx`);
     assert(dl.status === 200, `cube xlsx ${dl.status}`);
     state.sharepoint.push({ label: "Cube register (client format)", path: "08_QUALITY_HSE_AND_ENVIRONMENT/08.03_Testing_Test_Report_Control", url: null });
     return `${out.join(" · ")} · xlsx ${kb(dl.bytes)}`;
   });
-  await step("QA-3", "Site observations + site instructions each week (SOR log); contractor cannot issue an instruction", "site", async () => {
+  await step("QA-3", "Quality SOR: site observations + instructions each week; Progress SOR stats for July SOR Log; vendor cannot issue instruction", "site", async () => {
     const items = [["Site Observation", "Cover blocks missing at pedestal P3", "Grid A / P3", "Medium"], ["Site Instruction", "Stop work — shuttering props at F4 not braced", "Grid C / F4", "High"], ["Site Observation", "Curing of PCC not started within 24 h", "Grid B", "Low"], ["Site Instruction", "Re-do lap length at PB-2 (min 50 d)", "Plinth PB-2", "High"], ["Site Observation", "Anchor bolt template level off by 8 mm at A4", "Grid A4", "Medium"], ["Site Observation", "Housekeeping — rebar off-cuts in trench", "Grid D", "Low"]];
     let n = 0;
+    const counts = { "Site Observation": { total: 0, open: 0, closed: 0 }, "Site Instruction": { total: 0, open: 0, closed: 0 } };
     for (const [i, [recordType, title, location, severity]] of items.entries()) {
       const w = WEEKS[Math.floor(i / 2)];
-      const r = ok(await call("site", "POST", `/api/checklist/project/${pid()}/quality-site-records`, { recordType, title: `${TAG} ${title}`, description: `${title}. Raised ${fmt(w.days[i % 5])}.`, location, severity, issuedTo: state.vendorName, occurredAt: w.days[i % 5], status: i < 4 ? "Closed" : "Open", correctiveAction: i < 4 ? "Rectified and verified by PMC" : "" }), `record ${title}`);
+      const closed = i < 4;
+      ok(await call("site", "POST", `/api/checklist/project/${pid()}/quality-site-records`, { recordType, title: `${TAG} ${title}`, description: `${title}. Raised ${fmt(w.days[i % 5])}.`, location, severity, issuedTo: state.vendorName, occurredAt: w.days[i % 5], status: closed ? "Closed" : "Open", correctiveAction: closed ? "Rectified and verified by PMC" : "" }), `record ${title}`);
       n++;
-      void r;
+      const bucket = counts[recordType] || (counts[recordType] = { total: 0, open: 0, closed: 0 });
+      bucket.total++;
+      if (closed) bucket.closed++;
+      else bucket.open++;
     }
+    // July client "SOR Log" reads progressSorStat — seed from Quality module totals.
+    for (const [observation, c] of Object.entries(counts)) {
+      ok(await call("office", "POST", `/api/progress/${pid()}/sor-stats`, { observation, total: c.total, openCount: c.open, closedCount: c.closed }), `sor-stat ${observation}`);
+    }
+    ok(await call("office", "POST", `/api/progress/${pid()}/sor-stats`, { observation: "NCR", total: 2, openCount: 1, closedCount: 1 }), "sor-stat NCR");
     const denied = await call("vendor", "POST", `/api/checklist/project/${pid()}/quality-site-records`, { recordType: "Site Instruction", title: "x", description: "x" });
     const dl = await call("site", "GET", `/api/checklist/project/${pid()}/quality-site-records/download.xlsx`);
-    return `${n} records (4 closed, 2 open) · vendor instruction ${denied.status >= 400 ? `refused ${denied.status}` : `ALLOWED ${denied.status}`} · xlsx ${kb(dl.bytes)}`;
+    return `${n} quality records · SOR stats Site Observation/Instruction/NCR · vendor instruction ${denied.status >= 400 ? `refused ${denied.status}` : `ALLOWED ${denied.status}`} · xlsx ${kb(dl.bytes)}`;
   });
   await step("QA-4", "Week 1 NCR: site raises → Reeca responds + signs → office follow-up → office verifies and closes with sign-off → NCR form PDF", "site", async () => {
     const w = WEEKS[0];
@@ -845,16 +865,33 @@ async function sectionSafety() {
     }
     return `${n} days logged · manpower ${34}–${34 + 14 * 2 + 2} · ${n} toolbox talks`;
   });
-  await step("SAF-2", "Safety records across the weeks: unsafe-act observations, a near miss, a toolbox talk record (one per week closed by office)", "site", async () => {
-    const recs = [[0, "Observation", "Worker without harness on the F4 shuttering", "High", "Working at height"], [0, "Toolbox Talk", "TBT — excavation edge protection (34 attended)", "Low", "Training"], [1, "Near Miss", "Rebar bundle slipped from the crane sling — no injury", "High", "Lifting"], [1, "Observation", "Damaged extension board at the bar-bending yard", "Medium", "Electrical"], [2, "Observation", "Excavation at grid D without barricade overnight", "High", "Excavation"], [2, "Toolbox Talk", "TBT — crane lift signals before PEB erection", "Low", "Training"]];
+  await step("SAF-2", "Safety module records for July WPR: Site Instruction, Unsafe act/condition, TBT, near miss, FAC, NCN (HSE Statistic + safety sheets)", "site", async () => {
+    // recordType strings must match July pack matchers in wprClientPack (Site Instruction, Unsafe act, etc.).
+    const recs = [
+      [0, "Unsafe act", "Worker without harness on the F4 shuttering", "High", "Working at height"],
+      [0, "Site Instruction", "Re-fix edge protection before next pour at F4", "High", "Working at height"],
+      [0, "Toolbox Talk", "TBT — excavation edge protection (34 attended)", "Low", "Training"],
+      [1, "Near Miss", "Rebar bundle slipped from the crane sling — no injury", "High", "Lifting"],
+      [1, "Unsafe condition", "Damaged extension board at the bar-bending yard", "Medium", "Electrical"],
+      [1, "Site Instruction", "Replace damaged extension board before restart", "Medium", "Electrical"],
+      [1, "First Aid", "Minor cut on helper — first aid administered", "Low", "First aid"],
+      [2, "Unsafe act", "Excavation at grid D without barricade overnight", "High", "Excavation"],
+      [2, "Toolbox Talk", "TBT — crane lift signals before PEB erection", "Low", "Training"],
+      [2, "NCN", "HSE non-conformance — missing toe boards on mezzanine", "High", "Working at height"],
+      [2, "HSE Training", "Height work refresher — 12 workers", "Low", "Training"],
+    ];
     let n = 0;
     for (const [w, recordType, title, severity, category] of recs) {
-      const r = ok(await call("site", "POST", `/api/safety/project/${pid()}`, { recordType, title: `${TAG} ${title}`, description: title, severity, category, location: "Main plant", occurredAt: WEEKS[w].days[n % 5], issuedTo: state.vendorName, responsibleParty: state.vendorName, correctiveAction: recordType === "Toolbox Talk" ? "" : "Rectified on the spot; supervisor briefed", status: w < 2 ? "Closed" : "Open" }), `safety ${title}`);
-      void r;
+      ok(await call("site", "POST", `/api/safety/project/${pid()}`, {
+        recordType, title: `${TAG} ${title}`, description: title, severity, category, location: "Main plant",
+        occurredAt: WEEKS[w].days[n % 5], issuedTo: state.vendorName, responsibleParty: state.vendorName,
+        correctiveAction: /Talk|Training/i.test(recordType) ? "" : "Rectified on the spot; supervisor briefed",
+        status: w < 2 ? "Closed" : "Open",
+      }), `safety ${recordType}`);
       n++;
     }
     const list = ok(await call("site", "GET", `/api/safety/project/${pid()}`), "list");
-    return `${n} records · project total ${list.stats?.total ?? list.records?.length}`;
+    return `${n} safety records (instructions + unsafe act/condition + TBT + FAC + NCN) · project total ${list.stats?.total ?? list.records?.length}`;
   });
   await step("SAF-3", "Week 2 safety NCR: site issues → Reeca records root cause / actions (cannot close) → office closes; form PDF", "site", async () => {
     const w = WEEKS[1];
@@ -1137,6 +1174,13 @@ async function sectionWpr() {
       const designRows = (s.designStatus?.rows || []).length;
       const dwgRegRows = (s.drawingRegister?.rows || []).length;
       assert(designRows >= 1 || dwgRegRows >= 1, `WPR missing drawings feed (designStatus=${designRows}, drawingRegister=${dwgRegRows}) — run DWG before WPR`);
+      const qualityRows = (s.quality?.rows || s.cubeTest?.rows || []).length;
+      const safetyRows = (s.safety?.rows || []).length;
+      // Soft signal in notes when QA/SAF were skipped; hard-assert only if those sections ran this session.
+      if (want("QA") || want("SAF")) {
+        if (want("QA")) assert(qualityRows >= 1 || (s.cubeTest?.rows || []).length >= 1, `WPR quality/cube empty — run QA before WPR`);
+        if (want("SAF")) assert(safetyRows >= 1, `WPR safety section empty — run SAF before WPR`);
+      }
       const sizes = [];
       let clientCharts = 0;
       for (const k of ["download.xlsx", "download-client.xlsx", "download.pptx"]) {
