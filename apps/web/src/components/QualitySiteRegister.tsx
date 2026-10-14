@@ -317,35 +317,63 @@ export function QualitySiteRegister({ projectId, token, recordType, canEdit, sou
                     {new Date(r.occurredAt).toLocaleDateString()}
                   </td>
                   {canEdit && (
-                    <td className="text-left space-x-1">
-                      <Button type="button" variant="secondary" className="!py-1 !px-2 !text-xs" onClick={() => openEdit(r)}>
-                        Edit
-                      </Button>
-                      {r.status === "Open" && (
+                    <td className="text-left">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button type="button" variant="secondary" className="!py-1 !px-2 !text-xs" onClick={() => openEdit(r)}>
+                          Edit
+                        </Button>
+                        {r.status !== "Closed" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="!py-1 !px-2 !text-xs"
+                            onClick={async () => {
+                              try {
+                                await api(`/api/checklist/project/${projectId}/quality-site-records/${r.id}`, {
+                                  method: "PATCH",
+                                  token,
+                                  body: JSON.stringify({ status: "Closed" }),
+                                });
+                                setMsg(`${recordType} closed.`);
+                                await load();
+                                await onChanged?.();
+                              } catch (err) {
+                                setMsg(err instanceof Error ? err.message : "Could not close");
+                              }
+                            }}
+                          >
+                            Close
+                          </Button>
+                        )}
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="danger"
                           className="!py-1 !px-2 !text-xs"
                           onClick={async () => {
-                            await api(`/api/checklist/project/${projectId}/quality-site-records/${r.id}`, {
-                              method: "PATCH",
-                              token,
-                              body: JSON.stringify({ status: "Closed" }),
-                            });
-                            await load();
-                            await onChanged?.();
+                            if (!window.confirm(`Delete this ${recordType.toLowerCase()}? This cannot be undone.`)) return;
+                            try {
+                              await api(`/api/checklist/project/${projectId}/quality-site-records/${r.id}`, {
+                                method: "DELETE",
+                                token,
+                              });
+                              setMsg(`${recordType} deleted.`);
+                              await load();
+                              await onChanged?.();
+                            } catch (err) {
+                              setMsg(err instanceof Error ? err.message : "Could not delete");
+                            }
                           }}
                         >
-                          Close
+                          Delete
                         </Button>
-                      )}
+                      </div>
                     </td>
                   )}
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={canEdit ? 7 : 6} className="empty text-left">
+                  <td colSpan={canEdit ? 8 : 7} className="empty text-left">
                     No rows — use + Add row to log a {recordType.toLowerCase()}.
                   </td>
                 </tr>

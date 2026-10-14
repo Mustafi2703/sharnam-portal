@@ -2588,6 +2588,53 @@ html.is-tool-window #root {
   overflow-y: visible !important;
 }
 
+/*
+ * RFI register (tool window): keep the sheet as the scroll surface.
+ * Generic window rules set height:auto + overflow-y:visible on .sheet-register__scroll,
+ * while .tool-main__outlet .register-tab-body--sheet .sheet-register__scroll forces height:0 —
+ * those fight and lock the table. Pin a flex chain so the register body scrolls on both axes.
+ */
+.tool-workspace--window .tool-main__outlet:has(.rfi-register-page) {
+  overflow: hidden !important;
+  padding-bottom: 0.75rem;
+}
+.tool-workspace--window .tool-main__outlet > .rfi-register-page.page-stack--register,
+.tool-workspace--window .rfi-register-page.page-stack--register {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-workspace--window .rfi-register-page .register-tab-body,
+.tool-workspace--window .rfi-register-page .register-tab-body--sheet,
+.tool-workspace--window .rfi-register-page .register-page-fill,
+.tool-workspace--window .rfi-register-page .sheet-register.register-panel-fill,
+.tool-workspace--window .rfi-register-page .register-panel-fill {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-workspace--window .rfi-register-page .sheet-register__scroll,
+.tool-workspace--window .rfi-register-page .register-sheet-viewport,
+.tool-workspace--window .tool-main__outlet .rfi-register-page .register-tab-body--sheet .sheet-register__scroll,
+.tool-workspace--window .tool-main__outlet .rfi-register-page .register-tab-body--sheet .register-sheet-viewport {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 10rem !important;
+  max-height: none !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
 /* Legacy stack aliases — keep in sync with .register-tab-body--stack above */
 .tool-main__outlet .register-tab-body--stack {
   overflow-y: auto !important;

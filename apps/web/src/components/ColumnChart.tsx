@@ -6,7 +6,28 @@ import { useMemo } from "react";
 
 export type Series = { key: string; label: string; color: string };
 
-const PALETTE = ["#1E3A5F", "#0F766E", "#C45C26", "#2563EB", "#7C3AED", "#B45309", "#9F1239", "#059669"];
+/** Theme chart tokens first (follow module accent via applyModuleAccent), then safe fallbacks. */
+function chartVar(name: string, fallback: string) {
+  if (typeof document === "undefined") return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+const PALETTE = [
+  () => chartVar("--chart-1", "#0B6A78"),
+  () => chartVar("--chart-2", "#C45C26"),
+  () => chartVar("--chart-3", "#2563EB"),
+  () => chartVar("--chart-4", "#64748B"),
+  () => chartVar("--chart-5", "#059669"),
+  () => chartVar("--chart-6", "#B45309"),
+  () => chartVar("--color-danger", "#C0352B"),
+  () => chartVar("--color-ok", "#0F766E"),
+];
+
+function paletteAt(i: number) {
+  const fn = PALETTE[i % PALETTE.length];
+  return typeof fn === "function" ? fn() : String(fn);
+}
 
 function niceMax(v: number): { max: number; step: number } {
   if (v <= 0) return { max: 4, step: 1 };
@@ -80,7 +101,7 @@ export function ColumnChart({
   height?: number;
   emptyText?: string;
 }) {
-  const ser = series && series.length ? series : [{ key: "value", label: yLabel || "Count", color: PALETTE[0] }];
+  const ser = series && series.length ? series : [{ key: "value", label: yLabel || "Count", color: paletteAt(0) }];
   const rows = useMemo(() => (items || []).map((r) => ({ label: String(r.label ?? "—"), vals: ser.map((s) => Number(r[s.key]) || 0) })), [items, ser]);
   const total = rows.reduce((n, r) => n + r.vals.reduce((a, b) => a + b, 0), 0);
   if (!rows.length || total === 0) {
@@ -231,11 +252,24 @@ export function LineChart({
   );
 }
 
+/** Resolves at render time so module accents (Quality teal, etc.) apply. */
 export const CHART_COLORS = {
-  navy: PALETTE[0],
-  teal: PALETTE[1],
-  orange: PALETTE[2],
-  blue: PALETTE[3],
-  red: "#B91C1C",
-  green: "#15803D",
+  get navy() {
+    return paletteAt(0);
+  },
+  get teal() {
+    return paletteAt(0);
+  },
+  get orange() {
+    return paletteAt(1);
+  },
+  get blue() {
+    return paletteAt(2);
+  },
+  get red() {
+    return paletteAt(6);
+  },
+  get green() {
+    return paletteAt(7);
+  },
 };

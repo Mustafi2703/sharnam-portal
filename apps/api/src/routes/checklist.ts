@@ -2024,24 +2024,20 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     prisma.checklistSubmission.count({
       where: { assignment: { projectId, template: { checklistType: "SiteExecution" } }, status: COUNTED },
     }),
-    prisma.rfi.count({ where: { projectId, rfiKind: "QualityIR", status: { in: ["Open", "Answered"] } } }),
-    prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }] }),
     prisma.rfi.count({
       where: {
         projectId,
-        status: { in: ["Open", "Answered"] },
-        rfiKind: {
-          in: [
-            "QualityInspection",
-            "QualityIR",
-            "DrawingChecklist",
-            "RequestForInformation",
-            "SafetyChecklist",
-            "SafetyIR",
-            "ActivityInspection",
-            "SiteExecution",
-          ],
-        },
+        rfiKind: { in: ["QualityIR", "QualityInspection"] },
+        status: { in: ["Open", "Draft"] },
+      },
+    }),
+    prisma.qapActivity.findMany({ where: { projectId }, orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }] }),
+    /** Checklist fill requests only — not design RFIs or inspection IRs. */
+    prisma.rfi.count({
+      where: {
+        projectId,
+        status: { in: ["Open", "Draft"] },
+        rfiKind: { in: ["DrawingChecklist", "SiteExecution"] },
       },
     }),
     prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 200 }),
@@ -3547,14 +3543,37 @@ checklistRouter.patch(
   "/project/:projectId/quality-site-records/:recordId",
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
+    const existing = await prisma.qualitySiteRecord.findFirst({
+      where: { id: req.params.recordId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Record not found" });
     const body = req.body || {};
     const data: Record<string, unknown> = {};
     for (const k of ["title", "description", "location", "severity", "status", "issuedTo", "correctiveAction", "recordType"] as const) {
       if (body[k] != null) data[k] = String(body[k]);
     }
     if (body.status != null) data.closedAt = /clos/i.test(String(body.status)) ? new Date() : null;
-    const row = await prisma.qualitySiteRecord.update({ where: { id: req.params.recordId }, data });
+    const row = await prisma.qualitySiteRecord.update({ where: { id: existing.id }, data });
     res.json(row);
+  }
+);
+
+checklistRouter.delete(
+  "/project/:projectId/quality-site-records/:recordId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.qualitySiteRecord.findFirst({
+      where: { id: req.params.recordId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Record not found" });
+    await prisma.qualitySiteRecord.delete({ where: { id: existing.id } });
+    await audit("quality.site_records.delete", {
+      userId: req.user!.id,
+      entity: "QualitySiteRecord",
+      entityId: existing.id,
+      meta: { projectId: req.params.projectId, recordType: existing.recordType, title: existing.title },
+    });
+    res.json({ ok: true, id: existing.id });
   }
 );
 

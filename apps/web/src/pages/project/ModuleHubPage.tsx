@@ -73,8 +73,14 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
             >
               <div
                 className={`h-full rounded-xl border bg-paper p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 ${
-                  ready ? "border-dashed border-line opacity-90" : "border-line hover:border-brand/50"
+                  ready ? "border-dashed border-line opacity-90" : "border-line"
                 }`}
+                onMouseEnter={(e) => {
+                  if (!ready) e.currentTarget.style.borderColor = meta.accent;
+                }}
+                onMouseLeave={(e) => {
+                  if (!ready) e.currentTarget.style.borderColor = "";
+                }}
               >
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <span
@@ -84,15 +90,21 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
                     Tool {String(i + 1).padStart(2, "0")}
                   </span>
                   <span
-                    className={`text-[10px] font-mono uppercase tracking-wide shrink-0 px-2 py-0.5 rounded-full border ${
-                      ready ? "text-warn border-warn/30 bg-warn/5" : "text-brand border-brand/25 bg-brand-soft/40"
-                    }`}
+                    className="text-[10px] font-mono uppercase tracking-wide shrink-0 px-2 py-0.5 rounded-full border"
+                    style={
+                      ready
+                        ? { color: "var(--color-steel-muted)", borderColor: "var(--color-line)", background: "var(--color-sand)" }
+                        : { color: meta.accent, borderColor: `${meta.accent}40`, background: `${meta.accent}14` }
+                    }
                   >
                     {ready ? "Placeholder" : t.sheet ? "Sheet" : "Live"}
                   </span>
                 </div>
-                <div className="font-display text-base font-semibold text-ink group-hover:text-brand leading-snug">
-                  {formatUiText(t.label)}
+                <div
+                  className="font-display text-base font-semibold text-ink leading-snug transition-colors"
+                  style={{ ["--hub-hover" as string]: meta.accent }}
+                >
+                  <span className="group-hover:[color:var(--hub-hover)]">{formatUiText(t.label)}</span>
                 </div>
                 {t.blurb && (
                   <p className="text-sm text-steel-muted mt-2 leading-relaxed line-clamp-3">{formatUiText(t.blurb)}</p>
@@ -107,7 +119,10 @@ export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }
                     ? "Saves to this project only · fill log opens here — assignees fill in the popup"
                     : "Saves to this project only · add / edit / save in the tool"}
                 </p>
-                <div className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold text-brand flex items-center justify-between gap-2">
+                <div
+                  className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold flex items-center justify-between gap-2"
+                  style={{ color: meta.accent }}
+                >
                   <span>{ready ? "Open placeholder" : t.fillFamily ? "Open fill log" : "Open tool"}</span>
                   <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">↗</span>
                 </div>

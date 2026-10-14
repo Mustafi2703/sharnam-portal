@@ -187,12 +187,47 @@ export function spdcDaysTaken(r: DrawingRfiRow) {
   return String(daysBetween(new Date(r.createdAt), new Date(resp.createdAt)));
 }
 
+/** Pull Location / Discipline / Package lines from free-text question when formDataJson is thin. */
+function enrichFormFromQuestion(question: string | undefined, form: Record<string, string>): Record<string, string> {
+  if (!question) return form;
+  const out = { ...form };
+  const patterns: [RegExp, keyof typeof out | string][] = [
+    [/^Location(?:\s*\/\s*grid(?:\s*\/\s*level)?)?\s*:\s*(.+)$/i, "location"],
+    [/^Discipline\s*:\s*(.+)$/i, "discipline"],
+    [/^Package(?:\s*\/\s*WO(?:\s*no\.?)?)?\s*:\s*(.+)$/i, "package"],
+    [/^Category\s*:\s*(.+)$/i, "category"],
+    [/^Spec(?:ification)?\s*clause\s*:\s*(.+)$/i, "specClause"],
+    [/^Proposed\s*solution\s*:\s*(.+)$/i, "contractorSolution"],
+    [/^Contractor(?:'s)?\s*proposed\s*solution\s*:\s*(.+)$/i, "contractorSolution"],
+  ];
+  for (const line of question.split("\n")) {
+    const t = line.trim();
+    for (const [re, key] of patterns) {
+      const m = t.match(re);
+      if (!m?.[1]) continue;
+      const val = m[1].trim();
+      if (!val) continue;
+      if (key === "location") {
+        if (!out.location && !out.locationGrid) out.location = val;
+      } else if (!out[key as string]) {
+        out[key as string] = val;
+      }
+    }
+  }
+  return out;
+}
+
 /** One register row keyed by SPDC column header */
 export function buildSpdcRegisterRow(r: DrawingRfiRow): Record<SpdcRfiRegisterColumn, string> {
-  const form = parseFormDataJson(r.formDataJson);
+  const form = enrichFormFromQuestion(r.question, parseFormDataJson(r.formDataJson));
   const resp = officialResponse(r);
   const priority = spdcPriority(form, r.dueDate, r.createdAt);
   const slaDays = String(form.slaDays || spdcSlaDays(priority));
+  const queryRaised = (form.queryRaised || r.question || "")
+    .split("\n")
+    .filter((line) => !/^(Location|Discipline|Package|Category|Spec(?:ification)?\s*clause|Proposed\s*solution|Contractor)/i.test(line.trim()))
+    .join("\n")
+    .trim() || r.question;
 
   return {
     "RFI NO": r.number,
@@ -205,7 +240,7 @@ export function buildSpdcRegisterRow(r: DrawingRfiRow): Record<SpdcRfiRegisterCo
     "DWG REF": form.drawingRef || form.dwgRef || r.drawing?.drawingNumber || "—",
     "DWG REV": form.drawingRev || form.dwgRev || r.drawing?.currentRev || "—",
     "SPEC CLAUSE": form.specClause || r.specSectionLink || "—",
-    "QUERY RAISED": form.queryRaised || r.question,
+    "QUERY RAISED": queryRaised,
     "CONTRACTOR'S PROPOSED SOLUTION": form.contractorSolution || form.proposedSolution || "—",
     ORIGINATOR: form.originator || r.createdBy?.fullName || "—",
     "DATE RAISED": fmtDate(r.createdAt),

@@ -165,9 +165,12 @@ const MODULE_KEYS: ModuleExportKey[] = [
 
 /** RFI kind groups used on dashboards. */
 const RFI_INFO_KINDS = ["RequestForInformation", "Manual", "ClientConcern"];
-const RFI_INSPECTION_KINDS = ["QualityIR", "SafetyIR", "ActivityInspection"];
-const RFI_FILL_KINDS = ["DrawingChecklist", "QualityInspection", "SafetyChecklist", "SiteExecution"];
-const RFI_DONE = ["Closed", "Approved", "Rejected", "Cancelled", "Withdrawn"];
+/** Inspection products (F-01 / F-02) — includes legacy aliases still in DB. */
+const RFI_INSPECTION_KINDS = ["QualityIR", "QualityInspection", "SafetyIR", "SafetyChecklist", "ActivityInspection"];
+/** Checklist fill requests only — QI/Safety fills are stored as IR kinds above. */
+const RFI_FILL_KINDS = ["DrawingChecklist", "SiteExecution"];
+/** Actionable open = still awaiting a response (not answered / closed). */
+const RFI_OPEN_STATUSES = ["Open", "Draft"];
 
 /** Every project the person can open, with live counts for the dashboard (each number links to its register). */
 reportsRouter.get("/portfolio", async (req: AuthedRequest, res) => {
@@ -182,7 +185,11 @@ reportsRouter.get("/portfolio", async (req: AuthedRequest, res) => {
   if (!ids.length) return res.json({ projects: [] });
   const now = new Date();
   const [rfis, meetings, ncrs, safety, drawings] = await Promise.all([
-    prisma.rfi.groupBy({ by: ["projectId", "rfiKind"], where: { projectId: { in: ids }, status: { notIn: RFI_DONE } }, _count: { _all: true } }),
+    prisma.rfi.groupBy({
+      by: ["projectId", "rfiKind"],
+      where: { projectId: { in: ids }, status: { in: RFI_OPEN_STATUSES } },
+      _count: { _all: true },
+    }),
     prisma.meeting.findMany({
       where: { projectId: { in: ids }, meetingDate: { gte: new Date(now.getTime() - 12 * 3600_000) }, status: { notIn: ["Cancelled"] } },
       select: { projectId: true, meetingDate: true, title: true },
@@ -197,6 +204,7 @@ reportsRouter.get("/portfolio", async (req: AuthedRequest, res) => {
   res.json({
     projects: projects.map((p) => {
       const upcoming = meetings.filter((m) => m.projectId === p.id);
+      const drawingRows = drawings.filter((d) => d.projectId === p.id);
       return {
         ...p,
         openInfoRfis: sumRfi(p.id, RFI_INFO_KINDS),
@@ -206,8 +214,8 @@ reportsRouter.get("/portfolio", async (req: AuthedRequest, res) => {
         nextMeeting: upcoming[0] ? { title: upcoming[0].title, at: upcoming[0].meetingDate } : null,
         openNcrs: ncrs.find((n) => n.projectId === p.id)?._count._all || 0,
         openSafety: safety.find((n) => n.projectId === p.id)?._count._all || 0,
-        drawingsTotal: drawings.filter((d) => d.projectId === p.id).reduce((n, d) => n + d._count._all, 0),
-        drawingsGfc: drawings.find((d) => d.projectId === p.id && d.isPublished)?._count._all || 0,
+        drawingsTotal: drawingRows.reduce((n, d) => n + d._count._all, 0),
+        drawingsGfc: drawingRows.filter((d) => d.isPublished).reduce((n, d) => n + d._count._all, 0),
       };
     }),
   });

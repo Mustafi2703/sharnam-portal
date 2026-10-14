@@ -30,7 +30,7 @@ export function DrawingRfiRegisterTable({ rows, activeId, onSelect }: Props) {
         </div>
         <span className="text-xs font-mono bg-white/10 px-2 py-1 rounded">{rows.length} rows</span>
       </div>
-      <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
+      <div className="sheet-register__scroll register-sheet-viewport register-scroll-area scrollbars-visible flex-1 min-h-0 overflow-auto">
         <table className="w-full text-[11px] min-w-[2400px]">
           <thead className="bg-sand text-left text-[10px] uppercase tracking-wide text-steel-muted sticky top-0 z-10">
             <tr>

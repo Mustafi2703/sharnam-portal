@@ -26,8 +26,9 @@ type PortfolioProject = {
 };
 
 const INFO_KINDS = ["RequestForInformation", "Manual", "ClientConcern"];
-const INSPECTION_KINDS = ["QualityIR", "SafetyIR", "ActivityInspection"];
-const DONE = ["Closed", "Approved", "Rejected", "Cancelled", "Withdrawn"];
+const INSPECTION_KINDS = ["QualityIR", "QualityInspection", "SafetyIR", "SafetyChecklist", "ActivityInspection"];
+/** Still awaiting a response — Answered / Closed are not "open" on the main desk. */
+const OPEN_STATUSES = ["Open", "Draft"];
 
 /** Where each dashboard number opens. */
 const LINKS = {
@@ -54,19 +55,13 @@ const fmtDateTime = (d?: string | Date | null) =>
   d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
 const daysOpen = (d?: string) => (d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000)) : 0);
 
-function CountLink({ to, value, tone = "neutral" }: { to: string; value: number; tone?: "warn" | "danger" | "ok" | "neutral" }) {
+function CountLink({ to, value }: { to: string; value: number; tone?: "warn" | "danger" | "ok" | "neutral" }) {
   const cls =
     value === 0
-      ? "text-steel-muted"
-      : tone === "danger"
-        ? "text-red-700 bg-red-50 border-red-200"
-        : tone === "warn"
-          ? "text-amber-800 bg-amber-50 border-amber-200"
-          : tone === "ok"
-            ? "text-emerald-800 bg-emerald-50 border-emerald-200"
-            : "text-ink bg-sand/50 border-line";
+      ? "text-steel-muted border-transparent"
+      : "text-brand bg-brand-soft/50 border-brand/25";
   return (
-    <Link to={to} className={`inline-flex min-w-[2.25rem] justify-center rounded-md border px-2 py-0.5 font-semibold tabular-nums hover:ring-2 hover:ring-brand/30 ${value === 0 ? "border-transparent" : cls}`}>
+    <Link to={to} className={`inline-flex min-w-[2.25rem] justify-center rounded-md border px-2 py-0.5 font-semibold tabular-nums hover:ring-2 hover:ring-brand/30 ${cls}`}>
       {value}
     </Link>
   );
@@ -75,7 +70,7 @@ function CountLink({ to, value, tone = "neutral" }: { to: string; value: number;
 function Tile({ label, value, hint, icon, to }: { label: string; value: number | string; hint: string; icon: ModuleIconKey; to?: string }) {
   const body = (
     <div className="stat-tile w-full text-left h-full">
-      <div className="stat-tile__icon bg-[#1E3A5F]">
+      <div className="stat-tile__icon bg-[var(--color-procore-navy,#3D4450)]">
         <ModuleIcon name={icon} size={18} className="text-white" />
       </div>
       <div className="min-w-0">
@@ -164,8 +159,12 @@ export default function DashboardPage() {
     [portfolio],
   );
 
-  const openInfo = (detail?.rfis || []).filter((r) => INFO_KINDS.includes(r.rfiKind || "RequestForInformation") && !DONE.includes(r.status));
-  const openInsp = (detail?.rfis || []).filter((r) => INSPECTION_KINDS.includes(r.rfiKind) && !DONE.includes(r.status));
+  const openInfo = (detail?.rfis || []).filter(
+    (r) => INFO_KINDS.includes(r.rfiKind || "RequestForInformation") && OPEN_STATUSES.includes(r.status || "Open"),
+  );
+  const openInsp = (detail?.rfis || []).filter(
+    (r) => INSPECTION_KINDS.includes(r.rfiKind) && OPEN_STATUSES.includes(r.status || "Open"),
+  );
   const upcoming = (detail?.meetings || [])
     .filter((m) => m.meetingDate && new Date(m.meetingDate).getTime() >= Date.now() - 12 * 3600_000 && m.status !== "Cancelled")
     .sort((a, b) => new Date(a.meetingDate).getTime() - new Date(b.meetingDate).getTime());
@@ -180,7 +179,7 @@ export default function DashboardPage() {
     <div className="space-y-5">
       {!readOnly && <OfficeClockInCard />}
 
-      <div className="rounded-2xl bg-[linear-gradient(120deg,#1E3A5F,#0F766E)] text-white p-5 shadow-sm">
+      <div className="rounded-2xl bg-[linear-gradient(120deg,#3D4450,#2C3340)] text-white p-5 shadow-sm border border-line/20">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.16em] opacity-80">Sharnam portal · {portfolio.length} project{portfolio.length === 1 ? "" : "s"}</p>
@@ -196,7 +195,7 @@ export default function DashboardPage() {
         <Tile label="Checklist requests" value={totals.fills} hint="Fills asked for, not done" icon="quality" to={selected ? LINKS.fills(selected.id) : undefined} />
         <Tile label="Upcoming meetings" value={totals.meet} hint="Scheduled from today" icon="comms" to={selected ? LINKS.meetings(selected.id) : undefined} />
         <Tile label="Open NCR / CAR" value={totals.ncr} hint="Non-conformances open" icon="quality" to={selected ? LINKS.ncr(selected.id) : undefined} />
-        <Tile label="Open safety items" value={totals.safety} hint="Observations / incidents open" icon="safety" to={selected ? LINKS.safety(selected.id) : undefined} />
+        <Tile label="Open safety items" value={totals.safety} hint="Safety records still open" icon="safety" to={selected ? LINKS.safety(selected.id) : undefined} />
       </div>
 
       <Card padding={false}>

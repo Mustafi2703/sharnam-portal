@@ -313,12 +313,12 @@ export default function InspectionsPage() {
 
       {sheetKey === "" && (
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line pb-3 -mt-1 shrink-0">
-        <Badge tone="warn">{dash?.totals?.openInspections ?? 0} open F-01 requests</Badge>
+        <Badge tone="brand">{dash?.totals?.openInspections ?? 0} open F-01 requests</Badge>
         <Link to={`/projects/${id}/qap`}>
-          <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
+          <Badge tone="neutral">{dash?.totals?.qapOpen ?? 0} QAP open</Badge>
         </Link>
         <Link to={`/projects/${id}/qap`}>
-          <Badge tone="ok">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
+          <Badge tone="neutral">{dash?.totals?.qapDone ?? 0} QAP done</Badge>
         </Link>
         {id ? (
           <>
@@ -375,7 +375,7 @@ export default function InspectionsPage() {
               ["Open QI", dash.totals.openInspections],
               ["Open NCRs", dash.totals.openNcrs ?? 0],
             ].map(([l, v]) => (
-              <Card key={l as string} className="!p-4 border-brand/20">
+              <Card key={l as string} className="!p-4">
                 <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
                 <div className="text-2xl font-display mt-1">{v as string | number}</div>
               </Card>
@@ -419,10 +419,10 @@ export default function InspectionsPage() {
                     {new Date(project.startDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}.
                   </p>
                 ) : canManage ? (
-                  <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-                    <span className="text-xs text-amber-900">Set the project start so weeks read Week 1, 2, 3 … (earlier weeks show Week 0).</span>
+                  <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-line bg-sand/50 px-3 py-2">
+                    <span className="text-xs text-steel-muted">Set the project start so weeks read Week 1, 2, 3 … (earlier weeks show Week 0).</span>
                     <input type="date" className="rounded border border-line bg-white px-2 py-1 text-xs" value={startDraft} onChange={(e) => setStartDraft(e.target.value)} />
-                    <Button type="button" className="!text-xs !py-1" disabled={!startDraft} onClick={() => void saveProjectStart()}>
+                    <Button type="button" variant="secondary" className="!text-xs !py-1" disabled={!startDraft} onClick={() => void saveProjectStart()}>
                       Set Week 1
                     </Button>
                   </div>
@@ -489,14 +489,14 @@ export default function InspectionsPage() {
               )}
             </Card>
             {(dash.weekCharts?.kpis?.ncDue || []).length > 0 && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                <div className="font-semibold mb-1">28-day cube failures — raise an NCR</div>
-                <ul className="list-disc ml-5 space-y-0.5 text-xs">
+              <div className="rounded-lg border border-line bg-sand/60 p-3 text-sm text-ink">
+                <div className="font-semibold mb-1 text-brand">28-day cube failures — raise an NCR</div>
+                <ul className="list-disc ml-5 space-y-0.5 text-xs text-steel-muted">
                   {dash.weekCharts.kpis.ncDue.map((t: string) => (
                     <li key={t}>{t}</li>
                   ))}
                 </ul>
-                <Link to={`/projects/${id}/quality/ncr-fill-log`} className="inline-block mt-2 text-xs font-semibold underline">
+                <Link to={`/projects/${id}/quality/ncr-fill-log`} className="inline-block mt-2 text-xs font-semibold text-brand underline">
                   Open NCR / CAR →
                 </Link>
               </div>
@@ -986,7 +986,7 @@ export default function InspectionsPage() {
               />
             </label>
             {!projectVendors.length && (
-              <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-steel-muted bg-sand/60 border border-line rounded-lg px-3 py-2">
                 Assign contractors under Project → Vendors first — they receive the form link by email when raised.
               </p>
             )}

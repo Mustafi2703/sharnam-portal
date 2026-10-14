@@ -14,6 +14,7 @@ import { RfiFieldChecklist, RfiProgressBar, RfiStageStepper } from "../../compon
 import { InspectionRequestReference } from "../../components/InspectionRequestReference";
 import { DrawingRfiRegisterTable } from "../../components/DrawingRfiRegisterTable";
 import { RfiDeleteButton } from "../../components/RfiDeleteButton";
+import { SpdcRfiFormView } from "../../components/SpdcRfiFormView";
 import { rfiComposeProgress, rfiProgress } from "../../lib/rfiProgress";
 import { spdcFormDataFromCompose, spdcRegisterDashboard } from "../../lib/rfiRegisterColumns";
 import { rfiUsesDrawingLink } from "../../lib/inspectionRequestForms";
@@ -90,6 +91,7 @@ export default function RfisPage() {
   const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
   const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
   const [registerDetailOpen, setRegisterDetailOpen] = useState(false);
+  const [projectMeta, setProjectMeta] = useState<{ name?: string; code?: string; clientName?: string | null } | null>(null);
 
   useEffect(() => {
     if (!registerDetailOpen) return;
@@ -114,7 +116,7 @@ export default function RfisPage() {
   const kindPills = rfiKindPillsForScope(moduleScope);
 
   const load = async () => {
-    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, v, overview] = await Promise.all([
+    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, v, overview, project] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
@@ -134,10 +136,12 @@ export default function RfisPage() {
       })),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
       api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${id}/overview`, { token }).catch(() => null),
+      api<{ name?: string; code?: string; clientName?: string | null }>(`/api/projects/${id}`, { token }).catch(() => null),
     ]);
     const list = Array.isArray(rPayload) ? rPayload : rPayload.rfis || [];
     setRfis(list);
     setMatrixCanRespond(Array.isArray(rPayload) ? true : !!rPayload.canRespond);
+    setProjectMeta(project);
     setDrawings(d);
     setSiteAssignments(aSite.assignments || []);
     setDrawingAssignments(aDraw.assignments || []);
@@ -342,8 +346,19 @@ export default function RfisPage() {
     void openFamilyChecklistFill(id, fillFamily || "SiteExecution", token, { preferAssignmentFill: true });
   }
 
+  const useSpdcForm =
+    !!selected &&
+    (canonicalRfiKind(selected.rfiKind) === "RequestForInformation" ||
+      canonicalRfiKind(selected.rfiKind) === "DrawingChecklist");
+
   return (
-    <div className={registerMode ? "page-stack--register rfi-register-page flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2 min-w-0" : "space-y-6 min-w-0"}>
+    <div
+      className={
+        registerMode
+          ? "page-stack--register rfi-register-page flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2 min-w-0"
+          : "rfi-desk-page page-scroll-full space-y-6 min-w-0"
+      }
+    >
       <PageHeader
         eyebrow={pageCopy.eyebrow}
         title={isClient ? "Concerns & RFIs" : pageCopy.title}
@@ -727,10 +742,13 @@ export default function RfisPage() {
           </div>
         </div>
       ) : (
-      <div className="grid lg:grid-cols-[340px_1fr] gap-4">
-        <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40">{rfiLogTitle(moduleScope)}</div>
-          <ul className="divide-y divide-line max-h-[min(520px,60vh)] overflow-y-auto overscroll-contain">
+      <div className="grid lg:grid-cols-[320px_1fr] gap-4 items-start">
+        <Card padding={false} className="lg:sticky lg:top-2 flex flex-col max-h-[min(70vh,42rem)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-line font-semibold bg-sand/40 shrink-0 flex items-center justify-between gap-2">
+            <span>{rfiLogTitle(moduleScope)}</span>
+            <span className="text-[11px] font-mono text-steel-muted font-normal">{filtered.length}</span>
+          </div>
+          <ul className="divide-y divide-line flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbars-visible">
             {filtered.map((r) => {
               const prog = rfiProgress(r);
               return (
@@ -760,7 +778,31 @@ export default function RfisPage() {
 
         <Card>
           {!selected && <p className="text-steel-muted text-sm">Select an item</p>}
-          {selected && (
+          {selected && useSpdcForm && (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <RfiDeleteButton
+                  rfi={selected}
+                  token={token}
+                  role={user?.role}
+                  onDeleted={async () => {
+                    setActive(null);
+                    await load();
+                  }}
+                />
+              </div>
+              <SpdcRfiFormView
+                rfi={selected}
+                project={projectMeta}
+                token={token}
+                canRespond={canRespond}
+                canClose={canClose}
+                projectId={id}
+                onReload={load}
+              />
+            </div>
+          )}
+          {selected && !useSpdcForm && (
             <div className="space-y-4">
               <div>
                 <div className="flex items-start justify-between gap-2">
@@ -800,20 +842,11 @@ export default function RfisPage() {
               {id && selected.linkedDrawingId ? (
                 <DrawingMarkupPanel projectId={id} targetType="rfi" targetId={selected.id} drawingId={selected.linkedDrawingId} token={token} />
               ) : null}
-              {(selected.linkedAssignmentId || selected.linkedChecklistItemId) &&
-                (selected.rfiKind === "DrawingChecklist" ||
-                  selected.rfiKind === "QualityInspection" ||
-                  selected.rfiKind === "QualityIR" ||
-                  selected.rfiKind === "SafetyIR" ||
-                  selected.rfiKind === "RequestForInformation" ||
-                  selected.rfiKind === "SafetyChecklist" ||
-                  selected.rfiKind === "ActivityInspection" ||
-                  selected.rfiKind === "SiteExecution") && (
+              {(selected.linkedAssignmentId || selected.linkedChecklistItemId) && (
                 <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
                   <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill this checklist</div>
                   <p className="text-steel-muted text-xs leading-relaxed">
                     This request is already on the fill log for the assigned vendor / site person.
-                    Drawing-check fills are items only; Quality / Site / Safety fills still take photos.
                   </p>
                   <Button type="button" className="!text-sm" onClick={openFillForm}>
                     Fill checklist form →
@@ -826,11 +859,12 @@ export default function RfisPage() {
                   {selected.responses?.map((resp: any) => (
                     <li key={resp.id} className="rounded-xl border border-line p-3 text-sm">
                       <div className="text-xs text-steel-muted">
-                        {resp.respondedBy.fullName} · {new Date(resp.createdAt).toLocaleString()}
+                        {resp.respondedBy?.fullName || "—"} · {new Date(resp.createdAt).toLocaleString()}
                       </div>
-                      <div className="mt-1">{resp.responseText}</div>
+                      <div className="mt-1 whitespace-pre-wrap">{resp.responseText}</div>
                     </li>
                   ))}
+                  {!selected.responses?.length && <li className="text-sm text-steel-muted">No responses yet.</li>}
                 </ul>
               </div>
               {canRespond && selected.status !== "Closed" && (
@@ -901,59 +935,7 @@ export default function RfisPage() {
                 </button>
               </div>
               <div className="register-modal__body">
-                {selectedProgress && (
-                  <div className="space-y-2">
-                    <RfiStageStepper progress={selectedProgress} />
-                    <RfiProgressBar progress={selectedProgress} />
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone="brand">{selected.rfiKind || "RequestForInformation"}</Badge>
-                  <Badge tone="brand">Ball: {selected.ballInCourt}</Badge>
-                  <Badge>{selected.status}</Badge>
-                  {selected.drawing && <Badge tone="neutral">{selected.drawing.drawingNumber}</Badge>}
-                </div>
-                <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
-                {id && selected.linkedDrawingId ? (
-                  <DrawingMarkupPanel projectId={id} targetType="rfi" targetId={selected.id} drawingId={selected.linkedDrawingId} token={token} />
-                ) : null}
-                {(selected.linkedAssignmentId || selected.linkedChecklistItemId) && (
-                  <div className="rounded-lg border-2 border-brand bg-brand-soft/40 p-4 text-sm space-y-3">
-                    <div className="font-semibold text-xs uppercase tracking-wider text-brand">Fill checklist</div>
-                    <Button type="button" className="!text-sm" onClick={openFillForm}>
-                      Open checklist form →
-                    </Button>
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="!text-xs"
-                    onClick={() =>
-                      void downloadAuthFile(
-                        `/api/rfis/${selected.id}/download.xlsx`,
-                        token,
-                        `${selected.number || "RFI"}.xlsx`
-                      )
-                    }
-                  >
-                    Download SPDC form
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="!text-xs"
-                    onClick={() =>
-                      void downloadAuthFile(
-                        `/api/rfis/${selected.id}/download.html`,
-                        token,
-                        `${selected.number || "RFI"}.html`
-                      )
-                    }
-                  >
-                    Print / PDF
-                  </Button>
+                <div className="flex flex-wrap justify-end gap-2 mb-2">
                   <RfiDeleteButton
                     rfi={selected}
                     token={token}
@@ -965,20 +947,53 @@ export default function RfisPage() {
                     }}
                   />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-sm mb-2">Responses</h3>
-                  <ul className="space-y-2">
-                    {selected.responses?.map((resp: any) => (
-                      <li key={resp.id} className="rounded-xl border border-line p-3 text-sm">
-                        <div className="text-xs text-steel-muted mb-1">
-                          {resp.respondedBy?.fullName || "—"} · {resp.official ? "Official" : "Note"}
-                        </div>
-                        <div className="whitespace-pre-wrap">{resp.text}</div>
-                      </li>
-                    ))}
-                    {!selected.responses?.length && <li className="text-sm text-steel-muted">No responses yet.</li>}
-                  </ul>
-                </div>
+                {useSpdcForm ? (
+                  <SpdcRfiFormView
+                    rfi={selected}
+                    project={projectMeta}
+                    token={token}
+                    canRespond={canRespond}
+                    canClose={canClose}
+                    projectId={id}
+                    onReload={load}
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {selectedProgress && (
+                      <div className="space-y-2">
+                        <RfiStageStepper progress={selectedProgress} />
+                        <RfiProgressBar progress={selectedProgress} />
+                      </div>
+                    )}
+                    <div className="rounded-xl bg-sand/40 p-4 text-sm whitespace-pre-wrap">{selected.question}</div>
+                    {id && selected.linkedDrawingId ? (
+                      <DrawingMarkupPanel
+                        projectId={id}
+                        targetType="rfi"
+                        targetId={selected.id}
+                        drawingId={selected.linkedDrawingId}
+                        token={token}
+                      />
+                    ) : null}
+                    <div>
+                      <h3 className="font-semibold text-sm mb-2">Responses</h3>
+                      <ul className="space-y-2">
+                        {selected.responses?.map((resp: any) => (
+                          <li key={resp.id} className="rounded-xl border border-line p-3 text-sm">
+                            <div className="text-xs text-steel-muted mb-1">
+                              {resp.respondedBy?.fullName || "—"} ·{" "}
+                              {resp.isOfficialResponse ? "Official" : "Note"}
+                            </div>
+                            <div className="whitespace-pre-wrap">{resp.responseText}</div>
+                          </li>
+                        ))}
+                        {!selected.responses?.length && (
+                          <li className="text-sm text-steel-muted">No responses yet.</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>,
