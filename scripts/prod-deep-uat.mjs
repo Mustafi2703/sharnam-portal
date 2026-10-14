@@ -452,21 +452,22 @@ async function sectionSetup() {
     const clean = (s) => String(s || "").replace(/\bUAT-\d{4}-\d{2}-\d{2}\s*/gi, "").replace(/\bUAT[-\s]*/gi, "").replace(/\s{2,}/g, " ").trim();
     let n = 0;
     const rfis = await call("office", "GET", `/api/rfis/project/${pid()}`);
-    const rfiRows = Array.isArray(rfis.body) ? rfis.body : rfis.body?.rows || rfis.body?.rfis || [];
+    const rfiRows = Array.isArray(rfis.body) ? rfis.body : rfis.body?.rfis || rfis.body?.rows || [];
     for (const r of rfiRows) {
       const subject = clean(r.subject);
       const question = clean(r.question);
-      if ((subject && subject !== r.subject) || (question && question !== r.question)) {
+      if (subject !== String(r.subject || "") || question !== String(r.question || "")) {
         const patch = await call("office", "PATCH", `/api/rfis/${r.id}`, { subject: subject || r.subject, question: question || r.question });
         if (patch.status < 400) n++;
       }
     }
-    const coords = await call("office", "GET", `/api/directory/project/${pid()}/coordination`);
-    const cRows = Array.isArray(coords.body) ? coords.body : coords.body?.rows || coords.body?.issues || [];
+    const overview = await call("office", "GET", `/api/directory/project/${pid()}/overview`);
+    const cRows = overview.body?.coordination || [];
     for (const c of cRows) {
+      if (!c?.id) continue;
       const title = clean(c.title);
       const description = clean(c.description);
-      if ((title && title !== c.title) || (description && description !== c.description)) {
+      if (title !== String(c.title || "") || description !== String(c.description || "")) {
         const patch = await call("office", "PATCH", `/api/directory/coordination/${c.id}`, { title: title || c.title, description: description || c.description });
         if (patch.status < 400) n++;
       }

@@ -32,18 +32,16 @@ Mark each row `[OK]` / `[FIX]` / `[RETEST]` after you check in the UI.
 
 Evidence folder: `docs/uat-evidence/prod-deep-YYYY-MM-DD/REPORT.md` (now includes **Module scorecard**).
 
-### Snapshot — run on `34cada1` · **24 / 44** · portal dropped mid-run
+### Snapshot — `9a5c062` · 14 Oct 2026
 
 | Module | Worked | Didn’t / watch | Your mark |
 |---|---|---|---|
-| **CRM / Logins** | ✅ All 6 portal logins | CRM-1…3 on newer commit `abaf17f` (not in this run) | `[ ]` |
-| **Setup** | ✅ Team, matrix, logo, pin | — | `[ ]` |
-| **Drawings** | ✅ **9/9 GFC**, R1, exports, client blocked, fill log | Settings 404 soft; library timeout soft | `[ ]` |
-| **Design coordination** | ✅ Issue → escalate → consultant close | ❌ DCI-4 export `0/200` (gateway) | `[ ]` |
-| **Quality** | ✅ QA-3 SOR + QA-4 NCR | ❌ QA-1/2 download timeout; QA-5/6 **fetch failed** (API down) | `[ ]` |
-| **Safety / Progress / DPR / WPR** | — | ❌ All **TypeError: fetch failed** — **portal.spdc.in unreachable** after ~QA-4 | `[ ]` |
+| **CRM / Logins** | ✅ **15/15** — all 6 logins, Voltamp visible, SET-5 scrubbed UAT- labels | Restore admin API returns 403 (logins still OK) | `[ ]` |
+| **Drawings / PDF viewer** | ✅ **10/10** revisions re-uploaded with **real 3-page GFC PDF**; `/revision/:id/pdf` returns 200; viewer uses auth blob | Open any GFC → Full-screen PDF / Mark up drawing | `[ ]` |
+| **Design coordination / RFI markup** | Markup loads linked drawing PDF via same API | Check cloud/box tools on VT-ST-101 | `[ ]` |
+| **Other modules** | Per-module runners: `node scripts/uat-modules/run.mjs CRM` etc. | Run `--from DWG` when checking next | `[ ]` |
 
-**Blocker:** Hostinger / `portal.spdc.in` went offline mid-UAT. Retest `UAT_ONLY=QA,SAF,PRG,DPR,WPR` once health is OK.
+**How to check PDF markup now:** Site login → Voltamp → Drawings → open VT-ST-101 → viewer shows 3 pages → Coordination / RFI → **Mark up drawing**.
 
 ---
 
