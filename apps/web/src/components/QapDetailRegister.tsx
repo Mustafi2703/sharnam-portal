@@ -109,6 +109,7 @@ export function QapDetailRegister({
     return localRows.filter((r) => weekMatchesFilter(r.weekLabel, weekFilter));
   }, [localRows, weekFilter, showWeekFilter]);
 
+  /** Week 50 Excel always has 7 QC-log day columns — show them even when rows have no ticks yet. */
   const dayLabels = useMemo(() => {
     const set = new Set<string>();
     for (const r of filtered) {
@@ -119,7 +120,18 @@ export function QapDetailRegister({
         /* ignore */
       }
     }
-    return Array.from(set).sort();
+    const fromData = Array.from(set).sort();
+    if (fromData.length >= 7) return fromData.slice(0, 7);
+    if (fromData.length > 0) {
+      const out = [...fromData];
+      let i = 1;
+      while (out.length < 7) {
+        const pad = `Day ${i++}`;
+        if (!out.includes(pad)) out.push(pad);
+      }
+      return out;
+    }
+    return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   }, [filtered]);
 
   function sectionLabel(row: QapRow): string {
@@ -245,12 +257,12 @@ export function QapDetailRegister({
         )}
 
         <div className="register-scroll-hint shrink-0 px-4 py-1.5 border-b border-line">
-          Scroll ↔ ↕ inside sheet · project details stay fixed above · saves on blur
+          Scroll ↔ for Records, Remarks and daily QC logs · ↕ for all activity lines · saves on blur
         </div>
 
         <div className="sheet-register register-sheet-shell flex flex-col min-w-0 w-full border-t border-line">
-          <RegisterScrollArea tall className="qap-register__scroll sheet-register__scroll">
-            <table className="qap-register__table register-editor-pro min-w-[96rem]">
+          <RegisterScrollArea tall className="qap-register__scroll sheet-register__scroll scrollbars-visible">
+            <table className="qap-register__table register-editor-pro min-w-[110rem]">
               <thead className="spdc-register-thead">
                 <tr>
                   <th rowSpan={2} className="text-left qap-sticky-sr">
@@ -280,23 +292,16 @@ export function QapDetailRegister({
                   <th colSpan={1} className="text-center spdc-th-client">
                     CLIENT
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[8rem]">
+                  <th rowSpan={2} className="text-left min-w-[10rem]">
                     Records and documents to be Maintained
                   </th>
-                  <th rowSpan={2} className="text-left min-w-[6rem]">
+                  <th rowSpan={2} className="text-left min-w-[7rem]">
                     Remarks if any
                   </th>
-                  {dayLabels.map((d) => (
-                    <th
-                      key={d}
-                      rowSpan={2}
-                      className="text-center min-w-[2.5rem] align-middle"
-                      title={d}
-                    >
-                      {formatDayLabel(d)}
-                    </th>
-                  ))}
-                  <th rowSpan={2} className="text-left">
+                  <th colSpan={dayLabels.length} className="text-center qap-th-daily">
+                    Quality Control Logs
+                  </th>
+                  <th rowSpan={2} className="text-left min-w-[5rem]">
                     Status
                   </th>
                   {canEdit && <th rowSpan={2} className="w-28">Edit / Delete</th>}
@@ -306,6 +311,11 @@ export function QapDetailRegister({
                   <th className="spdc-th-contractor spdc-th-sub">Checker</th>
                   <th className="spdc-th-pmc spdc-th-sub">Checker</th>
                   <th className="spdc-th-client spdc-th-sub">Checker</th>
+                  {dayLabels.map((d) => (
+                    <th key={d} className="text-center min-w-[2.75rem] align-middle qap-th-daily-sub" title={d}>
+                      {formatDayLabel(d)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -441,19 +451,21 @@ export function QapDetailRegister({
                             }
                           />
                         </td>
-                        <td className="text-left align-top border border-line px-1 py-0.5">
+                        <td className="text-left align-top border border-line px-1 py-0.5 min-w-[10rem]">
                           <RegisterSheetCell
                             value={q.records || ""}
                             list="qap-pick-records"
                             disabled={!canEdit}
+                            className="min-w-[9rem]"
                             onCommit={(v) => void patchRow(q.id, { records: v || null })}
                           />
                         </td>
-                        <td className={`text-left align-top border border-line px-1 py-0.5 ${remarksCellClass(q.remarks)}`}>
+                        <td className={`text-left align-top border border-line px-1 py-0.5 min-w-[7rem] ${remarksCellClass(q.remarks)}`}>
                           <RegisterSheetCell
                             value={q.remarks || ""}
                             list="qap-pick-remarks"
                             disabled={!canEdit}
+                            className="min-w-[6rem]"
                             onCommit={(v) => void patchRow(q.id, { remarks: v || null })}
                           />
                         </td>

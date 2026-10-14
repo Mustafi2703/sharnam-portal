@@ -17,13 +17,20 @@ function s(v: unknown, max = 500) {
   return t ? t.slice(0, max) : "";
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+/** Calendar day key — use local Y-M-D (not UTC) so IST Excel midnights are not shifted back a day. */
 function excelSerialToDay(v: unknown): string | null {
   if (v == null || v === "") return null;
-  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return `${v.getFullYear()}-${pad2(v.getMonth() + 1)}-${pad2(v.getDate())}`;
+  }
   if (typeof v === "number" && v > 40000) {
     const epoch = new Date(Date.UTC(1899, 11, 30));
     epoch.setUTCDate(epoch.getUTCDate() + Math.floor(v));
-    return epoch.toISOString().slice(0, 10);
+    return `${epoch.getUTCFullYear()}-${pad2(epoch.getUTCMonth() + 1)}-${pad2(epoch.getUTCDate())}`;
   }
   const t = s(v, 40);
   if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
@@ -196,7 +203,15 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
           clientRole: row.clientRole || null,
           records: row.records || null,
           remarks: row.remarks || null,
-          dailyChecks: Object.keys(row.dailyChecks).length ? JSON.stringify(row.dailyChecks) : null,
+          /** Always persist day keys from the Week 50 header so the UI shows all QC-log columns. */
+          dailyChecks:
+            parsed.dayLabels.length > 0
+              ? JSON.stringify(
+                  Object.fromEntries(parsed.dayLabels.map((d) => [d, !!row.dailyChecks[d]])),
+                )
+              : Object.keys(row.dailyChecks).length
+                ? JSON.stringify(row.dailyChecks)
+                : null,
           contractorOk: flags.contractorOk,
           pmcOk: flags.pmcOk,
           clientOk: flags.clientOk,

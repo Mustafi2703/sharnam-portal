@@ -3108,6 +3108,19 @@ html.is-tool-window #root {
   font-weight: 700;
   text-align: center;
 }
+.qap-register__table thead .qap-th-daily {
+  background: color-mix(in srgb, var(--color-brand) 22%, #0f172a);
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.qap-register__table thead .qap-th-daily-sub {
+  background: color-mix(in srgb, var(--color-brand) 14%, #1e293b);
+  color: #f8fafc;
+  font-size: 10px;
+  min-width: 2.75rem;
+}
 
 .cube-group-start td {
   border-top: 2px solid var(--color-brand) !important;
