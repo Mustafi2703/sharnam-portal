@@ -73,31 +73,27 @@ export async function advanceProjectWeeksAfterFill(opts: {
     }
   }
 
-  let driveFiles = 0;
-  try {
-    const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
-    const published = await publishQualityPackToDrive(opts.projectId, opts.userId, nextLabel);
-    driveFiles = published.length;
-  } catch (err) {
-    console.warn("[checklist] week dashboard publish:", err instanceof Error ? err.message : err);
-  }
+  // SharePoint pack publish is minutes — never await on the request that called us (gateway ~60s).
+  import("./registerWorkbookPublish.js")
+    .then(({ publishQualityPackToDrive }) => publishQualityPackToDrive(opts.projectId, opts.userId, nextLabel))
+    .then((published) => console.log(`[checklist] week pack published ${published.length} file(s) → ${nextLabel}`))
+    .catch((err) => console.warn("[checklist] week dashboard publish:", err instanceof Error ? err.message : err));
 
   return {
     nextWeek: nextLabel,
     qapCopied,
-    driveFiles,
+    driveFiles: 0,
+    sharePointPending: true,
     checklistType: opts.checklistType || null,
   };
 }
 
 /** Republish QAP + cube + quality dashboard after a fill, review, or RFI close — no extra week copy. */
 export async function refreshQualityPackAfterChange(projectId: string, userId: string) {
-  try {
-    const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
-    const published = await publishQualityPackToDrive(projectId, userId);
-    return published.length;
-  } catch (err) {
-    console.warn("[checklist] quality pack refresh:", err instanceof Error ? err.message : err);
-    return 0;
-  }
+  // Fire-and-forget so review/close APIs return before the gateway times out.
+  import("./registerWorkbookPublish.js")
+    .then(({ publishQualityPackToDrive }) => publishQualityPackToDrive(projectId, userId))
+    .then((published) => console.log(`[checklist] quality pack refresh ${published.length} file(s)`))
+    .catch((err) => console.warn("[checklist] quality pack refresh:", err instanceof Error ? err.message : err));
+  return 0;
 }
