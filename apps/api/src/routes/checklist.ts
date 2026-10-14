@@ -3818,7 +3818,7 @@ checklistRouter.post(
   async (req: AuthedRequest, res) => {
     if (!req.file?.buffer) return res.status(400).json({ error: "Excel file required" });
     const { importQapWorkbook } = await import("../services/qapImportExport.js");
-    const out = await importQapWorkbook(req.params.projectId, req.file.buffer);
+    const out = await importQapWorkbook(req.params.projectId, req.file.buffer, true, req.user!.id);
     const { publishQualityPackToDrive, archiveUploadedWorkbook } = await import("../services/registerWorkbookPublish.js");
     const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id, out.weekLabel).catch(() => []);
     const archived = await archiveUploadedWorkbook({
@@ -3842,7 +3842,7 @@ checklistRouter.post(
     const file = resolveQapWeek50Path();
     if (!file) return res.status(404).json({ error: "Quality Assurance Plan Week 50.xlsx not found on server" });
     const fs = await import("fs");
-    const out = await importQapWorkbook(req.params.projectId, fs.readFileSync(file), true);
+    const out = await importQapWorkbook(req.params.projectId, fs.readFileSync(file), true, req.user!.id);
     const { publishQualityPackToDrive } = await import("../services/registerWorkbookPublish.js");
     const drive = await publishQualityPackToDrive(req.params.projectId, req.user!.id, out.weekLabel).catch(() => []);
     res.json({ ...out, drive });
@@ -3869,19 +3869,69 @@ checklistRouter.get("/checklist-pack/inventory", requireAuth, async (_req, res) 
   res.json(loadChecklistPackInventory());
 });
 
-/** The client's QAP library (Sheet2 of Quality Assurance Plan Week 50.xlsx): activities and their checks. */
-checklistRouter.get("/project/:projectId/qap/library", async (req, res) => {
-  const { getQapLibrary } = await import("../services/qapSettings.js");
+/** This project's QAP activity master (Week 50 Sheet1 + Sheet2): activities and their checks. */
+checklistRouter.get("/project/:projectId/qap/library", async (req: AuthedRequest, res) => {
+  const { ensureQapMasterForProject, getQapLibrary } = await import("../services/qapSettings.js");
+  await ensureQapMasterForProject(req.params.projectId, req.user?.id).catch(() => undefined);
   res.json((await getQapLibrary(req.params.projectId)).library);
 });
 
-/** QAP settings tool: this project's library and pick-lists (standard unless customised). */
-checklistRouter.get("/project/:projectId/qap/settings", async (req, res) => {
-  const { getQapLibrary, getQapPickers, QAP_PICKER_EDITABLE } = await import("../services/qapSettings.js");
+/** QAP settings tool: this project's library and pick-lists (persisted per project like checklist masters). */
+checklistRouter.get("/project/:projectId/qap/settings", async (req: AuthedRequest, res) => {
+  const { ensureQapMasterForProject, getQapLibrary, getQapPickers, QAP_PICKER_EDITABLE } = await import("../services/qapSettings.js");
   const { loadQapLibrary } = await import("../services/qapLibrary.js");
+  await ensureQapMasterForProject(req.params.projectId, req.user?.id).catch(() => undefined);
   const [lib, pickers] = await Promise.all([getQapLibrary(req.params.projectId), getQapPickers(req.params.projectId)]);
-  res.json({ library: lib.library, libraryCustom: lib.custom, standardLibraryActivities: loadQapLibrary().length, pickers: pickers.lists, pickersCustom: pickers.custom, editablePickers: QAP_PICKER_EDITABLE });
+  res.json({
+    library: lib.library,
+    libraryCustom: lib.custom,
+    standardLibraryActivities: loadQapLibrary().length,
+    pickers: pickers.lists,
+    pickersCustom: pickers.custom,
+    editablePickers: QAP_PICKER_EDITABLE,
+  });
 });
+
+/**
+ * Load / refresh Week 50 activity master + pick-lists onto this project
+ * (same idea as quality-catalog/sync for checklist types).
+ */
+checklistRouter.post(
+  "/project/:projectId/qap/settings/sync-master",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const { syncQapMasterForProject } = await import("../services/qapSettings.js");
+    const force = req.query.force === "1" || req.body?.force === true;
+    const out = await syncQapMasterForProject(req.params.projectId, req.user!.id, { force });
+    if (!out.source && !out.libraryActivities) {
+      return res.status(404).json({ error: "Quality Assurance Plan Week 50.xlsx not found on server" });
+    }
+    await audit("qap.master.sync", {
+      userId: req.user!.id,
+      entity: "Project",
+      entityId: req.params.projectId,
+      meta: out,
+    });
+    res.json({ ok: true, ...out });
+  },
+);
+
+/** Onboard Week 50 QAP master activities + pickers for every project. */
+checklistRouter.post(
+  "/qap/settings/sync-master-all",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const { syncQapMasterForAllProjects } = await import("../services/qapSettings.js");
+    const force = req.query.force === "1" || req.body?.force === true;
+    const out = await syncQapMasterForAllProjects(req.user!.id, { force });
+    await audit("qap.master.sync_all", {
+      userId: req.user!.id,
+      entity: "QapMaster",
+      meta: { projects: out.projects, force },
+    });
+    res.json({ ok: true, ...out });
+  },
+);
 
 /** This project's QAP library as Excel in the client's Sheet2 layout (re-importable), branded on the way out. */
 checklistRouter.get("/project/:projectId/qap/settings/library/download.xlsx", async (req, res) => {

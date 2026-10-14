@@ -8,6 +8,7 @@ import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDeta
 import { QapLibraryModal } from "../../components/QapLibraryModal";
 import { QapRegisterAddForm, type QapAddFormState } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
+import { invalidateQapSettings } from "../../lib/qapSettings";
 import { normalizeWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
 
 /** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
@@ -104,11 +105,19 @@ export default function QapPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const out = await api<{ imported: number; weekLabel: string }>(
-        `/api/checklist/project/${id}/qap/import`,
-        { method: "POST", token, body: fd }
-      );
-      setMsg(`Imported ${out.imported} QAP lines for ${out.weekLabel}`);
+      const out = await api<{
+        imported: number;
+        weekLabel: string;
+        libraryActivities?: number;
+        libraryChecks?: number;
+        pickersOnboarded?: number;
+      }>(`/api/checklist/project/${id}/qap/import`, { method: "POST", token, body: fd });
+      invalidateQapSettings(id);
+      const libBit =
+        out.libraryActivities != null
+          ? ` · library ${out.libraryActivities} activities / ${out.libraryChecks ?? 0} checks · ${out.pickersOnboarded ?? 0} pick-lists`
+          : "";
+      setMsg(`Imported ${out.imported} QAP lines for ${out.weekLabel}${libBit}`);
       setWeekFilter(out.weekLabel);
       await load();
     } catch (err) {
@@ -250,11 +259,19 @@ export default function QapPage() {
                   setBusy(true);
                   setMsg("");
                   try {
-                    const out = await api<{ imported: number; weekLabel: string }>(
-                      `/api/checklist/project/${id}/qap/sync-template`,
-                      { method: "POST", token },
-                    );
-                    setMsg(`Loaded ${out.imported} QAP lines (${out.weekLabel}).`);
+                    const out = await api<{
+                      imported: number;
+                      weekLabel: string;
+                      libraryActivities?: number;
+                      libraryChecks?: number;
+                      pickersOnboarded?: number;
+                    }>(`/api/checklist/project/${id}/qap/sync-template`, { method: "POST", token });
+                    invalidateQapSettings(id);
+                    const libBit =
+                      out.libraryActivities != null
+                        ? ` · library ${out.libraryActivities} activities / ${out.libraryChecks ?? 0} checks · ${out.pickersOnboarded ?? 0} pick-lists`
+                        : "";
+                    setMsg(`Loaded ${out.imported} QAP lines (${out.weekLabel})${libBit}.`);
                     setWeekFilter("");
                     await load();
                   } catch (err) {

@@ -198,7 +198,7 @@ export default function QapSettingsPage() {
       <PageHeader
         eyebrow="Quality module · QAP master"
         title="QAP master"
-        subtitle="Upload the client's QAP master Excel, keep this project's QAP library (activity → checks with frequency, code and test agency) and the pick-lists used on the QAP sheet. Everything downloads in Sharnam format."
+        subtitle="This project's QAP activity master — Week 50 activities and pick-lists you can edit, extend, and use when adding lines on the QAP sheet (same pattern as quality / safety checklist masters)."
       />
       <QapPickerLists />
       <StatusNote msg={msg || error} />
@@ -207,13 +207,36 @@ export default function QapSettingsPage() {
       ) : null}
 
       <section className="space-y-2">
-        <h3 className="font-semibold">1. Upload the QAP master Excel</h3>
+        <h3 className="font-semibold">1. Load QAP activity master</h3>
         <Card className="space-y-3">
           <p className="text-sm text-steel-muted">
-            The client's full QAP workbook (e.g. <span className="font-mono">Quality Assurance Plan Week 50.xlsx</span>). The week sheet loads as QAP lines on the QAP sheet; its library sheet (Sheet2 · Activity · Description · Frequency · Code · Test agency), when present, becomes this project's library. The file is also archived to SharePoint.
+            Same idea as quality / safety checklist masters: each project gets its own copy of the Week 50 activities
+            (Sheet1 — Site Survey, Excavation, Concreting…) plus materials checks (Sheet2), and the pick-lists used when
+            adding lines. Edit activities here, add more, then use them on the QAP sheet via “Add from QAP library”.
           </p>
           {canManage ? (
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void run("sync", "Loading Week 50 activity master", async () => {
+                    const out = await api<{
+                      libraryActivities: number;
+                      libraryChecks: number;
+                      pickersCustom: string[];
+                      fromSheet1: number;
+                      fromSheet2: number;
+                      skipped?: boolean;
+                    }>(`/api/checklist/project/${id}/qap/settings/sync-master?force=1`, { method: "POST", token, timeoutMs: 120_000 });
+                    return out.skipped
+                      ? `Already on file — ${out.libraryActivities} activities / ${out.libraryChecks} checks.`
+                      : `Loaded ${out.libraryActivities} activities / ${out.libraryChecks} checks from Week 50 (Sheet1 ${out.fromSheet1} · Sheet2 ${out.fromSheet2}) · ${out.pickersCustom?.length ?? 0} pick-lists.`;
+                  })
+                }
+              >
+                {busy === "sync" ? "Loading…" : "Load Week 50 master activities"}
+              </Button>
               <input
                 ref={masterRef}
                 type="file"
@@ -225,10 +248,12 @@ export default function QapSettingsPage() {
                   if (f) void uploadMaster(f);
                 }}
               />
-              <Button type="button" disabled={Boolean(busy)} onClick={() => masterRef.current?.click()}>
+              <Button type="button" variant="secondary" disabled={Boolean(busy)} onClick={() => masterRef.current?.click()}>
                 {busy === "master" ? "Uploading…" : "Upload QAP master Excel"}
               </Button>
-              <Link to={`/projects/${id}/qap`} className="text-sm font-semibold text-brand">Open the QAP sheet →</Link>
+              <Link to={`/projects/${id}/qap`} className="text-sm font-semibold text-brand">
+                Open the QAP sheet →
+              </Link>
             </div>
           ) : null}
         </Card>
@@ -280,7 +305,8 @@ export default function QapSettingsPage() {
           </div>
         </div>
         <p className="text-xs text-steel-muted">
-          Excel layout (same as Sheet2 of <span className="font-mono">Quality Assurance Plan Week 50.xlsx</span>): Activity · Description · Frequency · Code of Conformance · Test agency. The activity name goes on the first row of its checks.
+          Master source: <span className="font-mono">Quality Assurance Plan Week 50.xlsx</span> Sheet1 (full activities) + Sheet2 (materials).
+          Export layout: Activity · Description · Frequency · Code of Conformance · Test agency. Add new activities below; Save applies them to this project only.
         </p>
 
         <div className="grid lg:grid-cols-[minmax(220px,300px)_1fr] gap-3 items-start">

@@ -133,7 +133,7 @@ export async function provisionProjectSheetPack(
     const { importQapWorkbook, resolveQapWeek50Path } = await import("./qapImportExport.js");
     const file = resolveQapWeek50Path();
     if (!file) throw new Error("Quality Assurance Plan Week 50.xlsx not found");
-    const out = await importQapWorkbook(projectId, fs.readFileSync(file), true);
+    const out = await importQapWorkbook(projectId, fs.readFileSync(file), true, userId);
     const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
     await publishQualityPackToDrive(projectId, userId, (out as { weekLabel?: string }).weekLabel).catch(() => []);
     return (out as { imported?: number }).imported ?? 0;

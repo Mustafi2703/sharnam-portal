@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
 import { StatusNote } from "../components/StatusNote";
+import { invalidateQapSettings } from "../lib/qapSettings";
 
 type Load = { status: "idle" | "running" | "done" | "failed"; startedAt?: string; finishedAt?: string; startedBy?: string; summary?: Record<string, unknown>; error?: string };
 
@@ -103,10 +104,39 @@ function DemoTemplatesCard({ token }: { token: string | null }) {
     {
       key: "qap",
       label: "Load QAP Week 50 template",
-      hint: "Quality Assurance Plan activity lines",
+      hint: "QAP lines + activity master + pick-lists for this project",
       fn: async () => {
-        const out = await api<{ imported: number; weekLabel: string }>(`/api/checklist/project/${projectId}/qap/sync-template`, { method: "POST", token });
-        return `QAP: ${out.imported} lines (${out.weekLabel}).`;
+        const out = await api<{
+          imported: number;
+          weekLabel: string;
+          libraryActivities?: number;
+          libraryChecks?: number;
+          pickersOnboarded?: number;
+        }>(`/api/checklist/project/${projectId}/qap/sync-template`, { method: "POST", token });
+        invalidateQapSettings(projectId);
+        const lib =
+          out.libraryActivities != null
+            ? ` · library ${out.libraryActivities} activities / ${out.libraryChecks ?? 0} checks · ${out.pickersOnboarded ?? 0} pick-lists`
+            : "";
+        return `QAP: ${out.imported} lines (${out.weekLabel})${lib}.`;
+      },
+    },
+    {
+      key: "global:qap-master-all",
+      label: "Load QAP master on all projects",
+      hint: "Week 50 Sheet1 activities + pick-lists (like checklist types) for every project",
+      global: true,
+      fn: async () => {
+        const out = await api<{
+          projects: number;
+          results: Array<{ code: string; libraryActivities: number; libraryChecks: number; skipped?: boolean }>;
+        }>(`/api/checklist/qap/settings/sync-master-all?force=1`, { method: "POST", token, timeoutMs: 180_000 });
+        if (projectId) invalidateQapSettings(projectId);
+        const sample = out.results?.[0];
+        const bit = sample
+          ? ` (e.g. ${sample.code}: ${sample.libraryActivities} activities / ${sample.libraryChecks} checks)`
+          : "";
+        return `QAP master onboarded on ${out.projects} project(s)${bit}.`;
       },
     },
     {

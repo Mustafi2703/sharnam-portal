@@ -76,12 +76,19 @@ uatDataRouter.post("/load-arvind", async (req: AuthedRequest, res) => {
         where: { OR: [{ source: "SPDC HSE Pack" }, { checklistType: "ActivityInspection", isActive: true }] },
         select: { id: true },
       });
+      const { syncQapMasterForProject } = await import("../services/qapSettings.js");
       for (const p of arvindProjects) {
         try {
           const q = await syncQualityChecklistCatalog(p.id);
           templates[`${p.code} quality`] = q.assigned;
         } catch (err) {
           templates[`${p.code} quality`] = `failed: ${err instanceof Error ? err.message : err}`;
+        }
+        try {
+          const qm = await syncQapMasterForProject(p.id, undefined, { force: true });
+          templates[`${p.code} qap master`] = `${qm.libraryActivities} activities / ${qm.libraryChecks} checks`;
+        } catch (err) {
+          templates[`${p.code} qap master`] = `failed: ${err instanceof Error ? err.message : err}`;
         }
         for (const t of hseAndActivity) {
           await prisma.checklistAssignment.upsert({

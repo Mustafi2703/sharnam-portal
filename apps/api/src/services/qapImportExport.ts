@@ -2,10 +2,11 @@
  * QAP import / export —
  * - Quality Assurance Plan Week 50.xlsx · Sheet1 (weekly execution + day columns)
  * - Monthly Progress Dashboard.xlsx · Quality Assurance Plan - Detail (master detail, no day columns)
- * - Sheet2 of Week 50 is the activity library (handled by qapSettings)
+ * - Sheet1 (+ Sheet2 materials) is the activity master library (qapSettings / qapLibrary)
  */
 import fs from "fs";
 import path from "path";
+import { findWorkbook } from "../lib/excelRoot.js";
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
 import { qapStatusFromRow, type QapDetailRow } from "./qualityDashboardSheets.js";
@@ -72,17 +73,7 @@ function findQapHeaderRow(rows: unknown[][]): number {
 }
 
 export function resolveQapWeek50Path(): string | null {
-  const candidates = [
-    process.env.SHARNAM_EXCEL_ROOT
-      ? path.join(process.env.SHARNAM_EXCEL_ROOT, "Quality Assurance Plan Week 50.xlsx")
-      : "",
-    path.join(process.cwd(), "seed", "data", "Quality Assurance Plan Week 50.xlsx"),
-    path.join(process.cwd(), "module_prompts", "Sharnam_modules_docs 2", "Quality Assurance Plan Week 50.xlsx"),
-  ].filter(Boolean);
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
+  return findWorkbook(["Quality Assurance Plan Week 50.xlsx"]);
 }
 
 export function parseQapWeek50Workbook(buffer: Buffer): {
@@ -157,7 +148,7 @@ export function parseQapWeek50Workbook(buffer: Buffer): {
   return { weekLabel, dayLabels, sheetName, rows: enriched };
 }
 
-export async function importQapWorkbook(projectId: string, buffer: Buffer, replaceWeek = true) {
+export async function importQapWorkbook(projectId: string, buffer: Buffer, replaceWeek = true, userId?: string) {
   const parsed = parseQapWeek50Workbook(buffer);
   if (!parsed.rows.length) {
     throw new Error(
@@ -222,11 +213,30 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
     }
   });
 
+  /** Sheet1 (+ Sheet2) activity master + pick-lists for Add from library / datalist editors. */
+  const { onboardQapMasterForProject } = await import("./qapSettings.js");
+  const master = await onboardQapMasterForProject(projectId, buffer, parsed.rows, userId, { force: true }).catch((err) => {
+    console.warn("[qap] master onboard:", err instanceof Error ? err.message : err);
+    return {
+      libraryActivities: 0,
+      libraryChecks: 0,
+      pickersCustom: [] as string[],
+      fromSheet1: 0,
+      fromSheet2: 0,
+      persisted: false,
+    };
+  });
+
   return {
     weekLabel: parsed.weekLabel,
     imported: parsed.rows.length,
     dayLabels: parsed.dayLabels,
     sheetName: parsed.sheetName,
+    libraryActivities: master.libraryActivities,
+    libraryChecks: master.libraryChecks,
+    pickersOnboarded: master.pickersCustom.length,
+    libraryFromSheet1: master.fromSheet1,
+    libraryFromSheet2: master.fromSheet2,
   };
 }
 
