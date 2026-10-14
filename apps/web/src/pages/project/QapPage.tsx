@@ -184,12 +184,12 @@ export default function QapPage() {
   }
 
   return (
-    <div className="qap-page quality-module page-scroll-full flex flex-col gap-3 pb-8 min-w-0 w-full">
+    <div className="qap-page flex flex-col gap-3 pb-2 min-w-0 w-full flex-1 min-h-0 overflow-hidden">
       <div className="shrink-0">
       <PageHeader
         eyebrow="Quality module"
         title="Quality Assurance Plan"
-        subtitle="Full Week 50 register — project, PMC and client are editable in the sheet header."
+        subtitle="Week 50 execution sheet or Monthly Progress «Quality Assurance Plan - Detail» — upload either; scroll inside the table."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} open</Badge>
@@ -237,11 +237,11 @@ export default function QapPage() {
 
 
       {(qapRows.length === 0 || qapNeedsFullResync(dash?.qap || [])) && !busy && (
-        <Card className="!p-3 border-amber-200 bg-amber-50 shrink-0">
-          <p className="text-sm text-amber-900">
+        <Card className="!p-3 border-line bg-sand/50 shrink-0">
+          <p className="text-sm text-steel-muted">
             {qapRows.length === 0
-              ? "No QAP lines — use Load Week 50 in the toolbar or upload the client Excel."
-              : "Register is partial — reload Week 50 template from the toolbar."}
+              ? "No QAP lines yet — upload Quality Assurance Plan Week 50.xlsx or Monthly Progress Dashboard (Quality Assurance Plan - Detail). Demo load is on Admin → UAT Data."
+              : `Register looks partial (${qapRows.length} lines) — upload the full client Excel (~250+ activity lines), or use Admin → UAT Data to load the demo template.`}
           </p>
         </Card>
       )}
@@ -260,96 +260,6 @@ export default function QapPage() {
         {canManage && (
           <Button type="button" className="!text-xs" disabled={busy} onClick={() => setLibraryOpen(true)}>
             + Add from QAP library
-          </Button>
-        )}
-        {canManage && (
-          <Button
-            type="button"
-            className="!text-xs"
-            disabled={busy}
-            onClick={async () => {
-              if (!id) return;
-              const next = window.prompt("New QAP week sheet name", "Week 51");
-              if (!next?.trim()) return;
-              setBusy(true);
-              try {
-                const out = await api<{ weekLabel: string; copied: number }>(
-                  `/api/checklist/project/${id}/qap/new-sheet`,
-                  {
-                    method: "POST",
-                    token,
-                    body: JSON.stringify({
-                      weekLabel: next.trim(),
-                      copyFrom: weekFilter || preferWeekLabel(weeks) || "Week 50",
-                    }),
-                  }
-                );
-                setMsg(`Opened ${out.weekLabel} (${out.copied} lines copied)`);
-                setWeekFilter(out.weekLabel);
-                await load();
-              } catch (err) {
-                setMsg(err instanceof Error ? err.message : "New sheet failed");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            New week sheet
-          </Button>
-        )}
-        {canManage && weekFilter && (
-          <Button
-            type="button"
-            variant="secondary"
-            className="!text-xs"
-            disabled={busy}
-            onClick={async () => {
-              if (!id) return;
-              if (!window.confirm(`Delete the entire QAP sheet "${weekFilter}" and all its lines?`)) return;
-              setBusy(true);
-              try {
-                const out = await api<{ deleted: number; weekLabel: string }>(
-                  `/api/checklist/project/${id}/qap/delete-sheet`,
-                  { method: "POST", token, body: JSON.stringify({ weekLabel: weekFilter }) }
-                );
-                setMsg(`Deleted ${out.deleted} lines from ${out.weekLabel}`);
-                setWeekFilter("");
-                await load();
-              } catch (err) {
-                setMsg(err instanceof Error ? err.message : "Delete sheet failed");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Delete week sheet
-          </Button>
-        )}
-        {canManage && (
-          <Button
-            type="button"
-            variant="secondary"
-            className="!text-xs"
-            disabled={busy}
-            onClick={async () => {
-              if (!id) return;
-              setBusy(true);
-              try {
-                const out = await api<{ imported: number; weekLabel: string }>(
-                  `/api/checklist/project/${id}/qap/sync-template`,
-                  { method: "POST", token }
-                );
-                setMsg(`Loaded ${out.imported} QAP lines (${out.weekLabel}) and saved the Week 50 sheet to Drive.`);
-                setWeekFilter(out.weekLabel);
-                await load();
-              } catch (err) {
-                setMsg(err instanceof Error ? err.message : "Sync failed");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Load Week 50 template
           </Button>
         )}
       </div>
@@ -383,7 +293,7 @@ export default function QapPage() {
           else await uploadToDms(file);
         }}
         uploadTitle="Upload QAP Excel or master file"
-        uploadHint="Week 50 .xlsx imports activity lines; PDF/DOC saves to DMS quality folder."
+        uploadHint="Accepts Quality Assurance Plan Week 50.xlsx (Sheet1) or Monthly Progress Dashboard.xlsx (Quality Assurance Plan - Detail). PDF/DOC saves to DMS."
         onDownloadXlsx={async () => {
           if (!id) return;
           const q = weekFilter ? `?week=${encodeURIComponent(weekFilter)}` : "";
@@ -473,7 +383,7 @@ export default function QapPage() {
         />
       )}
 
-      <div className="qap-page__register flex flex-col min-w-0">
+      <div className="qap-page__register flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden">
         <QapDetailRegister
           projectId={id!}
           token={token}
@@ -482,7 +392,7 @@ export default function QapPage() {
           onUpdated={load}
           showWeekFilter={false}
           project={project}
-          loading={busy}
+          loading={busy && qapRows.length === 0}
           onProjectUpdated={load}
         />
       </div>

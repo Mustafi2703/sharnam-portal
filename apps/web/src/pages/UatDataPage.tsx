@@ -70,6 +70,255 @@ function MailSwitchCard({ token }: { token: string | null }) {
   );
 }
 
+/** Project-scoped SPDC / demo template loads — kept off project modules. */
+function DemoTemplatesCard({ token }: { token: string | null }) {
+  const [projects, setProjects] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [projectId, setProjectId] = useState("");
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    void api<{ id: string; code: string; name: string }[]>("/api/uat-data/projects", { token })
+      .then(setProjects)
+      .catch(() => undefined);
+  }, [token]);
+
+  async function run(key: string, label: string, fn: () => Promise<string>) {
+    if (!projectId && !key.startsWith("global:")) {
+      setNote("Choose a project first.");
+      return;
+    }
+    setBusy(key);
+    setNote("");
+    try {
+      setNote(await fn());
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : `${label} failed`);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  type Action = { key: string; label: string; hint: string; global?: boolean; fn: () => Promise<string> };
+  const actions: Action[] = [
+    {
+      key: "qap",
+      label: "Load QAP Week 50 template",
+      hint: "Quality Assurance Plan activity lines",
+      fn: async () => {
+        const out = await api<{ imported: number; weekLabel: string }>(`/api/checklist/project/${projectId}/qap/sync-template`, { method: "POST", token });
+        return `QAP: ${out.imported} lines (${out.weekLabel}).`;
+      },
+    },
+    {
+      key: "cost",
+      label: "Load SPDC budget / cost workbook",
+      hint: "Budget WBS + Monitoring + MB + BBS",
+      fn: async () => {
+        const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number }>(`/api/cost/${projectId}/sync-template`, { method: "POST", token });
+        return `Cost: Budget ${out.budget} · Monitoring ${out.monitoring} · MB ${out.mb} · BBS ${out.bbs}.`;
+      },
+    },
+    {
+      key: "progress-reg",
+      label: "Load Progress SPDC registers",
+      hint: "Milestones, hindrance, risk, legal, lessons",
+      fn: async () => {
+        await api(`/api/progress/${projectId}/resync-registers`, { method: "POST", token, body: JSON.stringify({ force: true }) });
+        return "Progress registers re-synced from SPDC templates.";
+      },
+    },
+    {
+      key: "pva",
+      label: "Load Planned vs Actual template",
+      hint: "Activities, cashflow, manpower",
+      fn: async () => {
+        const out = await api<{ activityLines: number; cashflow: number; manpower: number }>(
+          `/api/progress/${projectId}/planned-actual/sync-template`,
+          { method: "POST", token, body: JSON.stringify({ force: true }) },
+        );
+        return `Planned vs Actual: ${out.activityLines} activities · ${out.cashflow} cashflow · ${out.manpower} trades.`;
+      },
+    },
+    {
+      key: "sor",
+      label: "Re-sync SOR from Excel",
+      hint: "Schedule of rates",
+      fn: async () => {
+        const out = await api<{ imported: number }>(`/api/progress/${projectId}/resync-sor`, { method: "POST", token });
+        return `SOR: ${out.imported} lines.`;
+      },
+    },
+    {
+      key: "wpr",
+      label: "Load reference WPR programme",
+      hint: "Schedule tasks from WPR reference",
+      fn: async () => {
+        const out = await api<{ scheduleTasks: number }>(`/api/progress/${projectId}/schedule-tasks/import`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({}),
+        });
+        return `WPR programme: ${out.scheduleTasks} tasks.`;
+      },
+    },
+    {
+      key: "hira",
+      label: "Load HIRA from Safety Dashboard",
+      hint: "Risk IDs A1–O5",
+      fn: async () => {
+        const out = await api<{ imported: number }>(`/api/safety/project/${projectId}/hira/sync-template`, { method: "POST", token });
+        return `HIRA: ${out.imported} risk lines.`;
+      },
+    },
+    {
+      key: "cube",
+      label: "Load SPDC cube template",
+      hint: "Cube test register specimens",
+      fn: async () => {
+        const out = await api<{ imported: number; groups: number }>(`/api/checklist/project/${projectId}/cubes/sync-template`, { method: "POST", token });
+        return `Cube: ${out.imported} specimens in ${out.groups} groups.`;
+      },
+    },
+    {
+      key: "bpcl",
+      label: "Load BPCL communication matrix",
+      hint: "Technical + commercial contacts",
+      fn: async () => {
+        const out = await api<{ message?: string; technical?: number; commercial?: number }>(
+          `/api/comms/contacts/${projectId}/seed-bpcl`,
+          { method: "POST", token, body: JSON.stringify({ force: true, both: true }) },
+        );
+        return out.message || `BPCL matrices loaded (T ${out.technical ?? "—"} · C ${out.commercial ?? "—"}).`;
+      },
+    },
+    {
+      key: "finance",
+      label: "Sync Payment Summary template",
+      hint: "RA / material sheets",
+      fn: async () => {
+        const out = await api<{ raImported?: number; materialImported?: number }>(
+          `/api/finance/${projectId}/payment-summary/sync-template`,
+          { method: "POST", token },
+        );
+        return `Payment Summary: ${out.raImported ?? 0} RA · ${out.materialImported ?? 0} material.`;
+      },
+    },
+    {
+      key: "qi-pack",
+      label: "Onboard Quality pack",
+      hint: "docs/New folder → Quality master",
+      fn: async () => {
+        const out = await api<{ created: number; refreshed: number }>(`/api/checklist/project/${projectId}/pack-onboard`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ family: "QualityInspection" }),
+        });
+        return `Quality pack: ${out.created} new · ${out.refreshed} refreshed.`;
+      },
+    },
+    {
+      key: "qi-sheet1",
+      label: "Sync Quality Dashboard Sheet1",
+      hint: "Catalog types onto project master",
+      fn: async () => {
+        const out = await api<{ catalog: number; created: number }>(`/api/checklist/project/${projectId}/quality-catalog/sync`, {
+          method: "POST",
+          token,
+        });
+        return `Sheet1 catalog: ${out.catalog} types (${out.created} new).`;
+      },
+    },
+    {
+      key: "safety-pack",
+      label: "Onboard Safety pack",
+      hint: "HIRA / HSE folders → Safety master",
+      fn: async () => {
+        const out = await api<{ created: number; refreshed: number }>(`/api/checklist/project/${projectId}/pack-onboard`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ family: "Safety" }),
+        });
+        return `Safety pack: ${out.created} new · ${out.refreshed} refreshed.`;
+      },
+    },
+    {
+      key: "site-pack",
+      label: "Onboard Site pack",
+      hint: "Site execution checklist folders",
+      fn: async () => {
+        const out = await api<{ created: number; refreshed: number }>(`/api/checklist/project/${projectId}/pack-onboard`, {
+          method: "POST",
+          token,
+          body: JSON.stringify({ family: "SiteExecution" }),
+        });
+        return `Site pack: ${out.created} new · ${out.refreshed} refreshed.`;
+      },
+    },
+    {
+      key: "global:safety-seed",
+      label: "Seed SPDC Safety IR checklists",
+      hint: "Org-wide F-01 / F-02 / F-03 templates",
+      global: true,
+      fn: async () => {
+        const out = await api<{ templates?: { name: string }[] }>("/api/checklist/safety/seed-spdc", { method: "POST", token });
+        return `SPDC Safety pack: ${out.templates?.length ?? 0} template(s).`;
+      },
+    },
+    {
+      key: "global:drawing-check",
+      label: "Reload drawing-check master XLS",
+      hint: "Org-wide drawing checklist lines",
+      global: true,
+      fn: async () => {
+        const out = await api<{ file: string; templates: number; items: number }>("/api/checklist/templates/reimport-drawing-check", {
+          method: "POST",
+          token,
+        });
+        return `Drawing check: ${out.templates} checklist(s), ${out.items} lines from ${out.file}.`;
+      },
+    },
+  ];
+
+  return (
+    <Card className="space-y-3">
+      <h3 className="font-semibold">1b. Load Demo / SPDC Templates</h3>
+      <p className="text-xs text-steel-muted">
+        All demo and reference-workbook loads live here — not on project module toolbars. Pick a UAT project, then run only what you need. Prefer a test project; these overwrite register rows from the server templates.
+      </p>
+      <label className="text-xs font-semibold text-steel-muted">
+        Project
+        <select
+          className="block mt-1 rounded-lg border border-line bg-white px-3 py-2 text-sm min-w-[16rem]"
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+        >
+          <option value="">Choose…</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.code} — {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2">
+        {actions.map((a) => (
+          <button
+            key={a.key}
+            type="button"
+            disabled={!!busy || (!a.global && !projectId)}
+            className="text-left rounded-lg border border-line bg-paper px-3 py-2 hover:bg-sand/40 disabled:opacity-50"
+            onClick={() => void run(a.key, a.label, a.fn)}
+          >
+            <div className="text-sm font-semibold text-ink">{busy === a.key ? "Loading…" : a.label}</div>
+            <div className="text-[11px] text-steel-muted mt-0.5">{a.hint}{a.global ? " · no project needed" : ""}</div>
+          </button>
+        ))}
+      </div>
+      {note ? <p className="text-sm">{note}</p> : null}
+    </Card>
+  );
+}
+
 /** Simulated working days: every register gets a day's activity; removable in one click. */
 function SimulateCard({ token }: { token: string | null }) {
   const [projects, setProjects] = useState<{ id: string; code: string; name: string }[]>([]);
@@ -528,7 +777,7 @@ export default function UatDataPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader eyebrow="Office admin" title="UAT Data" subtitle="Load the Arvind week data SPDC shared, then clear leftover test projects and test logins before the client UAT." />
+      <PageHeader eyebrow="Office admin" title="UAT Data" subtitle="Load Arvind week data and every SPDC demo template here. Project modules stay clean for day-to-day work — no Week 50 / Load template buttons on registers." />
 
       <EnvironmentCard token={token} />
       <StatusNote msg={msg} onClose={() => setMsg("")} />
@@ -562,6 +811,8 @@ export default function UatDataPage() {
           </div>
         )}
       </Card>
+
+      <DemoTemplatesCard token={token} />
 
       <Card className="space-y-3">
         <h3 className="font-semibold">2. Delete Test Projects</h3>

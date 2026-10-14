@@ -238,23 +238,6 @@ export default function SafetyPage() {
           onSelect={setActive}
           canEdit={canCreate}
           busy={busy}
-          onLoadTemplate={async () => {
-            if (!id) return;
-            setBusy(true);
-            setMsg("");
-            try {
-              const out = await api<{ imported: number }>(`/api/safety/project/${id}/hira/sync-template`, {
-                method: "POST",
-                token,
-              });
-              setMsg(`Loaded ${out.imported} HIRA risk lines from Safety Dashboard.xlsx`);
-              await load();
-            } catch (err) {
-              setMsg(err instanceof Error ? err.message : "HIRA template load failed");
-            } finally {
-              setBusy(false);
-            }
-          }}
         />
         </div>
       )}

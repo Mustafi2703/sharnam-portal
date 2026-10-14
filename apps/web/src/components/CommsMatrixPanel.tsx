@@ -98,22 +98,6 @@ export function CommsMatrixPanel({
     void loadDirectory();
   }, [loadDirectory]);
 
-  async function seedBpcl(force: boolean) {
-    setBusy(true);
-    try {
-      const r = await api<{ message?: string; technical?: number; commercial?: number }>(
-        `/api/comms/contacts/${projectId}/seed-bpcl`,
-        { method: "POST", token, body: JSON.stringify({ force, both: true }) },
-      );
-      onMsg(r.message || "BPCL matrices loaded.");
-      await onReload();
-    } catch (err) {
-      onMsg(err instanceof Error ? err.message : "Seed failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function addContact(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -263,11 +247,6 @@ export function CommsMatrixPanel({
             }}
           >
             Open portal for everyone
-          </Button>
-        )}
-        {canEdit && (
-          <Button type="button" variant="secondary" disabled={busy} onClick={() => void seedBpcl(contacts.length > 0)}>
-            {contacts.length ? "Reload From BPCL Excel" : "Load BPCL Excel"}
           </Button>
         )}
         <Button

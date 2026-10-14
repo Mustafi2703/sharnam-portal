@@ -33,12 +33,15 @@ type QapRowProbe = {
   section?: string | null;
 };
 
-/** Detect partial/legacy QAP rows (activity-only lines without Week 50 detail columns). */
+/** Detect partial/legacy QAP rows (activity-only lines without full detail columns). */
 export function qapNeedsFullResync(rows: QapRowProbe[]): boolean {
   if (!rows.length) return true;
-  const pool = rows.filter((r) => normalizeWeekLabel(r.weekLabel) === "Week 50");
+  const pool = rows.filter(
+    (r) => normalizeWeekLabel(r.weekLabel) === "Week 50" || /qap\s*detail/i.test(String(r.weekLabel || "")),
+  );
   const set = pool.length ? pool : rows;
-  if (set.length < 250) return true;
+  /** Week 50 ~295 lines; Monthly Detail ~272 — under 200 is almost certainly incomplete. */
+  if (set.length < 200) return true;
   const rich = set.filter((r) => r.frequency || r.contractorPerformer || r.codeOfConformance).length;
   if (rich / set.length < 0.35) return true;
   const legacy = set.filter((r) => !r.section && / — /.test(String(r.activity || ""))).length;

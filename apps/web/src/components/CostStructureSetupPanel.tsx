@@ -1,8 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { useAuth } from "../auth";
-import { canLoadSheetTemplates } from "../lib/productionUi";
 import { UploadModal } from "./UploadModal";
 import { Button, Card, Input } from "./ui";
 import { StatusNote } from "./StatusNote";
@@ -24,7 +22,6 @@ type Props = {
   busy?: boolean;
   onChanged: () => void | Promise<void>;
   onOpenTab: (tab: "monitoring" | "mb" | "bbs" | "budget" | "cashflow", pkg?: string) => void;
-  onSyncTemplate?: () => void | Promise<void>;
   message?: string;
   onMessage?: (msg: string) => void;
   /** When true, show as primary tab content (full width, no collapse). */
@@ -33,7 +30,7 @@ type Props = {
 
 type SheetModal = { pkg: string; kind: "monitoring" | "mb" | "bbs" };
 
-/** SPDC cost setup — structures, MB/BBS sheets per package, full workbook load. */
+/** SPDC cost setup — structures, MB/BBS sheets per package. */
 export function CostStructureSetupPanel({
   projectId,
   token,
@@ -42,13 +39,10 @@ export function CostStructureSetupPanel({
   busy,
   onChanged,
   onOpenTab,
-  onSyncTemplate,
   message,
   onMessage,
   primary,
 }: Props) {
-  const { user } = useAuth();
-  const canLoadTemplate = canLoadSheetTemplates(user?.role);
   const [structureName, setStructureName] = useState("New structure");
   const [localBusy, setLocalBusy] = useState(false);
   const [structureModalOpen, setStructureModalOpen] = useState(false);
@@ -68,31 +62,6 @@ export function CostStructureSetupPanel({
     }),
     []
   );
-
-  async function loadFullTemplate() {
-    if (onSyncTemplate) {
-      await onSyncTemplate();
-      onOpenTab("monitoring", "Civil Dormitory");
-      return;
-    }
-    setLocalBusy(true);
-    onMessage?.("");
-    try {
-      const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number; cashflow?: number }>(
-        `/api/cost/${projectId}/sync-template`,
-        { method: "POST", token }
-      );
-      onMessage?.(
-        `Loaded SPDC_Budget_Arvind 49.xls — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}${out.cashflow != null ? `, Cashflow ${out.cashflow}` : ""} rows`
-      );
-      await onChanged();
-      onOpenTab("monitoring", "Civil Dormitory");
-    } catch (err) {
-      onMessage?.(err instanceof Error ? err.message : "Template load failed");
-    } finally {
-      setLocalBusy(false);
-    }
-  }
 
   async function importWorkbook(file: File) {
     setLocalBusy(true);
@@ -215,30 +184,21 @@ export function CostStructureSetupPanel({
           <h3 className="font-semibold text-sm text-ink">Cost sheet setup — SPDC format</h3>
           <p className="text-xs text-steel-muted mt-1 text-left max-w-4xl">
             Each <strong>structure / package</strong> (Civil Dormitory, Electrical, UGWT, …) has Monitoring BOQ plus MB and BBS tools.
-            Start with the full SPDC template, then upload per-structure sheets as packages grow.
+            Upload per-structure sheets as packages grow. Full SPDC budget demo load is on Admin → UAT Data.
           </p>
         </div>
 
         {canEdit && (
-          <div className="px-4 py-4 border-b border-line grid sm:grid-cols-3 gap-4 shrink-0">
-            {canLoadTemplate ? (
-              <Card className="!p-4 space-y-2 bg-paper">
-                <div className="text-[10px] uppercase font-semibold text-steel-muted">Step 1 · Full template</div>
-                <p className="text-xs text-steel-muted">Budget WBS + all Monitoring + MB + BBS + cashflow from server file.</p>
-                <Button type="button" disabled={isBusy} onClick={() => void loadFullTemplate()}>
-                  {isBusy ? "Loading…" : "Load SPDC_Budget_Arvind 49.xls"}
-                </Button>
-              </Card>
-            ) : null}
+          <div className="px-4 py-4 border-b border-line grid sm:grid-cols-2 gap-4 shrink-0">
             <Card className="!p-4 space-y-2 bg-paper">
-              <div className="text-[10px] uppercase font-semibold text-steel-muted">Step 2 · New structure</div>
+              <div className="text-[10px] uppercase font-semibold text-steel-muted">New structure</div>
               <p className="text-xs text-steel-muted">Add a package with a monitoring BOQ workbook (sections preserved).</p>
               <Button type="button" variant="secondary" disabled={isBusy} onClick={() => setStructureModalOpen(true)}>
                 Upload structure BOQ…
               </Button>
             </Card>
             <Card className="!p-4 space-y-2 bg-paper">
-              <div className="text-[10px] uppercase font-semibold text-steel-muted">Step 3 · Bulk MB + BBS</div>
+              <div className="text-[10px] uppercase font-semibold text-steel-muted">Bulk MB + BBS</div>
               <p className="text-xs text-steel-muted">Import every MB/BBS tab from one Excel workbook.</p>
               <Button type="button" variant="secondary" disabled={isBusy} onClick={() => setBulkModalOpen(true)}>
                 Import all MB/BBS sheets…

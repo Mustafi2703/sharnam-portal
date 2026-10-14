@@ -88,25 +88,6 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  async function syncTemplate(silent = false) {
-    setBusy(true);
-    if (!silent) setMsg("");
-    try {
-      const out = await api<{ budget: number; monitoring: number; mb: number; bbs: number; source: string }>(
-        `/api/cost/${projectId}/sync-template`,
-        { method: "POST", token }
-      );
-      setMsg(
-        `Loaded ${out.source}: Budget ${out.budget} · Monitoring ${out.monitoring} · MB ${out.mb} · BBS ${out.bbs}`
-      );
-      await onChanged();
-    } catch (e: any) {
-      if (!silent) setMsg(e?.message || "Template sync failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function patch(id: string, patch: Record<string, unknown>) {
     setSavingId(id);
     try {
@@ -210,16 +191,11 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
 
       {canEdit && (
         <Card className="!p-4 space-y-3 shrink-0">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="font-semibold text-sm">Budget WBS — SPDC columns</h3>
-              <p className="text-xs text-steel-muted mt-0.5">
-                From <code className="font-mono">SPDC_Budget_Arvind 49.xls</code> Budget tab — same load pattern as QAP / Cube.
-              </p>
-            </div>
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void syncTemplate(false)}>
-              {busy ? "Loading…" : "Load budget template"}
-            </Button>
+          <div>
+            <h3 className="font-semibold text-sm">Budget WBS — SPDC columns</h3>
+            <p className="text-xs text-steel-muted mt-0.5">
+              Add lines below, or upload the budget workbook. Demo SPDC budget load is on Admin → UAT Data.
+            </p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -378,7 +354,7 @@ export function BudgetWbsRegister({ projectId, token, rows, canEdit, onChanged }
               {!rows.length && (
                 <tr>
                   <td colSpan={canEdit ? 18 : 17} className="empty">
-                    No budget lines — Load budget template or add a line.
+                    No budget lines — add a line, upload Excel, or load the demo from Admin → UAT Data.
                   </td>
                 </tr>
               )}

@@ -1015,7 +1015,7 @@ export function BoqMonitoringEditor({
               {!rows.length && (
                 <tr>
                   <td colSpan={colSpan} className="empty">
-                    No BOQ lines yet — add a line or Load budget template (Budget tab / Monitoring).
+                    No BOQ lines yet — add a line or upload a monitoring workbook.
                   </td>
                 </tr>
               )}

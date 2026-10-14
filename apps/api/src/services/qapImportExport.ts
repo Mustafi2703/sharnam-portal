@@ -1,11 +1,14 @@
 /**
- * Quality Assurance Plan Week 50.xlsx — import / export with daily check columns.
+ * QAP import / export —
+ * - Quality Assurance Plan Week 50.xlsx · Sheet1 (weekly execution + day columns)
+ * - Monthly Progress Dashboard.xlsx · Quality Assurance Plan - Detail (master detail, no day columns)
+ * - Sheet2 of Week 50 is the activity library (handled by qapSettings)
  */
 import fs from "fs";
 import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
-import { parseQapDetailSheet, qapStatusFromRow, type QapDetailRow } from "./qualityDashboardSheets.js";
+import { qapStatusFromRow, type QapDetailRow } from "./qualityDashboardSheets.js";
 import { renderBrandedReportHtml, workbookBuffer, type SheetSpec } from "./brandedExport.js";
 import { detachSharedStyles } from "../lib/excelTemplate.js";
 
@@ -28,15 +31,37 @@ function excelSerialToDay(v: unknown): string | null {
   return null;
 }
 
-function parseDailyChecks(row: unknown[], headerRow: unknown[]): Record<string, boolean> {
+function parseDailyChecks(row: unknown[], headerRow: unknown[], dayStartCol: number): Record<string, boolean> {
   const out: Record<string, boolean> = {};
-  for (let c = 12; c <= 25; c++) {
+  for (let c = dayStartCol; c <= dayStartCol + 20; c++) {
     const label = excelSerialToDay(headerRow[c]) || s(headerRow[c], 40);
     if (!label) continue;
+    if (!excelSerialToDay(headerRow[c]) && !/^\d/.test(label)) continue;
     const val = row[c];
     out[label] = val === true || val === 1 || /^(x|1|yes|y|done|ok|✓)$/i.test(String(val ?? "").trim());
   }
   return out;
+}
+
+/** Prefer Detail sheet (Monthly Progress) or Week 50 Sheet1 over library Sheet2. */
+export function pickQapPlanSheetName(sheetNames: string[]): string {
+  const detail = sheetNames.find((n) => /quality\s*assurance\s*plan\s*[-–—]?\s*detail/i.test(n));
+  if (detail) return detail;
+  const assurance = sheetNames.find((n) => /quality\s*assurance\s*plan/i.test(n) && !/sheet\s*2/i.test(n));
+  if (assurance) return assurance;
+  const sheet1 = sheetNames.find((n) => /^sheet\s*1$/i.test(n));
+  if (sheet1) return sheet1;
+  return sheetNames[0] || "Sheet1";
+}
+
+function findQapHeaderRow(rows: unknown[][]): number {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const a = s(rows[i]?.[0], 40).toLowerCase();
+    const b = s(rows[i]?.[1], 40).toLowerCase();
+    const c = s(rows[i]?.[2], 60).toLowerCase();
+    if (/sr\.?\s*no/.test(a) && /activity/.test(b) && /description/.test(c)) return i;
+  }
+  return 7;
 }
 
 export function resolveQapWeek50Path(): string | null {
@@ -56,62 +81,101 @@ export function resolveQapWeek50Path(): string | null {
 export function parseQapWeek50Workbook(buffer: Buffer): {
   weekLabel: string;
   dayLabels: string[];
+  sheetName: string;
   rows: Array<QapDetailRow & { dailyChecks: Record<string, boolean> }>;
 } {
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const sheetName = wb.SheetNames.find((n) => /sheet1/i.test(n)) || wb.SheetNames[0];
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const sheetName = pickQapPlanSheetName(wb.SheetNames);
   const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[sheetName], {
     header: 1,
     defval: "",
   }) as unknown[][];
 
-  let weekLabel = "Week 50";
-  for (let i = 0; i < Math.min(rows.length, 12); i++) {
+  const isDetailSheet = /detail/i.test(sheetName);
+  let weekLabel = isDetailSheet ? "QAP Detail" : "Week 50";
+  for (let i = 0; i < Math.min(rows.length, 14); i++) {
     for (let c = 0; c < 20; c++) {
       const cell = s(rows[i]?.[c], 80);
       const m = cell.match(/week\s*(\d+)/i);
-      if (m) weekLabel = `Week ${m[1]}`;
+      if (m) weekLabel = `Week ${parseInt(m[1], 10)}`;
     }
   }
-  weekLabel = `Week ${parseInt(String(weekLabel).replace(/\D/g, "") || "50", 10)}`;
+  if (/^week\s*\d+/i.test(weekLabel)) {
+    weekLabel = `Week ${parseInt(String(weekLabel).replace(/\D/g, "") || "50", 10)}`;
+  }
 
-  const headerRow = rows[7] || [];
+  const headerIdx = findQapHeaderRow(rows);
+  const headerRow = (rows[headerIdx] || []) as unknown[];
+  /** Day columns start after Remarks (col 11) on Week 50 layout. */
+  const dayStartCol = 12;
   const dayLabels: string[] = [];
-  for (let c = 12; c <= 25; c++) {
+  for (let c = dayStartCol; c <= dayStartCol + 20; c++) {
     const label = excelSerialToDay(headerRow[c]) || s(headerRow[c], 40);
     if (label && (excelSerialToDay(headerRow[c]) || /^\d/.test(label))) dayLabels.push(label);
   }
 
-  const base = parseQapDetailSheet(rows, 9);
-  const enriched = base.map((row, idx) => {
-    const srcIdx = 9 + idx;
-    const src = rows[srcIdx] as unknown[] | undefined;
-    return {
-      ...row,
-      dailyChecks: src ? parseDailyChecks(src, headerRow) : {},
-    };
-  });
+  /** Data usually starts two rows under header (Performer/Checker sub-row). */
+  let dataStart = headerIdx + 1;
+  const sub = rows[dataStart] || [];
+  if (/performer|checker/i.test(`${s(sub[6])} ${s(sub[7])} ${s(sub[8])}`)) dataStart = headerIdx + 2;
 
-  return { weekLabel, dayLabels, rows: enriched };
+  const enriched: Array<QapDetailRow & { dailyChecks: Record<string, boolean> }> = [];
+  let section = "";
+  for (let i = dataStart; i < rows.length; i++) {
+    const r = rows[i] as unknown[];
+    const srRaw = s(r[0], 20);
+    const act = s(r[1], 120);
+    const detail = s(r[2], 400);
+    if (act) section = act;
+    if (!detail) continue;
+    const srNo = srRaw && /^\d+$/.test(srRaw) ? srRaw : null;
+    const row: QapDetailRow & { dailyChecks: Record<string, boolean> } = {
+      srNo,
+      section: section || act || "General",
+      description: detail,
+      frequency: s(r[3], 120),
+      codeOfConformance: s(r[4], 160),
+      testAgency: s(r[5], 120),
+      contractorPerformer: s(r[6], 80),
+      contractorChecker: s(r[7], 80),
+      pmcRole: s(r[8], 80),
+      clientRole: s(r[9], 80),
+      records: s(r[10], 160),
+      remarks: s(r[11], 120),
+      dailyChecks: dayLabels.length ? parseDailyChecks(r, headerRow, dayStartCol) : {},
+    };
+    enriched.push(row);
+  }
+
+  return { weekLabel, dayLabels, sheetName, rows: enriched };
 }
 
 export async function importQapWorkbook(projectId: string, buffer: Buffer, replaceWeek = true) {
   const parsed = parseQapWeek50Workbook(buffer);
-  if (!parsed.rows.length) throw new Error("No QAP rows found — use Quality Assurance Plan Week 50.xlsx layout");
+  if (!parsed.rows.length) {
+    throw new Error(
+      "No QAP rows found — upload Quality Assurance Plan Week 50.xlsx (Sheet1) or Monthly Progress Dashboard.xlsx (Quality Assurance Plan - Detail).",
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     if (replaceWeek) {
-      await tx.qapActivity.deleteMany({
-        where: {
-          projectId,
-          OR: [
-            { weekLabel: parsed.weekLabel },
-            { weekLabel: "W50" },
-            { weekLabel: "Week 50" },
-            { weekLabel: { startsWith: "Week 50" } },
-          ],
-        },
-      });
+      if (/^week\s*50$/i.test(parsed.weekLabel)) {
+        await tx.qapActivity.deleteMany({
+          where: {
+            projectId,
+            OR: [
+              { weekLabel: "Week 50" },
+              { weekLabel: "W50" },
+              { weekLabel: { startsWith: "Week 50" } },
+            ],
+          },
+        });
+      } else {
+        await tx.qapActivity.deleteMany({
+          where: { projectId, weekLabel: parsed.weekLabel },
+        });
+      }
     }
     for (const row of parsed.rows) {
       const flags = qapStatusFromRow(row);
@@ -143,7 +207,12 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
     }
   });
 
-  return { weekLabel: parsed.weekLabel, imported: parsed.rows.length, dayLabels: parsed.dayLabels };
+  return {
+    weekLabel: parsed.weekLabel,
+    imported: parsed.rows.length,
+    dayLabels: parsed.dayLabels,
+    sheetName: parsed.sheetName,
+  };
 }
 
 type QapRowProbe = {
@@ -161,12 +230,14 @@ function weekNumber(wl?: string | null): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/** True when Week 50 register is missing or still legacy/partial (no frequency / sign-off columns). */
+/** True when QAP register is missing or still legacy/partial (no frequency / sign-off columns). */
 export function qapRowsNeedFullResync(rows: QapRowProbe[]): boolean {
   if (!rows.length) return true;
-  const pool = rows.filter((r) => weekNumber(r.weekLabel) === 50);
+  const pool = rows.filter(
+    (r) => weekNumber(r.weekLabel) === 50 || /qap\s*detail/i.test(String(r.weekLabel || "")),
+  );
   const set = pool.length ? pool : rows;
-  if (set.length < 250) return true;
+  if (set.length < 200) return true;
   const rich = set.filter((r) => r.frequency || r.contractorPerformer || r.codeOfConformance).length;
   if (rich / set.length < 0.35) return true;
   const legacy = set.filter((r) => !r.section && / — /.test(String(r.activity || ""))).length;

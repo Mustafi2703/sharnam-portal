@@ -1303,19 +1303,6 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
     }
   }
 
-  async function syncTemplate() {
-    setBusy(true);
-    try {
-      const out = await api<any>(`/api/finance/${projectId}/payment-summary/sync-template`, { method: "POST", token });
-      setMsg(`Synced from Payment Summary template: ${out.raImported ?? 0} RA bills, ${out.materialImported ?? 0} material lines.`);
-      await reload();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Sync failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function importWorkbook(e: FormEvent) {
     e.preventDefault();
     if (!importFile) return;
@@ -1393,13 +1380,6 @@ function PaymentSummaryTab({ summary, canWrite, reload, setMsg, projectId, token
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={() => void downloadXlsx()}>Download XLSX</Button>
-          {canWrite && (
-            <>
-              <Button type="button" variant="secondary" disabled={busy} onClick={() => void syncTemplate()}>
-                {busy ? "Syncing…" : "Sync from Payment Summary template"}
-              </Button>
-            </>
-          )}
         </div>
       </Card>
       {canWrite && (

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Badge, Button, Card } from "./ui";
+import { Badge, Card } from "./ui";
 
 export type HiraRecord = {
   id: string;
@@ -40,11 +40,10 @@ type Props = {
   onSelect: (id: string) => void;
   canEdit?: boolean;
   busy?: boolean;
-  onLoadTemplate?: () => void;
 };
 
 /** SPDC Safety Dashboard.xlsx · HIRA — activity, risk ID, hazard, P×I, controls, residual. */
-export function HiraRegisterTable({ rows, activeId, onSelect, canEdit, busy, onLoadTemplate }: Props) {
+export function HiraRegisterTable({ rows, activeId, onSelect }: Props) {
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => {
       const ca = a.category || "";
@@ -73,11 +72,6 @@ export function HiraRegisterTable({ rows, activeId, onSelect, canEdit, busy, onL
             {sorted.length} risk {sorted.length === 1 ? "line" : "lines"} · Probability × Impact · residual after control
           </p>
         </div>
-        {canEdit && onLoadTemplate && (
-          <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={onLoadTemplate}>
-            Load HIRA from Safety Dashboard
-          </Button>
-        )}
       </div>
       <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
         <table className="hira-register__table min-w-[72rem] w-full">
@@ -158,7 +152,7 @@ export function HiraRegisterTable({ rows, activeId, onSelect, canEdit, busy, onL
             {!sorted.length && (
               <tr>
                 <td colSpan={14} className="empty text-left p-4">
-                  No HIRA lines — click <strong>Load HIRA from Safety Dashboard</strong> to import all risk IDs (A1–O5).
+                  No HIRA lines yet — add a line, or load the Safety Dashboard demo from Admin → UAT Data.
                 </td>
               </tr>
             )}

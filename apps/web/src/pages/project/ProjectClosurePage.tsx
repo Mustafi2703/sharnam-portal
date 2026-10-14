@@ -39,9 +39,6 @@ export default function ProjectClosurePage() {
     vendor: "",
   });
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
-  const canResyncExcel = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
-  const [registerSyncBusy, setRegisterSyncBusy] = useState(false);
-
   const load = async () => {
     const [dash, repRaw] = await Promise.all([
       api(`/api/closure/project/${id}/dashboard`, { token }),
@@ -207,25 +204,6 @@ export default function ProjectClosurePage() {
           projectId={id}
           token={token}
           canEdit={canEdit}
-          canResyncExcel={canResyncExcel}
-          onResyncTemplate={async () => {
-            if (!id || !canResyncExcel) return;
-            setRegisterSyncBusy(true);
-            try {
-              await api(`/api/progress/${id}/resync-registers`, {
-                method: "POST",
-                token,
-                body: JSON.stringify({ force: true }),
-              });
-              setMsg("Lessons template loaded.");
-              await load();
-            } catch (err) {
-              setMsg(err instanceof Error ? err.message : "Template load failed");
-            } finally {
-              setRegisterSyncBusy(false);
-            }
-          }}
-          registerSyncBusy={registerSyncBusy}
         />
       ) : null}
 

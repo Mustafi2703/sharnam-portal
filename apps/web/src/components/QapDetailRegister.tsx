@@ -210,17 +210,23 @@ export function QapDetailRegister({
   return (
     <>
       <QapPickerLists rows={rows} />
-      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden">
-        {loading && <div className="spdc-register-loading">Loading QAP register…</div>}
+      <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden h-full">
+        {loading && (
+          <div className="spdc-register-loading" aria-live="polite">
+            Loading QAP register…
+          </div>
+        )}
 
-        <RegisterBrandHeader
-          title="Quality Assurance Plan"
-          project={project}
-          token={token}
-          canEdit={canEdit}
-          onProjectUpdated={onProjectUpdated}
-          legend={legend}
-        />
+        <div className="shrink-0">
+          <RegisterBrandHeader
+            title="Quality Assurance Plan"
+            project={project}
+            token={token}
+            canEdit={canEdit}
+            onProjectUpdated={onProjectUpdated}
+            legend={legend}
+          />
+        </div>
 
         {patchErr && (
           <p className="text-xs text-danger bg-red-50 px-4 py-2 border-b border-line shrink-0">{patchErr}</p>
@@ -243,7 +249,7 @@ export function QapDetailRegister({
         </div>
 
         <div className="sheet-register register-sheet-shell flex flex-col flex-1 min-h-0 overflow-hidden border-t border-line">
-          <RegisterScrollArea tall className="flex-1 min-h-0">
+          <RegisterScrollArea tall className="flex-1 min-h-0 qap-register__scroll sheet-register__scroll">
             <table className="qap-register__table register-editor-pro min-w-[96rem]">
               <thead className="spdc-register-thead">
                 <tr>
@@ -511,7 +517,7 @@ export function QapDetailRegister({
                 {!filtered.length && (
                   <tr>
                     <td colSpan={colSpan} className="empty text-left border border-line p-4">
-                      No QAP detail rows — use Load Week 50 template to import all activity lines.
+                      No QAP detail rows — upload the client QAP Excel, or load the demo template from Admin → UAT Data.
                     </td>
                   </tr>
                 )}

@@ -75,7 +75,6 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
-  const [syncPackBusy, setSyncPackBusy] = useState(false);
   const [catalog, setCatalog] = useState<{ srNo: number; name: string; category: string }[]>([]);
   const [masterTab, setMasterTab] = useState<"templates" | "site-observation" | "site-instruction">("templates");
   const showRegisterTabs = Boolean(id && (family === "QualityInspection" || family === "Safety"));
@@ -214,9 +213,9 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           effectiveLock === "DrawingCheck"
             ? "Yes/No/N.A. items only — no photos or links. Edit lines here; fills unlock GFC upload. Quality and Safety templates live in their own modules."
             : effectiveLock === "Safety"
-            ? "Safety checklist types (HIRA, HSE pack, custom). Onboard from docs/New folder or create a new type. Fill from the Safety IR register — the fill log is information only."
+            ? "Safety checklist types (HIRA, HSE pack, custom). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Safety IR register — the fill log is information only."
             : effectiveLock === "QualityInspection"
-              ? "Quality checklist types from the client pack (Civil, HVAC, Electrical, ELV, Fire, interiors…). Onboard all, or create a new type. Fill from the Quality IR register."
+              ? "Quality checklist types (Civil, HVAC, Electrical, ELV, Fire, interiors…). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Quality IR register."
               : id
                 ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
                 : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
@@ -374,32 +373,9 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
       {effectiveLock === "DrawingCheck" && id && canEdit && (
         <Card className="!p-4 border-brand/20 bg-brand-soft/30">
           <p className="text-sm">
-            Line items come from <span className="font-semibold">Drwing check master checklist.xlt.xls</span>. You can edit or add lines here; use reload to refresh from the reference workbook without losing template names you added manually.
+            Line items come from the drawing-check master workbook. Edit or add lines here. Demo reload of the reference XLS is on Admin → UAT Data.
           </p>
           <div className="flex flex-wrap gap-3 mt-2">
-            <button
-              type="button"
-              className="rounded-full bg-sky-100 px-4 py-2 text-sm font-medium text-sky-900 hover:bg-sky-200 disabled:opacity-60"
-              disabled={syncPackBusy}
-              onClick={async () => {
-                setSyncPackBusy(true);
-                setMsg("");
-                try {
-                  const out = await api<{ file: string; templates: number; items: number }>(
-                    "/api/checklist/templates/reimport-drawing-check",
-                    { method: "POST", token },
-                  );
-                  setMsg(`Reloaded ${out.templates} checklist(s), ${out.items} lines from ${out.file}.`);
-                  await load();
-                } catch (err) {
-                  setMsg(err instanceof Error ? err.message : "Reload failed");
-                } finally {
-                  setSyncPackBusy(false);
-                }
-              }}
-            >
-              {syncPackBusy ? "Reloading…" : "Reload from drawing check master XLS"}
-            </button>
             <Link to={`/projects/${id}/rfis?kind=DrawingChecklist&compose=1`} className="rounded-full bg-violet-100 px-4 py-2 text-sm font-medium text-violet-900 hover:bg-violet-200">
               Request checklist fill
             </Link>
@@ -411,9 +387,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         <Card className="!p-4 border-brand/20 bg-brand-soft/30 space-y-2">
           <p className="text-sm">
             <span className="font-semibold text-ink">{templates.length}</span> checklist type
-            {templates.length === 1 ? "" : "s"} in this master. Onboard from{" "}
-            <span className="font-semibold">docs/New folder</span> (Civil, HVAC, Electrical, ELV, Fire, interiors,
-            HIRA…) or create a new type below. Fills happen on the{" "}
+            {templates.length === 1 ? "" : "s"} in this master. Create a new type below, or load demo packs from Admin → UAT Data. Fills happen on the{" "}
             <Link
               to={
                 family === "Safety"
@@ -439,90 +413,11 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
             </Link>{" "}
             is information only.
           </p>
-          <div className="flex flex-wrap gap-3 mt-1">
-            <button
-              type="button"
-              className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-              disabled={syncPackBusy}
-              onClick={async () => {
-                setSyncPackBusy(true);
-                setMsg("");
-                try {
-                  const out = await api<{ created: number; refreshed: number; scanned: number; skipped: number }>(
-                    `/api/checklist/project/${id}/pack-onboard`,
-                    { method: "POST", token, body: JSON.stringify({ family }) }
-                  );
-                  setMsg(
-                    `Pack onboard: ${out.created} new, ${out.refreshed} refreshed (${out.scanned} scanned, ${out.skipped} other-family skipped).`
-                  );
-                  await load();
-                } catch (err) {
-                  setMsg(err instanceof Error ? err.message : "Pack onboard failed");
-                } finally {
-                  setSyncPackBusy(false);
-                }
-              }}
-            >
-              {syncPackBusy
-                ? "Onboarding…"
-                : family === "Safety"
-                  ? "Onboard Safety pack (HIRA / HSE)"
-                  : family === "SiteExecution"
-                    ? "Onboard site pack folders"
-                    : "Onboard Quality pack (New folder)"}
-            </button>
-            {family === "QualityInspection" && (
-              <button
-                type="button"
-                className="text-sm font-semibold text-brand underline"
-                onClick={async () => {
-                  setMsg("");
-                  try {
-                    const out = await api<{ catalog: number; created: number }>(
-                      `/api/checklist/project/${id}/quality-catalog/sync`,
-                      { method: "POST", token }
-                    );
-                    setMsg(`Onboarded ${out.catalog} Sheet1 types (${out.created} new).`);
-                    await load();
-                  } catch (err) {
-                    setMsg(err instanceof Error ? err.message : "Onboard failed");
-                  }
-                }}
-              >
-                Also sync Quality Dashboard Sheet1
-              </button>
-            )}
-            {family === "Safety" && (
-              <button
-                type="button"
-                className="text-sm font-semibold text-brand underline"
-                disabled={syncPackBusy}
-                onClick={async () => {
-                  setSyncPackBusy(true);
-                  setMsg("");
-                  try {
-                    const out = await api<{ templates?: { name: string }[] }>("/api/checklist/safety/seed-spdc", {
-                      method: "POST",
-                      token,
-                    });
-                    setMsg(`SPDC Safety pack: ${out.templates?.length ?? 0} template(s).`);
-                    await load();
-                  } catch (err) {
-                    setMsg(err instanceof Error ? err.message : "Safety seed failed");
-                  } finally {
-                    setSyncPackBusy(false);
-                  }
-                }}
-              >
-                Seed SPDC Safety IR checklists
-              </button>
-            )}
-            {catalog.length > 0 && family === "QualityInspection" && (
-              <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="text-sm font-semibold text-brand self-center">
-                Catalog graphs ({catalog.length}) →
-              </Link>
-            )}
-          </div>
+          {catalog.length > 0 && family === "QualityInspection" && (
+            <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="text-sm font-semibold text-brand">
+              Catalog graphs ({catalog.length}) →
+            </Link>
+          )}
         </Card>
       )}
 
@@ -723,33 +618,6 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   disabled={!canEdit}
                 />
                 {canEdit && <Button type="submit" className="!bg-sky-600 !font-medium">Save header</Button>}
-                {canEdit && detail && (
-                  <Button
-                    type="button"
-                    className="!bg-violet-500 !font-medium"
-                    disabled={syncPackBusy}
-                    onClick={async () => {
-                      setSyncPackBusy(true);
-                      setMsg("");
-                      try {
-                        const out = await api<{ itemCount: number; workbookPath?: string }>(
-                          `/api/checklist/templates/${detail.id}/sync-pack`,
-                          { method: "POST", token }
-                        );
-                        setMsg(`Synced ${out.itemCount} lines from pack workbook.`);
-                        const fresh = await api(`/api/checklist/templates/${detail.id}`, { token });
-                        setDetail(fresh);
-                        await load();
-                      } catch (err) {
-                        setMsg(err instanceof Error ? err.message : "Pack sync failed");
-                      } finally {
-                        setSyncPackBusy(false);
-                      }
-                    }}
-                  >
-                    {syncPackBusy ? "Syncing…" : "Sync lines from pack xlsx"}
-                  </Button>
-                )}
               </form>
 
               <div className="border-t border-line pt-3">

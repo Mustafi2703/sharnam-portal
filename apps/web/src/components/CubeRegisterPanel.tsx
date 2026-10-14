@@ -11,8 +11,6 @@ import { Badge, Button, Card, Select } from "./ui";
 import { RegisterFilterBar } from "./RegisterFilterBar";
 import { RegisterBrandHeader } from "./RegisterBrandHeader";
 import type { RegisterBrandProject } from "./RegisterBrandHeader";
-import { useAuth } from "../auth";
-import { canLoadSheetTemplates } from "../lib/productionUi";
 import { StatusNote } from "./StatusNote";
 
 export type { CubeRow };
@@ -33,13 +31,10 @@ type Props = {
 
 /** SPDC CUBE REGISTER — full scroll sheet, inline editable cells, master-register add form. */
 export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, project, addOpen, onAddClose, onProjectUpdated }: Props) {
-  const { user } = useAuth();
-  const canLoadTemplate = canLoadSheetTemplates(user?.role);
   const { localRows, mergeRow } = useLocalRegisterRows(rows);
   const [form, setForm] = useState(emptyCube());
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [patchErr, setPatchErr] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const [filters, setFilters] = useState<Record<string, string>>({
@@ -93,30 +88,6 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
     const agencies = new Set(localRows.map((r) => r.testAgency).filter(Boolean));
     return { pass, fail, pending, groups, agencies: agencies.size };
   }, [localRows]);
-
-  async function syncTemplate(silent = false) {
-    if (!silent) {
-      setBusy(true);
-      setMsg("");
-    } else {
-      setSyncing(true);
-    }
-    try {
-      const out = await api<{ imported: number; groups: number }>(
-        `/api/checklist/project/${projectId}/cubes/sync-template`,
-        { method: "POST", token }
-      );
-      if (!silent) {
-        setMsg(`Loaded ${out.imported} cube specimens in ${out.groups} footing groups from SPDC register.`);
-      }
-      await onChanged();
-    } catch (err) {
-      if (!silent) setMsg(err instanceof Error ? err.message : "Sync failed");
-    } finally {
-      if (!silent) setBusy(false);
-      setSyncing(false);
-    }
-  }
 
   async function importCubeFile(file: File) {
     setBusy(true);
@@ -308,14 +279,14 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
         />
       )}
 
-      {localRows.length === 0 && !busy && !syncing && (
+      {localRows.length === 0 && !busy && (
         <Card className="!p-3 border-amber-200 bg-amber-50 text-sm text-amber-900 shrink-0">
-          Cube register is empty — add rows manually{canLoadTemplate ? " or load the SPDC cube template (admin)" : ""}.
+          Cube register is empty — add rows manually, import SPDC Excel, or load the demo from Admin → UAT Data.
         </Card>
       )}
 
       <Card padding={false} className="spdc-register-panel register-editor-panel register-panel-fill relative flex flex-col flex-1 min-h-0 overflow-hidden">
-        {(syncing || busy) && localRows.length === 0 && (
+        {busy && localRows.length === 0 && (
           <div className="spdc-register-loading">Loading cube register…</div>
         )}
 
@@ -353,14 +324,14 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
           </div>
           {canEdit && (
             <div className="flex flex-wrap gap-2 shrink-0">
-              <Button type="button" className="!text-xs" disabled={busy || syncing} onClick={() => void addGroup()}>
+              <Button type="button" className="!text-xs" disabled={busy} onClick={() => void addGroup()}>
                 New cube group
               </Button>
               <Button
                 type="button"
                 variant="secondary"
                 className="!text-xs"
-                disabled={busy || syncing}
+                disabled={busy}
                 onClick={() => importRef.current?.click()}
               >
                 Import SPDC Excel
@@ -369,16 +340,11 @@ export function CubeRegisterPanel({ projectId, token, rows, canEdit, onChanged, 
                 type="button"
                 variant="secondary"
                 className="!text-xs"
-                disabled={busy || syncing || !localRows.length}
+                disabled={busy || !localRows.length}
                 onClick={() => void recalculateFormulas()}
               >
                 Recalculate IS 516
               </Button>
-              {canLoadTemplate ? (
-                <Button type="button" variant="secondary" className="!text-xs" disabled={busy || syncing} onClick={() => void syncTemplate(false)}>
-                  Load SPDC cube template
-                </Button>
-              ) : null}
             </div>
           )}
         </div>

@@ -299,32 +299,6 @@ export default function CostPage() {
     }
   }
 
-  async function syncFullTemplate(silent = false) {
-    if (!id || !canEdit) return null;
-    setSyncing(true);
-    if (!silent) setMsg("");
-    try {
-      const out = await api<{
-        budget: number;
-        monitoring: number;
-        mb: number;
-        bbs: number;
-        cashflow?: number;
-        fullWorkbook?: boolean;
-      }>(`/api/cost/${id}/sync-template`, { method: "POST", token });
-      setMsg(
-        `Loaded SPDC_Budget_Arvind 49.xls — Budget ${out.budget}, Monitoring ${out.monitoring}, MB ${out.mb}, BBS ${out.bbs}${out.cashflow != null ? `, Cashflow ${out.cashflow}` : ""} rows`
-      );
-      await load();
-      if (!silent) void runVerify();
-      return out;
-    } catch (err) {
-      if (!silent) setMsg(err instanceof Error ? err.message : "Template load failed");
-      return null;
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   async function uploadBoqOrWorkbook(file: File, openPackage?: string) {
     if (!id || !canEdit) return;
@@ -849,13 +823,6 @@ export default function CostPage() {
                 ))}
               </tbody>
             </table>
-            {!verify.ok && canEdit && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" variant="secondary" disabled={syncing} onClick={() => void syncFullTemplate()}>
-                  {syncing ? "Loading…" : "Re-sync SPDC workbook"}
-                </Button>
-              </div>
-            )}
           </div>
         </details>
       )}
@@ -940,9 +907,6 @@ export default function CostPage() {
           onMessage={setMsg}
           onChanged={load}
           onOpenTab={(t, pkg) => setTab(t, pkg || "All")}
-          onSyncTemplate={async () => {
-            await syncFullTemplate();
-          }}
         />
       )}
 
@@ -1080,15 +1044,6 @@ export default function CostPage() {
                   }
                 : undefined
             }
-            onGenerate={
-              canEdit
-                ? async () => {
-                    const out = await syncFullTemplate();
-                    if (out) setTab("monitoring", DEFAULT_COST_MONITORING_PKG);
-                  }
-                : undefined
-            }
-            generateLabel="Load SPDC template"
             busy={syncing}
             onDownloadCsv={() => void downloadSheet("boq")}
             onDownloadXlsx={() => void downloadSheet("boq", "xlsx")}

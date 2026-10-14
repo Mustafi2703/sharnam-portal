@@ -2206,9 +2206,8 @@ html.is-standalone-form #root {
   -webkit-overflow-scrolling: touch;
 }
 
-/* QAP page — full middle-column scroll (not page-stack--register trap) */
-.qap-page.page-scroll-full,
-.qap-page.quality-module {
+/* QAP register — keep inner sheet scroll (do NOT force height:auto like page-scroll-full) */
+.qap-page.page-scroll-full {
   flex: none !important;
   height: auto !important;
   overflow: visible !important;
@@ -2220,6 +2219,46 @@ html.is-standalone-form #root {
   height: auto !important;
   min-height: 0 !important;
   overflow: visible !important;
+}
+
+/* QAP tool window — same flex scroll chain as RFI register (table body scrolls) */
+.tool-workspace--window .tool-main__outlet:has(.qap-page:not(.page-scroll-full)) {
+  overflow: hidden !important;
+  padding-bottom: 0.75rem;
+}
+.tool-workspace--window .tool-main__outlet > .qap-page:not(.page-scroll-full),
+.tool-workspace--window .qap-page:not(.page-scroll-full) {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-workspace--window .qap-page:not(.page-scroll-full) .qap-page__register,
+.tool-workspace--window .qap-page:not(.page-scroll-full) .spdc-register-panel,
+.tool-workspace--window .qap-page:not(.page-scroll-full) .register-panel-fill,
+.tool-workspace--window .qap-page:not(.page-scroll-full) .register-sheet-shell {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-workspace--window .qap-page:not(.page-scroll-full) .register-scroll-area,
+.tool-workspace--window .qap-page:not(.page-scroll-full) .register-sheet-viewport,
+.tool-workspace--window .qap-page:not(.page-scroll-full) .qap-register__scroll {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 10rem !important;
+  max-height: none !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .hrms-portal-shell.app-frame {

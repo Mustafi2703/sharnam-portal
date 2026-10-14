@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
 import { PieChart } from "./PieChart";
 import { ColumnChart } from "./ColumnChart";
-import { Badge, Button, Card } from "./ui";
-import { StatusNote } from "./StatusNote";
+import { Badge, Card } from "./ui";
 
 type CatalogRow = {
   srNo: number;
@@ -44,12 +42,9 @@ function statusLabel(row: CatalogRow) {
 }
 
 /** Quality Dashboard Sheet1 catalog + live fill status for DPR daily / weekly / monthly. */
-export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage, onChanged }: Props) {
+export function QualityChecklistSummaryPanel({ projectId, dash, canManage }: Props) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const autoRef = useRef(false);
 
   const rows: CatalogRow[] = dash?.catalogStatus?.length
     ? dash.catalogStatus
@@ -73,43 +68,8 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
   const filledTypes = rows.filter((r) => (r.fillCount || 0) > 0).length;
   const todayFills = (dash?.fillTrends?.fillsByDay || []).slice(-1)[0]?.value || 0;
 
-  useEffect(() => {
-    if (!canManage || autoRef.current) return;
-    if (rows.length >= 100 && onboarded >= rows.length * 0.8) return;
-    if (!rows.length) return;
-    autoRef.current = true;
-    void sync(true);
-  }, [canManage, rows.length, onboarded]);
-
-  async function sync(silent = false) {
-    if (!silent) {
-      setBusy(true);
-      setMsg("");
-    }
-    try {
-      const out = await api<{ catalog: number; created: number; assigned: number; pack?: { workbookFiles: number; matchedToCatalog: number; catalogRows: number } }>(
-        `/api/checklist/project/${projectId}/quality-catalog/sync`,
-        { method: "POST", token }
-      );
-      if (!silent) {
-        const packNote = out.pack
-          ? ` · ${out.pack.matchedToCatalog}/${out.pack.catalogRows} linked to client xlsx in New folder`
-          : "";
-        setMsg(`Onboarded ${out.catalog} types (${out.created} new) and assigned to this project${packNote}.`);
-      }
-      await onChanged();
-    } catch (err) {
-      autoRef.current = false;
-      if (!silent) setMsg(err instanceof Error ? err.message : "Sync failed");
-    } finally {
-      if (!silent) setBusy(false);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-2 min-w-0">
-      <StatusNote msg={msg} className="shrink-0" />
-
       <div className="shrink-0 space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <Card className="!p-3">
@@ -174,9 +134,9 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
             </Link>
           </div>
           {canManage && (
-            <Button type="button" className="mt-4 w-full" disabled={busy} onClick={() => void sync(false)}>
-              {busy ? "Onboarding…" : "Onboard all Sheet1 types to master"}
-            </Button>
+            <p className="mt-4 text-xs text-steel-muted">
+              Demo onboard of all Sheet1 types is on Admin → UAT Data.
+            </p>
           )}
         </Card>
       </div>

@@ -179,7 +179,7 @@ const G: Guide[] = [
     who: ["admin", "office", "site_employee"],
     when: "Site safety officer starts a new project or refreshes the master.",
     steps: [
-      "Master → Safety checklist master → 'Seed SPDC HSE pack' — creates F-01 · F-02 · F-03 forms with all 127 line items.",
+      "Admin → UAT Data → Seed SPDC Safety IR checklists — creates F-01 · F-02 · F-03 forms with all 127 line items.",
       "Project → Safety → Assign checklist → pick the frequency (Daily walk / Weekly audit / Monthly review).",
       "Site officer fills the log on tablet or phone — Photo per item is one tap.",
       "Any Fail opens the NCR flow with root-cause and closure date. Closure evidence attaches back to the same log.",

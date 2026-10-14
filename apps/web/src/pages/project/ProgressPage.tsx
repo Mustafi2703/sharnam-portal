@@ -60,8 +60,6 @@ export default function ProgressPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [data, setData] = useState<any>(null);
-  const [resyncBusy, setResyncBusy] = useState(false);
-  const [registerSyncBusy, setRegisterSyncBusy] = useState(false);
   const [paBusy, setPaBusy] = useState<"import" | "xlsx" | "pdf" | "sync" | "boq" | null>(null);
   const paImportRef = useRef<HTMLInputElement>(null);
   const [msProject, setMsProject] = useState<any>(null);
@@ -109,9 +107,6 @@ export default function ProgressPage() {
   const pva = (searchParams.get("pva") as "all" | "cashflow" | "manpower" | "activity") || "all";
   const canEdit =
     user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
-  const canResyncExcel =
-    user?.role === "admin" || user?.role === "office" || user?.role === "employee" || user?.role === "site_employee";
-
   const [hindranceForm, setHindranceForm] = useState({
     description: "",
     location: "",
@@ -245,23 +240,6 @@ export default function ProgressPage() {
     }
   }
 
-  async function runResyncSor() {
-    if (!canResyncExcel || !id) return;
-    setResyncBusy(true);
-    setMsg("");
-    try {
-      const out = await api<{ imported: number }>(`/api/progress/${id}/resync-sor`, {
-        method: "POST",
-        token,
-      });
-      await load();
-      setMsg(`Monthly SOR re-synced from Excel (${out.imported} rows).`);
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "SOR resync failed");
-    } finally {
-      setResyncBusy(false);
-    }
-  }
 
   useEffect(() => {
     void load();
@@ -391,25 +369,6 @@ export default function ProgressPage() {
     }
   }
 
-  async function loadProgressTemplate() {
-    if (!id) return;
-    setPaBusy("sync");
-    setMsg("");
-    try {
-      const out = await api<{ activityLines: number; cashflow: number; manpower: number; registers?: any }>(
-        `/api/progress/${id}/planned-actual/sync-template`,
-        { method: "POST", token, body: JSON.stringify({ force: true }) }
-      );
-      setMsg(
-        `Loaded Planned Vs. Actual format — ${out.activityLines} activities · ${out.cashflow} cashflow · ${out.manpower} trades (feeds DPR qty hints)`
-      );
-      await load();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Template load failed");
-    } finally {
-      setPaBusy(null);
-    }
-  }
 
   async function addActivityLine() {
     if (!id || !actForm.activity.trim()) return;
@@ -565,43 +524,7 @@ export default function ProgressPage() {
     }
   }
 
-  async function loadReferenceProgramme() {
-    if (!id) return;
-    setMsBusy("import");
-    setMsg("");
-    try {
-      const out = await api<{ scheduleTasks: number }>(`/api/progress/${id}/schedule-tasks/import`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({}),
-      });
-      setMsg(`Loaded reference WPR programme — ${out.scheduleTasks} tasks`);
-      await Promise.all([load(), loadMsProject()]);
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Could not load reference programme");
-    } finally {
-      setMsBusy(null);
-    }
-  }
 
-  async function runResyncRegisters() {
-    if (!canResyncExcel || !id) return;
-    setRegisterSyncBusy(true);
-    setMsg("");
-    try {
-      await api(`/api/progress/${id}/resync-registers`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({ force: true }),
-      });
-      await load();
-      setMsg("Progress registers re-synced from SPDC templates (milestones, hindrance, risk, legal, planned).");
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Register resync failed");
-    } finally {
-      setRegisterSyncBusy(false);
-    }
-  }
 
   async function patchMilestone(milestoneId: string, patch: Record<string, unknown>) {
     if (!id) return;
@@ -663,26 +586,6 @@ export default function ProgressPage() {
     }
   }
 
-  async function loadAllProgressTemplates(force = false) {
-    if (!id || !canResyncExcel) return;
-    setRegisterSyncBusy(true);
-    setMsg("");
-    try {
-      const out = await api<{ registers?: any; planned?: any }>(
-        `/api/progress/${id}/resync-registers`,
-        { method: "POST", token, body: JSON.stringify({ force }) }
-      );
-      await load();
-      const reg = out.registers;
-      setMsg(
-        `Loaded SPDC progress packs — ${reg?.milestones?.imported ?? 0} milestones · ${reg?.hindrance?.imported ?? 0} hindrances · ${reg?.risk?.imported ?? 0} risks · ${reg?.legal?.imported ?? 0} legal · ${reg?.lessons?.imported ?? 0} lessons · ${out.planned?.activityLines ?? 0} activity lines`
-      );
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Template load failed");
-    } finally {
-      setRegisterSyncBusy(false);
-    }
-  }
 
   async function syncActivityFromBoq() {
     if (!id) return;
@@ -1038,9 +941,7 @@ export default function ProgressPage() {
             rowCount={data.milestones?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setMileAddOpen(true) : undefined}
-            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
-            generateLabel="Load SPDC templates"
-            busy={registerSyncBusy}
+            busy={false}
             message={msg || undefined}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
@@ -1187,15 +1088,7 @@ export default function ProgressPage() {
                   }
                 : undefined
             }
-            onGenerate={
-              canEdit
-                ? async () => {
-                    await loadProgressTemplate();
-                  }
-                : undefined
-            }
-            generateLabel="Load SPDC template"
-            busy={!!paBusy || registerSyncBusy}
+            busy={!!paBusy}
             message={msg}
           />
           <div className="progress-sheet-filters flex flex-wrap items-center gap-2 shrink-0">
@@ -1510,9 +1403,7 @@ export default function ProgressPage() {
             canEdit={canEdit}
             onAddRow={canEdit ? () => setSorAddOpen(true) : undefined}
             addRowLabel="+ Add SOR row"
-            onGenerate={canEdit ? () => void runResyncSor() : undefined}
-            generateLabel="Re-sync SOR from Excel"
-            busy={resyncBusy}
+            busy={false}
             uploadHint="Add SOR rows here, or re-sync from the bundled Monthly Progress Dashboard workbook. Charts below update from this register."
             message={msg || undefined}
           />
@@ -1578,9 +1469,7 @@ export default function ProgressPage() {
             rowCount={data.hindrances?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setHindranceModalOpen(true) : undefined}
-            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
-            generateLabel="Load SPDC templates"
-            busy={registerSyncBusy || !!paBusy}
+            busy={!!paBusy}
             message={msg}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
@@ -1673,9 +1562,7 @@ export default function ProgressPage() {
             rowCount={data.risks?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setRiskAddOpen(true) : undefined}
-            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
-            generateLabel="Load SPDC templates"
-            busy={registerSyncBusy}
+            busy={false}
             message={msg || undefined}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
@@ -1763,9 +1650,7 @@ export default function ProgressPage() {
             rowCount={data.legalApprovals?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setLegalAddOpen(true) : undefined}
-            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
-            generateLabel="Load SPDC templates"
-            busy={registerSyncBusy}
+            busy={false}
             message={msg || undefined}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
@@ -2025,8 +1910,6 @@ export default function ProgressPage() {
                   }
                 : undefined
             }
-            onGenerate={canEdit ? () => void loadReferenceProgramme() : undefined}
-            generateLabel="Load reference WPR programme"
             onDownloadCsv={() => void downloadMsProjectXml()}
             busy={!!msBusy}
             message={msg}

@@ -137,8 +137,6 @@ export function LessonsLearntRegister({
         rowCount={lessons.length}
         canEdit={canEdit && !readOnly}
         onAddRow={canEdit && !readOnly ? openAdd : undefined}
-        onGenerate={canResyncExcel && onResyncTemplate ? () => void onResyncTemplate() : undefined}
-        generateLabel="Load SPDC template"
         busy={registerSyncBusy || busy}
         message={msg || undefined}
         uploadHint="Rows from Lessons Learnt - Sharnam PMC.xls — add site notes; portal edits are audit-logged."

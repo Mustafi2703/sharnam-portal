@@ -253,7 +253,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "quality/checklist-master",
       label: "Quality checklist master",
       roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Onboard Civil/HVAC/Electrical pack checklists or create a new QI type. Fill happens on the IR register.",
+      blurb: "Create a new QI type or load demo packs from Admin → UAT Data. Fill happens on the IR register.",
     },
     {
       to: "quality/site-checklist-master",
@@ -364,7 +364,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "safety/checklist-master",
       label: "Safety checklist master",
       roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Onboard HIRA / HSE pack or create a new Safety checklist type. Fill from the Safety IR register.",
+      blurb: "Create a new Safety checklist type or load demo packs from Admin → UAT Data. Fill from the Safety IR register.",
     },
     {
       to: "inspection-register",
