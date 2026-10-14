@@ -481,10 +481,73 @@ export function assertPortalSafePath(relPath: string) {
  * Ensure folder under sandbox only.
  * Idempotent: if folder exists, leave it untouched (no rename/delete).
  */
+const folderUrlCache = new Map<string, { webUrl: string; id: string; name: string; at: number }>();
+const FOLDER_URL_TTL_MS = 15 * 60 * 1000;
+
+/** One Graph GET for the full path — use this for Open-in-SharePoint (avoids segment walk timeouts). */
+export async function resolveDriveFolder(
+  driveId: string,
+  folderPath: string,
+  opts?: { createIfMissing?: boolean }
+): Promise<{ id: string; name: string; webUrl?: string }> {
+  const safePath = assertPortalSafePath(folderPath);
+  const cacheKey = `${driveId}::${safePath}`;
+  const hit = folderUrlCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < FOLDER_URL_TTL_MS) {
+    return { id: hit.id, name: hit.name, webUrl: hit.webUrl };
+  }
+
+  try {
+    const existing = await graphFetch<{ id: string; name: string; webUrl?: string; folder?: unknown }>(
+      `/drives/${driveId}/root:/${encodeDrivePath(safePath)}?$select=id,name,webUrl,folder`
+    );
+    if (existing.webUrl) {
+      folderUrlCache.set(cacheKey, {
+        id: existing.id,
+        name: existing.name,
+        webUrl: existing.webUrl,
+        at: Date.now(),
+      });
+    }
+    return { id: existing.id, name: existing.name, webUrl: existing.webUrl };
+  } catch (err) {
+    if (opts?.createIfMissing === false) throw err;
+    // Missing — walk/create once, then cache.
+    const created = await ensureDriveFolder(driveId, safePath);
+    if (created.webUrl) {
+      folderUrlCache.set(cacheKey, {
+        id: created.id,
+        name: created.name,
+        webUrl: created.webUrl,
+        at: Date.now(),
+      });
+    }
+    return created;
+  }
+}
+
 export async function ensureDriveFolder(driveId: string, folderPath: string): Promise<{ id: string; name: string; webUrl?: string }> {
   const safePath = assertPortalSafePath(folderPath);
   const parts = safePath.split("/").filter(Boolean);
   if (!parts.length) throw new Error("folderPath required");
+
+  // Fast path: whole folder already exists (common after UAT / provision).
+  try {
+    const existing = await graphFetch<{ id: string; name: string; webUrl?: string; folder?: unknown }>(
+      `/drives/${driveId}/root:/${encodeDrivePath(safePath)}?$select=id,name,webUrl,folder`
+    );
+    if (existing.webUrl) {
+      folderUrlCache.set(`${driveId}::${safePath}`, {
+        id: existing.id,
+        name: existing.name,
+        webUrl: existing.webUrl,
+        at: Date.now(),
+      });
+    }
+    return { id: existing.id, name: existing.name, webUrl: existing.webUrl };
+  } catch {
+    /* walk below */
+  }
 
   let parentPath = "";
   let last: { id: string; name: string; webUrl?: string } | null = null;
@@ -530,6 +593,14 @@ export async function ensureDriveFolder(driveId: string, folderPath: string): Pr
   }
 
   if (!last) throw new Error(`Failed to ensure folder ${folderPath}`);
+  if (last.webUrl) {
+    folderUrlCache.set(`${driveId}::${safePath}`, {
+      id: last.id,
+      name: last.name,
+      webUrl: last.webUrl,
+      at: Date.now(),
+    });
+  }
   return last;
 }
 

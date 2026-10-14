@@ -1248,16 +1248,46 @@ projectsRouter.patch("/:id/work-packages", requireRoles("admin", "office"), asyn
 projectsRouter.get("/:id/sharepoint-folder", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.id }, select: { code: true } });
   if (!project) return res.status(404).json({ error: "Project not found" });
-  const { graphConfig, MODULE_TO_ISO_FOLDER, resolveDefaultDrive, ensureDriveFolder, SHAREPOINT_SANDBOX_ROOT, sanitizeProjectCode } = await import("../services/graph.js");
+  const {
+    graphConfig,
+    MODULE_TO_ISO_FOLDER,
+    resolveDefaultDrive,
+    resolveDriveFolder,
+    SHAREPOINT_SANDBOX_ROOT,
+    sanitizeProjectCode,
+  } = await import("../services/graph.js");
   const cfg = graphConfig();
   if (!cfg.configured || cfg.mock) return res.status(400).json({ error: "SharePoint is not connected on this server." });
-  const key = String(req.query.module || "");
-  const iso = (MODULE_TO_ISO_FOLDER as Record<string, string>)[key];
-  const folder = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}${iso ? `/${iso}` : ""}`;
+  const key = String(req.query.module || "").trim();
+  const iso = key ? (MODULE_TO_ISO_FOLDER as Record<string, string>)[key] : undefined;
+  if (key && !iso) {
+    return res.status(400).json({
+      error: `Unknown SharePoint module key "${key}". Open the tool from Quality / Safety / Drawings / Progress so the right folder is selected.`,
+    });
+  }
+  const projectRoot = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}`;
+  const folder = iso ? `${projectRoot}/${iso}` : projectRoot;
   try {
     const drive = await resolveDefaultDrive();
-    const out = await ensureDriveFolder(drive.driveId, folder);
-    res.json({ webUrl: out.webUrl || null, folder });
+    // Prefer a single Graph GET (cached) — deep ensureDriveFolder walks were timing out the button.
+    try {
+      const out = await resolveDriveFolder(drive.driveId, folder, { createIfMissing: true });
+      if (out.webUrl) return res.json({ webUrl: out.webUrl, folder, module: key || null });
+    } catch (deepErr) {
+      // Fall back to project root so permissioned users still get a working link.
+      const root = await resolveDriveFolder(drive.driveId, projectRoot, { createIfMissing: true });
+      return res.json({
+        webUrl: root.webUrl || null,
+        folder: projectRoot,
+        module: key || null,
+        fallback: true,
+        note:
+          deepErr instanceof Error
+            ? `Could not open ${iso || "folder"} (${deepErr.message}). Opened project root instead.`
+            : "Opened project root instead.",
+      });
+    }
+    res.status(502).json({ error: "SharePoint returned no web URL for this folder.", folder });
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : "Could not reach SharePoint" });
   }
