@@ -1064,10 +1064,10 @@ progressRouter.patch(
           : existing.balanceQty;
     const pctComplete =
       body.pctComplete != null
-        ? Number(body.pctComplete)
+        ? asFraction(body.pctComplete)
         : gfcQty > 0
           ? (executedQty || 0) / gfcQty
-          : existing.pctComplete;
+          : asFraction(existing.pctComplete);
     const row = await prisma.progressActivityLine.update({
       where: { id: existing.id },
       data: {
