@@ -231,18 +231,18 @@ export default function App() {
                 <Route path="/projects/:id" element={<ProjectToolsLayout />}>
                   <Route index element={<ProjectHomePage />} />
                   <Route path="setup" element={<LiveProjectSetupPage />} />
-                  <Route path="hub/drawings" element={<ModuleHubPage moduleKey="drawings" />} />
-                  <Route path="hub/dms" element={<ModuleHubPage moduleKey="dms" />} />
-                  <Route path="hub/quality" element={<ModuleHubPage moduleKey="quality" />} />
-                  <Route path="hub/safety" element={<ModuleHubPage moduleKey="safety" />} />
-                  <Route path="hub/inspection" element={<ModuleHubPage moduleKey="inspection" />} />
-                  <Route path="hub/progress" element={<ModuleHubPage moduleKey="progress" />} />
-                  <Route path="hub/auditKpi" element={<ModuleHubPage moduleKey="auditKpi" />} />
-                  <Route path="hub/comms" element={<ModuleHubPage moduleKey="comms" />} />
-                  <Route path="hub/cost" element={<ModuleHubPage moduleKey="cost" />} />
-                  <Route path="hub/finance" element={<ModuleHubPage moduleKey="finance" />} />
-                  <Route path="hub/reports" element={<ModuleHubPage moduleKey="reports" />} />
-                  <Route path="hub/closure" element={<ModuleHubPage moduleKey="closure" />} />
+                  <Route path="hub/drawings" element={<ModuleHubPage key="hub-drawings" moduleKey="drawings" />} />
+                  <Route path="hub/dms" element={<ModuleHubPage key="hub-dms" moduleKey="dms" />} />
+                  <Route path="hub/quality" element={<ModuleHubPage key="hub-quality" moduleKey="quality" />} />
+                  <Route path="hub/safety" element={<ModuleHubPage key="hub-safety" moduleKey="safety" />} />
+                  <Route path="hub/inspection" element={<ModuleHubPage key="hub-inspection" moduleKey="inspection" />} />
+                  <Route path="hub/progress" element={<ModuleHubPage key="hub-progress" moduleKey="progress" />} />
+                  <Route path="hub/auditKpi" element={<ModuleHubPage key="hub-auditKpi" moduleKey="auditKpi" />} />
+                  <Route path="hub/comms" element={<ModuleHubPage key="hub-comms" moduleKey="comms" />} />
+                  <Route path="hub/cost" element={<ModuleHubPage key="hub-cost" moduleKey="cost" />} />
+                  <Route path="hub/finance" element={<ModuleHubPage key="hub-finance" moduleKey="finance" />} />
+                  <Route path="hub/reports" element={<ModuleHubPage key="hub-reports" moduleKey="reports" />} />
+                  <Route path="hub/closure" element={<ModuleHubPage key="hub-closure" moduleKey="closure" />} />
                   <Route path="directory" element={<DirectoryPage />} />
                   <Route path="vendors" element={<VendorsPage />} />
                   <Route path="drawings" element={<DrawingsPage />} />
@@ -282,10 +282,22 @@ export default function App() {
                   <Route path="closure" element={<ProjectClosurePage />} />
                   <Route path="progress" element={<ProgressPage />} />
                   <Route path="audit-kpi" element={<AuditKpiPage />} />
-                  <Route path="quality/checklist-master" element={<ChecklistMasterPage lockedFamily="QualityInspection" />} />
-                  <Route path="quality/site-checklist-master" element={<ChecklistMasterPage lockedFamily="SiteExecution" />} />
-                  <Route path="safety/checklist-master" element={<ChecklistMasterPage lockedFamily="Safety" />} />
-                  <Route path="inspection/checklist-master" element={<ChecklistMasterPage lockedFamily="ActivityInspection" />} />
+                  <Route
+                    path="quality/checklist-master"
+                    element={<ChecklistMasterPage key="master-quality" lockedFamily="QualityInspection" />}
+                  />
+                  <Route
+                    path="quality/site-checklist-master"
+                    element={<ChecklistMasterPage key="master-site" lockedFamily="SiteExecution" />}
+                  />
+                  <Route
+                    path="safety/checklist-master"
+                    element={<ChecklistMasterPage key="master-safety" lockedFamily="Safety" />}
+                  />
+                  <Route
+                    path="inspection/checklist-master"
+                    element={<ChecklistMasterPage key="master-activity" lockedFamily="ActivityInspection" />}
+                  />
                   <Route path="progress/checklist-master" element={<Navigate to="../quality/site-checklist-master" replace />} />
                   <Route path="quality/checklist-logs" element={<ChecklistLogsPage lockedFamily="QualityInspection" />} />
                   <Route path="quality/ncr-fill-log" element={<NcrFillLogPage />} />

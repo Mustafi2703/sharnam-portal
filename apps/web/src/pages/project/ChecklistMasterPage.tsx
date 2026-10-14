@@ -97,12 +97,19 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   }, [id, location.pathname, searchParams, navigate]);
 
   useEffect(() => {
-    setForm((f) => ({
-      ...f,
+    setForm({
+      name: "",
+      category: "General",
       checklistType: family,
+      instructions: "",
       requirePhotosMin: family === "QualityInspection" || family === "Safety" ? 3 : 0,
-    }));
+    });
     setActiveId(null);
+    setDetail(null);
+    setMsg("");
+    setMasterTab("templates");
+    setItemForm({ description: "", instruction: "", section: "General", requirePhoto: false });
+    setExcelFile(null);
     void load();
   }, [family, token]);
 
@@ -189,36 +196,42 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           effectiveLock === "DrawingCheck"
             ? "Drawings · checklist master"
             : effectiveLock === "Safety"
-            ? id
-              ? "Safety · checklist master"
-              : "Global · Safety checklists"
-            : effectiveLock === "QualityInspection"
               ? id
-                ? "Quality · checklist master"
-                : "Global · Quality checklists"
-              : id
-                ? "Project checklist master"
-                : "Global master · all projects"
+                ? "Safety · checklist master"
+                : "Global · Safety checklists"
+              : effectiveLock === "QualityInspection"
+                ? id
+                  ? "Quality · checklist master"
+                  : "Global · Quality checklists"
+                : effectiveLock === "SiteExecution" || effectiveLock === "ActivityInspection"
+                  ? "Quality · site checklist master"
+                  : id
+                    ? "Project checklist master"
+                    : "Global master · all projects"
         }
         title={
           effectiveLock === "DrawingCheck"
             ? "Drawing checklist master"
             : effectiveLock === "Safety"
-            ? "Safety checklist master"
-            : effectiveLock === "QualityInspection"
-              ? "Quality checklist master"
-              : "Create, upload & choose checklists"
+              ? "Safety checklist master"
+              : effectiveLock === "QualityInspection"
+                ? "Quality checklist master"
+                : effectiveLock === "SiteExecution" || effectiveLock === "ActivityInspection"
+                  ? "Site checklist master"
+                  : "Create, upload & choose checklists"
         }
         subtitle={
           effectiveLock === "DrawingCheck"
             ? "Yes/No/N.A. items only — no photos or links. Edit lines here; fills unlock GFC upload. Quality and Safety templates live in their own modules."
             : effectiveLock === "Safety"
-            ? "Safety checklist types (HIRA, HSE pack, custom). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Safety IR register — the fill log is information only."
-            : effectiveLock === "QualityInspection"
-              ? "Quality checklist types (Civil, HVAC, Electrical, ELV, Fire, interiors…). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Quality IR register."
-              : id
-                ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
-                : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
+              ? "Safety checklist types (HIRA, HSE pack, custom). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Safety IR register — the fill log is information only."
+              : effectiveLock === "QualityInspection"
+                ? "Quality checklist types (Civil, HVAC, Electrical, ELV, Fire, interiors…). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Quality IR register."
+                : effectiveLock === "SiteExecution" || effectiveLock === "ActivityInspection"
+                  ? "Site / field checklist types (SPDC Activity format). Create or edit here; fill from the Quality register — not mixed with Safety masters."
+                  : id
+                    ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
+                    : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">

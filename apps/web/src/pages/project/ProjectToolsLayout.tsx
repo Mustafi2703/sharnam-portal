@@ -29,6 +29,7 @@ const TOP_MODULES = (
     { key: "dms", label: "Documents", path: "hub/dms" },
     { key: "quality", label: "Quality", path: "hub/quality" },
     { key: "safety", label: "Safety", path: "hub/safety" },
+    { key: "inspection", label: "Inspection", path: "hub/inspection" },
     { key: "progress", label: "Progress", path: "hub/progress" },
     { key: "comms", label: "Comms", path: "hub/comms" },
     { key: "auditKpi", label: "Audit & KPI", path: "hub/auditKpi" },
@@ -300,7 +301,9 @@ export default function ProjectToolsLayout() {
         )}
         <div className="tool-main min-w-0 flex-1 min-h-0 flex flex-col">
           <div className="tool-main__outlet flex flex-col flex-1 min-h-0 min-w-0">
+            {/* Remount on path change so Quality/Safety hubs and checklist masters never keep the previous module's cards. */}
             <Outlet
+              key={location.pathname}
               context={{
                 project,
                 gate,

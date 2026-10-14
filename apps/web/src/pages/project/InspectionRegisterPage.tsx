@@ -67,6 +67,14 @@ export default function InspectionRegisterPage() {
   const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [project, setProject] = useState<any>(null);
+  const [fillTotals, setFillTotals] = useState<{
+    fills: number;
+    safetyFills: number;
+    siteExecutionFills: number;
+    activityFills: number;
+    catalogFilled: number;
+    catalogTypes: number;
+  } | null>(null);
 
   const canCreate = !!user && user.role !== "client";
   const formRef = registerFormRefForTab(tab);
@@ -223,43 +231,88 @@ export default function InspectionRegisterPage() {
     };
   }, [rows]);
 
+  useEffect(() => {
+    if (!overview || !id) return;
+    void api<any>(`/api/checklist/project/${id}/quality-dashboard`, { token })
+      .then((d) =>
+        setFillTotals({
+          fills: d?.totals?.fills ?? 0,
+          safetyFills: d?.totals?.safetyFills ?? 0,
+          siteExecutionFills: d?.totals?.siteExecutionFills ?? 0,
+          activityFills: d?.totals?.activityFills ?? 0,
+          catalogFilled: d?.totals?.catalogFilled ?? 0,
+          catalogTypes: d?.totals?.catalogTypes ?? 0,
+        }),
+      )
+      .catch(() => setFillTotals(null));
+  }, [overview, id, token]);
+
   if (overview && id) {
     return (
       <div className="space-y-4 pb-8">
         <PageHeader
           eyebrow="Inspection overview"
           title="Inspection desk"
-          subtitle="This table is an overview only. Raise, answer and close on the Quality or Safety registers — those are the real logs."
+          subtitle="Overview only. Raise, answer and close on the Quality or Safety registers — those own the live logs and checklist fills."
         />
+        {fillTotals ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {[
+              { label: "QI fills", value: fillTotals.fills },
+              { label: "Safety fills", value: fillTotals.safetyFills },
+              { label: "Site fills", value: fillTotals.siteExecutionFills },
+              { label: "Activity fills", value: fillTotals.activityFills },
+              { label: "Catalog types filled", value: `${fillTotals.catalogFilled}/${fillTotals.catalogTypes}` },
+              {
+                label: "Open IRs (Q / S)",
+                value: `${openByStatus.quality.open}/${openByStatus.safety.open}`,
+              },
+            ].map((k) => (
+              <Card key={k.label} className="!p-3">
+                <div className="text-[10px] uppercase text-steel-muted">{k.label}</div>
+                <div className="text-xl font-display tabular-nums">{k.value}</div>
+              </Card>
+            ))}
+          </div>
+        ) : null}
         <div className="grid sm:grid-cols-3 gap-3">
           {[
             {
-              title: "Quality — Request for Inspection (F-01)",
+              title: "Raise Quality IR (F-01)",
               meta: `${openByStatus.quality.open} open · ${openByStatus.quality.total} total`,
               href: registerToolPath(id, "quality-ir"),
               sheet: QUALITY_IR_FORM.workbook,
+              cta: "Raise / open Quality register →",
             },
             {
-              title: "Quality — Activity checklist (F-02)",
+              title: "Raise Activity checklist (F-02)",
               meta: `${openByStatus.activity.open} open · ${openByStatus.activity.total} total`,
               href: registerToolPath(id, "activity-f02"),
               sheet: ACTIVITY_CHECKLIST_FORM.workbook,
+              cta: "Raise / open F-02 →",
             },
             {
-              title: "Safety — Safety IR (F-01) + HSE",
+              title: "Raise Safety IR (F-01)",
               meta: `${openByStatus.safety.open} open · ${openByStatus.safety.total} total`,
               href: registerToolPath(id, "safety-ir"),
               sheet: SAFETY_IR_FORM.workbook,
+              cta: "Raise / open Safety register →",
             },
           ].map((c) => (
             <Link key={c.href} to={c.href} className="block rounded-xl border border-line bg-paper p-4 hover:border-brand/50 hover:shadow-sm">
               <div className="font-semibold text-sm text-ink">{c.title}</div>
               <p className="text-xs text-steel-muted mt-1">{c.meta}</p>
               <p className="text-[10px] font-mono text-steel-muted mt-2 truncate">{c.sheet}</p>
-              <p className="text-xs font-semibold text-brand mt-3">Open register →</p>
+              <p className="text-xs font-semibold text-brand mt-3">{c.cta}</p>
             </Link>
           ))}
         </div>
+        <p className="text-xs text-steel-muted">
+          Checklist fill counts by type:{" "}
+          <Link className="text-brand font-semibold" to={`/projects/${id}/inspections?sheet=checklist-summary`}>
+            Quality · Checklist summary →
+          </Link>
+        </p>
         <Card>
           <h3 className="font-semibold mb-2">All inspection requests (read-only overview)</h3>
           <p className="text-xs text-steel-muted mb-3">Click a row’s module link to work it in the owning register.</p>
@@ -366,7 +419,15 @@ export default function InspectionRegisterPage() {
               }
             : undefined
         }
-        addRowLabel={tab === "hse-register" ? "+ Raise Safety IR" : "+ Add to register"}
+        addRowLabel={
+          tab === "hse-register"
+            ? "+ Raise Safety IR"
+            : tab === "safety-ir"
+              ? "+ Raise Safety IR"
+              : tab === "activity-checklist"
+                ? "+ Raise Activity F-02"
+                : "+ Raise Quality IR"
+        }
       />
 
       <div className="flex flex-wrap gap-2">

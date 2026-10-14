@@ -156,6 +156,22 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "Quality Dashboard.xlsx · Dashboard",
     },
     {
+      to: "inspection-register",
+      label: "Raise Quality IR (F-01)",
+      query: "tab=quality-ir&lock=quality",
+      roles: ["admin", "office", "site_employee", "employee"],
+      blurb: "Request for Inspection — attach QI checklist + assignee (directory or matrix). Assignees fill from the register.",
+      sheet: "SPDC_Request_for_Inspection_Form.xlsx",
+    },
+    {
+      to: "inspection-register",
+      label: "Raise Activity checklist (F-02)",
+      query: "tab=activity-checklist&lock=quality",
+      roles: ["admin", "office", "site_employee", "employee"],
+      blurb: "F-02 enclosure linked to a Quality IR — contractor self-check, not a separate RFI type.",
+      sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
+    },
+    {
       to: "quality/files",
       label: "Quality files",
       roles: ["admin", "office", "site_employee", "employee", "client"],
@@ -227,16 +243,16 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     },
     {
       to: "quality/checklist-master",
-      label: "Quality IR master",
-      roles: ["admin", "office", "employee", "client"],
-      blurb: "SPDC Request for Inspection (F-01) templates.",
+      label: "Quality checklist master",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
+      blurb: "QI types (Civil, HVAC, Electrical…) and SPDC F-01 templates — create / edit here; fill from the Quality IR register.",
       sheet: "SPDC_Request_for_Inspection_Form.xlsx",
     },
     {
       to: "quality/site-checklist-master",
       label: "Site checklist master",
-      roles: ["admin", "office", "employee", "site_employee"],
-      blurb: "Final Index / field templates — SPDC Activity format.",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
+      blurb: "Field / Final Index templates — SPDC Activity format. Create types here; fill from the Quality register.",
       sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
     },
     {
@@ -249,34 +265,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "Site execution fill log",
       blurb: "Information only — site checklist fill history. Fill from the Quality register.",
     },
-    {
-      to: "quality/checklist-master",
-      label: "Quality checklist master",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Create a new QI type or load demo packs from Admin → UAT Data. Fill happens on the IR register.",
-    },
-    {
-      to: "quality/site-checklist-master",
-      label: "Site checklist master",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Site / field checklist types — onboard pack folders or create new. Fill from the register.",
-    },
-    {
-      to: "inspection-register",
-      label: "Inspection register (F-01 log)",
-      query: "tab=quality-ir&lock=quality",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Quality’s live register of Requests for Inspection — open, answered, closed. Raise F-01 here.",
-      sheet: "SPDC_Request_for_Inspection_Form.xlsx",
-    },
-    {
-      to: "inspection-register",
-      label: "Activity checklist log (F-02)",
-      query: "tab=activity-checklist&lock=quality",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "F-02 enclosures linked to a Quality IR — not a separate RFI type.",
-      sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
-    },
   ],
   safety: [
     {
@@ -287,6 +275,14 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       blurb: "Safety NCR / NCN / observations issued to your company — respond; PMC verifies and closes.",
     },
     { to: "safety", label: "Dashboard", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Safety Dashboard KPIs.", sheet: "Safety Dashboard.xlsx · One Pager" },
+    {
+      to: "inspection-register",
+      label: "Raise Safety IR (F-01)",
+      query: "tab=safety-ir&lock=safety",
+      roles: ["admin", "office", "site_employee", "employee"],
+      blurb: "Safety Request for Inspection — attach Safety checklist + assignee. Same pattern as Quality IR.",
+      sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
+    },
     {
       to: "safety/files",
       label: "Safety files",
@@ -352,19 +348,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     {
       to: "safety/checklist-master",
       label: "Safety checklist master",
-      roles: ["admin", "office", "employee", "client"],
-      blurb: "Create / upload Safety checklists only — not Quality QI.",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
+      blurb: "Safety checklist types only (not Quality QI) — create / edit here; fill from the Safety IR register.",
     },
     {
       to: "safety/checklist-logs",
       label: "Safety fill log",
       blurb: "Information only — log of Safety checklist fills. Raise & fill on the Safety IR register.",
-    },
-    {
-      to: "safety/checklist-master",
-      label: "Safety checklist master",
-      roles: ["admin", "office", "site_employee", "employee", "client"],
-      blurb: "Create a new Safety checklist type or load demo packs from Admin → UAT Data. Fill from the Safety IR register.",
     },
     {
       to: "inspection-register",
@@ -386,30 +376,30 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
   inspection: [
     {
       to: "inspection-register",
-      label: "Overview — all inspections",
+      label: "Overview — IR & fill counts",
       end: true,
       query: "overview=1",
-      blurb: "Counts of Quality IR, Safety IR and Activity checklists. Raise and edit only on Quality or Safety registers.",
+      blurb: "Open Quality / Safety IR counts and checklist fill totals. Raise and edit only on those registers.",
     },
     {
       to: "inspection-register",
-      label: "→ Quality Inspection register (F-01)",
+      label: "→ Raise Quality IR (F-01)",
       query: "tab=quality-ir&lock=quality",
-      blurb: "Opens Quality module’s Request for Inspection register — the real place to raise and close F-01.",
+      blurb: "Opens Quality’s Request for Inspection register — raise, answer, close F-01 with checklist attach.",
       sheet: "SPDC_Request_for_Inspection_Form.xlsx",
     },
     {
       to: "inspection-register",
-      label: "→ Quality Activity checklist (F-02)",
+      label: "→ Raise Activity checklist (F-02)",
       query: "tab=activity-checklist&lock=quality",
       blurb: "Opens Quality’s F-02 log (enclosure to an IR).",
       sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
     },
     {
       to: "inspection-register",
-      label: "→ Safety IR register (F-01)",
+      label: "→ Raise Safety IR (F-01)",
       query: "tab=safety-ir&lock=safety",
-      blurb: "Opens Safety module’s clearance register.",
+      blurb: "Opens Safety’s clearance register — raise / clear Safety IRs.",
       sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
     },
     {
@@ -417,6 +407,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       label: "→ HSE register",
       query: "tab=hse-register&lock=safety",
       blurb: "Opens Safety’s HSE log.",
+    },
+    {
+      to: "inspections",
+      label: "→ Checklist summary (fill counts)",
+      query: "sheet=checklist-summary",
+      blurb: "Quality Dashboard Sheet1 catalog with live fill counts per type — request fills via Quality IR.",
+      sheet: "Quality Dashboard.xlsx · Sheet1",
     },
     {
       to: "quality/checklist-master",

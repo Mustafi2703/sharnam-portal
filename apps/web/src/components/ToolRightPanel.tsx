@@ -260,8 +260,17 @@ export function ToolRightPanel({
       case "inspections":
         if (canFill) {
           actions.push(
-            { label: "New Quality Inspection", to: "inspections", primary: true },
-            { label: "Open Safety", to: "safety", secondary: true },
+            {
+              label: "Raise Quality IR (F-01)",
+              onClick: () =>
+                navigate(`/projects/${ctx.projectId}/inspection-register?tab=quality-ir&lock=quality`),
+              primary: true,
+            },
+            {
+              label: "Checklist summary (fill counts)",
+              onClick: () => navigate(`/projects/${ctx.projectId}/inspections?sheet=checklist-summary`),
+              secondary: true,
+            },
             {
               label: "Fill quality checklist",
               onClick: () => void openFamilyChecklistFill(ctx.projectId, "QualityInspection", token),
@@ -273,7 +282,13 @@ export function ToolRightPanel({
       case "safety":
         if (canFill) {
           actions.push(
-            { label: "Log safety observation", to: "safety", primary: true },
+            {
+              label: "Raise Safety IR (F-01)",
+              onClick: () =>
+                navigate(`/projects/${ctx.projectId}/inspection-register?tab=safety-ir&lock=safety`),
+              primary: true,
+            },
+            { label: "Log safety observation", to: "safety", secondary: true },
             {
               label: "Fill safety checklist",
               onClick: () => void openFamilyChecklistFill(ctx.projectId, "Safety", token),
@@ -315,7 +330,17 @@ export function ToolRightPanel({
         break;
       case "quality":
         actions.push(
-          { label: "Quality Inspections", to: "inspections", primary: true },
+          {
+            label: "Raise Quality IR (F-01)",
+            onClick: () =>
+              navigate(`/projects/${ctx.projectId}/inspection-register?tab=quality-ir&lock=quality`),
+            primary: true,
+          },
+          {
+            label: "Quality dashboard",
+            to: "inspections",
+            secondary: true,
+          },
           {
             label: "Checklist master (Excel)",
             onClick: () => navigate(`/projects/${ctx.projectId}/quality/checklist-master`),
@@ -329,6 +354,27 @@ export function ToolRightPanel({
           {
             label: "Fill quality checklist",
             onClick: () => void openFamilyChecklistFill(ctx.projectId, "QualityInspection", token),
+            secondary: true,
+          }
+        );
+        break;
+      case "inspection":
+        actions.push(
+          {
+            label: "→ Raise Quality IR",
+            onClick: () =>
+              navigate(`/projects/${ctx.projectId}/inspection-register?tab=quality-ir&lock=quality`),
+            primary: true,
+          },
+          {
+            label: "→ Raise Safety IR",
+            onClick: () =>
+              navigate(`/projects/${ctx.projectId}/inspection-register?tab=safety-ir&lock=safety`),
+            secondary: true,
+          },
+          {
+            label: "Overview desk",
+            onClick: () => navigate(`/projects/${ctx.projectId}/inspection-register?overview=1`),
             secondary: true,
           }
         );

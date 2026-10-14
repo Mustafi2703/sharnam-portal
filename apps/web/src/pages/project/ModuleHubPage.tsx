@@ -1,22 +1,41 @@
-import { useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import { PageHeader } from "../../components/ui";
 import { MODULE_TOOLS, MODULE_META, type WorkspaceKey } from "../../workspaces";
 import { formatUiText } from "../../lib/formatUiText";
 import { useAuth } from "../../auth";
 import { openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { moduleToolHref, openModuleToolWindow, withToolWindowParam } from "../../lib/moduleToolWindow";
+import { projectRouteTail } from "../../lib/projectWorkspace";
 
 /** Module hub — pick a tool; each card opens a dedicated edit window. */
-export default function ModuleHubPage({ moduleKey }: { moduleKey: WorkspaceKey }) {
+export default function ModuleHubPage({ moduleKey: moduleKeyProp }: { moduleKey: WorkspaceKey }) {
   const { id } = useParams();
+  const location = useLocation();
   const { user, token } = useAuth();
+  /** Prefer URL so Quality ↔ Safety never shows the previous hub's tool cards. */
+  const moduleKey = useMemo(() => {
+    const tail = projectRouteTail(location.pathname);
+    const fromHub = tail.startsWith("hub/") ? (tail.slice(4) as WorkspaceKey) : null;
+    if (fromHub && MODULE_META[fromHub]) return fromHub;
+    return moduleKeyProp;
+  }, [location.pathname, moduleKeyProp]);
   const meta = MODULE_META[moduleKey];
-  const tools = (MODULE_TOOLS[moduleKey] || []).filter(
-    (t) => !t.roles || !user?.role || t.roles.includes(user.role as any)
+  const tools = useMemo(
+    () =>
+      (MODULE_TOOLS[moduleKey] || []).filter(
+        (t) => !t.roles || !user?.role || t.roles.includes(user.role as any),
+      ),
+    [moduleKey, user?.role],
   );
 
   return (
-    <div className="module-hub space-y-5 min-w-0" style={{ ["--module-accent" as string]: meta.accent }}>
+    <div
+      key={moduleKey}
+      className="module-hub space-y-5 min-w-0"
+      style={{ ["--module-accent" as string]: meta.accent }}
+      data-module={moduleKey}
+    >
       <div className="module-hub__hero border border-line bg-paper rounded-xl overflow-hidden">
         <div className="module-hub__hero-bar h-1" style={{ background: meta.accent }} aria-hidden />
         <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-start gap-4">
