@@ -180,7 +180,9 @@ export default function InspectionsPage() {
 
   useEffect(() => {
     // The QI sheet was the same F-01 request as the Inspection register — one place now.
-    if (sheetKey === "qi" && id) navigate(`/projects/${id}/inspection-register`, { replace: true });
+    if (sheetKey === "qi" && id) {
+      navigate(`/projects/${id}/inspection-register?tab=quality-ir&lock=quality`, { replace: true });
+    }
   }, [sheetKey, id, navigate]);
 
   useEffect(() => {

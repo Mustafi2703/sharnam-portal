@@ -14,7 +14,7 @@ export type RfiKindFilter =
   | "Manual"
   | "ClientConcern";
 
-/** SPDC branded export templates per checklist / RFI family */
+/** SPDC branded export templates per family (one sheet → one product). */
 export const SPDC_CHECKLIST_TEMPLATES = {
   drawingRfi: "SPDC_RFI_Form_and_Register.xlsx",
   qualityIr: "SPDC_Request_for_Inspection_Form.xlsx",
@@ -22,7 +22,13 @@ export const SPDC_CHECKLIST_TEMPLATES = {
   activity: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
 } as const;
 
-/** Which module owns the current RFI page — keeps Drawing / Quality / Safety / Activity separate. */
+/**
+ * Four SPDC products (not ten rfiKinds):
+ * 1. Request for Information     → Drawings
+ * 2. Request for Inspection F-01 → Quality (+ Activity F-02 as enclosure)
+ * 3. Safety IR F-01 + checklists → Safety (+ HSE register)
+ * 4. Drawing checklist fill      → Drawings (gate), not a design RFI
+ */
 export type RfiModuleScope = "drawings" | "quality" | "safety" | "comms" | "inspection" | "home";
 
 export function rfiModuleScope(pathname: string, search: string): RfiModuleScope {
@@ -32,11 +38,12 @@ export function rfiModuleScope(pathname: string, search: string): RfiModuleScope
   return "home";
 }
 
+/** Canonical kind stored when raising from a module. */
 export function defaultRfiKindForModule(scope: RfiModuleScope): RfiKindFilter | null {
-  if (scope === "quality") return "QualityInspection";
-  if (scope === "safety") return "SafetyChecklist";
+  if (scope === "quality") return "QualityIR";
+  if (scope === "safety") return "SafetyIR";
   if (scope === "drawings") return "RequestForInformation";
-  if (scope === "inspection") return "ActivityInspection";
+  if (scope === "inspection") return null; // overview only — open Quality / Safety registers
   return null;
 }
 
@@ -54,111 +61,114 @@ export function isDrawingRfiRegisterMode(scope: RfiModuleScope, search: URLSearc
   return scope === "drawings" && search.get("view") === "register" && !isRfiComposeMode(search);
 }
 
+/** Pills on the RFI desk — keep to the sheet product for that module. */
 export function rfiKindPillsForScope(scope: RfiModuleScope): [RfiKindFilter, string][] {
   switch (scope) {
     case "drawings":
       return [
-        ["RequestForInformation", "Ask (PMC RFI)"],
+        ["RequestForInformation", "Request for Information"],
         ["DrawingChecklist", "Drawing checklist fill"],
-        ["All", "All drawing RFIs"],
+        ["All", "All drawing requests"],
       ];
     case "quality":
+      // Raise happens on inspection-register; /rfis redirects there.
       return [
-        ["QualityInspection", "Quality IR fill"],
-        ["SiteExecution", "Site execution fill"],
+        ["QualityIR", "Request for Inspection (F-01)"],
+        ["ActivityInspection", "Activity checklist (F-02)"],
       ];
     case "safety":
-      return [["SafetyChecklist", "Safety checklist fill"]];
+      return [["SafetyIR", "Safety IR (F-01)"]];
     case "inspection":
+      // Overview desk — no compose kinds here; registers live on Quality / Safety.
+      return [];
+    case "comms":
+      return [["ClientConcern", "Client concern"]];
+    default:
       return [
+        ["RequestForInformation", "Drawing RFI"],
         ["QualityIR", "Quality IR"],
         ["SafetyIR", "Safety IR"],
         ["ActivityInspection", "Activity checklist"],
-      ];
-    case "comms":
-      return [["ClientConcern", "Client"]];
-    default:
-      return [
-        ["All", "All"],
-        ["RequestForInformation", "Ask (PMC)"],
-        ["DrawingChecklist", "Drawing checklist"],
-        ["QualityInspection", "Quality IR"],
-        ["SafetyChecklist", "Safety"],
-        ["ActivityInspection", "Activity"],
-        ["SiteExecution", "Site execution"],
         ["ClientConcern", "Client"],
       ];
   }
 }
 
 export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebrow: string; title: string; subtitle: string } {
+  if (scope === "inspection") {
+    return {
+      eyebrow: "Inspection overview",
+      title: "Inspection desk",
+      subtitle:
+        "Overview only. Raise and maintain registers on Quality (F-01 / F-02) or Safety (Safety IR / HSE). This desk does not create a fifth type of request.",
+    };
+  }
   if (scope === "quality" && kind === "SiteExecution") {
     return {
       eyebrow: "Quality module · site execution",
       title: "Site checklist fill request",
-      subtitle:
-        "Final Index / field site checklists (SPDC Activity format) — assign from Quality checklist master, partial save, branded XLSX to SharePoint.",
+      subtitle: "Field site checklists — assign from Quality site master. Not a design RFI.",
     };
   }
   if (scope === "quality" || kind === "QualityInspection" || kind === "QualityIR") {
     return {
-      eyebrow: "Quality module",
-      title: "Quality inspection request",
-      subtitle: `SPDC Request for Inspection (F-01) — pick checklist from Quality master. Template: ${SPDC_CHECKLIST_TEMPLATES.qualityIr}`,
+      eyebrow: "Quality module · register",
+      title: "Request for Inspection (F-01)",
+      subtitle: `Live log of open / answered / closed IRs. Template: ${SPDC_CHECKLIST_TEMPLATES.qualityIr}`,
+    };
+  }
+  if (kind === "ActivityInspection") {
+    return {
+      eyebrow: "Quality module · F-02",
+      title: "Activity inspection checklist",
+      subtitle: `Enclosure to a Quality IR — ${SPDC_CHECKLIST_TEMPLATES.activity}. Link the IR number on the form.`,
     };
   }
   if (scope === "safety" || kind === "SafetyChecklist" || kind === "SafetyIR") {
     return {
-      eyebrow: "Safety module",
-      title: "Safety checklist fill request",
-      subtitle: `Safety walkthrough / IR — ${SPDC_CHECKLIST_TEMPLATES.safety}`,
+      eyebrow: "Safety module · register",
+      title: "Safety IR & clearance",
+      subtitle: `Pre-start clearance + checklist fills. Template: ${SPDC_CHECKLIST_TEMPLATES.safety}`,
     };
   }
   if (scope === "drawings" && kind === "RequestForInformation") {
     return {
-      eyebrow: "Drawings module",
-      title: "Ask (PMC RFI)",
-      subtitle: `Request for Information — drawing clarification only. Register: ${SPDC_CHECKLIST_TEMPLATES.drawingRfi}`,
+      eyebrow: "Drawings module · register",
+      title: "Request for Information",
+      subtitle: `Design query trail — drawing no + rev required. Register: ${SPDC_CHECKLIST_TEMPLATES.drawingRfi}`,
     };
   }
   if (scope === "drawings" && (kind === "All" || kind === "Manual")) {
     return {
-      eyebrow: "Drawings module",
+      eyebrow: "Drawings module · register",
       title: "Drawing RFI register",
-      subtitle: `Live SPDC RFI log — PMC asks and drawing checklist fills. Export matches ${SPDC_CHECKLIST_TEMPLATES.drawingRfi}.`,
+      subtitle: `Log of open and closed information RFIs (+ drawing checklist fills). ${SPDC_CHECKLIST_TEMPLATES.drawingRfi}`,
     };
   }
   if (scope === "drawings" || kind === "DrawingChecklist") {
     return {
       eyebrow: "Drawings module",
-      title: "Request drawing checklist fill",
-      subtitle: "Drawing Check Master templates — link drawing + revision. Not used for Quality / Safety / Activity site fills.",
-    };
-  }
-  if (scope === "inspection" || kind === "ActivityInspection") {
-    return {
-      eyebrow: "Inspection module",
-      title: "Activity inspection request",
-      subtitle: `Activity clearance — ${SPDC_CHECKLIST_TEMPLATES.activity}`,
-    };
-  }
-  if (kind === "SiteExecution") {
-    return {
-      eyebrow: "Quality · site execution",
-      title: "Site checklist fill",
-      subtitle: "Site execution checklists from Quality master — not a Progress module tool.",
+      title: "Drawing checklist fill",
+      subtitle: "Drawing Check master — gate before GFC upload. Not a design information RFI.",
     };
   }
   return {
     eyebrow: "Requests",
-    title: "RFI desk",
-    subtitle: "Drawings = PMC RFI only. Quality / Safety / Activity = checklist masters with SPDC branded exports.",
+    title: "Request desk",
+    subtitle: "Drawings = RFI. Quality = Inspection F-01. Safety = Safety IR. Each has its own register log.",
   };
 }
 
 export function rfiListKindFilter(scope: RfiModuleScope, kindFilter: RfiKindFilter): RfiKindFilter {
-  if (scope === "quality") return kindFilter === "SiteExecution" ? "SiteExecution" : "QualityInspection";
-  if (scope === "safety") return "SafetyChecklist";
+  if (scope === "quality") {
+    if (kindFilter === "SiteExecution") return "SiteExecution";
+    if (kindFilter === "ActivityInspection") return "ActivityInspection";
+    return "QualityIR";
+  }
+  if (scope === "safety") {
+    if (kindFilter === "SafetyChecklist") return "SafetyChecklist";
+    return "SafetyIR";
+  }
   if (scope === "inspection") return kindFilter;
   if (scope === "drawings" && kindFilter === "All") return "All";
   if (scope === "drawings" && kindFilter === "RequestForInformation") return "RequestForInformation";
@@ -167,17 +177,27 @@ export function rfiListKindFilter(scope: RfiModuleScope, kindFilter: RfiKindFilt
   return kindFilter;
 }
 
-/** Keeps drawing information RFIs out of Quality / Safety logs (and vice versa). */
+/** Normalize legacy aliases so QualityInspection ≡ QualityIR for scoping. */
+export function canonicalRfiKind(rfiKind: string | null | undefined): string {
+  const k = rfiKind || "RequestForInformation";
+  if (k === "QualityInspection") return "QualityIR";
+  if (k === "SafetyChecklist") return "SafetyIR";
+  if (k === "Manual") return "RequestForInformation";
+  return k;
+}
+
+/** Keeps each product’s register clean — no cross-module bleed. */
 export function rfiKindAllowedInModuleScope(scope: RfiModuleScope, rfiKind: string | null | undefined): boolean {
-  const kind = rfiKind || "RequestForInformation";
+  const kind = canonicalRfiKind(rfiKind);
   switch (scope) {
     case "drawings":
-      return kind === "RequestForInformation" || kind === "DrawingChecklist" || kind === "Manual";
+      return kind === "RequestForInformation" || kind === "DrawingChecklist";
     case "quality":
-      return kind === "QualityInspection" || kind === "SiteExecution";
+      return kind === "QualityIR" || kind === "ActivityInspection" || kind === "SiteExecution";
     case "safety":
-      return kind === "SafetyChecklist" || kind === "SafetyIR";
+      return kind === "SafetyIR";
     case "inspection":
+      // Overview can list Quality + Safety IRs for navigation only.
       return kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection";
     case "comms":
       return kind === "ClientConcern";
@@ -189,15 +209,15 @@ export function rfiKindAllowedInModuleScope(scope: RfiModuleScope, rfiKind: stri
 export function rfiLogTitle(scope: RfiModuleScope): string {
   switch (scope) {
     case "drawings":
-      return "Drawing RFI & information log";
+      return "Request for Information register";
     case "quality":
-      return "Quality inspection log";
+      return "Request for Inspection register";
     case "safety":
-      return "Safety checklist log";
+      return "Safety IR & HSE register";
     case "inspection":
-      return "Inspection request log (IR)";
+      return "Inspection overview (opens Quality / Safety registers)";
     case "comms":
-      return "Communication RFI log";
+      return "Client concerns";
     default:
       return "Request log";
   }
@@ -206,11 +226,12 @@ export function rfiLogTitle(scope: RfiModuleScope): string {
 export function checklistFamilyForRfiKind(
   rfiKind: string | undefined
 ): "DrawingCheck" | "QualityInspection" | "Safety" | "SiteExecution" | "ActivityInspection" {
-  if (rfiKind === "QualityInspection" || rfiKind === "QualityIR") return "QualityInspection";
-  if (rfiKind === "SafetyChecklist" || rfiKind === "SafetyIR") return "Safety";
-  if (rfiKind === "ActivityInspection") return "ActivityInspection";
-  if (rfiKind === "SiteExecution") return "SiteExecution";
-  if (rfiKind === "DrawingChecklist" || rfiKind === "RequestForInformation" || rfiKind === "Manual") return "DrawingCheck";
+  const k = canonicalRfiKind(rfiKind);
+  if (k === "QualityIR") return "QualityInspection";
+  if (k === "SafetyIR") return "Safety";
+  if (k === "ActivityInspection") return "ActivityInspection";
+  if (k === "SiteExecution") return "SiteExecution";
+  if (k === "DrawingChecklist" || k === "RequestForInformation") return "DrawingCheck";
   return "SiteExecution";
 }
 
@@ -221,7 +242,7 @@ export function isModuleScopedRfi(scope: RfiModuleScope): boolean {
 export function moduleForChecklistFamily(family: string): WorkspaceKey {
   if (family === "DrawingCheck") return "drawings";
   if (family === "Safety") return "safety";
-  if (family === "ActivityInspection") return "inspection";
+  if (family === "ActivityInspection") return "quality";
   if (family === "SiteExecution") return "quality";
   return "quality";
 }
@@ -229,7 +250,7 @@ export function moduleForChecklistFamily(family: string): WorkspaceKey {
 export function checklistMasterPath(family: string, projectId: string): string {
   if (family === "DrawingCheck") return `/projects/${projectId}/drawings/checklist-master`;
   if (family === "Safety") return `/projects/${projectId}/safety/checklist-master`;
-  if (family === "ActivityInspection") return `/projects/${projectId}/inspection/checklist-master`;
+  if (family === "ActivityInspection") return `/projects/${projectId}/quality/site-checklist-master`;
   if (family === "SiteExecution") return `/projects/${projectId}/quality/site-checklist-master`;
   return `/projects/${projectId}/quality/checklist-master`;
 }
@@ -237,18 +258,55 @@ export function checklistMasterPath(family: string, projectId: string): string {
 export function checklistLogsPath(family: string, projectId: string): string {
   if (family === "DrawingCheck") return `/projects/${projectId}/drawings/checklist-logs`;
   if (family === "Safety") return `/projects/${projectId}/safety/checklist-logs`;
-  if (family === "ActivityInspection") return `/projects/${projectId}/inspection/checklist-logs`;
+  if (family === "ActivityInspection") return `/projects/${projectId}/quality/site-checklist-logs`;
   if (family === "SiteExecution") return `/projects/${projectId}/quality/site-checklist-logs`;
   return `/projects/${projectId}/quality/checklist-logs`;
 }
 
+/** Dedicated register tool URLs — one register per SPDC product. */
+export function registerToolPath(
+  projectId: string,
+  product: "drawing-rfi" | "quality-ir" | "activity-f02" | "safety-ir" | "hse"
+): string {
+  switch (product) {
+    case "drawing-rfi":
+      return `/projects/${projectId}/rfis?view=register`;
+    case "quality-ir":
+      return `/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality`;
+    case "activity-f02":
+      return `/projects/${projectId}/inspection-register?tab=activity-checklist&lock=quality`;
+    case "safety-ir":
+      return `/projects/${projectId}/inspection-register?tab=safety-ir&lock=safety`;
+    case "hse":
+      return `/projects/${projectId}/inspection-register?tab=hse-register&lock=safety`;
+  }
+}
 
-/** Query string that opens an RFI of this kind in the module it belongs to (mirrors the API's email links). */
+/** Query string that opens an RFI of this kind in the module it belongs to. */
 export function rfiSearchForKind(kind: string | null | undefined, rfiId?: string): string {
   const q = new URLSearchParams();
-  const k = kind || "RequestForInformation";
-  if (k === "RequestForInformation" || k === "Manual" || k === "DrawingChecklist") q.set("view", "register");
-  else q.set("kind", k);
+  const k = canonicalRfiKind(kind);
+  if (k === "RequestForInformation" || k === "DrawingChecklist") {
+    q.set("view", "register");
+    if (k === "DrawingChecklist") q.set("kind", "DrawingChecklist");
+  } else if (k === "QualityIR" || k === "ActivityInspection") {
+    q.set("tab", k === "ActivityInspection" ? "activity-checklist" : "quality-ir");
+    q.set("lock", "quality");
+  } else if (k === "SafetyIR") {
+    q.set("tab", "safety-ir");
+    q.set("lock", "safety");
+  } else {
+    q.set("kind", k);
+  }
   if (rfiId) q.set("rfi", rfiId);
   return `?${q.toString()}`;
+}
+
+export function homeModuleForRfiKind(kind: string | null | undefined): "drawings" | "quality" | "safety" | "comms" {
+  const k = canonicalRfiKind(kind);
+  if (k === "RequestForInformation" || k === "DrawingChecklist") return "drawings";
+  if (k === "QualityIR" || k === "ActivityInspection" || k === "SiteExecution") return "quality";
+  if (k === "SafetyIR") return "safety";
+  if (k === "ClientConcern") return "comms";
+  return "drawings";
 }

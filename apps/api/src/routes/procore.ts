@@ -666,11 +666,37 @@ function sendWorkbook(res: import("express").Response, buf: Buffer, filename: st
   res.send(buf);
 }
 
+/** Legacy aliases so register logs include older checklist-fill kinds. */
+function expandRfiKindQuery(kinds: string[]): string[] {
+  const out = new Set<string>();
+  for (const k of kinds) {
+    out.add(k);
+    if (k === "QualityIR" || k === "QualityInspection") {
+      out.add("QualityIR");
+      out.add("QualityInspection");
+    }
+    if (k === "SafetyIR" || k === "SafetyChecklist") {
+      out.add("SafetyIR");
+      out.add("SafetyChecklist");
+    }
+  }
+  return [...out];
+}
+
+/** Store register products under one canonical kind so logs stay consistent. */
+function canonicalStoredRfiKind(kind: string): string {
+  if (kind === "QualityInspection") return "QualityIR";
+  if (kind === "SafetyChecklist") return "SafetyIR";
+  if (kind === "Manual") return "RequestForInformation";
+  return kind;
+}
+
 rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
   const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
   const canRespond = await roleOnRfiMatrix(req.params.projectId, req.user!.role);
   const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
-  const kindList = kind && kind !== "All" ? kind.split(",").map((k) => k.trim()).filter(Boolean) : [];
+  const kindList =
+    kind && kind !== "All" ? expandRfiKindQuery(kind.split(",").map((k) => k.trim()).filter(Boolean)) : [];
   const rfis = await prisma.rfi.findMany({
     where: {
       projectId: req.params.projectId,
@@ -685,12 +711,13 @@ rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
 rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee", "client", "vendor"), async (req: AuthedRequest, res) => {
   const count = await prisma.rfi.count({ where: { projectId: req.params.projectId } });
   const isClient = req.user!.role === "client";
-  const rfiKind = isClient
+  const rawKind = isClient
     ? "ClientConcern"
     : req.body.rfiKind ||
       (req.body.linkedChecklistItemId || req.body.linkedAssignmentId
         ? "DrawingChecklist"
         : "RequestForInformation");
+  const rfiKind = isClient ? "ClientConcern" : canonicalStoredRfiKind(String(rawKind));
   const noDrawingLink = [
     "QualityIR",
     "SafetyIR",
@@ -740,9 +767,10 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   ].includes(rfiKind);
   if (fillNeedsTarget && !isClient && !req.body.assignedToId && !req.body.responsibleVendorId) {
     return res.status(400).json({
-      error: "Raise the fill request to a named person or a vendor from this project's directory.",
+      error: "Raise to a named person or vendor from this project's directory or communication matrix.",
     });
   }
+  // Checklist master link is optional — attach later from masters when ready.
   if (req.body.assignedToId) {
     const assigneeId = String(req.body.assignedToId);
     const onProject = await prisma.projectMember.findFirst({

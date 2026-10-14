@@ -263,17 +263,17 @@ export default function ProjectToolsLayout() {
             )}
             {openRfis > 0 && (
               <ToolLink
-                to={`/projects/${id}/rfis${
+                to={
                   activeMod === "quality"
-                    ? "?kind=QualityInspection"
+                    ? `/projects/${id}/inspection-register?tab=quality-ir&lock=quality`
                     : activeMod === "safety"
-                      ? "?kind=SafetyChecklist"
+                      ? `/projects/${id}/inspection-register?tab=safety-ir&lock=safety`
                       : activeMod === "drawings"
-                        ? "?view=register"
+                        ? `/projects/${id}/rfis?view=register`
                         : activeMod === "comms"
-                          ? "?kind=RequestForInformation"
-                          : ""
-                }`}
+                          ? `/projects/${id}/rfis?kind=RequestForInformation`
+                          : `/projects/${id}/rfis`
+                }
               >
                 <Badge tone="warn">{openRfis} open RFIs</Badge>
               </ToolLink>

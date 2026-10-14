@@ -208,22 +208,35 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
           effectiveLock === "DrawingCheck"
             ? "Yes/No/N.A. items only — no photos or links. Edit lines here; fills unlock GFC upload. Quality and Safety templates live in their own modules."
             : effectiveLock === "Safety"
-            ? "Safety-only templates — separate from Quality QI checklists. Upload Excel, assign to project, raise Safety checklist RFIs."
+            ? "Safety checklist types (HIRA, HSE pack, custom). Onboard from docs/New folder or create a new type. Fill from the Safety IR register — the fill log is information only."
             : effectiveLock === "QualityInspection"
-              ? "Quality inspection (QI) templates only — separate from Safety. Client can create/upload QI checklists."
+              ? "Quality checklist types from the client pack (Civil, HVAC, Electrical, ELV, Fire, interiors…). Onboard all, or create a new type. Fill from the Quality IR register."
               : id
                 ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
                 : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {id && (
+            {id && (family === "QualityInspection" || family === "Safety" || family === "SiteExecution") && (
+              <Link
+                to={
+                  family === "Safety"
+                    ? `/projects/${id}/inspection-register?tab=safety-ir&lock=safety`
+                    : `/projects/${id}/inspection-register?tab=quality-ir&lock=quality`
+                }
+              >
+                <Button type="button" className="!bg-amber-400 !text-ink !font-medium">
+                  Open register to fill →
+                </Button>
+              </Link>
+            )}
+            {id && family === "DrawingCheck" && (
               <Button
                 type="button"
                 className="!bg-amber-400 !text-ink !font-medium"
                 onClick={() => void openFamilyChecklistFill(id, family, token, { templateId: activeId })}
               >
-                Fill checklist
+                Fill drawing check
               </Button>
             )}
 
@@ -309,23 +322,71 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         </Card>
       )}
 
-      {family === "QualityInspection" && catalog.length > 0 && (
-        <Card className="!p-4 border-brand/20 bg-brand-soft/30">
+      {(family === "QualityInspection" || family === "Safety" || family === "SiteExecution") && id && canEdit && (
+        <Card className="!p-4 border-brand/20 bg-brand-soft/30 space-y-2">
           <p className="text-sm">
-            <span className="font-semibold text-ink">{catalog.length}</span> checklist types from{" "}
-            <span className="font-semibold">Quality Dashboard · Sheet1</span> —{" "}
-            <span className="font-semibold text-ink">{templates.length}</span> templates in master. This page is the
-            type library (line items & min. photos). Fill history lives in the{" "}
-            <Link to={`/projects/${id}/quality/checklist-logs`} className="text-brand font-semibold">
-              QI fill log
+            <span className="font-semibold text-ink">{templates.length}</span> checklist type
+            {templates.length === 1 ? "" : "s"} in this master. Onboard from{" "}
+            <span className="font-semibold">docs/New folder</span> (Civil, HVAC, Electrical, ELV, Fire, interiors,
+            HIRA…) or create a new type below. Fills happen on the{" "}
+            <Link
+              to={
+                family === "Safety"
+                  ? `/projects/${id}/inspection-register?tab=safety-ir&lock=safety`
+                  : `/projects/${id}/inspection-register?tab=quality-ir&lock=quality`
+              }
+              className="text-brand font-semibold"
+            >
+              register
             </Link>
-            .
+            ; the{" "}
+            <Link
+              to={
+                family === "Safety"
+                  ? `/projects/${id}/safety/checklist-logs`
+                  : family === "SiteExecution"
+                    ? `/projects/${id}/quality/site-checklist-logs`
+                    : `/projects/${id}/quality/checklist-logs`
+              }
+              className="text-brand font-semibold"
+            >
+              fill log
+            </Link>{" "}
+            is information only.
           </p>
-          <div className="flex flex-wrap gap-3 mt-2">
-            <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="text-sm font-semibold text-brand">
-              Catalog + fill graphs →
-            </Link>
-            {id && canEdit && (
+          <div className="flex flex-wrap gap-3 mt-1">
+            <button
+              type="button"
+              className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              disabled={syncPackBusy}
+              onClick={async () => {
+                setSyncPackBusy(true);
+                setMsg("");
+                try {
+                  const out = await api<{ created: number; refreshed: number; scanned: number; skipped: number }>(
+                    `/api/checklist/project/${id}/pack-onboard`,
+                    { method: "POST", token, body: JSON.stringify({ family }) }
+                  );
+                  setMsg(
+                    `Pack onboard: ${out.created} new, ${out.refreshed} refreshed (${out.scanned} scanned, ${out.skipped} other-family skipped).`
+                  );
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Pack onboard failed");
+                } finally {
+                  setSyncPackBusy(false);
+                }
+              }}
+            >
+              {syncPackBusy
+                ? "Onboarding…"
+                : family === "Safety"
+                  ? "Onboard Safety pack (HIRA / HSE)"
+                  : family === "SiteExecution"
+                    ? "Onboard site pack folders"
+                    : "Onboard Quality pack (New folder)"}
+            </button>
+            {family === "QualityInspection" && (
               <button
                 type="button"
                 className="text-sm font-semibold text-brand underline"
@@ -343,8 +404,38 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   }
                 }}
               >
-                Onboard all Sheet1 types
+                Also sync Quality Dashboard Sheet1
               </button>
+            )}
+            {family === "Safety" && (
+              <button
+                type="button"
+                className="text-sm font-semibold text-brand underline"
+                disabled={syncPackBusy}
+                onClick={async () => {
+                  setSyncPackBusy(true);
+                  setMsg("");
+                  try {
+                    const out = await api<{ templates?: { name: string }[] }>("/api/checklist/safety/seed-spdc", {
+                      method: "POST",
+                      token,
+                    });
+                    setMsg(`SPDC Safety pack: ${out.templates?.length ?? 0} template(s).`);
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Safety seed failed");
+                  } finally {
+                    setSyncPackBusy(false);
+                  }
+                }}
+              >
+                Seed SPDC Safety IR checklists
+              </button>
+            )}
+            {catalog.length > 0 && family === "QualityInspection" && (
+              <Link to={`/projects/${id}/inspections?sheet=checklist-summary`} className="text-sm font-semibold text-brand self-center">
+                Catalog graphs ({catalog.length}) →
+              </Link>
             )}
           </div>
         </Card>
@@ -501,8 +592,12 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
 
           {canEdit && (
             <form className="space-y-2 border-t border-line pt-3" onSubmit={createTemplate}>
-              <Input placeholder="Checklist name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <Input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-brand">Create new checklist type</h4>
+              <p className="text-[11px] text-steel-muted">
+                Add a custom type when the pack does not cover it — then add line items or upload Excel.
+              </p>
+              <Input placeholder="Checklist name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <Input placeholder="Category (e.g. Civil, HVAC, HSE)" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
               <TextArea
                 placeholder="QA / fill instructions for the whole checklist"
                 value={form.instructions}
@@ -521,7 +616,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               </label>
               )}
               <Button type="submit" disabled={createBusy || !form.name.trim()} className="!bg-sky-600 !font-medium">
-                {createBusy ? "Creating…" : "Create checklist"}
+                {createBusy ? "Creating…" : "Create new type"}
               </Button>
             </form>
           )}

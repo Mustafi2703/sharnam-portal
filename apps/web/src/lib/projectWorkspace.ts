@@ -8,12 +8,12 @@ export function projectRouteTail(pathname: string): string {
   return parts.slice(i + 2).join("/");
 }
 
-function checklistFamilyModule(search: string, tool: "master" | "logs"): WorkspaceKey {
+function checklistFamilyModule(search: string, _tool: "master" | "logs"): WorkspaceKey {
   const family = new URLSearchParams(search).get("family");
   if (family === "Safety") return "safety";
   if (family === "DrawingCheck") return "drawings";
-  if (family === "ActivityInspection") return "inspection";
-  if (family === "SiteExecution") return "quality";
+  // Activity / site checklists are Quality-owned (F-02 enclosure + site execution).
+  if (family === "ActivityInspection" || family === "SiteExecution") return "quality";
   return "quality";
 }
 
@@ -53,7 +53,18 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
 
   if (tail === "safety" || tail.startsWith("safety/")) return "safety";
 
-  if (tail === "inspection-register" || tail.startsWith("inspection-register") || tail.startsWith("inspection/")) return "inspection";
+  // Registers live on Quality / Safety; Inspection hub is overview only.
+  if (tail === "inspection-register" || tail.startsWith("inspection-register")) {
+    const params = new URLSearchParams(search);
+    const lock = params.get("lock");
+    if (lock === "quality") return "quality";
+    if (lock === "safety") return "safety";
+    const tab = params.get("tab");
+    if (tab === "quality-ir" || tab === "activity-checklist") return "quality";
+    if (tab === "safety-ir" || tab === "hse-register") return "safety";
+    return "inspection"; // overview=1 or bare URL
+  }
+  if (tail.startsWith("inspection/")) return "inspection";
 
   if (tail === "checklist-master") return checklistFamilyModule(search, "master");
   if (tail === "checklist-logs") return checklistFamilyModule(search, "logs");
@@ -78,8 +89,8 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (kind === "RequestForInformation") return "drawings";
     if (kind === "QualityInspection") return "quality";
     if (kind === "SafetyChecklist") return "safety";
-    if (kind === "QualityIR" || kind === "SafetyIR" || kind === "ActivityInspection") return "inspection";
-    if (kind === "SiteExecution") return "quality";
+    if (kind === "QualityIR" || kind === "ActivityInspection" || kind === "SiteExecution") return "quality";
+    if (kind === "SafetyIR") return "safety";
     if (kind === "ClientConcern") return "comms";
     // No kind → neutral "all requests" desk. (Falling back to the last-visited module hid RFIs of other modules.)
     return "home";

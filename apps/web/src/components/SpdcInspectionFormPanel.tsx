@@ -139,7 +139,22 @@ export function SpdcInspectionFormPanel({
 
       <div className="grid sm:grid-cols-2 gap-2 mb-3">
         <div>
-          <label className="text-[10px] uppercase text-steel-muted font-semibold">Checklist to fill *</label>
+          <label className="text-[10px] uppercase text-steel-muted font-semibold">Assignee *</label>
+          <Select className="mt-0.5" value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} required>
+            <option value="">Select assignee…</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.fullName}
+                {u.role ? ` · ${u.role}` : ""}
+              </option>
+            ))}
+          </Select>
+          {!users.length && (
+            <p className="text-[11px] text-amber-800 mt-1">Add people on project setup or the technical communication matrix first.</p>
+          )}
+        </div>
+        <div>
+          <label className="text-[10px] uppercase text-steel-muted font-semibold">Link checklist (optional)</label>
           <Select
             className="mt-0.5"
             value={linkedAssignmentId}
@@ -157,7 +172,7 @@ export function SpdcInspectionFormPanel({
               }
             }}
           >
-            <option value="">Select from checklist master</option>
+            <option value="">None — attach from master later</option>
             {checklistAssignments.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.template?.name || a.id}
@@ -166,41 +181,21 @@ export function SpdcInspectionFormPanel({
           </Select>
           {masterHref && (
             <a href={masterHref} className="text-[11px] text-brand font-medium mt-1 inline-block">
-              Open checklist master →
+              Checklist master →
             </a>
-          )}
-          {!checklistAssignments.length && (
-            <p className="text-[11px] text-amber-800 mt-1">Assign a checklist in master first, then raise this IR.</p>
-          )}
-        </div>
-        <div>
-          <label className="text-[10px] uppercase text-steel-muted font-semibold">Assignee (project / communication matrix)</label>
-          <Select className="mt-0.5" value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)} required>
-            <option value="">Select assignee…</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.fullName}
-                {u.role ? ` · ${u.role}` : ""}
-              </option>
-            ))}
-          </Select>
-          {!users.length && (
-            <p className="text-[11px] text-amber-800 mt-1">Add people on project setup or the technical communication matrix first.</p>
           )}
         </div>
       </div>
 
       <div className="space-y-2 mb-3">
         <Input
-          required
-          placeholder="Subject"
+          placeholder="Subject (auto-built from form if blank)"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
         />
         <TextArea
-          required
-          rows={6}
-          placeholder="Inspection request body — use Build subject & body from SPDC fields above"
+          rows={5}
+          placeholder="Request body (auto-built from form if blank)"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
         />
@@ -209,18 +204,15 @@ export function SpdcInspectionFormPanel({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-          if (!subject.trim() || !question.trim()) {
-            applyTemplate();
-          }
           const subj = subject.trim() || buildSpdcSubject(ref, draft);
           const body = question.trim() || buildSpdcBody(ref, draft);
           const irNumber = draft.irNumber || draft.checklistNo || "";
-          if (!linkedAssignmentId) {
-            window.alert("Select which checklist from master this inspection should fill.");
-            return;
-          }
           if (!assignedToId) {
             window.alert("Select an assignee from the project directory or communication matrix.");
+            return;
+          }
+          if (!subj || !body) {
+            window.alert("Fill the SPDC form fields (or subject/body) before raising.");
             return;
           }
           await onSubmit({

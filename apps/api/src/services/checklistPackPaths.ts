@@ -9,6 +9,8 @@ import XLSX from "../lib/xlsx.js";
 export function resolveChecklistPackRoot(): string | null {
   const candidates = [
     process.env.SHARNAM_CHECKLIST_PACK_ROOT?.trim(),
+    // Client pack (canonical upload location)
+    path.join(process.cwd(), "docs", "New folder"),
     path.join(process.cwd(), "seed", "checklist-pack"),
     path.join(
       process.cwd(),

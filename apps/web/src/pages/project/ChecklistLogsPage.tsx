@@ -6,7 +6,6 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, PageHero } from "../../components/ui";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../../lib/brandedChecklistPrint";
 import { downloadAuthFile } from "../../lib/downloadReport";
-import { ensureFamilyAssignment, openChecklistFillWindow } from "../../lib/checklistFillWindow";
 import { isEmbedView } from "../../lib/inPageOverlay";
 import { projectRouteTail } from "../../lib/projectWorkspace";
 
@@ -53,19 +52,17 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
   const [busy, setBusy] = useState(true);
   const [msg, setMsg] = useState("");
   const canReview = user?.role === "admin" || user?.role === "office";
-  const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const embed = isEmbedView();
 
-  async function startNewFill() {
-    if (!id) return;
-    const familyKey = family || "SiteExecution";
-    setMsg("");
-    const assignmentId = await ensureFamilyAssignment(id, familyKey, token);
-    if (!assignmentId) {
-      setMsg("Assign a checklist type from master first, then use New fill.");
-      return;
+  /** Register path where raises + fills happen — this page is information-only. */
+  function registerHref(): string {
+    if (!id) return "#";
+    if (family === "Safety") return `/projects/${id}/inspection-register?tab=safety-ir&lock=safety`;
+    if (family === "DrawingCheck") return `/projects/${id}/rfis?view=register`;
+    if (family === "ActivityInspection" || family === "SiteExecution") {
+      return `/projects/${id}/inspection-register?tab=activity-checklist&lock=quality`;
     }
-    openChecklistFillWindow(id, assignmentId, familyKey);
+    return `/projects/${id}/inspection-register?tab=quality-ir&lock=quality`;
   }
 
   const [deletingId, setDeletingId] = useState("");
@@ -244,10 +241,12 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
 
   const fillActions = (
     <div className="flex flex-wrap gap-2">
-      {canFill && id && (
-        <Button type="button" className={embed ? "" : "!bg-amber-500"} onClick={() => void startNewFill()}>
-          New fill
-        </Button>
+      {id && (
+        <Link to={registerHref()}>
+          <Button type="button" className={embed ? "" : "!bg-amber-500"}>
+            Open register to fill →
+          </Button>
+        </Link>
       )}
       <Button
         type="button"
@@ -266,20 +265,22 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="font-display text-lg font-semibold text-ink">{title}</h1>
-            <p className="text-xs text-steel-muted">Open a row to fill — assignees save in this popup.</p>
+            <p className="text-xs text-steel-muted">Information only — raise and fill on the register.</p>
           </div>
           {fillActions}
         </div>
       ) : (
       <PageHero
         title={title}
-        subtitle="Open any logged fill or start a new one — the popup saves the checklist, updates ISO drive, and rolls the next week on dashboards."
+        subtitle="Information log of completed / in-progress checklist fills linked to RFIs and IRs. Raise and fill on the module register — not here."
         actions={
           <div className="flex flex-wrap gap-2">
-            {canFill && id && (
-              <Button type="button" className="!bg-amber-500" onClick={() => void startNewFill()}>
-                New fill
-              </Button>
+            {id && (
+              <Link to={registerHref()}>
+                <Button type="button" className="!bg-amber-500">
+                  Open register to fill →
+                </Button>
+              </Link>
             )}
             <Button type="button" variant="secondary" className="!bg-white/15 !text-white !border-white/30" onClick={() => void load()}>
               Refresh
@@ -432,22 +433,12 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
                     <td className="w-[11rem]">
                       <div className="flex flex-col items-end gap-1">
                         <div className="flex flex-wrap justify-end gap-1">
-                          {id && s.assignment?.id && canFill && (
-                            <Button
-                              type="button"
-                              className="!text-xs !py-1.5"
-                              onClick={() =>
-                                openChecklistFillWindow(id, s.assignment.id, s.assignment?.template?.checklistType || family || "SiteExecution", {
-                                  resumeDraft: s.status === "Draft",
-                                  submissionId: s.id,
-                                  drawingId: s.drawingId || s.drawing?.id || undefined,
-                                  revisionId: s.revisionId || s.revision?.id || undefined,
-                                  rfi: s.rfiNumber || undefined,
-                                })
-                              }
-                            >
-                              {s.status === "Draft" ? "Resume fill" : "Open fill"}
-                            </Button>
+                          {id && (
+                            <Link to={registerHref()} className="inline-flex">
+                              <Button type="button" variant="secondary" className="!text-xs !py-1.5">
+                                {s.status === "Draft" ? "Continue on register →" : "Open register →"}
+                              </Button>
+                            </Link>
                           )}
                           {canReview && (s.status === "Submitted" || s.status === "Reviewed") && (
                             <>

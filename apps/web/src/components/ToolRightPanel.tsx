@@ -339,21 +339,21 @@ export function ToolRightPanel({
       case "rfis":
         if (rfiScope === "quality") {
           actions.push(
-            { label: "New quality inspection request", to: "rfis?kind=QualityInspection", primary: true },
-            { label: "Inspection register (IR)", to: "inspection-register?tab=quality-ir", secondary: true },
+            { label: "Raise Quality IR (F-01)", to: "inspection-register?tab=quality-ir&lock=quality", primary: true },
+            { label: "Activity checklist log (F-02)", to: "inspection-register?tab=activity-checklist&lock=quality", secondary: true },
             { label: "Quality checklist master", onClick: () => navigate(`/projects/${ctx.projectId}/quality/checklist-master`), secondary: true }
           );
         } else if (rfiScope === "safety") {
           actions.push(
-            { label: "New safety checklist request", to: "rfis?kind=SafetyChecklist", primary: true },
-            { label: "Safety IR register", to: "inspection-register?tab=safety-ir", secondary: true },
+            { label: "Raise Safety IR (F-01)", to: "inspection-register?tab=safety-ir&lock=safety", primary: true },
+            { label: "HSE register", to: "inspection-register?tab=hse-register&lock=safety", secondary: true },
             { label: "Safety checklist master", onClick: () => navigate(`/projects/${ctx.projectId}/safety/checklist-master`), secondary: true }
           );
         } else if (rfiScope === "inspection") {
           actions.push(
-            { label: "Quality IR register", to: "inspection-register?tab=quality-ir", primary: true },
-            { label: "Safety IR register", to: "inspection-register?tab=safety-ir", secondary: true },
-            { label: "Activity checklists", to: "inspection-register?tab=activity-checklist", secondary: true }
+            { label: "→ Quality IR register", to: "inspection-register?tab=quality-ir&lock=quality", primary: true },
+            { label: "→ Safety IR register", to: "inspection-register?tab=safety-ir&lock=safety", secondary: true },
+            { label: "Overview desk", to: "inspection-register?overview=1", secondary: true }
           );
         } else if (rfiScope === "drawings") {
           actions.push(
@@ -364,8 +364,8 @@ export function ToolRightPanel({
         } else {
           actions.push(
             { label: "Drawing RFI register", to: "rfis?view=register", primary: true },
-            { label: "Quality inspection requests", to: "rfis?kind=QualityInspection", secondary: true },
-            { label: "Inspection register (IR)", to: "inspection-register", secondary: true }
+            { label: "Quality IR register", to: "inspection-register?tab=quality-ir&lock=quality", secondary: true },
+            { label: "Safety IR register", to: "inspection-register?tab=safety-ir&lock=safety", secondary: true }
           );
         }
         break;
@@ -585,13 +585,13 @@ export function ToolRightPanel({
               ? rfiScope === "safety"
                 ? [
                     ["safety", "Safety dashboard"],
-                    ["inspection-register?tab=safety-ir", "Safety IR register"],
-                    ["inspection-register?tab=hse-register", "HSE register"],
+                    ["inspection-register?tab=safety-ir&lock=safety", "Safety IR register"],
+                    ["inspection-register?tab=hse-register&lock=safety", "HSE register"],
                   ]
                 : [
                     ["inspections", "Quality dashboard"],
-                    ["inspection-register?tab=quality-ir", "Inspection register (IR)"],
-                    ["inspection-register?tab=activity-checklist", "Activity checklists"],
+                    ["inspection-register?tab=quality-ir&lock=quality", "Quality IR register"],
+                    ["inspection-register?tab=activity-checklist&lock=quality", "Activity checklist log"],
                   ]
               : (tool === "rfis" && rfiScope === "drawings") || tool === "coordination"
               ? [

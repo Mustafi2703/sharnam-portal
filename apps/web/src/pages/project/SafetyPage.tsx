@@ -194,7 +194,7 @@ export default function SafetyPage() {
           </button>
           <Link to={`/projects/${id}/safety/checklist-logs`}>Safety fill log →</Link>
           <Link to={`/projects/${id}/safety/checklist-master`}>Safety checklist master →</Link>
-          <Link to={`/projects/${id}/inspection-register?tab=safety-ir`}>Safety IR register (F-01) →</Link>
+          <Link to={`/projects/${id}/inspection-register?tab=safety-ir&lock=safety`}>Safety IR register (F-01) →</Link>
         </div>
       </div>
       </div>

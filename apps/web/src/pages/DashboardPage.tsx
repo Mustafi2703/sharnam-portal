@@ -33,10 +33,14 @@ const DONE = ["Closed", "Approved", "Rejected", "Cancelled", "Withdrawn"];
 const LINKS = {
   info: (id: string) => `/projects/${id}/rfis?kind=RequestForInformation`,
   infoOne: (id: string, rfi: string) => `/projects/${id}/rfis?kind=RequestForInformation&rfi=${rfi}`,
-  inspections: (id: string) => `/projects/${id}/inspection-register`,
+  inspections: (id: string) => `/projects/${id}/inspection-register?overview=1`,
   inspectionOne: (id: string, kind: string) =>
-    `/projects/${id}/inspection-register?tab=${kind === "SafetyIR" ? "safety-ir" : kind === "ActivityInspection" ? "activity" : "quality-ir"}`,
-  fills: (id: string) => `/projects/${id}/rfis`,
+    kind === "SafetyIR"
+      ? `/projects/${id}/inspection-register?tab=safety-ir&lock=safety`
+      : kind === "ActivityInspection"
+        ? `/projects/${id}/inspection-register?tab=activity-checklist&lock=quality`
+        : `/projects/${id}/inspection-register?tab=quality-ir&lock=quality`,
+  fills: (id: string) => `/projects/${id}/rfis?view=register`,
   meetings: (id: string) => `/projects/${id}/comms?tab=agenda`,
   ncr: (id: string) => `/projects/${id}/inspections?sheet=car-register`,
   safety: (id: string) => `/projects/${id}/safety`,

@@ -27,14 +27,19 @@ export function InspectionRequestReference({ rfiKind, projectId, onApplyTemplate
   if (isSpdcRegisterKind && projectId) {
     const tab =
       rfiKind === "SafetyIR" ? "safety-ir" : rfiKind === "ActivityInspection" ? "activity-checklist" : "quality-ir";
+    const lock = rfiKind === "SafetyIR" ? "safety" : "quality";
+    const owner = rfiKind === "SafetyIR" ? "Safety" : "Quality";
     return (
       <Card className="!p-4 bg-sand/30 border-brand/20">
         <p className="text-sm">
-          Use the dedicated{" "}
-          <Link className="text-brand underline font-medium" to={`/projects/${projectId}/inspection-register?tab=${tab}`}>
-            Inspection register
+          Raise and maintain this on the{" "}
+          <Link
+            className="text-brand underline font-medium"
+            to={`/projects/${projectId}/inspection-register?tab=${tab}&lock=${lock}`}
+          >
+            {owner} {ref.title} register
           </Link>{" "}
-          for SPDC {ref.title} — structured form fields and live register.
+          — the live log of open / answered / closed entries for this sheet.
         </p>
       </Card>
     );

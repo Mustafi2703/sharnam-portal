@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Badge, Button, Input, Select } from "./ui";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -11,6 +12,7 @@ import {
   type InspectionFormRef,
 } from "../lib/inspectionRequestForms";
 import { openChecklistFillWindow } from "../lib/checklistFillWindow";
+import { canonicalRfiKind } from "../lib/rfiModuleScope";
 
 type ProjectLite = {
   code?: string;
@@ -84,6 +86,14 @@ export function SpdcInspectionIrPanel({
   const form = useMemo(() => resolveInspectionFormData(rfi, project || undefined), [rfi, project]);
   const sections = useMemo(() => (ref ? sectionsFromRef(ref) : []), [ref]);
   const linkedName = checklistName || rfi.linkedAssignment?.template?.name;
+  const home = canonicalRfiKind(rfi.rfiKind);
+  const isSafety = home === "SafetyIR";
+  const failLike =
+    /reject|fail|not.?cleared|s3|s4|closed.?reject/i.test(String(rfi.status || "")) ||
+    (/^S[34]/.test(String(form.clearanceResult || "")));
+  const ncrHref = isSafety
+    ? `/projects/${projectId}/safety?sheet=ncr-form&fromIr=${encodeURIComponent(rfi.number || rfi.id)}`
+    : `/projects/${projectId}/inspections?sheet=car-register&fromIr=${encodeURIComponent(rfi.number || rfi.id)}`;
 
   if (!ref) return null;
 
@@ -154,6 +164,22 @@ export function SpdcInspectionIrPanel({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {(failLike || canClear) && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-steel">
+            {failLike
+              ? "Result needs a non-conformance. Raise it on the owning module’s NCR register — not here."
+              : "If inspection fails / is not cleared, raise NCR on Quality or Safety (module that owns this IR)."}
+          </span>
+          <Link
+            to={ncrHref}
+            className="text-xs font-semibold text-brand underline shrink-0"
+          >
+            {isSafety ? "Open Safety NCR form →" : "Open Quality NCR / CAR register →"}
+          </Link>
         </div>
       )}
 

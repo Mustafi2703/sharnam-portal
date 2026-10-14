@@ -31,6 +31,7 @@ import {
   rfiModuleScope,
   rfiPageCopy,
   rfiSearchForKind,
+  canonicalRfiKind,
   type RfiKindFilter,
 } from "../../lib/rfiModuleScope";
 import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
@@ -194,28 +195,13 @@ export default function RfisPage() {
     if (def) setKindFilter(def);
   }, [search, moduleScope]);
 
+  // Drawings compose only — Quality/Safety IR forms live on their register tools.
   useEffect(() => {
     if (!moduleScoped || registerMode) return;
+    if (moduleScope === "quality" || moduleScope === "safety" || moduleScope === "inspection") return;
     const locked =
-      moduleScope === "quality"
-        ? kindFilter === "SiteExecution"
-          ? "SiteExecution"
-          : "QualityInspection"
-        : moduleScope === "safety"
-          ? "SafetyChecklist"
-          : moduleScope === "inspection"
-            ? (kindFilter as string)
-            : composeMode && kindFilter === "RequestForInformation"
-              ? "RequestForInformation"
-              : composeMode && kindFilter === "DrawingChecklist"
-                ? "DrawingChecklist"
-                : "DrawingChecklist";
-    setForm((f) => ({
-      ...f,
-      rfiKind: locked,
-      linkedDrawingId: locked === "QualityInspection" ? "" : f.linkedDrawingId,
-    }));
-    if (locked !== "RequestForInformation" && !registerMode) setKindFilter(locked as RfiKind);
+      String(kindFilter) === "RequestForInformation" ? "RequestForInformation" : "DrawingChecklist";
+    setForm((f) => ({ ...f, rfiKind: locked }));
   }, [moduleScoped, moduleScope, kindFilter, composeMode, registerMode]);
 
   useEffect(() => {
@@ -237,6 +223,23 @@ export default function RfisPage() {
       window.setTimeout(() => createFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
     }
   }, [search]);
+
+  // IR / inspection products → owning register log (no duplicate raise UI on /rfis).
+  useEffect(() => {
+    if (!id) return;
+    const k = search.get("kind");
+    if (k === "QualityIR" || k === "QualityInspection") {
+      navigate(`/projects/${id}/inspection-register?tab=quality-ir&lock=quality`, { replace: true });
+    } else if (k === "ActivityInspection") {
+      navigate(`/projects/${id}/inspection-register?tab=activity-checklist&lock=quality`, { replace: true });
+    } else if (k === "SafetyIR" || k === "SafetyChecklist") {
+      navigate(`/projects/${id}/inspection-register?tab=safety-ir&lock=safety`, { replace: true });
+    } else if (moduleScope === "quality" && !k && search.get("view") !== "register") {
+      navigate(`/projects/${id}/inspection-register?tab=quality-ir&lock=quality`, { replace: true });
+    } else if (moduleScope === "safety" && !k) {
+      navigate(`/projects/${id}/inspection-register?tab=safety-ir&lock=safety`, { replace: true });
+    }
+  }, [id, search, navigate, moduleScope]);
 
   useEffect(() => {
     if (kindFilter === "QualityInspection") {
@@ -279,17 +282,17 @@ export default function RfisPage() {
       const kind = r.rfiKind || "RequestForInformation";
       if (moduleScoped && !rfiKindAllowedInModuleScope(moduleScope, kind)) return false;
       const effectiveKind = rfiListKindFilter(moduleScope, kindFilter);
+      const kindCanon = canonicalRfiKind(kind);
+      const filterCanon = canonicalRfiKind(effectiveKind);
       const kindOk =
         effectiveKind === "All"
           ? moduleScope === "drawings"
-            ? kind === "DrawingChecklist" ||
-              kind === "RequestForInformation" ||
-              kind === "Manual"
+            ? kindCanon === "DrawingChecklist" || kindCanon === "RequestForInformation"
             : moduleScope === "home"
               ? true
               : rfiKindAllowedInModuleScope(moduleScope, kind)
-          : kind === effectiveKind ||
-            (effectiveKind === "RequestForInformation" && (kind === "Manual" || kind === "RequestForInformation"));
+          : kindCanon === filterCanon ||
+            (filterCanon === "RequestForInformation" && kindCanon === "RequestForInformation");
       return statusOk && kindOk;
     });
   }, [rfis, statusFilter, kindFilter, moduleScope, moduleScoped]);

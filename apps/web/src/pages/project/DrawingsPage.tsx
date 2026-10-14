@@ -1172,7 +1172,7 @@ export default function DrawingsPage() {
                       <td className="px-2 py-2 text-center font-mono text-xs">{revsByNum.length}</td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap justify-end gap-1">
-                          {revisionHasFiles(latest) && revisionUploadStatus(latest).pdf ? (
+                          {latest && revisionHasFiles(latest) && revisionUploadStatus(latest).pdf ? (
                             <Button type="button" variant="primary" className="!px-2 !py-1 !text-xs" onClick={() => openLatestViewer(d)}>
                               View drawing
                             </Button>

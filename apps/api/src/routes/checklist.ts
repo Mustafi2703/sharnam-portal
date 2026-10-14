@@ -323,6 +323,33 @@ checklistRouter.get("/pack-inventory", requireRoles("admin", "office"), async (_
   res.json(loadChecklistPackInventory());
 });
 
+/**
+ * Onboard docs/New folder (or seed/checklist-pack) workbooks into Quality / Safety / Site masters
+ * and assign them to the project. Idempotent by template name + family.
+ */
+checklistRouter.post(
+  "/project/:projectId/pack-onboard",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const familyRaw = String(req.body?.family || req.query.family || "QualityInspection");
+      const family =
+        familyRaw === "Safety" || familyRaw === "SiteExecution" ? familyRaw : "QualityInspection";
+      const { onboardChecklistPack } = await import("../services/checklistPackOnboard.js");
+      const out = await onboardChecklistPack({ projectId: req.params.projectId, family });
+      await audit("checklist.pack.onboard", {
+        userId: req.user!.id,
+        entity: "Project",
+        entityId: req.params.projectId,
+        meta: { family, created: out.created, refreshed: out.refreshed, scanned: out.scanned },
+      });
+      res.json({ ok: true, ...out });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Pack onboard failed" });
+    }
+  }
+);
+
 /** Vendor desk — assigned checklists + fill RFIs across jobs the contractor can see. */
 checklistRouter.get("/vendor-inbox", async (req: AuthedRequest, res) => {
   const role = req.user!.role;

@@ -221,9 +221,9 @@ export function ModulePortalFilesPanel({ projectId, token, config }: Props) {
               title: x.subject || x.title || "—",
               status: x.status || "Open",
               updated: x.updatedAt || x.createdAt,
-              // Inspection requests live on the inspection register; RFIs open in their module with the row selected.
+              // IR products open on the owning module register (Quality / Safety); drawing RFIs on the RFI register.
               portalPath: irTab
-                ? `/projects/${projectId}/inspection-register?tab=${irTab}`
+                ? `/projects/${projectId}/inspection-register?tab=${irTab}&lock=${kind === "SafetyIR" ? "safety" : "quality"}&rfi=${x.id}`
                 : `/projects/${projectId}/rfis?${isRfi ? "view=register" : `kind=${encodeURIComponent(kind)}`}&rfi=${x.id}`,
               // RFI → SPDC RFI form; inspection → SPDC Request for Inspection form; fill requests have no form of their own.
               downloadPath: irTab ? `/api/rfis/${x.id}/inspection.xlsx` : isRfi ? `/api/rfis/${x.id}/download.xlsx` : undefined,
