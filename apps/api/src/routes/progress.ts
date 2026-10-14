@@ -34,6 +34,14 @@ progressRouter.param("projectId", async (req: AuthedRequest, res, next, projectI
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+/** Store / display progress as 0–1. Accepts 0–1 or 0–100 from clients / Excel. */
+function asFraction(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (n > 1) return Math.min(1, n / 100);
+  return n;
+}
+
 function countBy<T>(rows: T[], keyFn: (r: T) => string) {
   const out: Record<string, number> = {};
   for (const r of rows) {
@@ -120,7 +128,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
   const openRisk = risks.filter((r) => r.status === "Open").length;
   const delayed = milestones.filter((m) => /delay/i.test(m.status) || (m.varianceDays || 0) > 0).length;
   const weightedPct =
-    milestones.reduce((s, m) => s + (m.weightage || 0) * (m.pctComplete || 0), 0) /
+    milestones.reduce((s, m) => s + (m.weightage || 0) * asFraction(m.pctComplete), 0) /
     Math.max(1, milestones.reduce((s, m) => s + (m.weightage || 0), 0));
 
   const cashflowPvA = plannedActual.filter((p) => p.packageName !== MS_PROJECT_SCURVE_PACKAGE);
@@ -148,7 +156,7 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       milestoneByPhase: countBy(milestones, (m) => m.category || "Other").map((x) => ({
         ...x,
         value:
-          milestones.filter((m) => (m.category || "Other") === x.label).reduce((s, m) => s + (m.pctComplete || 0), 0) /
+          milestones.filter((m) => (m.category || "Other") === x.label).reduce((s, m) => s + asFraction(m.pctComplete), 0) /
           Math.max(1, milestones.filter((m) => (m.category || "Other") === x.label).length),
       })),
       hindranceByActivity: countBy(hindrances, (h) => h.activity || "Other"),
@@ -565,7 +573,7 @@ progressRouter.post(
         actualDays,
         varianceDays: Number(body.varianceDays ?? actualDays - plannedDays),
         weightage: Number(body.weightage || 0),
-        pctComplete: Number(body.pctComplete || 0),
+        pctComplete: asFraction(body.pctComplete),
         stakeholder: body.stakeholder || null,
         zone: body.zone || null,
         status: body.status || "Planned",
@@ -601,9 +609,10 @@ progressRouter.patch(
     ] as const) {
       if (body[k] != null) data[k] = body[k];
     }
-    for (const k of ["plannedDays", "actualDays", "varianceDays", "weightage", "pctComplete"] as const) {
+    for (const k of ["plannedDays", "actualDays", "varianceDays", "weightage"] as const) {
       if (body[k] != null) data[k] = Number(body[k]);
     }
+    if (body.pctComplete != null) data.pctComplete = asFraction(body.pctComplete);
     for (const k of ["plannedStart", "plannedEnd", "actualStart", "actualEnd"] as const) {
       if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
     }

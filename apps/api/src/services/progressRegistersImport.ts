@@ -301,7 +301,9 @@ export function readProgressOverviewDashboard() {
       const v = pick("Project Progress");
       if (v == null || v === "") return null;
       const x = Number(v);
-      return Number.isFinite(x) ? x : null;
+      if (!Number.isFinite(x)) return null;
+      // Sheet may store 0–1 or 0–100 — always expose as 0–1 for the UI.
+      return x > 1 ? x / 100 : x;
     })(),
   };
 }

@@ -741,7 +741,7 @@ export default function ProgressPage() {
             <div className="flex flex-wrap gap-2 items-center">
               <Badge tone="brand">
                 {data.overviewSheet?.sheetProgressPct != null
-                  ? `${Math.round(Number(data.overviewSheet.sheetProgressPct) * 1000) / 10}% sheet`
+                  ? `${pct(Number(data.overviewSheet.sheetProgressPct))} sheet`
                   : pct(data.totals.projectProgressPct)}
               </Badge>
               <ReportExportButtons projectId={id} kind="progress" compact />
@@ -784,7 +784,7 @@ export default function ProgressPage() {
                     Dates from {data.overviewSheet.source}: start {fmtDate(data.overviewSheet.startDate)} · planned end{" "}
                     {fmtDate(data.overviewSheet.plannedEnd)} · sheet current {fmtDate(data.overviewSheet.currentDate)}
                     {data.overviewSheet.sheetProgressPct != null
-                      ? ` · sheet progress ${Math.round(Number(data.overviewSheet.sheetProgressPct) * 1000) / 10}%`
+                      ? ` · sheet progress ${pct(Number(data.overviewSheet.sheetProgressPct))}`
                       : ""}
                     {" · "}
                     register weighted {pct(data.totals?.projectProgressPct || 0)}
