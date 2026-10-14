@@ -154,9 +154,15 @@ app.get("/api/health", async (_req, res) => {
   let dbOk = false;
   let dbError: string | null = null;
   let userCount: number | null = null;
+  let userCountAll: number | null = null;
   let momSchemaOk = false;
   try {
-    userCount = await prisma.user.count();
+    // Active portal logins (what office sees in Users) — not the raw User table
+    // (which still holds soft-deleted / old HRMS / inactive rows from earlier seeds).
+    userCount = await prisma.user.count({
+      where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+    });
+    userCountAll = await prisma.user.count();
     dbOk = true;
   } catch (err) {
     dbError = err instanceof Error ? err.message : String(err);
@@ -184,6 +190,7 @@ app.get("/api/health", async (_req, res) => {
     dbOk,
     dbError,
     userCount,
+    userCountAll,
     momSchemaOk,
     databaseUrlSet: Boolean(process.env.DATABASE_URL?.startsWith("mysql://")),
     mockOneDrive: process.env.MOCK_ONEDRIVE !== "false",

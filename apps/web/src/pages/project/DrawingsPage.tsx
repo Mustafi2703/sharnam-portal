@@ -45,26 +45,47 @@ function RevisionShareLinks({
   rev,
   label,
   compact,
-  onOpen,
+  onViewPdf,
+  onOpenSharePoint,
 }: {
   rev: any;
   label?: string;
   compact?: boolean;
-  onOpen: (fileUrl?: string) => void;
+  /** In-app PDF popup (preferred). */
+  onViewPdf?: () => void;
+  /** SharePoint / DWG external open. */
+  onOpenSharePoint?: (fileUrl?: string) => void;
 }) {
   const status = revisionUploadStatus(rev);
   return (
     <div className={`flex flex-col ${compact ? "items-center" : "items-start"} gap-0.5`}>
       {label && <span className="text-[10px] font-mono text-steel-muted">{label}</span>}
       {status.pdfUrl ? (
-        <button type="button" className="text-[10px] font-semibold text-brand hover:underline" onClick={() => onOpen(status.pdfUrl || undefined)}>
-          Open PDF
+        <button
+          type="button"
+          className="text-[10px] font-semibold text-brand hover:underline"
+          onClick={() => (onViewPdf ? onViewPdf() : onOpenSharePoint?.(status.pdfUrl || undefined))}
+        >
+          View PDF
         </button>
       ) : (
         <span className="text-[10px] text-steel-muted">PDF not uploaded</span>
       )}
+      {status.pdfUrl && onViewPdf && onOpenSharePoint ? (
+        <button
+          type="button"
+          className="text-[10px] text-steel-muted hover:underline"
+          onClick={() => onOpenSharePoint(status.pdfUrl || undefined)}
+        >
+          SharePoint
+        </button>
+      ) : null}
       {status.dwgUrl ? (
-        <button type="button" className="text-[10px] font-semibold text-brand hover:underline" onClick={() => onOpen(status.dwgUrl || undefined)}>
+        <button
+          type="button"
+          className="text-[10px] font-semibold text-brand hover:underline"
+          onClick={() => onOpenSharePoint?.(status.dwgUrl || undefined)}
+        >
           Open DWG
         </button>
       ) : (
@@ -1071,14 +1092,28 @@ export default function DrawingsPage() {
                       <td className="px-2 py-2 text-xs">{d.discipline}</td>
                       <td className="px-2 py-2 text-xs">{d.buildingArea || "—"}</td>
                       <td className="px-2 py-2 text-xs font-mono">{d.tlNo || "—"}</td>
-                      <td className="px-2 py-2 font-mono text-xs text-brand font-semibold">{d.drawingNumber}</td>
+                      <td className="px-2 py-2 font-mono text-xs text-brand font-semibold">
+                        {latest && revisionHasFiles(latest) && revisionUploadStatus(latest).pdf ? (
+                          <button
+                            type="button"
+                            className="hover:underline text-left"
+                            title="View drawing in popup"
+                            onClick={() => openLatestViewer(d)}
+                          >
+                            {d.drawingNumber}
+                          </button>
+                        ) : (
+                          d.drawingNumber
+                        )}
+                      </td>
                       <td className="px-2 py-2 font-medium max-w-[180px]">{d.title}</td>
                       <td className="px-2 py-2">
                         {latest ? (
                           <RevisionShareLinks
                             rev={latest}
                             label={latest.revisionNumber || d.currentRev}
-                            onOpen={(fileUrl) => void openRevisionSharePoint(latest.id, fileUrl)}
+                            onViewPdf={() => openLatestViewer(d)}
+                            onOpenSharePoint={(fileUrl) => void openRevisionSharePoint(latest.id, fileUrl)}
                           />
                         ) : (
                           <span className="text-xs text-steel-muted">—</span>
@@ -1121,7 +1156,11 @@ export default function DrawingsPage() {
                                 <RevisionShareLinks
                                   rev={r}
                                   compact
-                                  onOpen={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
+                                  onViewPdf={() => {
+                                    setViewerRevId(r.id);
+                                    setViewer(previewFromRev(d, r));
+                                  }}
+                                  onOpenSharePoint={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
                                 />
                               </div>
                             ) : (
@@ -1133,6 +1172,11 @@ export default function DrawingsPage() {
                       <td className="px-2 py-2 text-center font-mono text-xs">{revsByNum.length}</td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap justify-end gap-1">
+                          {revisionHasFiles(latest) && revisionUploadStatus(latest).pdf ? (
+                            <Button type="button" variant="primary" className="!px-2 !py-1 !text-xs" onClick={() => openLatestViewer(d)}>
+                              View drawing
+                            </Button>
+                          ) : null}
                           <Button type="button" variant="ghost" className="!px-2 !py-1 !text-xs" onClick={() => setExpandedId(open ? null : d.id)}>
                             {open ? "Hide log" : "Log"}
                           </Button>
@@ -1234,7 +1278,11 @@ export default function DrawingsPage() {
                                   </div>
                                   <RevisionShareLinks
                                     rev={r}
-                                    onOpen={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
+                                    onViewPdf={() => {
+                                      setViewerRevId(r.id);
+                                      setViewer(previewFromRev(d, r));
+                                    }}
+                                    onOpenSharePoint={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
                                   />
                                   {extraFileList(r).map((f) => (
                                     <div key={f.fileUrl} className="text-[11px] font-mono flex flex-wrap gap-2 mt-0.5">

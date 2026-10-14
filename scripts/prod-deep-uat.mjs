@@ -310,7 +310,7 @@ async function sectionSetup() {
     const body = await res.json();
     assert(res.status === 200 && body.ok && body.dbOk, `health ${res.status} ${noteOf(body)}`);
     state.commit = String(body.commit || "").slice(0, 7);
-    return `commit ${state.commit} · ${body.userCount} users`;
+    return `commit ${state.commit} · ${body.userCount} active portal logins${body.userCountAll != null && body.userCountAll !== body.userCount ? ` (${body.userCountAll} rows in User table incl. inactive/old)` : ""}`;
   });
   await step("SYS-2", "SharePoint connected (Sharnam Projects drive)", "office", async () => {
     const body = await (await fetch(`${BASE}/api/health/sharepoint`)).json();
