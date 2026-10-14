@@ -1477,6 +1477,8 @@ costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee", "s
       projectId: req.params.projectId,
       packageName,
       srNo: req.body.srNo || null,
+      // itemCode links MB qty → monitoring itemNo on Sync MB → Monitoring
+      itemCode: req.body.itemCode ? String(req.body.itemCode) : req.body.srNo ? String(req.body.srNo) : null,
       description: String(req.body.description || (rowKind === "data" ? "MB line" : "New heading")),
       nos1,
       nos2,

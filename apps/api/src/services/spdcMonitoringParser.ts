@@ -62,16 +62,28 @@ function isTotalRow(description: string) {
   return /^total amount$/i.test(description.trim());
 }
 
-function isSkipRow(description: string) {
-  return !description || /^electric work$|^plumbing work$/i.test(description.trim());
+function isSkipRow(description: string, itemNo: string) {
+  if (!description && !itemNo) return true;
+  if (/^item\s*no\.?$/i.test(itemNo) || /^item of work$/i.test(description)) return true;
+  if (/^qty$/i.test(description) && !itemNo) return true;
+  // Package title rows — sometimes in col A, sometimes col B.
+  const title = description || itemNo;
+  if (/^(electric|plumbing|civil)\s+work$/i.test(title.trim())) return true;
+  return false;
 }
 
-/** Heading row — package section or sub-section (Size, Dormitory Room, Part - B block title). */
+/** Heading row — package section or sub-section (Size, Dormitory Room, Part - B, letter A/B, Section 1.00). */
 function isHeadingRow(itemNo: string, description: string, uom: string, rate: number, boqQty: number) {
   if (isTotalRow(description)) return "total";
   if (/^part\s*[-–]\s*[a-z0-9]+$/i.test(itemNo) && !uom && rate === 0 && boqQty === 0) return "section";
   if (/^size$/i.test(description) && !uom && rate === 0 && boqQty === 0) return "subsection";
-  if (!itemNo && !uom && rate === 0 && boqQty === 0) return "section";
+  // Letter band (A / B / a) — Plumbing / Electric style subsections.
+  if (/^[A-Za-z]$/.test(itemNo) && !uom && rate === 0 && boqQty === 0 && description) return "subsection";
+  // "Section 1.00" / "EXCAVATION" / "Compound Wall" — section band with no measures.
+  if (/^section\s+/i.test(description) && !uom && rate === 0 && boqQty === 0) return "section";
+  if (!itemNo && !uom && rate === 0 && boqQty === 0 && description) return "section";
+  // Numbered parent with description but no UOM/rate/qty (Civil Excavation 1.0).
+  if (itemNo && description && !uom && rate === 0 && boqQty === 0) return "subsection";
   return null;
 }
 
@@ -85,11 +97,17 @@ export function parseSpdcMonitoringRows(rows: unknown[][], packageName: string):
   let section: string | null = null;
   let subsection: string | null = null;
 
-  for (let i = 2; i < rows.length; i++) {
+  // Row 0 = column headers; row 1+ may be package/section bands (Compound Wall, Dormitory Block).
+  for (let i = 1; i < rows.length; i++) {
     const row = rows[i] as unknown[];
-    const description = s(row[1], 500);
-    const itemNo = s(row[0], 40);
-    if (isSkipRow(description)) continue;
+    let description = s(row[1], 500);
+    let itemNo = s(row[0], 40);
+    // Some SPDC rows put the band title only in column A.
+    if (!description && itemNo && !/^\d/.test(itemNo) && !/^[A-Za-z]$/.test(itemNo)) {
+      description = itemNo;
+      itemNo = "";
+    }
+    if (isSkipRow(description, itemNo)) continue;
 
     const uom = s(row[2], 20);
     const rate = n(row[3]);
@@ -99,13 +117,15 @@ export function parseSpdcMonitoringRows(rows: unknown[][], packageName: string):
     if (heading === "total") continue;
 
     if (heading === "section") {
-      section = description;
+      section = description || itemNo || "Section";
       subsection = null;
       continue;
     }
 
     if (heading === "subsection") {
-      subsection = description;
+      // Prefer description; letter-only rows use "A · Title".
+      subsection = description || itemNo || "Subsection";
+      if (/^[A-Za-z]$/.test(itemNo) && description) subsection = `${itemNo} · ${description}`;
       continue;
     }
 

@@ -1071,68 +1071,69 @@ checklistRouter.post(
       select: { id: true, number: true, subject: true, rfiKind: true, status: true },
     });
 
-    try {
-      const project = existing.assignment.project;
-      const { notifyChecklistReviewed, notifyRfiClosed, rfiEmailContextFromRecord } = await import(
-        "../services/rfiFlowNotify.js"
-      );
-      await notifyChecklistReviewed({
-        projectId: existing.assignment.projectId,
-        projectCode: project.code,
-        projectName: project.name,
-        templateName: existing.assignment.template.name,
-        status,
-        submissionId: submission.id,
-        remarks: remarks || null,
-        rfiNumbers: linkedRfis.map((r) => r.number),
-        createdById: req.user!.id,
+    // Close linked RFIs in DB now; SharePoint archive + Graph mail + pack refresh must not block the gateway.
+    const toClose =
+      closeRfi && status === "Approved"
+        ? linkedRfis.filter((x) => x.status !== "Closed")
+        : [];
+    if (toClose.length) {
+      await prisma.rfi.updateMany({
+        where: { id: { in: toClose.map((r) => r.id) } },
+        data: { status: "Closed", closedAt: new Date(), ballInCourt: "Closed" },
       });
+    }
 
-      if (closeRfi && status === "Approved" && linkedRfis.length) {
-        const { archiveClosedRfiReport } = await import("../services/archiveClosedRfiReport.js");
-        for (const r of linkedRfis.filter((x) => x.status !== "Closed")) {
-          await prisma.rfi.update({
-            where: { id: r.id },
-            data: { status: "Closed", closedAt: new Date(), ballInCourt: "Closed" },
-          });
-          try {
-            await archiveClosedRfiReport({ projectId: existing.assignment.projectId, rfiId: r.id });
-          } catch {
-            /* SharePoint optional */
-          }
-          const closedFull = await prisma.rfi.findUnique({
-            where: { id: r.id },
-            include: {
-              assignedTo: { select: { fullName: true } },
-              createdBy: { select: { fullName: true } },
-              drawing: { select: { drawingNumber: true, title: true } },
-              vendor: { select: { name: true } },
-            },
-          });
-          if (closedFull) {
-            await notifyRfiClosed({
-              projectId: existing.assignment.projectId,
-              rfiId: r.id,
-              createdById: req.user!.id,
-              ...rfiEmailContextFromRecord(
-                closedFull,
-                project,
-                existing.assignment.template.name
-              ),
+    const project = existing.assignment.project;
+    const reviewerId = req.user!.id;
+    void (async () => {
+      try {
+        const { notifyChecklistReviewed, notifyRfiClosed, rfiEmailContextFromRecord } = await import(
+          "../services/rfiFlowNotify.js"
+        );
+        await notifyChecklistReviewed({
+          projectId: existing.assignment.projectId,
+          projectCode: project.code,
+          projectName: project.name,
+          templateName: existing.assignment.template.name,
+          status,
+          submissionId: submission.id,
+          remarks: remarks || null,
+          rfiNumbers: linkedRfis.map((r) => r.number),
+          createdById: reviewerId,
+        });
+        if (toClose.length) {
+          const { archiveClosedRfiReport } = await import("../services/archiveClosedRfiReport.js");
+          for (const r of toClose) {
+            try {
+              await archiveClosedRfiReport({ projectId: existing.assignment.projectId, rfiId: r.id });
+            } catch {
+              /* SharePoint optional */
+            }
+            const closedFull = await prisma.rfi.findUnique({
+              where: { id: r.id },
+              include: {
+                assignedTo: { select: { fullName: true } },
+                createdBy: { select: { fullName: true } },
+                drawing: { select: { drawingNumber: true, title: true } },
+                vendor: { select: { name: true } },
+              },
             });
+            if (closedFull) {
+              await notifyRfiClosed({
+                projectId: existing.assignment.projectId,
+                rfiId: r.id,
+                createdById: reviewerId,
+                ...rfiEmailContextFromRecord(closedFull, project, existing.assignment.template.name),
+              });
+            }
           }
         }
+        const { refreshQualityPackAfterChange } = await import("../services/checklistWeekAdvance.js");
+        await refreshQualityPackAfterChange(existing.assignment.projectId, reviewerId);
+      } catch (err) {
+        console.warn("[checklist] review side-effects:", err instanceof Error ? err.message : err);
       }
-    } catch {
-      /* email optional */
-    }
-
-    try {
-      const { refreshQualityPackAfterChange } = await import("../services/checklistWeekAdvance.js");
-      await refreshQualityPackAfterChange(existing.assignment.projectId, req.user!.id);
-    } catch (err) {
-      console.warn("[checklist] review pack refresh:", err instanceof Error ? err.message : err);
-    }
+    })();
 
     res.json(submission);
   }

@@ -1102,12 +1102,48 @@ html.is-standalone-form #root {
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: linear-gradient(90deg, #ecfdf8, #f0f9ff);
+  background: color-mix(in srgb, var(--color-brand-soft, var(--color-sand)) 70%, var(--color-paper));
   border-bottom: 1px solid var(--color-line);
-  border-left: 4px solid var(--color-brand);
+  border-left: 4px solid var(--mod-accent, var(--color-brand));
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #0f766e;
+  color: var(--color-brand-dark, var(--color-ink));
+}
+
+/* Progress sheets — Graphite chrome: actions above registers, charts below */
+.progress-module .sheet-actions-bar {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--ui-radius-sm, 6px);
+  background: var(--color-paper);
+}
+.progress-module .progress-sheet-filters {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.progress-module .progress-sheet-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--ui-radius-sm, 6px);
+  border: 1px solid var(--color-line);
+  background: var(--color-paper);
+  color: var(--color-steel);
+}
+.progress-module .progress-sheet-chip:hover {
+  border-color: color-mix(in srgb, var(--mod-accent, var(--color-brand)) 40%, var(--color-line));
+}
+.progress-module .progress-sheet-chip.is-active {
+  background: var(--mod-accent, var(--color-brand));
+  border-color: var(--mod-accent, var(--color-brand));
+  color: #fff;
+}
+.progress-module .progress-sheet-charts {
+  padding-top: 0.25rem;
+}
+.progress-module .sheet-register__head {
+  background: color-mix(in srgb, var(--mod-soft, var(--color-sand)) 55%, var(--color-paper));
+  color: var(--color-ink);
 }
 .sheet-register__scroll {
   overflow: auto;
@@ -3047,7 +3083,7 @@ html.is-tool-window #root {
   --cost-col-qty-achieved-bg: #6ee7b7;
   --cost-col-cost-bg: #fef3c7;
   --cost-col-pct-bg: #bbf7d0;
-  --cost-col-ev-bg: #ede9fe;
+  --cost-col-ev-bg: #e0f2fe;
 }
 .cost-line--fresh {
   outline: 2px solid var(--cost-accent, var(--color-brand, #0b6a78));
@@ -3101,7 +3137,7 @@ html.is-tool-window #root {
   --cost-col-qty-achieved-bg: #14532d;
   --cost-col-cost-bg: #2a2314;
   --cost-col-pct-bg: #143328;
-  --cost-col-ev-bg: #1e1a32;
+  --cost-col-ev-bg: #152238;
 }
 
 /* Column group bands — body cells only (headers use one shared colour below) */
@@ -5210,7 +5246,29 @@ body {
 }
 .boq-actions-col {
   white-space: nowrap;
-  width: 1%;
+  width: 7.5rem;
+  min-width: 7.5rem;
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  background: var(--cost-thead-bg, var(--color-paper)) !important;
+  box-shadow: -4px 0 8px rgba(15, 23, 42, 0.06);
+  text-align: center;
+  vertical-align: middle;
+}
+.cost-register-thead th.boq-actions-col {
+  z-index: 6;
+  color: #fff !important;
+  background: var(--cost-thead-bg, #0c4a44) !important;
+}
+tbody td.boq-actions-col {
+  background: var(--color-paper) !important;
+  z-index: 3;
+}
+.boq-actions-col .flex {
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
 }
 .boq-edit-btn {
   font-size: 11px;

@@ -3,6 +3,7 @@
  * Column layout matches seed/costFromBudget.ts.
  */
 import XLSX, { type WorkBook } from "../lib/xlsx.js";
+import { SPDC_BUDGET_DATA_START_ROW } from "./spdcBudgetManifest.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -241,10 +242,13 @@ export function parseBudgetBuffer(buffer: Buffer): ParsedBudgetLine[] {
     wb.SheetNames.find((n) => /^budget$/i.test(n.trim())) || wb.SheetNames[0];
   const rows = sheetRows(wb, budgetSheet);
   const data: ParsedBudgetLine[] = [];
-  for (let i = 3; i < rows.length; i++) {
+  // SPDC_Budget_Arvind: header block ends at row 6; first WBS line is row index 7.
+  for (let i = SPDC_BUDGET_DATA_START_ROW; i < rows.length; i++) {
     const row = rows[i] as unknown[];
     const description = s(row[1], 400);
     if (!description) continue;
+    // Skip leftover header labels if a short sheet was pasted above the WBS.
+    if (/^description$/i.test(description) || /^budget wbs$/i.test(description)) continue;
     data.push({
       srNo: s(row[0], 20) || null,
       description,

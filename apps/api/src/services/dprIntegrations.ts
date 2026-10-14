@@ -370,6 +370,26 @@ export async function buildDprAutoFill(
     if (kept?.finish) ln.finish = kept.finish;
   }
 
+  // Programme register (Progress → MS Project / WPR PPTX) then MS XML summary for planned dates.
+  try {
+    const scheduleTasks = await prisma.progressScheduleTask.findMany({
+      where: { projectId },
+      select: { name: true, start: true, finish: true, baselineStart: true, baselineFinish: true },
+    });
+    for (const ln of lines) {
+      if (ln.start && ln.finish) continue;
+      const task = scheduleTasks.find((t) => fuzzyMatch(t.name, ln.description));
+      if (!task) continue;
+      const s = task.baselineStart || task.start;
+      const f = task.baselineFinish || task.finish;
+      if (s) ln.start = s.toISOString().slice(0, 10);
+      if (f) ln.finish = f.toISOString().slice(0, 10);
+    }
+    if (scheduleTasks.length) sources.push("Progress programme → planned dates");
+  } catch {
+    /* schedule optional */
+  }
+
   try {
     const { loadMsProjectSummary } = await import("./msProjectSchedule.js");
     const ms = await loadMsProjectSummary(projectId);

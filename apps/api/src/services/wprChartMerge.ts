@@ -71,12 +71,14 @@ export function mergeWprChartsForExport(
         ? milestoneShort
         : barRows(sections.milestones, 0, 1, 2);
 
+  const pvaHeaders = (sections.plannedVsActual?.headers || []).map((h) => String(h));
+  const pvaDated = pvaHeaders.some((h) => /plan start/i.test(h));
   const pvaDirect = barRows(sections.plannedVsActual, 0, 1, 2);
   const pvaActivity = (sections.plannedVsActual?.rows || [])
     .map((row) => ({
       label: `${String(row[1] ?? "")} ${String(row[2] ?? "")}`.trim().slice(0, 28),
-      planned: num(row[10] ?? row[6]),
-      actual: num(row[11] ?? row[7]),
+      planned: pvaDated ? num(row[9]) : num(row[10] ?? row[7]),
+      actual: pvaDated ? num(row[10]) : num(row[11] ?? row[8]),
     }))
     .filter((r) => r.label && (r.planned || r.actual));
   const execBars = (sections.weeklyExecuted?.rows || [])

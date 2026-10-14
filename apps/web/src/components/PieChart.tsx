@@ -2,7 +2,7 @@
 
 export type ChartItem = { label: string; value: number; color?: string };
 
-const FALLBACK = ["#0B6A78", "#C45C26", "#2563EB", "#7C3AED", "#059669", "#DB2777", "#0891B2", "#D97706"];
+const FALLBACK = ["#0B6A78", "#C45C26", "#2563EB", "#64748B", "#059669", "#B45309", "#0891B2", "#D97706"];
 
 function cssVar(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;

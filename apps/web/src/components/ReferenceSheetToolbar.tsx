@@ -18,6 +18,9 @@ type ReferenceSheetToolbarProps = {
   addKinds?: { key: string; label: string }[];
   onAddKind?: (key: string) => void;
   onUpload?: (file: File) => void | Promise<void>;
+  /** File input accept list (default Excel). Use for XML / PPTX programme uploads. */
+  uploadAccept?: string;
+  uploadLabel?: string;
   uploadTitle?: string;
   uploadHint?: string;
   onDownloadCsv?: () => void;
@@ -48,6 +51,8 @@ export function ReferenceSheetToolbar({
   addKinds,
   onAddKind,
   onUpload,
+  uploadAccept = ".xlsx,.xls,.csv",
+  uploadLabel = "Upload sheet",
   uploadHint,
   onDownloadCsv,
   onDownloadXlsx,
@@ -108,7 +113,7 @@ export function ReferenceSheetToolbar({
         )}
         {canEdit && onUpload && (
           <FilePickButton
-            accept=".xlsx,.xls,.csv"
+            accept={uploadAccept}
             variant="primary"
             disabled={busy}
             onPick={(files) => {
@@ -116,7 +121,7 @@ export function ReferenceSheetToolbar({
               if (file) void onUpload(file);
             }}
           >
-            Upload sheet
+            {formatUiText(uploadLabel)}
           </FilePickButton>
         )}
         {canEdit && addKinds && addKinds.length > 0 && onAddKind && (

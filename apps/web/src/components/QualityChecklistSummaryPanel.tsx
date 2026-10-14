@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { openFamilyChecklistFill } from "../lib/checklistFillWindow";
 import { PieChart } from "./PieChart";
 import { ColumnChart } from "./ColumnChart";
 import { Badge, Button, Card } from "./ui";
@@ -160,23 +159,19 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
         <Card className="!p-4">
           <h3 className="font-semibold mb-2">Where this lives</h3>
           <p className="text-xs text-steel-muted mb-3">
-            Left list is the <strong>type catalog</strong> (Sheet1) already onboarded in Quality checklist master. Fill
-            history is the <strong>QI fill log</strong> — both feed the DPR quality block.
+            This catalog is the Sheet1 <strong>type list</strong> (status only). Do not fill from here — raise a Quality
+            IR and link the checklist on the inspection register; the contractor fills from that request.
           </p>
           <div className="flex flex-col gap-2 text-sm font-semibold">
+            <Link className="text-brand" to={`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality`}>
+              Raise / open Quality IR register →
+            </Link>
             <Link className="text-brand" to={`/projects/${projectId}/quality/checklist-master`}>
               Quality checklist master →
             </Link>
             <Link className="text-brand" to={`/projects/${projectId}/quality/checklist-logs`}>
-              QI fill log →
+              QI fill log (info only) →
             </Link>
-            <button
-              type="button"
-              className="text-brand text-left"
-              onClick={() => void openFamilyChecklistFill(projectId, "QualityInspection", token)}
-            >
-              Fill quality checklist →
-            </button>
           </div>
           {canManage && (
             <Button type="button" className="mt-4 w-full" disabled={busy} onClick={() => void sync(false)}>
@@ -192,10 +187,10 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
           <div>
             <h3 className="font-semibold text-sm">Checklist catalog — Quality Dashboard · Sheet1</h3>
             <p className="text-xs text-steel-muted mt-0.5">
-              {filtered.length} of {rows.length} types · status from master + this project’s fill log
+              {filtered.length} of {rows.length} types · status only · request a fill via Quality IR (not from this table)
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <select
               className="text-xs border border-line rounded px-2 py-1 bg-white"
               value={cat}
@@ -212,10 +207,16 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            <Link
+              to={`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality`}
+              className="text-xs font-semibold text-brand underline"
+            >
+              Request fill on IR register →
+            </Link>
           </div>
         </div>
         <div className="sheet-register__scroll register-sheet-viewport flex-1 min-h-0 overflow-auto">
-          <table className="sheet-register__table w-full text-xs min-w-[52rem]">
+          <table className="sheet-register__table w-full text-xs min-w-[48rem]">
             <thead>
               <tr>
                 <th className="text-left">Sr</th>
@@ -225,7 +226,6 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
                 <th className="text-left">Lines</th>
                 <th className="text-left">Status</th>
                 <th className="text-left">Last fill</th>
-                <th className="text-left w-24">Fill</th>
               </tr>
             </thead>
             <tbody>
@@ -244,25 +244,11 @@ export function QualityChecklistSummaryPanel({ projectId, token, dash, canManage
                       ? `${new Date(r.lastFilledAt).toLocaleDateString("en-IN")} · ${r.lastStatus || ""}`
                       : "—"}
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-brand underline"
-                      onClick={() =>
-                        void openFamilyChecklistFill(projectId, "QualityInspection", token, {
-                          assignmentId: r.assignmentId,
-                          templateId: r.templateId,
-                        })
-                      }
-                    >
-                      Fill →
-                    </button>
-                  </td>
                 </tr>
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={8} className="empty">
+                  <td colSpan={7} className="empty">
                     No catalog rows — onboard Sheet1 types or re-seed Quality Dashboard.xlsx.
                   </td>
                 </tr>

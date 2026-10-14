@@ -1,6 +1,12 @@
 {
+  "phases": {
+    "1": ["CRM", "HRM"],
+    "2": ["ATT", "DWG", "DCI", "RFI", "CHK", "QA", "SAF", "PRG", "CST", "FIN", "DPR"],
+    "3": ["WPR", "RPT", "VER"]
+  },
   "order": [
     "CRM",
+    "HRM",
     "ATT",
     "DWG",
     "DCI",
@@ -13,6 +19,7 @@
     "FIN",
     "DPR",
     "WPR",
+    "RPT",
     "VER"
   ],
   "modules": {
@@ -21,6 +28,12 @@
       "only": "SET",
       "logins": ["office", "site", "vendor", "client", "consultant"],
       "creates": "Directory companies, Activate portal (Demo@1234), Voltamp team + matrix + site pin + logo"
+    },
+    "HRM": {
+      "title": "HRMS (desk, attendance register, letter previews)",
+      "only": "HRM",
+      "logins": ["office"],
+      "creates": "Read-only HR desk checks. Offer / Appointment / Experience previews are not saved."
     },
     "ATT": {
       "title": "Attendance (site check-in)",
@@ -93,6 +106,12 @@
       "only": "WPR",
       "logins": ["office", "client"],
       "creates": "3 WPRs — client xlsx + pptx with charts + communication matrix"
+    },
+    "RPT": {
+      "title": "All generated reports (needs the three weeks from phase 2, then WPR)",
+      "only": "RPT",
+      "logins": ["office"],
+      "creates": "Downloads DPR Fridays, WPR xlsx/client/pptx/pdf for 3 weeks, plus quality, safety, drawings, progress, cost, RFI, QAP, cubes, NCR, finance and analytics workbooks"
     },
     "VER": {
       "title": "SharePoint verify (folder listing)",

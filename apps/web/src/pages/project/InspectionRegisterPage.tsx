@@ -19,7 +19,7 @@ import {
   parseFormDataJson,
   type InspectionRegisterTab,
 } from "../../lib/inspectionRequestForms";
-import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
+import { openChecklistFillWindow } from "../../lib/checklistFillWindow";
 import { canonicalRfiKind, registerToolPath } from "../../lib/rfiModuleScope";
 
 const ALL_TABS: { key: InspectionRegisterTab; label: string; doc: string; lock?: "quality" | "safety" }[] = [
@@ -442,11 +442,10 @@ export default function InspectionRegisterPage() {
           onFillChecklist={
             id
               ? (row) => {
+                  // Only fill when this IR already links a checklist — free-form catalog fill is not allowed.
                   if (row.linkedAssignmentId) {
                     openChecklistFillWindow(id, row.linkedAssignmentId, tabChecklist.family);
-                    return;
                   }
-                  void openFamilyChecklistFill(id, tabChecklist.family, token);
                 }
               : undefined
           }

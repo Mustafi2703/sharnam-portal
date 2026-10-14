@@ -74,6 +74,7 @@ export default function ProgressPage() {
   const [scurveBusy, setScurveBusy] = useState(false);
   const scurveImportRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
+  const [scheduleOpenOnly, setScheduleOpenOnly] = useState(true);
   const [hindranceModalOpen, setHindranceModalOpen] = useState(false);
   const [mileAddOpen, setMileAddOpen] = useState(false);
   const [riskAddOpen, setRiskAddOpen] = useState(false);
@@ -83,6 +84,10 @@ export default function ProgressPage() {
   const [manAddOpen, setManAddOpen] = useState(false);
   const [sorAddOpen, setSorAddOpen] = useState(false);
   const [sorForm, setSorForm] = useState({ observation: "", total: "", openCount: "", closedCount: "" });
+  const [schedAddOpen, setSchedAddOpen] = useState(false);
+  const [designAddOpen, setDesignAddOpen] = useState(false);
+  const [schedForm, setSchedForm] = useState({ wbs: "", name: "", start: "", finish: "", pctComplete: "" });
+  const [designForm, setDesignForm] = useState({ discipline: "", pctComplete: "", plannedEnd: "", remark: "" });
   const [actBusy, setActBusy] = useState(false);
   const [actForm, setActForm] = useState({
     activity: "",
@@ -458,6 +463,146 @@ export default function ProgressPage() {
     }
   }
 
+  async function patchSchedule(taskId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/schedule-tasks/${taskId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function patchDesign(rowId: string, patch: Record<string, unknown>) {
+    if (!id) return;
+    try {
+      await api(`/api/progress/${id}/design-status/${rowId}`, { method: "PATCH", token, body: JSON.stringify(patch) });
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function addScheduleTask() {
+    if (!id || !schedForm.wbs.trim() || !schedForm.name.trim()) return;
+    setMsBusy("import");
+    try {
+      await api(`/api/progress/${id}/schedule-tasks`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          wbs: schedForm.wbs.trim(),
+          name: schedForm.name.trim(),
+          start: schedForm.start || null,
+          finish: schedForm.finish || null,
+          pctComplete: Number(schedForm.pctComplete || 0),
+        }),
+      });
+      setSchedForm({ wbs: "", name: "", start: "", finish: "", pctComplete: "" });
+      setSchedAddOpen(false);
+      setMsg("Programme task added — feeds WPR schedule slides");
+      await Promise.all([load(), loadMsProject()]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Add schedule task failed");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  async function addDesignStatus() {
+    if (!id || !designForm.discipline.trim()) return;
+    setMsBusy("import");
+    try {
+      await api(`/api/progress/${id}/design-status`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          discipline: designForm.discipline.trim(),
+          pctComplete: Number(designForm.pctComplete || 0),
+          plannedEnd: designForm.plannedEnd || null,
+          remark: designForm.remark || null,
+        }),
+      });
+      setDesignForm({ discipline: "", pctComplete: "", plannedEnd: "", remark: "" });
+      setDesignAddOpen(false);
+      setMsg("Design status row added — carried into each WPR");
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Add design status failed");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  /** Route by file type: MS Project XML → full import; WPR PPTX → programme tables only. */
+  async function importProgrammeFile(file: File) {
+    if (!id) return;
+    setMsBusy("import");
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (/\.pptx$/i.test(file.name)) {
+        const out = await api<{ scheduleTasks: number }>(`/api/progress/${id}/schedule-tasks/import`, {
+          method: "POST",
+          token,
+          body: fd,
+        });
+        setMsg(`Programme imported from PPTX — ${out.scheduleTasks} tasks (WPR schedule)`);
+      } else {
+        const out = await api<{ taskCount: number; scurvePoints: number }>(`/api/progress/${id}/ms-project/import`, {
+          method: "POST",
+          token,
+          body: fd,
+        });
+        setMsg(`MS Project imported — ${out.taskCount} tasks · ${out.scurvePoints} S-curve points (Progress + DPR + WPR)`);
+      }
+      await Promise.all([load(), loadMsProject()]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Programme import failed");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  async function loadReferenceProgramme() {
+    if (!id) return;
+    setMsBusy("import");
+    setMsg("");
+    try {
+      const out = await api<{ scheduleTasks: number }>(`/api/progress/${id}/schedule-tasks/import`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({}),
+      });
+      setMsg(`Loaded reference WPR programme — ${out.scheduleTasks} tasks`);
+      await Promise.all([load(), loadMsProject()]);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not load reference programme");
+    } finally {
+      setMsBusy(null);
+    }
+  }
+
+  async function runResyncRegisters() {
+    if (!canResyncExcel || !id) return;
+    setRegisterSyncBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/progress/${id}/resync-registers`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ force: true }),
+      });
+      await load();
+      setMsg("Progress registers re-synced from SPDC templates (milestones, hindrance, risk, legal, planned).");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Register resync failed");
+    } finally {
+      setRegisterSyncBusy(false);
+    }
+  }
+
   async function patchMilestone(milestoneId: string, patch: Record<string, unknown>) {
     if (!id) return;
     try {
@@ -775,7 +920,7 @@ export default function ProgressPage() {
           <div className="rounded-sm border border-line bg-paper p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-2 mb-4">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ok">Workday overview</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand">Workday overview</p>
                 <h3 className="font-display text-lg text-ink">
                   {data.overviewSheet?.title || "Key registers at a glance"}
                 </h3>
@@ -893,8 +1038,8 @@ export default function ProgressPage() {
             rowCount={data.milestones?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setMileAddOpen(true) : undefined}
-            onGenerate={undefined}
-            generateLabel="Load SPDC template"
+            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
+            generateLabel="Load SPDC templates"
             busy={registerSyncBusy}
             message={msg || undefined}
           />
@@ -996,6 +1141,11 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          {(data.charts?.milestoneByStatus || []).length > 0 && (
+            <div className="progress-sheet-charts grid sm:grid-cols-2 gap-3 shrink-0">
+              <PieChart title="Milestones by status" items={data.charts.milestoneByStatus} size={140} />
+            </div>
+          )}
         </div>
       )}
 
@@ -1006,7 +1156,7 @@ export default function ProgressPage() {
             rowCount={(data.activityLines || []).length || (data.plannedActual || []).length}
             canEdit={canEdit}
             onUpload={canEdit ? (f) => importPlannedActual(f) : undefined}
-            uploadHint="Upload client Excel — cashflow, manpower, and activity qty columns preserved."
+            uploadHint="Upload client Excel — cashflow, manpower, and activity qty. Weekly planned/actual on activity lines feed DPR Maker (qty today ≈ weekly / 6)."
             addKinds={
               canEdit
                 ? [
@@ -1048,7 +1198,7 @@ export default function ProgressPage() {
             busy={!!paBusy || registerSyncBusy}
             message={msg}
           />
-          <div className="flex flex-wrap items-center gap-2 shrink-0 border-b border-line pb-3">
+          <div className="progress-sheet-filters flex flex-wrap items-center gap-2 shrink-0">
             {(
               [
                 ["all", "All"],
@@ -1060,11 +1210,7 @@ export default function ProgressPage() {
               <button
                 key={key}
                 type="button"
-                className={`text-xs px-2.5 py-1.5 rounded border font-medium ${
-                  pva === key
-                    ? "bg-brand text-white border-brand"
-                    : "bg-white text-steel border-line hover:border-brand/40"
-                }`}
+                className={`progress-sheet-chip ${pva === key ? "is-active" : ""}`}
                 onClick={() => {
                   const next = new URLSearchParams(searchParams);
                   next.set("tab", "planned");
@@ -1083,14 +1229,9 @@ export default function ProgressPage() {
               </Button>
             )}
             {canEdit && (
-              <button
-                type="button"
-                className="text-xs font-semibold text-brand disabled:opacity-50"
-                disabled={!!paBusy}
-                onClick={() => void syncPvaCashflowToCost()}
-              >
+              <Button type="button" variant="secondary" className="!text-xs" disabled={!!paBusy} onClick={() => void syncPvaCashflowToCost()}>
                 {paBusy === "sync" ? "Syncing cashflow…" : "Push cashflow to Cost"}
-              </button>
+              </Button>
             )}
             <Link to={`/projects/${id}/cost?tab=cashflow`} className="text-xs text-steel-muted hover:text-brand ml-auto">
               Cost cashflow chart →
@@ -1108,33 +1249,9 @@ export default function ProgressPage() {
               e.target.value = "";
             }}
           />
-          {(pva === "all" || pva === "cashflow" || pva === "manpower") && (
-          <div className="grid lg:grid-cols-2 gap-4 w-full shrink-0">
-            <BarChart
-              title="Cashflow planned vs actual"
-              items={data.charts?.cashflow || []}
-              valueKey="planned"
-              compareKey="actual"
-            />
-            <BarChart
-              title="Manpower shortage %"
-              items={(data.charts?.manpower || []).map((m: any) => ({
-                label: m.label,
-                value: (m.shortagePct || 0) * 100,
-              }))}
-            />
-          </div>
-          )}
           {(pva === "all" || pva === "cashflow") && (
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
-              <span>Project cashflow · Planned Vs Actual</span>
-              {canEdit && (
-                <Button type="button" className="!text-xs" onClick={() => setCashAddOpen(true)}>
-                  Add cashflow month
-                </Button>
-              )}
-            </div>
+            <div className="sheet-register__head shrink-0">Project cashflow · Planned Vs Actual</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table min-w-[48rem] w-full text-sm">
               <thead className="sticky top-0 z-10">
@@ -1210,19 +1327,13 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "manpower") && (
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
-              <span>Weekly manpower (headcount for the week — not hours)</span>
-              {canEdit && (
-                <Button type="button" className="!text-xs" onClick={() => setManAddOpen(true)}>
-                  Add manpower trade
-                </Button>
-              )}
-            </div>
+            <div className="sheet-register__head shrink-0">Weekly manpower (headcount for the week — not hours)</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[40rem]">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left text-[11px] uppercase tracking-wider text-steel-muted border-b border-line bg-white">
                   <th className="py-2.5 px-3">Type of Manpower</th>
+                  <th className="py-2.5 pr-3">Week ending</th>
                   <th className="py-2.5 pr-3 text-right">Required for week</th>
                   <th className="py-2.5 pr-3 text-right">Available</th>
                   <th className="py-2.5 pr-3 text-right">Shortage</th>
@@ -1236,6 +1347,7 @@ export default function ProgressPage() {
                     <td className="py-2 px-3">
                       <RegisterSheetCell value={m.trade} disabled={!canEdit} onCommit={(v) => void patchManpower(m.id, { trade: v })} />
                     </td>
+                    <td className="py-1.5 pr-3 border border-line whitespace-nowrap text-xs">{fmtDate(m.weekEnding)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       <RegisterSheetCell type="number" value={m.required} disabled={!canEdit} onCommit={(v) => void patchManpower(m.id, { required: Number(v) })} />
                     </td>
@@ -1281,18 +1393,11 @@ export default function ProgressPage() {
           )}
           {(pva === "all" || pva === "activity") && (
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0 flex flex-wrap items-center justify-between gap-2">
+            <div className="sheet-register__head shrink-0 flex flex-wrap items-center justify-between gap-2">
               <span>Planned Vs Actual qty ({(data.activityLines || []).length} lines) — weekly qty feeds DPR</span>
-              <div className="flex flex-wrap items-center gap-2">
-                {canEdit && (
-                  <Button type="button" className="!text-xs" onClick={() => setActAddOpen(true)}>
-                    Add activity
-                  </Button>
-                )}
-                <Link to={`/projects/${id}/cost?tab=monitoring`} className="text-xs font-semibold text-brand">
-                  Cost BOQ / monitoring ({data.totals?.boqLines || 0} lines) →
-                </Link>
-              </div>
+              <Link to={`/projects/${id}/cost?tab=monitoring`} className="text-xs font-semibold text-brand normal-case tracking-normal">
+                Cost BOQ / monitoring ({data.totals?.boqLines || 0} lines) →
+              </Link>
             </div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-[11px] min-w-[1280px] border-collapse">
@@ -1373,6 +1478,27 @@ export default function ProgressPage() {
             </div>
           </Card>
           )}
+          {(pva === "all" || pva === "cashflow" || pva === "manpower") && (
+          <div className="progress-sheet-charts grid lg:grid-cols-2 gap-4 w-full shrink-0">
+            {(pva === "all" || pva === "cashflow") && (
+            <BarChart
+              title="Cashflow planned vs actual"
+              items={data.charts?.cashflow || []}
+              valueKey="planned"
+              compareKey="actual"
+            />
+            )}
+            {(pva === "all" || pva === "manpower") && (
+            <BarChart
+              title="Manpower shortage %"
+              items={(data.charts?.manpower || []).map((m: any) => ({
+                label: m.label,
+                value: (m.shortagePct || 0) * 100,
+              }))}
+            />
+            )}
+          </div>
+          )}
         </div>
       )}
 
@@ -1384,28 +1510,12 @@ export default function ProgressPage() {
             canEdit={canEdit}
             onAddRow={canEdit ? () => setSorAddOpen(true) : undefined}
             addRowLabel="+ Add SOR row"
-            onGenerate={undefined}
-            generateLabel="Load Monthly Dashboard"
+            onGenerate={canEdit ? () => void runResyncSor() : undefined}
+            generateLabel="Re-sync SOR from Excel"
             busy={resyncBusy}
-            uploadHint="SOR Log from Monthly Progress Dashboard.xlsx — Sr.no, Observation, Total, Open, Close, Closure Rate."
+            uploadHint="Add SOR rows here, or re-sync from the bundled Monthly Progress Dashboard workbook. Charts below update from this register."
             message={msg || undefined}
           />
-          <div className="grid md:grid-cols-2 gap-4 shrink-0">
-            <BarChart
-              title="SOR / observation closure"
-              items={data.charts?.sor || []}
-              valueKey="closed"
-              compareKey="open"
-            />
-            <PieChart
-              title="SOR closure rate"
-              items={(data.sorStats || []).map((s: any) => ({
-                label: s.observation?.slice(0, 24) || "SOR",
-                value: s.closedCount || 0,
-                color: s.closureRate >= 0.9 ? "#16A34A" : s.closureRate >= 0.5 ? "#D97706" : "#DC2626",
-              })).filter((x: { value: number }) => x.value > 0)}
-            />
-          </div>
           <Card className="overflow-x-auto !p-0 sheet-register register-table-panel progress-sheet-table flex-1 min-h-0 flex flex-col">
             <div className="sheet-register__head shrink-0">Monthly Progress · SOR Log</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
@@ -1442,6 +1552,22 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          <div className="progress-sheet-charts grid md:grid-cols-2 gap-4 shrink-0">
+            <BarChart
+              title="SOR / observation closure"
+              items={data.charts?.sor || []}
+              valueKey="closed"
+              compareKey="open"
+            />
+            <PieChart
+              title="SOR closure rate"
+              items={(data.sorStats || []).map((s: any) => ({
+                label: s.observation?.slice(0, 24) || "SOR",
+                value: s.closedCount || 0,
+                color: s.closureRate >= 0.9 ? "#0F766E" : s.closureRate >= 0.5 ? "#B45309" : "#C0352B",
+              })).filter((x: { value: number }) => x.value > 0)}
+            />
+          </div>
         </div>
       )}
 
@@ -1451,14 +1577,14 @@ export default function ProgressPage() {
             sheetLabel="Hindrance Register Dashboard"
             rowCount={data.hindrances?.length}
             canEdit={canEdit}
-            onAddRow={() => setHindranceModalOpen(true)}
-            onGenerate={undefined}
-            generateLabel="Load SPDC template"
+            onAddRow={canEdit ? () => setHindranceModalOpen(true) : undefined}
+            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
+            generateLabel="Load SPDC templates"
             busy={registerSyncBusy || !!paBusy}
             message={msg}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Hindrance register</div>
+            <div className="sheet-register__head shrink-0">Hindrance register</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
@@ -1533,6 +1659,10 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          <div className="progress-sheet-charts grid sm:grid-cols-2 gap-3 shrink-0">
+            <PieChart title="Hindrance by status" items={data.charts?.hindranceByStatus || []} size={140} />
+            <BarChart title="Hindrance by activity" items={data.charts?.hindranceByActivity || []} />
+          </div>
         </div>
       )}
 
@@ -1543,13 +1673,13 @@ export default function ProgressPage() {
             rowCount={data.risks?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setRiskAddOpen(true) : undefined}
-            onGenerate={undefined}
-            generateLabel="Load SPDC template"
+            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
+            generateLabel="Load SPDC templates"
             busy={registerSyncBusy}
             message={msg || undefined}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Risk register</div>
+            <div className="sheet-register__head shrink-0">Risk register</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[56rem]">
               <thead>
@@ -1618,6 +1748,11 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          {(data.charts?.riskByStatus || []).length > 0 && (
+            <div className="progress-sheet-charts shrink-0">
+              <PieChart title="Risk by status" items={data.charts.riskByStatus} size={140} />
+            </div>
+          )}
         </div>
       )}
 
@@ -1628,13 +1763,13 @@ export default function ProgressPage() {
             rowCount={data.legalApprovals?.length}
             canEdit={canEdit}
             onAddRow={canEdit ? () => setLegalAddOpen(true) : undefined}
-            onGenerate={undefined}
-            generateLabel="Load SPDC template"
+            onGenerate={canEdit ? () => void runResyncRegisters() : undefined}
+            generateLabel="Load SPDC templates"
             busy={registerSyncBusy}
             message={msg || undefined}
           />
           <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Legal Approval Tracker</div>
+            <div className="sheet-register__head shrink-0">Legal Approval Tracker</div>
             <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
             <table className="sheet-register__table w-full text-sm min-w-[1000px]">
               <thead>
@@ -1693,42 +1828,46 @@ export default function ProgressPage() {
             </table>
             </div>
           </Card>
+          {(data.charts?.legalByStatus || []).length > 0 && (
+            <div className="progress-sheet-charts shrink-0">
+              <PieChart title="Legal by status" items={data.charts.legalByStatus} size={140} />
+            </div>
+          )}
         </div>
       )}
 
       {tab === "scurve" && (
-        <div className="space-y-4">
-          <Card className="!p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">Schedule S-curve</p>
-                <h3 className="font-display text-xl text-ink">Planned vs actual — cumulative %</h3>
-                <p className="text-sm text-steel-muted mt-1 max-w-2xl">
-                  Built from MS Project task baseline + % complete. Same weekly rows feed DPR dashboard charts and WPR progress slides.
-                </p>
-              </div>
-              {canEdit && (
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
-                    {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
-                  </Button>
-                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => void downloadMsProjectXml()}>
-                    {msBusy === "xml" ? "Downloading…" : "Download XML"}
-                  </Button>
-                  <input
-                    ref={msImportRef}
-                    type="file"
-                    accept=".xml,application/xml,text/xml"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void importMsProject(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </div>
-              )}
+        <div className="progress-sheet-block space-y-4">
+          <div className="sheet-actions-bar shrink-0">
+            <div className="min-w-0 text-left">
+              <strong className="text-sm text-ink">Schedule S-curve</strong>
+              <p className="text-xs text-steel-muted mt-0.5 max-w-xl">
+                Built from MS Project task baseline + % complete. Same weekly rows feed DPR and WPR.
+              </p>
             </div>
+            {canEdit && (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
+                  {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
+                </Button>
+                <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => void downloadMsProjectXml()}>
+                  {msBusy === "xml" ? "Downloading…" : "Download XML"}
+                </Button>
+                <input
+                  ref={msImportRef}
+                  type="file"
+                  accept=".xml,application/xml,text/xml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void importMsProject(f);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            )}
+          </div>
+          <Card className="!p-5">
             {msProject?.connected && msProject.scurve?.length ? (
               <>
                 <ProgressScurveChart
@@ -1748,111 +1887,99 @@ export default function ProgressPage() {
                 <p className="text-sm text-steel-muted px-4">
                   No S-curve yet — import MS Project XML (File → Save As → XML in MS Project).
                 </p>
-                {canEdit && (
-                  <Button type="button" variant="secondary" disabled={!!msBusy} onClick={() => msImportRef.current?.click()}>
-                    {msBusy === "import" ? "Importing…" : "Import MS Project XML"}
-                  </Button>
-                )}
               </div>
             )}
           </Card>
-          <Card className="!p-4">
-            <p className="text-xs font-semibold text-ink mb-2">Connection to DPR / WPR</p>
-            <ul className="text-sm text-steel-muted space-y-1 list-disc pl-4">
-              <li>MS Project → <code className="text-xs">ProgressPlannedActual</code> (S-curve weekly %)</li>
-              <li>Per-discipline register below → DPR INPUT + WPR discipline charts</li>
-              <li>Tasks → <code className="text-xs">ProgressActivityLine</code> → DPR planned qty hints</li>
-              <li>DPR Maker dashboard charts read published DPR history + BOQ progress</li>
-              <li>WPR Maker progress section reads milestones + hindrance + quality</li>
-            </ul>
-          </Card>
 
-          <Card className="!p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-brand mb-1">DPR-style register</p>
-                <h3 className="font-display text-lg text-ink">Per-discipline S-curve input</h3>
-                <p className="text-sm text-steel-muted mt-1">
-                  Planned baseline (and actual) % by date. The DPR S-curve uses this planned line when it is set; otherwise it uses each
-                  BOQ line's planned start / finish. Upload columns: Date · Planned % · Actual % (optional).
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Select value={scurveDiscipline} onChange={(e) => setScurveDiscipline(e.target.value)} className="!w-auto min-w-[180px]">
-                  {SCURVE_DISCIPLINES.map((d) => (
-                    <option key={d.key} value={d.key}>{d.label}</option>
-                  ))}
-                </Select>
-                {canEdit ? (
-                  <>
-                    <Button type="button" variant="secondary" onClick={() => void generateScurveBaseline()} disabled={scurveBusy}>
-                      Generate from schedule
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={() => scurveImportRef.current?.click()} disabled={scurveBusy}>
-                      Upload baseline (Excel / CSV)
-                    </Button>
-                    <input
-                      ref={scurveImportRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) void importScurveBaseline(f);
-                        e.target.value = "";
-                      }}
-                    />
-                    <Button type="button" onClick={() => setScurveModalOpen(true)} disabled={scurveBusy}>
-                      + Add week
-                    </Button>
-                  </>
-                ) : null}
-              </div>
+          <div className="sheet-actions-bar shrink-0">
+            <div className="min-w-0 text-left">
+              <strong className="text-sm text-ink">Per-discipline S-curve input</strong>
+              <p className="text-xs text-steel-muted mt-0.5 max-w-xl">
+                Planned baseline (and actual) % by date. Upload columns: Date · Planned % · Actual % (optional).
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <Select value={scurveDiscipline} onChange={(e) => setScurveDiscipline(e.target.value)} className="!w-auto min-w-[180px]">
+                {SCURVE_DISCIPLINES.map((d) => (
+                  <option key={d.key} value={d.key}>{d.label}</option>
+                ))}
+              </Select>
+              {canEdit ? (
+                <>
+                  <Button type="button" variant="secondary" onClick={() => void generateScurveBaseline()} disabled={scurveBusy}>
+                    Generate from schedule
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={() => scurveImportRef.current?.click()} disabled={scurveBusy}>
+                    Upload baseline
+                  </Button>
+                  <input
+                    ref={scurveImportRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void importScurveBaseline(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button type="button" onClick={() => setScurveModalOpen(true)} disabled={scurveBusy}>
+                    + Add week
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel overflow-hidden !p-0">
+            <div className="sheet-register__head shrink-0">
+              {SCURVE_DISCIPLINES.find((d) => d.key === scurveDiscipline)?.label || scurveDiscipline} · weekly %
             </div>
             {scurvePoints.length ? (
-              <>
-                <ProgressScurveChart
-                  points={scurvePoints.map((p) => ({
-                    label: p.periodLabel || fmtDate(p.periodDate),
-                    planned: Number(p.plannedPct) || 0,
-                    actual: Number(p.actualPct) || 0,
-                  }))}
-                />
-                <div className="overflow-x-auto mt-4 border border-line rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-sand/40 text-xs uppercase text-steel-muted">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Week</th>
-                        <th className="px-3 py-2 text-right">Planned %</th>
-                        <th className="px-3 py-2 text-right">Actual %</th>
-                        {canEdit ? <th className="px-3 py-2" /> : null}
+              <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible">
+                <table className="sheet-register__table w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-left">Week</th>
+                      <th className="text-right">Planned %</th>
+                      <th className="text-right">Actual %</th>
+                      {canEdit ? <th /> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scurvePoints.map((p) => (
+                      <tr key={p.id} className="border-b border-line/70">
+                        <td className="py-2 px-3">{p.periodLabel || fmtDate(p.periodDate)}</td>
+                        <td className="py-2 pr-3 text-right font-mono">{(Number(p.plannedPct) || 0).toFixed(1)}%</td>
+                        <td className="py-2 pr-3 text-right font-mono">{(Number(p.actualPct) || 0).toFixed(1)}%</td>
+                        {canEdit ? (
+                          <td className="py-2 px-3 text-right">
+                            <button type="button" className="text-xs text-danger underline" disabled={scurveBusy} onClick={() => void deleteScurvePoint(p.id)}>
+                              Delete
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {scurvePoints.map((p) => (
-                        <tr key={p.id} className="border-t border-line/60">
-                          <td className="px-3 py-2">{p.periodLabel || fmtDate(p.periodDate)}</td>
-                          <td className="px-3 py-2 text-right font-mono">{(Number(p.plannedPct) || 0).toFixed(1)}%</td>
-                          <td className="px-3 py-2 text-right font-mono">{(Number(p.actualPct) || 0).toFixed(1)}%</td>
-                          {canEdit ? (
-                            <td className="px-3 py-2 text-right">
-                              <button type="button" className="text-xs text-danger underline" disabled={scurveBusy} onClick={() => void deleteScurvePoint(p.id)}>
-                                Delete
-                              </button>
-                            </td>
-                          ) : null}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <p className="text-sm text-steel-muted py-6 text-center border border-dashed border-line rounded-lg">
-                No rows for {scurveDiscipline}. Add weekly planned / actual % or import MS Project for overall curve.
+              <p className="text-sm text-steel-muted py-6 text-center px-4">
+                No rows for {scurveDiscipline}. Add weekly planned / actual % above or import MS Project.
               </p>
             )}
           </Card>
+          {scurvePoints.length > 0 && (
+            <div className="progress-sheet-charts shrink-0 rounded border border-line bg-paper p-4">
+              <ProgressScurveChart
+                points={scurvePoints.map((p) => ({
+                  label: p.periodLabel || fmtDate(p.periodDate),
+                  planned: Number(p.plannedPct) || 0,
+                  actual: Number(p.actualPct) || 0,
+                }))}
+              />
+            </div>
+          )}
 
           <RegisterEntryModal
             open={scurveModalOpen}
@@ -1875,84 +2002,162 @@ export default function ProgressPage() {
       {tab === "msproject" && (
         <div className="progress-sheet-block space-y-3">
           <ReferenceSheetToolbar
-            sheetLabel="MS Project task register"
-            rowCount={msProject?.tasks?.length}
+            sheetLabel="Programme & design (WPR schedule)"
+            rowCount={(data.scheduleTasks || []).length || msProject?.tasks?.length}
             canEdit={canEdit}
-            onUpload={
+            onUpload={canEdit ? (f) => void importProgrammeFile(f) : undefined}
+            uploadAccept=".xml,.pptx,application/xml,text/xml,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            uploadLabel="Upload XML / PPTX"
+            uploadHint="MS Project: File → Save As → XML. Or upload a WPR deck PPTX with WBS / Task Name tables. Maintain % complete here so WPR schedule slides stay current."
+            addKinds={
               canEdit
-                ? async (file) => {
-                    if (!id) return;
-                    setMsBusy("import");
-                    try {
-                      const fd = new FormData();
-                      fd.append("file", file);
-                      const out = await api<{ taskCount: number; scurvePoints: number }>(
-                        `/api/progress/${id}/ms-project/import`,
-                        { method: "POST", token, body: fd }
-                      );
-                      setMsg(`MS Project imported — ${out.taskCount} tasks · ${out.scurvePoints} S-curve points`);
-                      await Promise.all([load(), loadMsProject()]);
-                    } catch (e) {
-                      setMsg(e instanceof Error ? e.message : "MS Project import failed");
-                    } finally {
-                      setMsBusy(null);
-                    }
+                ? [
+                    { key: "schedule", label: "+ Programme task" },
+                    { key: "design", label: "+ Design status" },
+                  ]
+                : undefined
+            }
+            onAddKind={
+              canEdit
+                ? (key) => {
+                    if (key === "design") setDesignAddOpen(true);
+                    else setSchedAddOpen(true);
                   }
                 : undefined
             }
-            uploadHint="Import File → Save As → XML from Microsoft Project."
+            onGenerate={canEdit ? () => void loadReferenceProgramme() : undefined}
+            generateLabel="Load reference WPR programme"
             onDownloadCsv={() => void downloadMsProjectXml()}
             busy={!!msBusy}
             message={msg}
           />
-          <details className="rounded border border-line bg-paper shrink-0 text-sm">
-            <summary className="cursor-pointer px-3 py-2 font-semibold text-brand-dark">Import help</summary>
-            <div className="px-3 pb-3 text-steel-muted">
-              Import <strong>File → Save As → XML</strong> from Microsoft Project. MPP binary is not supported.
+          <div className="progress-sheet-filters flex flex-wrap items-center gap-2 shrink-0">
+            {(data.scheduleTasks || []).length > 0 && (
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setScheduleOpenOnly((v) => !v)}>
+                {scheduleOpenOnly ? "Show full programme" : "Show open and summary"}
+              </Button>
+            )}
+            <span className="text-xs text-steel-muted">
+              Programme % + design status → WPR · S-curve from XML → DPR / WPR charts
+            </span>
+          </div>
+
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel overflow-hidden !p-0">
+            <div className="sheet-register__head shrink-0">Design status — % carried into each WPR</div>
+            <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible">
+              <table className="sheet-register__table w-full text-sm min-w-[40rem]">
+                <thead>
+                  <tr>
+                    <th>Discipline</th>
+                    <th>Status %</th>
+                    <th>Planned end</th>
+                    <th>Remark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.designStatuses || []).map((d: any) => (
+                    <tr key={d.id} className="border-b border-line/60">
+                      <td className="py-2 px-3">
+                        <RegisterSheetCell value={d.discipline} disabled={!canEdit} onCommit={(v) => void patchDesign(d.id, { discipline: v })} />
+                      </td>
+                      <td className="py-2 pr-3 w-24">
+                        <RegisterSheetCell
+                          type="number"
+                          value={Math.round((Number(d.pctComplete) || 0) * 1000) / 10}
+                          disabled={!canEdit}
+                          onCommit={(v) => void patchDesign(d.id, { pctComplete: Number(v) })}
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <RegisterSheetCell
+                          type="date"
+                          value={isoDay(d.plannedEnd)}
+                          disabled={!canEdit}
+                          onCommit={(v) => void patchDesign(d.id, { plannedEnd: v || null })}
+                        />
+                      </td>
+                      <td className="py-2 px-3">
+                        <RegisterSheetCell value={d.remark} disabled={!canEdit} onCommit={(v) => void patchDesign(d.id, { remark: v })} />
+                      </td>
+                    </tr>
+                  ))}
+                  {!(data.designStatuses || []).length && <RegisterEmptyRow colSpan={4} />}
+                </tbody>
+              </table>
             </div>
-          </details>
-          <input
-              ref={msImportRef}
-              type="file"
-              accept=".xml,application/xml,text/xml"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f && id) {
-                  void (async () => {
-                    setMsBusy("import");
-                    try {
-                      const fd = new FormData();
-                      fd.append("file", f);
-                      const out = await api<{ taskCount: number; scurvePoints: number }>(
-                        `/api/progress/${id}/ms-project/import`,
-                        { method: "POST", token, body: fd }
-                      );
-                      setMsg(`MS Project imported — ${out.taskCount} tasks`);
-                      await Promise.all([load(), loadMsProject()]);
-                    } catch (err) {
-                      setMsg(err instanceof Error ? err.message : "Import failed");
-                    } finally {
-                      setMsBusy(null);
-                    }
-                  })();
-                }
-              e.target.value = "";
-            }}
-          />
-          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-line bg-sand/50 text-sm font-semibold shrink-0">Task register · % complete · baseline</div>
-            {msProject?.tasks?.length ? (
+          </Card>
+
+          <Card padding={false} className="sheet-register register-table-panel spdc-register-panel flex-1 min-h-0 flex flex-col overflow-hidden !p-0">
+            <div className="sheet-register__head shrink-0">
+              Programme
+              {(data.scheduleTasks || []).length ? ` · ${(data.scheduleTasks || []).length} tasks` : ""}
+              {" "}— dates and % complete feed WPR schedule slides
+            </div>
+            {(data.scheduleTasks || []).length ? (
+              <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
+                <table className="sheet-register__table w-full text-sm min-w-[64rem]">
+                  <thead>
+                    <tr>
+                      <th>WBS</th>
+                      <th>Task</th>
+                      <th>Start</th>
+                      <th>Finish</th>
+                      <th>Baseline finish</th>
+                      <th>Actual start</th>
+                      <th>Actual finish</th>
+                      <th>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.scheduleTasks || [])
+                      .slice()
+                      .sort((a: any, b: any) => String(a.wbs).localeCompare(String(b.wbs), undefined, { numeric: true }))
+                      .filter((t: any) => !scheduleOpenOnly || t.summary || Number(t.outlineLevel) <= 2 || Number(t.pctComplete) < 0.995)
+                      .map((t: any) => (
+                      <tr key={t.id} className="border-b border-line/60">
+                        <td className="py-1.5 px-2 font-mono text-xs whitespace-nowrap">{t.wbs}</td>
+                        <td className="py-1.5 pr-2 max-w-[16rem] text-xs" style={{ paddingLeft: `${Math.min(6, Number(t.outlineLevel) || 1) * 8}px` }}>
+                          <RegisterSheetCell value={t.name} disabled={!canEdit} onCommit={(v) => void patchSchedule(t.id, { name: v })} />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <RegisterSheetCell type="date" value={isoDay(t.start)} disabled={!canEdit} onCommit={(v) => void patchSchedule(t.id, { start: v || null })} />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <RegisterSheetCell type="date" value={isoDay(t.finish)} disabled={!canEdit} onCommit={(v) => void patchSchedule(t.id, { finish: v || null })} />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <RegisterSheetCell type="date" value={isoDay(t.baselineFinish)} disabled={!canEdit} onCommit={(v) => void patchSchedule(t.id, { baselineFinish: v || null })} />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <RegisterSheetCell type="date" value={isoDay(t.actualStart)} disabled={!canEdit} onCommit={(v) => void patchSchedule(t.id, { actualStart: v || null })} />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <RegisterSheetCell type="date" value={isoDay(t.actualFinish)} disabled={!canEdit} onCommit={(v) => void patchSchedule(t.id, { actualFinish: v || null })} />
+                        </td>
+                        <td className="py-1.5 px-2 w-16">
+                          <RegisterSheetCell
+                            type="number"
+                            value={Math.round((Number(t.pctComplete) || 0) * 1000) / 10}
+                            disabled={!canEdit}
+                            onCommit={(v) => void patchSchedule(t.id, { pctComplete: Number(v) })}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : msProject?.tasks?.length ? (
               <div className="sheet-register__scroll register-sheet-viewport scrollbars-visible flex-1 min-h-0">
                 <table className="sheet-register__table w-full text-sm min-w-[48rem]">
                   <thead>
-                    <tr className="text-left text-[10px] uppercase tracking-wider text-steel-muted border-b border-line">
-                      <th className="py-2 pr-3">WBS</th>
-                      <th className="py-2 pr-3">Activity</th>
-                      <th className="py-2 pr-3">Plan start</th>
-                      <th className="py-2 pr-3">Plan finish</th>
-                      <th className="py-2 pr-3">Days</th>
-                      <th className="py-2 px-3">% complete</th>
+                    <tr>
+                      <th>WBS</th>
+                      <th>Activity</th>
+                      <th>Plan start</th>
+                      <th>Plan finish</th>
+                      <th>Days</th>
+                      <th>% complete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1974,11 +2179,43 @@ export default function ProgressPage() {
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-steel-muted py-8 text-center">
-                No MS Project tasks — import client XML from Microsoft Project.
+              <p className="text-sm text-steel-muted py-8 text-center px-4">
+                No programme yet. Use <strong>+ Programme task</strong>, upload MS Project XML / WPR PPTX, or load the reference WPR programme.
               </p>
             )}
           </Card>
+
+          <RegisterEntryModal
+            open={schedAddOpen}
+            title="Add programme task"
+            onClose={() => setSchedAddOpen(false)}
+            onSave={() => void addScheduleTask()}
+            saving={msBusy === "import"}
+            saveLabel="Add task"
+          >
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Input required placeholder="WBS (e.g. 1.2.3)" value={schedForm.wbs} onChange={(e) => setSchedForm({ ...schedForm, wbs: e.target.value })} />
+              <Input required placeholder="Task name" value={schedForm.name} onChange={(e) => setSchedForm({ ...schedForm, name: e.target.value })} />
+              <Input type="date" value={schedForm.start} onChange={(e) => setSchedForm({ ...schedForm, start: e.target.value })} />
+              <Input type="date" value={schedForm.finish} onChange={(e) => setSchedForm({ ...schedForm, finish: e.target.value })} />
+              <Input type="number" step="0.1" placeholder="% complete" value={schedForm.pctComplete} onChange={(e) => setSchedForm({ ...schedForm, pctComplete: e.target.value })} />
+            </div>
+          </RegisterEntryModal>
+          <RegisterEntryModal
+            open={designAddOpen}
+            title="Add design status"
+            onClose={() => setDesignAddOpen(false)}
+            onSave={() => void addDesignStatus()}
+            saving={msBusy === "import"}
+            saveLabel="Add row"
+          >
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Input required className="sm:col-span-2" placeholder="Discipline (e.g. Architecture)" value={designForm.discipline} onChange={(e) => setDesignForm({ ...designForm, discipline: e.target.value })} />
+              <Input type="number" step="0.1" placeholder="% complete" value={designForm.pctComplete} onChange={(e) => setDesignForm({ ...designForm, pctComplete: e.target.value })} />
+              <Input type="date" value={designForm.plannedEnd} onChange={(e) => setDesignForm({ ...designForm, plannedEnd: e.target.value })} />
+              <Input className="sm:col-span-2" placeholder="Remark" value={designForm.remark} onChange={(e) => setDesignForm({ ...designForm, remark: e.target.value })} />
+            </div>
+          </RegisterEntryModal>
         </div>
       )}
 
@@ -2239,8 +2476,8 @@ function ProgressScurveChart({ points }: { points: { label: string; planned: num
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full" role="img" aria-label="S-curve planned vs actual">
         <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
         <line x1={pad} y1={pad} x2={pad} y2={h - pad} stroke="var(--color-line,#d5dadd)" />
-        <path d={planned} fill="none" stroke="#2563EB" strokeWidth="2.5" />
-        <path d={actual} fill="none" stroke="#0F766E" strokeWidth="2.5" />
+        <path d={planned} fill="none" stroke="var(--chart-3, var(--color-mark, #C45C26))" strokeWidth="2.5" />
+        <path d={actual} fill="none" stroke="var(--chart-1, var(--color-brand, #0B6A78))" strokeWidth="2.5" />
         {[0, 25, 50, 75, 100].filter((v) => v <= maxY).map((v) => (
           <g key={v}>
             <line x1={pad - 4} y1={y(v)} x2={w - pad} y2={y(v)} stroke="var(--color-line,#e8eaed)" strokeDasharray="4 4" />
@@ -2249,8 +2486,14 @@ function ProgressScurveChart({ points }: { points: { label: string; planned: num
         ))}
       </svg>
       <div className="flex gap-4 text-[11px] text-steel-muted mt-2">
-        <span><span className="inline-block w-3 h-0.5 bg-[#2563EB] align-middle mr-1" />Planned (baseline)</span>
-        <span><span className="inline-block w-3 h-0.5 bg-[#0F766E] align-middle mr-1" />Actual (% complete)</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-3 h-0.5 align-middle" style={{ background: "var(--chart-3, var(--color-mark, #C45C26))" }} />
+          Planned (baseline)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-3 h-0.5 align-middle" style={{ background: "var(--chart-1, var(--color-brand, #0B6A78))" }} />
+          Actual (% complete)
+        </span>
       </div>
     </div>
   );

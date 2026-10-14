@@ -58,6 +58,8 @@ export async function seedWprSections(
     invoiceTrackers,
     sorStats,
     checklistFills,
+    scheduleTasks,
+    designStatuses,
   ] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId } }),
     prisma.projectMember.findMany({
@@ -151,7 +153,7 @@ export async function seedWprSections(
     prisma.certificateOfPayment.findMany({ where: { projectId }, take: 20, orderBy: { certificateDate: "desc" } }),
     prisma.financeMaterialInvoice.findMany({ where: { projectId }, take: 30, orderBy: { invoiceDate: "desc" } }),
     prisma.progressValueAddition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 40 }),
-    prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 40 }),
+    prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: [{ lineKind: "asc" }, { srNo: "asc" }], take: 80 }),
     prisma.siteMaterialStock.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 40 }),
     prisma.progressPurchaseRequisition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
     prisma.progressInvoiceTracker.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
@@ -164,6 +166,8 @@ export async function seedWprSections(
       },
       include: { assignment: { include: { template: { select: { checklistType: true } } } } },
     }),
+    prisma.progressScheduleTask.findMany({ where: { projectId } }),
+    prisma.progressDesignStatus.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
   ]);
 
   // Only real image files can be embedded in the PPTX (placeholder .txt rows and PDFs render as empty boxes).
@@ -320,26 +324,27 @@ export async function seedWprSections(
 
   const hindranceSec: WprSection = {
     title: DEFAULT_WPR_TITLES.hindrance,
-    headers: ["Sr", "Description", "Location", "Category", "Days impact", "Status"],
+    headers: ["Sr", "Description", "Location", "Occurred", "Baseline start", "Schedule impact (days)", "Status"],
     rows: hindrance.map((h: any, i: number) => [
       i + 1,
       h.description || "",
       h.location || "",
-      h.category || "",
-      h.daysImpacted || 0,
+      h.occurredAt ? isoDate(h.occurredAt) : "",
+      h.baselineStart ? isoDate(h.baselineStart) : "",
+      h.scheduleImpact || h.daysImpacted || 0,
       h.status || "",
     ]),
   };
 
   const riskSec: WprSection = {
     title: DEFAULT_WPR_TITLES.risk,
-    headers: ["Code", "Category", "Name", "Probability", "Consequence", "Severity", "Status"],
+    headers: ["Code", "Name", "Raised", "Target", "Owner", "Severity", "Status"],
     rows: risk.map((r: any) => [
       r.code || "",
-      r.category || "",
       r.name || "",
-      r.probability || 0,
-      r.consequence || 0,
+      r.dateLastUpdated ? isoDate(r.dateLastUpdated) : "",
+      r.targetDate ? isoDate(r.targetDate) : "",
+      r.riskOwner || "",
       r.severity || 0,
       r.status || "",
     ]),
@@ -381,27 +386,51 @@ export async function seedWprSections(
     if (d.isPublished) cur.published += 1;
     designDisciplines.set(disc, cur);
   }
+  const pctLabel = (n: number) => `${Math.round((Number(n) || 0) * 1000) / 10}%`;
   const designStatus: WprSection = {
     title: DEFAULT_WPR_TITLES.designStatus,
-    headers: ["Sr", "Discipline", "Status", "Published %", "Remark"],
+    headers: ["Sr", "Discipline", "Status %", "Planned end", "Remark"],
     rows:
-      designDisciplines.size > 0
-        ? [...designDisciplines.entries()].map(([disc, v], i) => [
-            i + 1,
-            disc,
-            v.published >= v.total ? "Complete" : "In progress",
-            v.total ? `${Math.round((100 * v.published) / v.total)}%` : "—",
-            `${v.published}/${v.total} sheets GFC`,
+      designStatuses.length > 0
+        ? designStatuses.map((d: any) => [
+            d.srNo || "",
+            d.discipline || "",
+            pctLabel(d.pctComplete),
+            d.plannedEnd ? isoDate(d.plannedEnd) : "",
+            d.remark || "",
           ])
-        : submittals.slice(0, 5).map((s: any, i: number) => [i + 1, s.submittalType || "Design", s.status || "Under Review", "", s.title || ""]),
+        : designDisciplines.size > 0
+          ? [...designDisciplines.entries()].map(([disc, v], i) => [
+              i + 1,
+              disc,
+              v.total ? `${Math.round((100 * v.published) / v.total)}%` : "—",
+              "",
+              `${v.published}/${v.total} sheets GFC`,
+            ])
+          : submittals.slice(0, 5).map((s: any, i: number) => [i + 1, s.submittalType || "Design", "", "", s.title || s.status || ""]),
+    notes: designStatuses.length ? "Design % as entered on the project — carried forward each week." : "Published drawing ratio until a design-status row is entered.",
   };
 
+  const statusLines = procurementLines.filter((r: any) => r.lineKind === "status");
+  const trackerLines = procurementLines.filter((r: any) => r.lineKind !== "status");
   const procurement: WprSection = {
     title: DEFAULT_WPR_TITLES.procurement,
-    headers: ["Sr", "Work package", "Item", "Stakeholder", "Vendor appointed", "Target inquiry", "Priority"],
-    rows:
-      procurementLines.length > 0
-        ? procurementLines.map((r: any) => [
+    headers: statusLines.length
+      ? ["Code", "Package", "Location", "Design %", "Inquiry start", "Inquiry close", "Vendor onboard", "Decision"]
+      : ["Sr", "Work package", "Item", "Stakeholder", "Vendor appointed", "Target inquiry", "Priority"],
+    rows: statusLines.length
+      ? statusLines.map((r: any) => [
+          r.packageCode || r.srNo || "",
+          r.workPackage || "",
+          r.location || "",
+          pctLabel(r.designPct),
+          r.targetInquiryDate ? isoDate(r.targetInquiryDate) : "",
+          r.inquiryCloseDate ? isoDate(r.inquiryCloseDate) : "",
+          r.vendorAppointmentDate ? isoDate(r.vendorAppointmentDate) : "",
+          r.decisionStatus || (r.vendorAppointed ? "Yes" : "No"),
+        ])
+      : trackerLines.length > 0
+        ? trackerLines.map((r: any) => [
             r.srNo || "",
             r.workPackage || "",
             (r.itemDescription || "").slice(0, 80),
@@ -421,21 +450,45 @@ export async function seedWprSections(
               "",
             ])
           : [[1, "Civil & Structural", "Main contractor package", "Client", "No", "", 1]],
-    notes: procurementLines.length ? "Procurement tracker — inquiry float & vendor appointment." : "Import WPR client pack or add POs under Finance.",
+    notes: statusLines.length
+      ? "Procurement status matrix — design % and vendor dates carried on the project."
+      : trackerLines.length
+        ? "Procurement tracker — inquiry float and vendor appointment."
+        : "Import WPR client pack or add POs under Finance.",
   };
 
-  const milestonesSec: WprSection = {
-    title: DEFAULT_WPR_TITLES.milestones,
-    headers: ["Code", "Activity", "Plan days", "Actual days", "Variance", "Status"],
-    rows: milestones.map((m: any) => [
-      m.code || "",
-      m.activity || "",
-      m.plannedDays || 0,
-      m.actualDays || 0,
-      m.varianceDays || 0,
-      m.status || "",
-    ]),
-  };
+  const scheduleForWeek = scheduleRowsForWeek(scheduleTasks, weekStart, weekEnd);
+  const milestonesSec: WprSection = scheduleForWeek.length
+    ? {
+        title: DEFAULT_WPR_TITLES.milestones,
+        notes: `${scheduleTasks.length} programme tasks on the project. This week prints summary rows plus anything still open or dated in the week. Edit dates on Progress → MS Project; the next WPR picks them up.`,
+        headers: ["WBS", "Task", "Start", "Finish", "Baseline finish", "Actual start", "Actual finish", "% complete"],
+        rows: scheduleForWeek.map((t) => [
+          t.wbs,
+          t.name,
+          t.start ? isoDate(t.start) : "",
+          t.finish ? isoDate(t.finish) : "",
+          t.baselineFinish ? isoDate(t.baselineFinish) : "",
+          t.actualStart ? isoDate(t.actualStart) : "",
+          t.actualFinish ? isoDate(t.actualFinish) : "",
+          pctLabel(t.pctComplete),
+        ]),
+      }
+    : {
+        title: DEFAULT_WPR_TITLES.milestones,
+        headers: ["Code", "Activity", "Plan start", "Plan end", "Plan days", "Actual days", "Variance", "% complete", "Status"],
+        rows: milestones.map((m: any) => [
+          m.code || "",
+          m.activity || "",
+          m.plannedStart ? isoDate(m.plannedStart) : "",
+          m.plannedEnd ? isoDate(m.plannedEnd) : "",
+          m.plannedDays || 0,
+          m.actualDays || 0,
+          m.varianceDays || 0,
+          pctLabel(m.pctComplete),
+          m.status || "",
+        ]),
+      };
 
   const diaryManpowerRows =
     weeklyDiaries.length > 0
@@ -453,7 +506,8 @@ export async function seedWprSections(
           return [isoDate(snap.logDate), total, "", "", ""];
         });
 
-  const tradeManpowerRows = progressManpower.map((m: any) => [
+  const weekManpower = manpowerForWeek(progressManpower, weekStart, weekEnd);
+  const tradeManpowerRows = weekManpower.map((m: any) => [
     m.trade || "",
     m.required || 0,
     m.available || 0,
@@ -502,24 +556,26 @@ export async function seedWprSections(
   const cashflowOnly = cashflow.filter(
     (c: { packageName?: string }) => !String(c.packageName || "").toLowerCase().includes("s-curve")
   );
+  let plannedCum = 0;
+  let actualCum = 0;
   const cashflowRows =
     cashflowOnly.length > 0
-      ? cashflowOnly.map((c: any) => [
-          c.periodLabel || "",
-          c.packageName || "",
-          c.plannedAmount || 0,
-          c.actualAmount || 0,
-          (c.actualAmount || 0) - (c.plannedAmount || 0),
-        ])
+      ? cashflowOnly.map((c: any) => {
+          const planned = Number(c.plannedAmount) || 0;
+          const actual = Number(c.actualAmount) || 0;
+          plannedCum += planned;
+          actualCum += actual;
+          return [c.periodLabel || "", c.packageName || "", planned, actual, actual - planned, plannedCum, actualCum];
+        })
       : [];
 
   const cashflowSec: WprSection = {
     title: DEFAULT_WPR_TITLES.cashflow,
     notes:
       cashflowOnly.length > 0
-        ? "Monthly / period cashflow (₹) from Cost — separate from S-curve % and weekly activity qty."
+        ? "Monthly cashflow (₹). Planned cumulative and actual cumulative run from the first period so the next week continues the same totals."
         : "Import Cost cashflow or sync from Progress. Regenerate applies demo fill if empty.",
-    headers: ["Period", "Package", "Planned", "Actual", "Variance"],
+    headers: ["Period", "Package", "Planned", "Actual", "Variance", "Planned cumulative", "Actual cumulative"],
     rows: cashflowRows,
   };
 
@@ -527,7 +583,7 @@ export async function seedWprSections(
   const quality: WprSection = {
     title: DEFAULT_WPR_TITLES.quality,
     headers: liveQuality.length
-      ? ["Sr", "Observation", "Raised this week", "Total", "Open", "Closed", "Closure %"]
+      ? ["Sr", "Observation", "Up to previous week", "Raised this week", "Cumulative", "Open", "Closed", "Closure %"]
       : sorStats.length
       ? ["Sr", "Observation", "Total", "Open", "Closed"]
       : ["Week", "Activity", "Discipline", "Contractor", "PMC", "Client", "Status"],
@@ -535,6 +591,7 @@ export async function seedWprSections(
       ? liveQuality.map((q, i) => [
           i + 1,
           q.label,
+          Math.max(0, q.total - q.raisedThisWeek),
           q.raisedThisWeek,
           q.total,
           q.open,
@@ -671,6 +728,8 @@ export async function seedWprSections(
       a.srNo || "",
       a.tower || "",
       a.activity || "",
+      a.plannedStart ? isoDate(a.plannedStart) : "",
+      a.plannedEnd ? isoDate(a.plannedEnd) : "",
       a.unit || "",
       a.boqQty || 0,
       a.gfcQty || 0,
@@ -688,7 +747,7 @@ export async function seedWprSections(
     let sr = activityLines.length;
     for (const r of pvaRollup.values()) {
       if (matched.has(r) || !r.weekQty) continue;
-      pvaActivityRows.push([++sr, "", r.description, r.unit || "", "", "", round3(r.tillDate - r.weekQty), "", r.weekQty, r.tillDate, "", ""]);
+      pvaActivityRows.push([++sr, "", r.description, "", "", r.unit || "", "", "", round3(r.tillDate - r.weekQty), "", r.weekQty, r.tillDate, "", ""]);
     }
   }
 
@@ -702,7 +761,7 @@ export async function seedWprSections(
         : "Import Planned Vs. Actual Dashboard.xlsx under Progress → Planned vs Actual.",
     headers:
       pvaActivityRows.length > 0
-        ? ["Sr", "Tower", "Activity", "Unit", "BOQ", "GFC", "Executed till prev week", "Wk plan", "Wk act", "Executed till date", "Balance", "% complete"]
+        ? ["Sr", "Tower", "Activity", "Plan start", "Plan end", "Unit", "BOQ", "GFC", "Till previous week", "This week plan", "This week actual", "Cumulative", "Balance", "% complete"]
         : ["Period", "Package", "Planned %", "Actual %", "Variance %", "Planned ₹", "Actual ₹"],
     rows: pvaActivityRows.length > 0 ? pvaActivityRows : pvaCashRows,
   };
@@ -980,6 +1039,61 @@ export function overlayChecklistFillKpis(
     ? { ...sections.drawingRegister, notes: [sections.drawingRegister.notes, fills.drawing ? `${fills.drawing} Drawing Check fill(s).` : ""].filter(Boolean).join(" ") }
     : undefined;
   return { ...sections, projectDashboard: dashboard, quality, safety, drawingRegister };
+}
+
+function wbsCompare(a: string, b: string) {
+  const as = a.split(".").map((n) => Number(n) || 0);
+  const bs = b.split(".").map((n) => Number(n) || 0);
+  const len = Math.max(as.length, bs.length);
+  for (let i = 0; i < len; i++) {
+    const d = (as[i] || 0) - (bs[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+function day(d: Date | null | undefined) {
+  if (!d) return null;
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function overlapsWeek(start: Date | null | undefined, finish: Date | null | undefined, weekStart: Date, weekEnd: Date) {
+  const s = day(start) || day(finish);
+  const f = day(finish) || day(start);
+  if (!s || !f) return false;
+  const ws = day(weekStart)!;
+  const we = day(weekEnd)!;
+  return s <= we && f >= ws;
+}
+
+/** Summary rows, anything not finished, and tasks whose dates sit in this week. */
+function scheduleRowsForWeek(tasks: any[], weekStart: Date, weekEnd: Date) {
+  const sorted = [...tasks].sort((a, b) => wbsCompare(String(a.wbs || ""), String(b.wbs || "")));
+  const picked = sorted.filter((t) => {
+    const pct = Number(t.pctComplete) || 0;
+    const open = pct < 0.995;
+    const shallow = Boolean(t.summary) || Number(t.outlineLevel) <= 2;
+    const live = overlapsWeek(t.start, t.finish, weekStart, weekEnd);
+    return open || shallow || live;
+  });
+  return picked.length ? picked : sorted.slice(0, 60);
+}
+
+function manpowerForWeek(rows: any[], weekStart: Date, weekEnd: Date) {
+  const dated = rows.filter((m) => m.weekEnding);
+  if (!dated.length) return rows;
+  const inWeek = dated.filter((m) => {
+    const d = day(m.weekEnding);
+    return d && d >= day(weekStart)! && d <= day(weekEnd)!;
+  });
+  if (inWeek.length) return inWeek;
+  const prior = dated.filter((m) => day(m.weekEnding)! <= day(weekEnd)!);
+  const pool = prior.length ? prior : dated;
+  const latest = pool.reduce((a, b) => (day(a.weekEnding)! > day(b.weekEnding)! ? a : b));
+  const key = isoDate(latest.weekEnding);
+  return pool.filter((m) => isoDate(m.weekEnding) === key);
 }
 
 function avgLogged(days: { manpower: number; logged: boolean }[]): number {

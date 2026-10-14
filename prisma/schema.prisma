@@ -138,6 +138,8 @@ model Project {
   legalApprovals          ProgressLegalApproval[]
   manpowerRows            ProgressManpower[]
   activityLines           ProgressActivityLine[]
+  scheduleTasks           ProgressScheduleTask[]
+  designStatuses          ProgressDesignStatus[]
   scurvePoints            ProgressScurvePoint[]
   sorStats                ProgressSorStat[]
   valueAdditions          ProgressValueAddition[]
@@ -2061,6 +2063,8 @@ model ProgressRisk {
   contingencyPlan   String?   @db.Text
   trackingComments  String?
   dateLastUpdated   DateTime?
+  /// Client risk sheet "Target date"
+  targetDate        DateTime?
   status            String    @default("Open")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @default(now()) @updatedAt
@@ -2130,16 +2134,73 @@ model ProgressLegalApproval {
  * Weekly manpower planned vs actual (Shortage chart)
  */
 model ProgressManpower {
-  id          String @id @default(cuid())
+  id          String    @id @default(cuid())
   projectId   String
   trade       String
-  required    Float  @default(0)
-  available   Float  @default(0)
-  shortage    Float  @default(0)
-  shortagePct Float  @default(0)
-  rank        Int    @default(0)
+  required    Float     @default(0)
+  available   Float     @default(0)
+  shortage    Float     @default(0)
+  shortagePct Float     @default(0)
+  rank        Int       @default(0)
+  /// Week this headcount belongs to (week-ending date). Null = undated snapshot.
+  weekEnding  DateTime?
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, weekEnding])
+}
+
+/**
+ * Contractor programme — baseline and current dates, kept so each WPR can
+ * print the open tasks and the cumulative % without re-pasting the deck.
+ */
+model ProgressScheduleTask {
+  id             String    @id @default(cuid())
+  projectId      String
+  wbs            String
+  name           String    @db.Text
+  outlineLevel   Int       @default(1)
+  summary        Boolean   @default(false)
+  durationDays   Float     @default(0)
+  start          DateTime?
+  finish         DateTime?
+  baselineStart  DateTime?
+  baselineFinish DateTime?
+  actualStart    DateTime?
+  actualFinish   DateTime?
+  /// 0–1
+  pctComplete    Float     @default(0)
+  predecessors   String?   @db.Text
+  source         String    @default("WPR")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, wbs])
+  @@index([projectId])
+}
+
+/**
+ * Design status as entered on the WPR (discipline % and remark), not only
+ * the published-drawing ratio.
+ */
+model ProgressDesignStatus {
+  id          String    @id @default(cuid())
+  projectId   String
+  srNo        Int       @default(0)
+  discipline  String
+  /// 0–1
+  pctComplete Float     @default(0)
+  plannedEnd  DateTime?
+  remark      String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, discipline])
+  @@index([projectId])
 }
 
 /**
@@ -2231,12 +2292,21 @@ model ProgressProcurementLine {
   priorityLevel          Int       @default(1)
   vendorAppointed        Boolean   @default(false)
   remarks                String?   @db.Text
+  /// tracker = inquiry float list · status = package matrix (design % and decision)
+  lineKind               String    @default("tracker")
+  packageCode            String?
+  location               String?
+  /// 0–1 design completion on the procurement status matrix
+  designPct              Float     @default(0)
+  inquiryCloseDate       DateTime?
+  decisionStatus         String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([projectId, lineKind])
 }
 
 /**

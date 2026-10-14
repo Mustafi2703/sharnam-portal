@@ -28,15 +28,15 @@ const LIGHT: Record<string, string> = {
   "--color-kpi-1": "#0B6A78",
   "--color-kpi-2": "#C45C26",
   "--color-kpi-3": "#2563EB",
-  "--color-kpi-4": "#7C3AED",
+  "--color-kpi-4": "#64748B",
   "--color-kpi-5": "#059669",
-  "--color-kpi-6": "#DB2777",
+  "--color-kpi-6": "#B45309",
   "--chart-1": "#0B6A78",
   "--chart-2": "#C45C26",
   "--chart-3": "#2563EB",
-  "--chart-4": "#7C3AED",
+  "--chart-4": "#64748B",
   "--chart-5": "#059669",
-  "--chart-6": "#DB2777",
+  "--chart-6": "#B45309",
   "--wd-chrome": "#FFFFFF",
   "--wd-chrome-border": "#D5DADD",
   "--side-bg": "#F7F9FB",
@@ -79,15 +79,15 @@ const DARK: Record<string, string> = {
   "--color-kpi-1": "#2EC4B6",
   "--color-kpi-2": "#F0783A",
   "--color-kpi-3": "#60A5FA",
-  "--color-kpi-4": "#A78BFA",
+  "--color-kpi-4": "#94A3B8",
   "--color-kpi-5": "#34D399",
-  "--color-kpi-6": "#F472B6",
+  "--color-kpi-6": "#FBBF24",
   "--chart-1": "#2EC4B6",
   "--chart-2": "#F0783A",
   "--chart-3": "#60A5FA",
-  "--chart-4": "#A78BFA",
+  "--chart-4": "#94A3B8",
   "--chart-5": "#34D399",
-  "--chart-6": "#F472B6",
+  "--chart-6": "#FBBF24",
   "--wd-chrome": "#10141A",
   "--wd-chrome-border": "#3A4554",
   "--side-bg": "#0E1218",
@@ -204,9 +204,9 @@ export function applyModuleAccent(accent: string, soft: string) {
   const glow = dark ? mixHex(accent, "#ffffff", 0.28) : mixHex(accent, "#ffffff", 0.35);
   const kpi2 = dark ? "#F0783A" : "#C45C26";
   const kpi3 = mixHex(accent, "#2563EB", 0.45);
-  const kpi4 = mixHex(accent, "#7C3AED", 0.4);
+  const kpi4 = mixHex(accent, "#64748B", 0.4);
   const kpi5 = mixHex(accent, "#059669", 0.35);
-  const kpi6 = mixHex(accent, "#DB2777", 0.4);
+  const kpi6 = mixHex(accent, "#C45C26", 0.45);
 
   root.style.setProperty("--mod-accent", fill);
   root.style.setProperty("--mod-soft", softBg);

@@ -115,6 +115,27 @@ function readSheetRows(filePath: string, sheetName?: RegExp) {
   return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" }) as unknown[][];
 }
 
+/** "23 July to 29 July" in the file name, year taken from dates on the Planned vs Actual sheet. */
+function inferReportWeekEnd(filePath: string, wb: WorkBook): Date | null {
+  const m = path.basename(filePath).match(/(\d{1,2})\s+([A-Za-z]+)\s+to\s+(\d{1,2})\s+([A-Za-z]+)/i);
+  if (!m) return null;
+  const months: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
+  const month = months[m[4].slice(0, 3).toLowerCase()];
+  const day = Number(m[3]);
+  if (month == null || !day) return null;
+  const years: number[] = [];
+  for (const row of sheetRows(wb, /Planned Vs Actual/i)) {
+    for (const cell of row) {
+      const d = excelDate(cell);
+      if (d && d.getMonth() === month && d.getFullYear() >= 2020 && d.getFullYear() <= 2035) years.push(d.getFullYear());
+    }
+  }
+  const year = years.sort((a, b) => years.filter((y) => y === b).length - years.filter((y) => y === a).length)[0] || new Date().getFullYear();
+  return new Date(year, month, day);
+}
+
 function sheetRows(wb: WorkBook, pattern: RegExp) {
   const name = wb.SheetNames.find((n) => pattern.test(n));
   if (!name) return [] as unknown[][];
@@ -136,6 +157,9 @@ export type WprTrackerImportResult = {
   cashflow: number;
   activityLines: number;
   cubeTests: number;
+  designStatuses: number;
+  procurementStatus: number;
+  scheduleTasks: number;
 };
 
 export async function importWprTrackerPack(prisma: PrismaClient, projectId: string): Promise<WprTrackerImportResult> {
@@ -154,6 +178,9 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
     cashflow: 0,
     activityLines: 0,
     cubeTests: 0,
+    designStatuses: 0,
+    procurementStatus: 0,
+    scheduleTasks: 0,
   };
 
   const wprPath = resolveJulyWprWorkbook() || (findWorkbookFile(dir, /^WPR/i) ? path.join(dir, findWorkbookFile(dir, /^WPR/i)) : "");
@@ -197,7 +224,7 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
 
     const procRows = sheetRows(wb, /^Procurement tracker$/i);
     if (procRows.length) {
-      await prisma.progressProcurementLine.deleteMany({ where: { projectId } });
+      await prisma.progressProcurementLine.deleteMany({ where: { projectId, lineKind: "tracker" } });
       let sr = 0;
       for (const row of procRows.slice(1)) {
         const wp = str(row[1]);
@@ -300,6 +327,7 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
             contingencyPlan: str(row[10]) || null,
             impactNotes: str(row[11]) || null,
             dateLastUpdated: excelDate(row[2]),
+            targetDate: excelDate(row[12]),
             status: /close|closed/i.test(str(row[13])) ? "Closed" : /pending/i.test(str(row[13])) ? "Open" : str(row[13]) || "Open",
           },
         });
@@ -357,17 +385,29 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
 
     const manRows = sheetRows(wb, /Weekly Manpower/i);
     if (manRows.length > 1) {
+      const headerAt = manRows.findIndex((r) => r.some((c) => /type of manpower/i.test(str(c))));
+      const header = headerAt >= 0 ? manRows[headerAt] : [];
+      const tradeCol = header.findIndex((c) => /type of manpower/i.test(str(c)));
+      const reqCol = header.findIndex((c) => /required/i.test(str(c)));
+      const availCol = header.findIndex((c) => /^available/i.test(str(c)));
+      const tCol = tradeCol >= 0 ? tradeCol : 0;
+      const rCol = reqCol >= 0 ? reqCol : tCol + 1;
+      const aCol = availCol >= 0 ? availCol : tCol + 2;
+      const weekEnding = inferReportWeekEnd(wprPath, wb);
       await prisma.progressManpower.deleteMany({ where: { projectId } });
       let rank = 0;
       const seen = new Set<string>();
-      for (const row of manRows.slice(1)) {
-        const trade = str(row[0]);
-        if (!trade || /total|type of manpower/i.test(trade)) continue;
+      for (const row of manRows.slice(headerAt >= 0 ? headerAt + 1 : 1)) {
+        const trade = str(row[tCol]);
+        if (!trade || /total|type of manpower|^available$|^required$|^date$/i.test(trade)) {
+          if (/total of above|^available$|^required$|^date$/i.test(trade)) break;
+          continue;
+        }
         const key = trade.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        const required = num(row[1]);
-        const available = num(row[2]);
+        const required = num(row[rCol]);
+        const available = num(row[aCol]);
         const shortage = Math.max(0, required - available);
         rank++;
         await prisma.progressManpower.create({
@@ -379,9 +419,76 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
             shortage,
             shortagePct: required > 0 ? shortage / required : 0,
             rank,
+            weekEnding,
           },
         });
         out.manpower++;
+      }
+    }
+
+    const designRows = sheetRows(wb, /Design status/i);
+    const designHeader = designRows.findIndex((r) => r.some((c) => /percentage/i.test(str(c))) && r.some((c) => /^status$/i.test(str(c))));
+    if (designHeader >= 0) {
+      await prisma.progressDesignStatus.deleteMany({ where: { projectId } });
+      const header = designRows[designHeader];
+      const discCol = header.findIndex((c) => /^status$/i.test(str(c)));
+      const pctCol = header.findIndex((c) => /percentage/i.test(str(c)));
+      const endCol = header.findIndex((c) => /planned end/i.test(str(c)));
+      const remCol = header.findIndex((c) => /remark/i.test(str(c)));
+      let sr = 0;
+      for (const row of designRows.slice(designHeader + 1)) {
+        const discipline = str(row[discCol >= 0 ? discCol : 1]);
+        if (!discipline || /^status$/i.test(discipline)) continue;
+        sr++;
+        const pctRaw = num(row[pctCol >= 0 ? pctCol : 2]);
+        await prisma.progressDesignStatus.create({
+          data: {
+            projectId,
+            srNo: sr,
+            discipline,
+            pctComplete: pctRaw > 1 ? Math.min(1, pctRaw / 100) : pctRaw,
+            plannedEnd: excelDate(row[endCol >= 0 ? endCol : 3]),
+            remark: str(row[remCol >= 0 ? remCol : 4]) || null,
+          },
+        });
+        out.designStatuses++;
+      }
+    }
+
+    const statusRows = sheetRows(wb, /^Procurement Status$/i);
+    const statusHeader = statusRows.findIndex((r) => /package\s*no/i.test(str(r[0])));
+    if (statusHeader >= 0) {
+      await prisma.progressProcurementLine.deleteMany({ where: { projectId, lineKind: "status" } });
+      let sr = 0;
+      for (const row of statusRows.slice(statusHeader + 1)) {
+        const code = str(row[0]);
+        const name = str(row[1]);
+        if (!code || !name || /^[A-Z]$/.test(code)) continue;
+        sr++;
+        const decision = str(row[8]) || (/^yes/i.test(str(row[8])) ? "Yes" : "");
+        await prisma.progressProcurementLine.create({
+          data: {
+            projectId,
+            srNo: sr,
+            lineKind: "status",
+            packageCode: code,
+            workPackage: name,
+            location: str(row[2]) || null,
+            designPct: (() => {
+              const n = num(row[3]);
+              return n > 1 ? Math.min(1, n / 100) : n;
+            })(),
+            itemDescription: str(row[4]) || null,
+            responsibleStakeholder: str(row[4]) || null,
+            targetInquiryDate: excelDate(row[5]),
+            inquiryCloseDate: excelDate(row[6]),
+            vendorAppointmentDate: excelDate(row[7]),
+            decisionStatus: decision || null,
+            vendorAppointed: /^yes/i.test(decision),
+            remarks: str(row[9]) || null,
+          },
+        });
+        out.procurementStatus++;
       }
     }
 
@@ -530,6 +637,9 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
       out.siteMaterials++;
     }
   }
+
+  const { importScheduleFromReferenceDeck } = await import("./wprScheduleImport.js");
+  out.scheduleTasks = await importScheduleFromReferenceDeck(prisma, projectId);
 
   return out;
 }

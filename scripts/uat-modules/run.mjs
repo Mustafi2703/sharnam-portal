@@ -2,10 +2,11 @@
 /**
  * Per-module production UAT runner.
  *
- *   node scripts/uat-modules/run.mjs CRM
- *   node scripts/uat-modules/run.mjs DWG QA SAF
+ *   node scripts/uat-modules/phase-1-crm-hrm.mjs
+ *   node scripts/uat-modules/phase-2-three-weeks.mjs
+ *   node scripts/uat-modules/phase-3-reports.mjs
+ *   node scripts/uat-modules/run.mjs HRM
  *   node scripts/uat-modules/run.mjs --all
- *   node scripts/uat-modules/run.mjs --from DWG
  *
  * Each module writes its own evidence folder:
  *   docs/uat-evidence/modules/<date>/<MODULE>/REPORT.md
@@ -115,7 +116,18 @@ function writeIndex(rows) {
       `| ${r.module} | ${r.title} | ${r.passed ?? "—"} | ${r.failed ?? "—"} | ${r.total ?? "—"} | ${status} | [REPORT](./${r.module}/REPORT.md) |`,
     );
   }
-  md.push("", "## How to re-run one module", "", "```bash", "node scripts/uat-modules/run.mjs CRM", "node scripts/uat-modules/run.mjs DWG", "node scripts/uat-modules/run.mjs --from QA", "```", "");
+  md.push(
+    "",
+    "## How to re-run",
+    "",
+    "```bash",
+    "node scripts/uat-modules/phase-1-crm-hrm.mjs",
+    "node scripts/uat-modules/phase-2-three-weeks.mjs",
+    "node scripts/uat-modules/phase-3-reports.mjs",
+    "node scripts/uat-modules/run.mjs HRM",
+    "```",
+    "",
+  );
   fs.writeFileSync(path.join(BASE_OUT, "INDEX.md"), md.join("\n"));
   fs.writeFileSync(path.join(BASE_OUT, "index.json"), JSON.stringify({ date: TODAY, rows }, null, 2));
 }

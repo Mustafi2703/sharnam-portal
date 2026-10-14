@@ -535,39 +535,15 @@ export function BoqMonitoringEditor({
       draft.packageName ||
       packages[0] ||
       "Civil";
-    if (kind === "item") {
-      setDraft({ ...emptyDraft(pkg), rowKind: "item" });
-      setLocalAdd(true);
-      return;
-    }
-    setAdding(true);
-    setMsg("");
-    try {
-      const parent = parentSectionName(grouped[grouped.length - 1]?.section || "General");
-      const label = kind === "section" ? "New section" : "New subsection";
-      await api(`/api/cost/${projectId}/monitoring`, {
-        method: "POST",
-        token,
-        body: JSON.stringify({
-          packageName: pkg,
-          section: kind === "section" ? label : `${parent} › ${label}`,
-          itemNo: null,
-          description: label,
-          uom: null,
-          rate: 0,
-          boqQty: 0,
-          extraQty: 0,
-          gfcQty: 0,
-          achievedQty: 0,
-        }),
-      });
-      setMsg(kind === "section" ? "Section heading added — edit the label in the sheet" : "Subsection heading added");
-      onChanged();
-    } catch (e: any) {
-      setMsg(e?.message || "Could not add heading");
-    } finally {
-      setAdding(false);
-    }
+    // Open named modal for section / subsection / item — matches Arvind Budget bands (Section › A · title).
+    const parent = parentSectionName(grouped[grouped.length - 1]?.section || "");
+    setDraft({
+      ...emptyDraft(pkg),
+      rowKind: kind,
+      section: kind === "subsection" ? parent : "",
+      description: "",
+    });
+    setLocalAdd(true);
   }
 
   async function addLine() {
@@ -678,8 +654,9 @@ export function BoqMonitoringEditor({
   function monitoringSectionRow(section: string, items: MonLine[]) {
     const hasSection = Boolean(section.trim());
     if (!hasSection && singlePackage) return null;
+    const isSub = section.includes(" › ");
     return (
-      <tr className="boq-section-row">
+      <tr className={isSub ? "boq-subsection-row" : "boq-section-row"}>
         <td className={monitoringColClass(0, { sticky: true, extra: "text-left" })}>
           {items[0]?.packageName || ""}
         </td>
@@ -843,7 +820,9 @@ export function BoqMonitoringEditor({
             : `${rows.length} lines · ${grouped.length} sections · all ${headers.length} SPDC monitoring columns visible`
         }
         toolbar={
-          canFullEdit ? (
+          // Parent CostPage ReferenceSheetToolbar owns + Section / + Subsection / + Item.
+          // Keep a fallback bar only when this editor is used without the outer toolbar.
+          canFullEdit && preferredAddKind == null && !addOpen ? (
             <SheetAddKindBar
               disabled={adding}
               onAdd={(key) => void addKind(key as "section" | "subsection" | "item")}
@@ -892,7 +871,6 @@ export function BoqMonitoringEditor({
                     )}
                   </th>
                 ))}
-                {canTouch && <th className="boq-actions-col">Actions</th>}
               </tr>
             </thead>
             <tbody>

@@ -187,7 +187,7 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "inspections",
       label: "Checklist summary",
       query: "sheet=checklist-summary",
-      blurb: "Checklists filled by discipline + catalog.",
+      blurb: "Sheet1 catalog status only — request fills via Quality IR, not from the catalog.",
       sheet: "Sheet1 / Sheet2",
     },
     {
@@ -777,10 +777,10 @@ export const MODULE_META: Record<
     title: "Progress",
     desc: "Overview, milestones, planned vs actual, site execution checklists, monthly, hindrance, risk, legal, plus S-curve and MS Project for DPR/WPR.",
     path: "hub/progress",
-    accent: "#7C3AED",
-    soft: "#EDE9FE",
-    glow: "rgba(124,58,237,0.32)",
-    ink: "#4C1D95",
+    accent: "#3D4450",
+    soft: "#E8EAED",
+    glow: "rgba(61,68,80,0.32)",
+    ink: "#1F2937",
     icon: "PRG",
   },
   auditKpi: {

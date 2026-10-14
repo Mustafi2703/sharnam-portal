@@ -85,7 +85,7 @@ progressRouter.get("/:projectId/verify-pack", requireRoles("admin", "office", "e
 
 progressRouter.get("/:projectId/summary", async (req, res) => {
   const projectId = req.params.projectId;
-  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLineCount, lessons, valueAdditions, procurementLines, siteMaterials, prRequisitions, invoiceTrackers] =
+  const [milestones, hindrances, risks, plannedActual, legalApprovals, manpower, activityLines, sorStats, boqLineCount, lessons, valueAdditions, procurementLines, siteMaterials, prRequisitions, invoiceTrackers, scheduleTasks, designStatuses] =
     await Promise.all([
       prisma.progressMilestone.findMany({ where: { projectId }, orderBy: { code: "asc" } }),
       prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" } }),
@@ -102,6 +102,8 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       prisma.siteMaterialStock.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
       prisma.progressPurchaseRequisition.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
       prisma.progressInvoiceTracker.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
+      prisma.progressScheduleTask.findMany({ where: { projectId } }),
+      prisma.progressDesignStatus.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
     ]);
 
   const { readProgressOverviewDashboard } = await import("../services/progressRegistersImport.js");
@@ -195,6 +197,8 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     sorStats,
     valueAdditions,
     procurementLines,
+    scheduleTasks,
+    designStatuses,
     siteMaterials,
     prRequisitions,
     invoiceTrackers,
@@ -339,6 +343,188 @@ progressRouter.patch("/:projectId/procurement-lines/:rowId", requireRoles(...TRA
     },
   });
   res.json(row);
+});
+
+function optDate(v: unknown): Date | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Create or upsert one programme task (WBS unique). Feeds WPR milestone schedule slides. */
+progressRouter.post("/:projectId/schedule-tasks", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const wbs = String(body.wbs || "").trim();
+  const name = String(body.name || "").trim();
+  if (!wbs || !name) return res.status(400).json({ error: "wbs and name required" });
+  const pctComplete = body.pctComplete != null ? asFraction(body.pctComplete) : undefined;
+  const outlineLevel = Number(body.outlineLevel) || wbs.split(".").length;
+  const createData = {
+    name,
+    outlineLevel,
+    summary: Boolean(body.summary),
+    durationDays: Number(body.durationDays || 0),
+    start: body.start !== undefined ? optDate(body.start) ?? null : null,
+    finish: body.finish !== undefined ? optDate(body.finish) ?? null : null,
+    baselineStart: body.baselineStart !== undefined ? optDate(body.baselineStart) ?? null : null,
+    baselineFinish: body.baselineFinish !== undefined ? optDate(body.baselineFinish) ?? null : null,
+    actualStart: body.actualStart !== undefined ? optDate(body.actualStart) ?? null : null,
+    actualFinish: body.actualFinish !== undefined ? optDate(body.actualFinish) ?? null : null,
+    pctComplete: pctComplete ?? 0,
+    predecessors: body.predecessors != null ? String(body.predecessors) : null,
+    source: String(body.source || "manual"),
+  };
+  const updateData: Record<string, unknown> = { name, outlineLevel };
+  if (body.summary != null) updateData.summary = Boolean(body.summary);
+  if (body.durationDays != null) updateData.durationDays = Number(body.durationDays);
+  if (body.start !== undefined) updateData.start = optDate(body.start) ?? null;
+  if (body.finish !== undefined) updateData.finish = optDate(body.finish) ?? null;
+  if (body.baselineStart !== undefined) updateData.baselineStart = optDate(body.baselineStart) ?? null;
+  if (body.baselineFinish !== undefined) updateData.baselineFinish = optDate(body.baselineFinish) ?? null;
+  if (body.actualStart !== undefined) updateData.actualStart = optDate(body.actualStart) ?? null;
+  if (body.actualFinish !== undefined) updateData.actualFinish = optDate(body.actualFinish) ?? null;
+  if (pctComplete != null) updateData.pctComplete = pctComplete;
+  if (body.predecessors != null) updateData.predecessors = String(body.predecessors);
+  const row = await prisma.progressScheduleTask.upsert({
+    where: { projectId_wbs: { projectId, wbs } },
+    create: { projectId, wbs, ...createData },
+    update: updateData,
+  });
+  await audit("progress.schedule.create", { userId: req.user!.id, entity: "ProgressScheduleTask", entityId: row.id, meta: { projectId, wbs } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/schedule-tasks/:taskId", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressScheduleTask.findFirst({
+    where: { id: req.params.taskId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const row = await prisma.progressScheduleTask.update({
+    where: { id: existing.id },
+    data: {
+      name: body.name != null ? String(body.name) : undefined,
+      start: optDate(body.start),
+      finish: optDate(body.finish),
+      baselineStart: optDate(body.baselineStart),
+      baselineFinish: optDate(body.baselineFinish),
+      actualStart: optDate(body.actualStart),
+      actualFinish: optDate(body.actualFinish),
+      pctComplete: body.pctComplete != null ? asFraction(body.pctComplete) : undefined,
+      predecessors: body.predecessors != null ? String(body.predecessors) : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/schedule-tasks/:taskId", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressScheduleTask.findFirst({
+    where: { id: req.params.taskId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressScheduleTask.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
+/** Upload WPR PPTX (programme tables) or load the bundled reference deck into ProgressScheduleTask. */
+progressRouter.post(
+  "/:projectId/schedule-tasks/import",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const { parseScheduleFromPptxBuffer, replaceProjectSchedule, importScheduleFromReferenceDeck } = await import(
+      "../services/wprScheduleImport.js"
+    );
+    const file = (req as { file?: { buffer: Buffer; originalname: string } }).file;
+    try {
+      let count = 0;
+      if (file?.buffer?.length) {
+        if (!/\.pptx$/i.test(file.originalname)) {
+          return res.status(400).json({ error: "Upload a WPR / programme PPTX (.pptx). For MS Project use XML import." });
+        }
+        const tasks = parseScheduleFromPptxBuffer(file.buffer, file.originalname);
+        if (!tasks.length) {
+          return res.status(400).json({ error: "No WBS / Task Name tables found in that PPTX." });
+        }
+        count = await replaceProjectSchedule(prisma, project.id, tasks);
+      } else {
+        count = await importScheduleFromReferenceDeck(prisma, project.id);
+        if (!count) {
+          return res.status(400).json({
+            error: "No schedule file uploaded and no reference WPR deck found on the server. Upload a .pptx or MS Project .xml.",
+          });
+        }
+      }
+      await audit("progress.schedule.import", {
+        userId: req.user!.id,
+        entity: "ProgressScheduleTask",
+        entityId: project.id,
+        meta: { count, file: file?.originalname || "reference-deck" },
+      });
+      res.json({ ok: true, scheduleTasks: count });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "Schedule import failed" });
+    }
+  }
+);
+
+/** Create or upsert design-status row (discipline unique). Carried into each WPR. */
+progressRouter.post("/:projectId/design-status", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const projectId = req.params.projectId;
+  const body = req.body || {};
+  const discipline = String(body.discipline || "").trim();
+  if (!discipline) return res.status(400).json({ error: "discipline required" });
+  const last = await prisma.progressDesignStatus.findFirst({ where: { projectId }, orderBy: { srNo: "desc" } });
+  const pctComplete = asFraction(body.pctComplete);
+  const row = await prisma.progressDesignStatus.upsert({
+    where: { projectId_discipline: { projectId, discipline } },
+    create: {
+      projectId,
+      srNo: Number(body.srNo || (last?.srNo || 0) + 1),
+      discipline,
+      pctComplete,
+      plannedEnd: optDate(body.plannedEnd) ?? null,
+      remark: body.remark != null ? String(body.remark) : null,
+    },
+    update: {
+      pctComplete,
+      plannedEnd: optDate(body.plannedEnd) ?? undefined,
+      remark: body.remark != null ? String(body.remark) : undefined,
+    },
+  });
+  await audit("progress.design.create", { userId: req.user!.id, entity: "ProgressDesignStatus", entityId: row.id, meta: { projectId, discipline } });
+  res.status(201).json(row);
+});
+
+progressRouter.patch("/:projectId/design-status/:rowId", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressDesignStatus.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const body = req.body || {};
+  const row = await prisma.progressDesignStatus.update({
+    where: { id: existing.id },
+    data: {
+      discipline: body.discipline != null ? String(body.discipline) : undefined,
+      pctComplete: body.pctComplete != null ? asFraction(body.pctComplete) : undefined,
+      plannedEnd: optDate(body.plannedEnd),
+      remark: body.remark != null ? String(body.remark) : undefined,
+    },
+  });
+  res.json(row);
+});
+
+progressRouter.delete("/:projectId/design-status/:rowId", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.progressDesignStatus.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.progressDesignStatus.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
 });
 
 progressRouter.delete("/:projectId/procurement-lines/:rowId", requireRoles(...TRACKER_ROLES), async (req: AuthedRequest, res) => {

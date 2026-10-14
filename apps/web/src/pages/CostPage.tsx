@@ -107,8 +107,20 @@ export default function CostPage() {
   const [monAddOpen, setMonAddOpen] = useState(false);
   const [monAddKind, setMonAddKind] = useState<"item" | "section" | "subsection">("item");
   const [mbAddOpen, setMbAddOpen] = useState(false);
+  const [mbAddKind, setMbAddKind] = useState<"item" | "data">("data");
   const [bbsAddOpen, setBbsAddOpen] = useState(false);
-  const [mbForm, setMbForm] = useState({ description: "", nos1: "1", nos2: "1", length: "", width: "", height: "", unit: "", remark: "" });
+  const [bbsAddKind, setBbsAddKind] = useState<"section" | "data">("data");
+  const [mbForm, setMbForm] = useState({
+    description: "",
+    itemCode: "",
+    nos1: "1",
+    nos2: "1",
+    length: "",
+    width: "",
+    height: "",
+    unit: "",
+    remark: "",
+  });
   const [bbsForm, setBbsForm] = useState({ barMark: "", location: "", diameterMm: "", nos: "1", shapeLenA: "", shapeLenB: "", shapeLenC: "", shapeLenD: "", shapeLenE: "" });
   const mbFormRef = useRef<HTMLFormElement>(null);
   const bbsFormRef = useRef<HTMLFormElement>(null);
@@ -229,9 +241,16 @@ export default function CostPage() {
   }
 
   /** Same branded workbook as Download XLSX, filed in the sheet's ISO folder on SharePoint. */
+  function downloadPackageForKind(kind: string) {
+    if (pkgFilter === "All") return "All";
+    if (kind === "mb" || kind === "bbs") return flowPackageForTab(kind, pkgFilter);
+    return pkgFilter;
+  }
+
   async function publishSheet(kind: string) {
     if (!id) return;
-    const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
+    const apiPkg = downloadPackageForKind(kind);
+    const q = apiPkg !== "All" ? `?package=${encodeURIComponent(apiPkg)}` : "";
     const iso: Record<string, string> = { boq: "boq", mb: "mb", bbs: "bbs", budget: "budget", cashflow: "cashflow", rates: "costReport" };
     try {
       setMsg(await saveExportToSharePoint(id, token, `/api/cost/${id}/download/${kind}.xlsx${q}`, iso[kind] || "costReport"));
@@ -242,8 +261,9 @@ export default function CostPage() {
 
   async function downloadSheet(kind: string, fmt: "csv" | "xlsx" = "csv") {
     if (!id) return;
-    const q = pkgFilter !== "All" ? `?package=${encodeURIComponent(pkgFilter)}` : "";
-    const slug = pkgFilter === "All" ? "all" : pkgFilter.replace(/[^\w.-]+/g, "_");
+    const apiPkg = downloadPackageForKind(kind);
+    const q = apiPkg !== "All" ? `?package=${encodeURIComponent(apiPkg)}` : "";
+    const slug = apiPkg === "All" ? "all" : apiPkg.replace(/[^\w.-]+/g, "_");
     try {
       await downloadAuthFile(`/api/cost/${id}/download/${kind}.${fmt}${q}`, token, `${kind}-${slug}.${fmt}`);
       setMsg(`Downloaded ${kind} ${fmt.toUpperCase()} — Row kind column is included. Open and check the bands.`);
@@ -384,12 +404,20 @@ export default function CostPage() {
     setSyncSheetBusy(true);
     setMsg("");
     try {
-      const out = await api<{ mbSync?: { updated?: number } }>(`/api/cost/${id}/sync-from-sheets`, {
+      const mbPkg = mbPackageForSelection(activePkg);
+      const out = await api<{
+        mbSync?: { packageName: string; monitoringPackage: string; linesUpdated: number; mbLinesMatched: number }[];
+      }>(`/api/cost/${id}/sync-from-sheets`, {
         method: "POST",
         token,
-        body: JSON.stringify({ packageName: activePkg }),
+        body: JSON.stringify({ packageName: mbPkg }),
       });
-      setMsg(`Synced MB → Monitoring for ${activePkg} (${out.mbSync?.updated ?? 0} lines updated).`);
+      const rows = Array.isArray(out.mbSync) ? out.mbSync : [];
+      const updated = rows.reduce((s, r) => s + (Number(r.linesUpdated) || 0), 0);
+      const matched = rows.reduce((s, r) => s + (Number(r.mbLinesMatched) || 0), 0);
+      setMsg(
+        `Synced MB → Monitoring — ${mbPkg} → ${activePkg} (${updated} monitoring lines · ${matched} MB item codes matched).`
+      );
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Sync failed");
@@ -435,10 +463,13 @@ export default function CostPage() {
         /* fall through to single-sheet import */
       }
     }
-    const pkg = pkgFilter !== "All" ? pkgFilter : (kind === "mb" ? mbPackages[0] : bbsPackages[0]) || "Dormitory Civil";
+    // Always map monitoring package names → MB/BBS sheet packages before import.
+    const pkg = writePackage(kind);
     fd.set("packageName", pkg);
+    fd.set("replace", "0");
     const r = await api<{ rowsImported: number }>(`/api/cost/${id}/${kind}/import`, { method: "POST", token, body: fd });
     setMsg(`Imported ${r.rowsImported} ${kind.toUpperCase()} rows → ${pkg}`);
+    setTab(kind, pkg);
     await load();
   }
 
@@ -497,17 +528,33 @@ export default function CostPage() {
 
   async function addMbLine(kind: "item" | "data", fromModal = false) {
     if (!id) return;
-    if (kind === "data" && !fromModal) {
-      setMbForm({
-        description: "",
-        nos1: "1",
-        nos2: "1",
-        length: "",
-        width: "",
-        height: "",
-        unit: "",
-        remark: sheetDate || "",
-      });
+    if (!fromModal) {
+      if (kind === "data") {
+        setMbForm({
+          description: "",
+          itemCode: "",
+          nos1: "1",
+          nos2: "1",
+          length: "",
+          width: "",
+          height: "",
+          unit: "",
+          remark: sheetDate || "",
+        });
+      } else {
+        setMbForm({
+          description: "",
+          itemCode: "",
+          nos1: "1",
+          nos2: "1",
+          length: "",
+          width: "",
+          height: "",
+          unit: "",
+          remark: "",
+        });
+      }
+      setMbAddKind(kind);
       setMbAddOpen(true);
       return;
     }
@@ -519,6 +566,7 @@ export default function CostPage() {
             packageName,
             rowKind: "data",
             description: mbForm.description.trim() || "New measurement",
+            itemCode: mbForm.itemCode.trim() || undefined,
             nos1: Number(mbForm.nos1 || 1),
             nos2: Number(mbForm.nos2 || 1),
             length: Number(mbForm.length || 0),
@@ -531,7 +579,7 @@ export default function CostPage() {
             packageName,
             rowKind: "item",
             srNo: String(sectionN + 1),
-            description: "New section",
+            description: mbForm.description.trim() || "New section",
           };
     setSheetAddBusy(true);
     setMsg("");
@@ -539,7 +587,7 @@ export default function CostPage() {
       const row = await api<{ id: string }>(`/api/cost/${id}/mb`, { method: "POST", token, body: JSON.stringify(body) });
       setHighlightId(row.id);
       setMbAddOpen(false);
-      setMsg(kind === "data" ? `Measurement added for ${packageName}` : `Section added for ${packageName} — edit the heading`);
+      setMsg(kind === "data" ? `Measurement added for ${packageName}` : `Section added for ${packageName}`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add failed");
@@ -550,18 +598,33 @@ export default function CostPage() {
 
   async function addBbsLine(kind: "section" | "data", fromModal = false) {
     if (!id) return;
-    if (kind === "data" && !fromModal) {
-      setBbsForm({
-        barMark: "",
-        location: "",
-        diameterMm: "",
-        nos: "1",
-        shapeLenA: "",
-        shapeLenB: "",
-        shapeLenC: "",
-        shapeLenD: "",
-        shapeLenE: "",
-      });
+    if (!fromModal) {
+      if (kind === "data") {
+        setBbsForm({
+          barMark: "",
+          location: "",
+          diameterMm: "",
+          nos: "1",
+          shapeLenA: "",
+          shapeLenB: "",
+          shapeLenC: "",
+          shapeLenD: "",
+          shapeLenE: "",
+        });
+      } else {
+        setBbsForm({
+          barMark: "",
+          location: "",
+          diameterMm: "",
+          nos: "1",
+          shapeLenA: "",
+          shapeLenB: "",
+          shapeLenC: "",
+          shapeLenD: "",
+          shapeLenE: "",
+        });
+      }
+      setBbsAddKind(kind);
       setBbsAddOpen(true);
       return;
     }
@@ -585,8 +648,8 @@ export default function CostPage() {
         : {
             packageName,
             rowKind: "section",
-            barMark: String.fromCharCode(65 + (sectionN % 26)),
-            location: "New section",
+            barMark: bbsForm.barMark.trim() || String.fromCharCode(65 + (sectionN % 26)),
+            location: bbsForm.location.trim() || "New section",
           };
     setSheetAddBusy(true);
     setMsg("");
@@ -594,7 +657,7 @@ export default function CostPage() {
       const row = await api<{ id: string }>(`/api/cost/${id}/bbs`, { method: "POST", token, body: JSON.stringify(body) });
       setHighlightId(row.id);
       setBbsAddOpen(false);
-      setMsg(kind === "data" ? `Bar line added for ${packageName}` : `Section added for ${packageName} — edit the heading`);
+      setMsg(kind === "data" ? `Bar line added for ${packageName}` : `Section added for ${packageName}`);
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Add failed");
@@ -996,7 +1059,9 @@ export default function CostPage() {
             canEdit={canEdit}
             sheetDate={sheetDate}
             onSheetDateChange={persistSheetDate}
-            onUpload={canEdit ? (file) => uploadBoqOrWorkbook(file, activePkg) : undefined}
+            onUpload={canEdit ? (file) => void uploadBoqOrWorkbook(file, activePkg) : undefined}
+            uploadAccept=".xlsx,.xls,.csv"
+            uploadLabel="Upload BOQ / workbook"
             uploadHint="Upload SPDC_Budget_Arvind 49.xls (full workbook) or a single monitoring BOQ for this package."
             addKinds={
               canEdit
@@ -1059,10 +1124,13 @@ export default function CostPage() {
             sheetDate={sheetDate}
             onSheetDateChange={persistSheetDate}
             onUpload={canEdit ? (f) => importCostSheet("mb", f) : undefined}
+            uploadAccept=".xlsx,.xls,.csv"
+            uploadLabel="Upload MB sheet"
+            uploadHint="Upload a single MB sheet for this package, or the full SPDC_Budget_Arvind workbook."
             onAddSection={canEdit || canSiteEdit ? () => void addMbLine("item") : undefined}
             addSectionLabel="+ Add section"
             onAddRow={canEdit || canSiteEdit ? () => void addMbLine("data") : undefined}
-            addRowLabel="+ Add row"
+            addRowLabel="+ Add measurement"
             busy={sheetAddBusy}
             onDownloadCsv={() => void downloadSheet("mb")}
             onDownloadXlsx={() => void downloadSheet("mb", "xlsx")}
@@ -1083,11 +1151,11 @@ export default function CostPage() {
           </div>
           <RegisterEntryModal
             open={mbAddOpen}
-            title={`Add measurement — ${writePackage("mb")}`}
+            title={mbAddKind === "item" ? `Add section — ${writePackage("mb")}` : `Add measurement — ${writePackage("mb")}`}
             onClose={() => setMbAddOpen(false)}
             onSave={() => mbFormRef.current?.requestSubmit()}
             saving={sheetAddBusy}
-            saveLabel="Add row"
+            saveLabel={mbAddKind === "item" ? "Add section" : "Add row"}
             size="lg"
           >
             <form
@@ -1095,23 +1163,32 @@ export default function CostPage() {
               className="grid sm:grid-cols-2 gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                void addMbLine("data", true);
+                void addMbLine(mbAddKind, true);
               }}
             >
               <Input
                 className="sm:col-span-2"
                 required
-                placeholder="Description"
+                placeholder={mbAddKind === "item" ? "Section heading (e.g. EXCAVATION)" : "Description"}
                 value={mbForm.description}
                 onChange={(e) => setMbForm({ ...mbForm, description: e.target.value })}
               />
-              <Input type="date" value={mbForm.remark} onChange={(e) => setMbForm({ ...mbForm, remark: e.target.value })} />
-              <Input placeholder="Unit" value={mbForm.unit} onChange={(e) => setMbForm({ ...mbForm, unit: e.target.value })} />
-              <Input type="number" step="any" placeholder="Nos 1" value={mbForm.nos1} onChange={(e) => setMbForm({ ...mbForm, nos1: e.target.value })} />
-              <Input type="number" step="any" placeholder="Nos 2" value={mbForm.nos2} onChange={(e) => setMbForm({ ...mbForm, nos2: e.target.value })} />
-              <Input type="number" step="any" placeholder="Length" value={mbForm.length} onChange={(e) => setMbForm({ ...mbForm, length: e.target.value })} />
-              <Input type="number" step="any" placeholder="Width" value={mbForm.width} onChange={(e) => setMbForm({ ...mbForm, width: e.target.value })} />
-              <Input type="number" step="any" placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
+              {mbAddKind === "data" && (
+                <>
+                  <Input
+                    placeholder="Item code (must match monitoring ITEM NO. for Sync)"
+                    value={mbForm.itemCode}
+                    onChange={(e) => setMbForm({ ...mbForm, itemCode: e.target.value })}
+                  />
+                  <Input type="date" value={mbForm.remark} onChange={(e) => setMbForm({ ...mbForm, remark: e.target.value })} />
+                  <Input placeholder="Unit" value={mbForm.unit} onChange={(e) => setMbForm({ ...mbForm, unit: e.target.value })} />
+                  <Input type="number" step="any" placeholder="Nos 1" value={mbForm.nos1} onChange={(e) => setMbForm({ ...mbForm, nos1: e.target.value })} />
+                  <Input type="number" step="any" placeholder="Nos 2" value={mbForm.nos2} onChange={(e) => setMbForm({ ...mbForm, nos2: e.target.value })} />
+                  <Input type="number" step="any" placeholder="Length" value={mbForm.length} onChange={(e) => setMbForm({ ...mbForm, length: e.target.value })} />
+                  <Input type="number" step="any" placeholder="Width" value={mbForm.width} onChange={(e) => setMbForm({ ...mbForm, width: e.target.value })} />
+                  <Input type="number" step="any" placeholder="Height" value={mbForm.height} onChange={(e) => setMbForm({ ...mbForm, height: e.target.value })} />
+                </>
+              )}
             </form>
           </RegisterEntryModal>
         </div>
@@ -1131,10 +1208,13 @@ export default function CostPage() {
             sheetDate={sheetDate}
             onSheetDateChange={persistSheetDate}
             onUpload={canEdit ? (f) => importCostSheet("bbs", f) : undefined}
+            uploadAccept=".xlsx,.xls,.csv"
+            uploadLabel="Upload BBS sheet"
+            uploadHint="Upload a single BBS sheet for this package, or the full SPDC_Budget_Arvind workbook."
             onAddSection={canEdit || canSiteEdit ? () => void addBbsLine("section") : undefined}
             addSectionLabel="+ Add section"
             onAddRow={canEdit || canSiteEdit ? () => void addBbsLine("data") : undefined}
-            addRowLabel="+ Add row"
+            addRowLabel="+ Add bar line"
             busy={sheetAddBusy}
             onDownloadCsv={() => void downloadSheet("bbs")}
             onDownloadXlsx={() => void downloadSheet("bbs", "xlsx")}
@@ -1147,7 +1227,7 @@ export default function CostPage() {
                 projectId={id!}
                 token={token}
                 kind="bbs"
-                packageName={pkgFilter}
+                packageName={writePackage("bbs")}
                 packageOptions={bbsPackages.length ? bbsPackages : packages.filter((p: string) => p !== "All")}
                 barMarks={bbsBarMarks}
                 files={sheetFiles}
@@ -1172,11 +1252,11 @@ export default function CostPage() {
           </div>
           <RegisterEntryModal
             open={bbsAddOpen}
-            title={`Add bar line — ${writePackage("bbs")}`}
+            title={bbsAddKind === "section" ? `Add section — ${writePackage("bbs")}` : `Add bar line — ${writePackage("bbs")}`}
             onClose={() => setBbsAddOpen(false)}
             onSave={() => bbsFormRef.current?.requestSubmit()}
             saving={sheetAddBusy}
-            saveLabel="Add row"
+            saveLabel={bbsAddKind === "section" ? "Add section" : "Add row"}
             size="lg"
           >
             <form
@@ -1184,25 +1264,40 @@ export default function CostPage() {
               className="grid sm:grid-cols-2 gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                void addBbsLine("data", true);
+                void addBbsLine(bbsAddKind, true);
               }}
             >
-              <Input placeholder="Bar mark" value={bbsForm.barMark} onChange={(e) => setBbsForm({ ...bbsForm, barMark: e.target.value })} />
-              <Input type="date" value={sheetDate} onChange={(e) => persistSheetDate(e.target.value)} />
-              <Input
-                className="sm:col-span-2"
-                required
-                placeholder="Location / description"
-                value={bbsForm.location}
-                onChange={(e) => setBbsForm({ ...bbsForm, location: e.target.value })}
-              />
-              <Input type="number" step="any" placeholder="Dia mm" value={bbsForm.diameterMm} onChange={(e) => setBbsForm({ ...bbsForm, diameterMm: e.target.value })} />
-              <Input type="number" step="any" placeholder="Nos" value={bbsForm.nos} onChange={(e) => setBbsForm({ ...bbsForm, nos: e.target.value })} />
-              <Input type="number" step="any" placeholder="A" value={bbsForm.shapeLenA} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenA: e.target.value })} />
-              <Input type="number" step="any" placeholder="B" value={bbsForm.shapeLenB} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenB: e.target.value })} />
-              <Input type="number" step="any" placeholder="C" value={bbsForm.shapeLenC} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenC: e.target.value })} />
-              <Input type="number" step="any" placeholder="D" value={bbsForm.shapeLenD} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenD: e.target.value })} />
-              <Input type="number" step="any" placeholder="E" value={bbsForm.shapeLenE} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenE: e.target.value })} />
+              {bbsAddKind === "section" ? (
+                <>
+                  <Input placeholder="Section mark (A, B…)" value={bbsForm.barMark} onChange={(e) => setBbsForm({ ...bbsForm, barMark: e.target.value })} />
+                  <Input
+                    className="sm:col-span-2"
+                    required
+                    placeholder="Section heading"
+                    value={bbsForm.location}
+                    onChange={(e) => setBbsForm({ ...bbsForm, location: e.target.value })}
+                  />
+                </>
+              ) : (
+                <>
+                  <Input placeholder="Bar mark" value={bbsForm.barMark} onChange={(e) => setBbsForm({ ...bbsForm, barMark: e.target.value })} />
+                  <Input type="date" value={sheetDate} onChange={(e) => persistSheetDate(e.target.value)} />
+                  <Input
+                    className="sm:col-span-2"
+                    required
+                    placeholder="Location / description"
+                    value={bbsForm.location}
+                    onChange={(e) => setBbsForm({ ...bbsForm, location: e.target.value })}
+                  />
+                  <Input type="number" step="any" placeholder="Dia mm" value={bbsForm.diameterMm} onChange={(e) => setBbsForm({ ...bbsForm, diameterMm: e.target.value })} />
+                  <Input type="number" step="any" placeholder="Nos" value={bbsForm.nos} onChange={(e) => setBbsForm({ ...bbsForm, nos: e.target.value })} />
+                  <Input type="number" step="any" placeholder="A" value={bbsForm.shapeLenA} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenA: e.target.value })} />
+                  <Input type="number" step="any" placeholder="B" value={bbsForm.shapeLenB} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenB: e.target.value })} />
+                  <Input type="number" step="any" placeholder="C" value={bbsForm.shapeLenC} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenC: e.target.value })} />
+                  <Input type="number" step="any" placeholder="D" value={bbsForm.shapeLenD} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenD: e.target.value })} />
+                  <Input type="number" step="any" placeholder="E" value={bbsForm.shapeLenE} onChange={(e) => setBbsForm({ ...bbsForm, shapeLenE: e.target.value })} />
+                </>
+              )}
             </form>
           </RegisterEntryModal>
         </div>

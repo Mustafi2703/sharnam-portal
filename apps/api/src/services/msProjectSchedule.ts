@@ -353,6 +353,28 @@ export async function importMsProjectToProgress(
 
   await upsertScurveRegisterPoints(projectId, scurve, MS_SOURCE, "OVERALL");
 
+  const { replaceProjectSchedule } = await import("./wprScheduleImport.js");
+  await replaceProjectSchedule(
+    prisma,
+    projectId,
+    tasks.map((t) => ({
+      wbs: t.wbs || String(t.uid),
+      name: t.name,
+      outlineLevel: t.outlineLevel,
+      summary: t.summary,
+      durationDays: t.durationDays,
+      start: t.start,
+      finish: t.finish,
+      baselineStart: t.baselineStart,
+      baselineFinish: t.baselineFinish,
+      actualStart: t.percentComplete > 0 ? t.start : null,
+      actualFinish: t.percentComplete >= 100 ? t.finish : null,
+      pctComplete: t.percentComplete / 100,
+      predecessors: null,
+      source: MS_SOURCE,
+    }))
+  );
+
   const saved = await mockOneDrive.upload(project.code, MS_PROJECT_FOLDER, fileName, xmlBuffer);
 
   return {

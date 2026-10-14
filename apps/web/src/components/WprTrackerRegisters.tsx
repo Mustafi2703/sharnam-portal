@@ -350,7 +350,7 @@ export function WprTrackerRegisters({
       setMsg(
         apiBase === "finance"
           ? `Imported PR Tracker — ${out.purchaseRequisitions ?? 0} PRs, ${out.invoiceTrackers ?? 0} invoices (filed to 05.01 / 09.01)`
-          : `Imported July 23–29 pack — VE ${out.valueAdditions ?? 0}, PR ${out.purchaseRequisitions ?? 0}, invoices ${out.invoiceTrackers ?? 0}, PvA ${out.activityLines ?? 0}, cashflow ${out.cashflow ?? 0}`
+          : `Imported reference pack — schedule ${out.scheduleTasks ?? 0}, design ${out.designStatuses ?? 0}, procurement status ${out.procurementStatus ?? 0}, PvA ${out.activityLines ?? 0}, manpower ${out.manpower ?? 0}`
       );
       onReload();
     } catch (e) {
@@ -516,6 +516,9 @@ export function WprTrackerRegisters({
                   <th className="py-2 pr-3">Stakeholder</th>
                   <th className="py-2 pr-3">Vendor</th>
                   <th className="py-2 pr-3">Appointed</th>
+                  <th className="py-2 pr-3">Design %</th>
+                  <th className="py-2 pr-3">Inquiry close</th>
+                  <th className="py-2 pr-3">Code</th>
                   <th className="py-2 px-3" />
                 </tr>
               </thead>
@@ -528,8 +531,11 @@ export function WprTrackerRegisters({
                     <td className="py-2 pr-3">{r.responsibleStakeholder || "—"}</td>
                     <td className="py-2 pr-3">{r.contractorName || "—"}</td>
                     <td className="py-2 pr-3">
-                      <Badge tone={r.vendorAppointed ? "ok" : "warn"}>{r.vendorAppointed ? "Yes" : "No"}</Badge>
+                      <Badge tone={r.vendorAppointed ? "ok" : "warn"}>{r.decisionStatus || (r.vendorAppointed ? "Yes" : "No")}</Badge>
                     </td>
+                    <td className="py-2 pr-3 tabular-nums">{r.lineKind === "status" ? `${Math.round((Number(r.designPct) || 0) * 100)}%` : "—"}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(r.inquiryCloseDate)}</td>
+                    <td className="py-2 pr-3">{r.packageCode || "—"}</td>
                     <td className="py-2 px-3 whitespace-nowrap">
                       {canEdit && (
                         <>
@@ -546,7 +552,7 @@ export function WprTrackerRegisters({
                 ))}
                 {!proc.length && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-steel-muted text-sm">
+                    <td colSpan={10} className="py-8 text-center text-steel-muted text-sm">
                       No procurement rows — add via popup or import the WPR pack.
                     </td>
                   </tr>

@@ -843,11 +843,11 @@ async function sectionFills() {
     const noPhotos = await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: form({ responsesJson: Object.fromEntries(tpl.items.map((i) => [i.id, { answer: "Yes" }])), status: "Submitted" }, [{ field: "signature", buffer: signaturePng(2), type: "image/png", name: "signature.png" }]) });
     assert(noPhotos.status === 400, `submit without photos returned ${noPhotos.status}`);
     const sub = ok(await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "vendor", "Sanjay Thakor — Reeca"), timeoutMs: 300000 }), "submit");
-    ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: TAG, closeRfi: true }), "review");
+    ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: TAG, closeRfi: true }, { timeoutMs: 120000 }), "review");
     const log = ok(await call("office", "GET", `/api/checklist/project/${pid()}/submissions`), "fill log");
     const rows = Array.isArray(log) ? log : log.rows || log.submissions || [];
     const statuses = rows.reduce((a, x) => ((a[x.status] = (a[x.status] || 0) + 1), a), {});
-    const branded = await call("office", "GET", `/api/checklist/submissions/${sub.id}/branded.xlsx`);
+    const branded = await call("office", "GET", `/api/checklist/submissions/${sub.id}/branded.xlsx`, undefined, { timeoutMs: 180000 });
     remember("fills", `${rfi.number} ${tpl.name}`);
     return `photos enforced (400 without) · ${rfi.number} approved · fill log ${rows.length} fills ${noteOf(statuses)} · branded xlsx ${kb(branded.bytes)}`;
   });

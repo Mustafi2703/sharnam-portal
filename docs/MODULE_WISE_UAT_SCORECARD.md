@@ -69,18 +69,19 @@ Evidence folder: `docs/uat-evidence/prod-deep-YYYY-MM-DD/REPORT.md` (now include
 
 ---
 
-## 4. Commands (module slices)
+## 4. Commands (three phases, one script per module)
 
 ```bash
-# CRM + logins + setup only
-UAT_ONLY=SET node scripts/prod-deep-uat.mjs
+# 1. CRM, then HRMS
+node scripts/uat-modules/phase-1-crm-hrm.mjs
 
-# Drawings + coordination
-UAT_ONLY=SET,DWG,DCI node scripts/prod-deep-uat.mjs
+# 2. Onboard already done in phase 1. This writes three weeks of project data.
+node scripts/uat-modules/phase-2-three-weeks.mjs
 
-# Quality + Safety
-UAT_ONLY=SET,QA,SAF node scripts/prod-deep-uat.mjs
+# 3. Generate WPR for those three weeks, then every other report
+node scripts/uat-modules/phase-3-reports.mjs
 
-# Full chain into WPR
-UAT_ONLY=SET,DWG,DCI,QA,SAF,PRG,DPR,WPR node scripts/prod-deep-uat.mjs
+# One module
+node scripts/uat-modules/HRM.mjs
+node scripts/uat-modules/RPT.mjs
 ```
