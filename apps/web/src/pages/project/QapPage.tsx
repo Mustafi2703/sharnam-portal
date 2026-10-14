@@ -189,7 +189,7 @@ export default function QapPage() {
       <PageHeader
         eyebrow="Quality module"
         title="Quality Assurance Plan"
-        subtitle="Week 50 execution sheet or Monthly Progress «Quality Assurance Plan - Detail» — upload either; scroll inside the table."
+        subtitle="Upload Week 50 or Monthly Progress Detail Excel. Scroll inside the sheet to move through all activity lines."
         actions={
           <div className="flex flex-wrap gap-2">
             <Badge tone="brand">{dash?.totals?.qapOpen ?? 0} open</Badge>

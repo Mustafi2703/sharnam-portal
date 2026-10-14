@@ -2206,60 +2206,6 @@ html.is-standalone-form #root {
   -webkit-overflow-scrolling: touch;
 }
 
-/* QAP register — keep inner sheet scroll (do NOT force height:auto like page-scroll-full) */
-.qap-page.page-scroll-full {
-  flex: none !important;
-  height: auto !important;
-  overflow: visible !important;
-}
-.qap-page.page-scroll-full .qap-page__register,
-.qap-page.page-scroll-full .register-panel-fill,
-.qap-page.page-scroll-full .register-sheet-shell {
-  flex: none !important;
-  height: auto !important;
-  min-height: 0 !important;
-  overflow: visible !important;
-}
-
-/* QAP tool window — same flex scroll chain as RFI register (table body scrolls) */
-.tool-workspace--window .tool-main__outlet:has(.qap-page:not(.page-scroll-full)) {
-  overflow: hidden !important;
-  padding-bottom: 0.75rem;
-}
-.tool-workspace--window .tool-main__outlet > .qap-page:not(.page-scroll-full),
-.tool-workspace--window .qap-page:not(.page-scroll-full) {
-  flex: 1 1 0% !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-.tool-workspace--window .qap-page:not(.page-scroll-full) .qap-page__register,
-.tool-workspace--window .qap-page:not(.page-scroll-full) .spdc-register-panel,
-.tool-workspace--window .qap-page:not(.page-scroll-full) .register-panel-fill,
-.tool-workspace--window .qap-page:not(.page-scroll-full) .register-sheet-shell {
-  flex: 1 1 0% !important;
-  height: 0 !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-.tool-workspace--window .qap-page:not(.page-scroll-full) .register-scroll-area,
-.tool-workspace--window .qap-page:not(.page-scroll-full) .register-sheet-viewport,
-.tool-workspace--window .qap-page:not(.page-scroll-full) .qap-register__scroll {
-  flex: 1 1 0% !important;
-  height: 0 !important;
-  min-height: 10rem !important;
-  max-height: none !important;
-  overflow: auto !important;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-}
 
 .hrms-portal-shell.app-frame {
   min-height: 100dvh;
@@ -2672,6 +2618,67 @@ html.is-tool-window #root {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+}
+
+/*
+ * QAP register — same flex scroll chain as RFI.
+ * Generic .tool-workspace--window .register-scroll-area { overflow-y: visible; min-height: 0 }
+ * collapses the sheet to a tiny strip. Pin outlet → page → panel → sheet → scroll area.
+ */
+.tool-workspace--window .tool-main__outlet:has(.qap-page),
+.tool-main__outlet:has(> .qap-page) {
+  overflow: hidden !important;
+  padding-bottom: 0.75rem;
+}
+.tool-workspace--window .tool-main__outlet > .qap-page,
+.tool-main__outlet > .qap-page,
+.tool-workspace--window .qap-page {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-workspace--window .qap-page .qap-page__register,
+.tool-workspace--window .qap-page .spdc-register-panel,
+.tool-workspace--window .qap-page .register-panel-fill,
+.tool-workspace--window .qap-page .register-sheet-shell,
+.tool-workspace--window .qap-page .sheet-register,
+.tool-main__outlet > .qap-page .qap-page__register,
+.tool-main__outlet > .qap-page .spdc-register-panel,
+.tool-main__outlet > .qap-page .register-panel-fill,
+.tool-main__outlet > .qap-page .register-sheet-shell {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.tool-workspace--window .qap-page .register-scroll-area,
+.tool-workspace--window .qap-page .register-sheet-viewport,
+.tool-workspace--window .qap-page .qap-register__scroll,
+.tool-workspace--window .qap-page .sheet-register__scroll,
+.tool-workspace--window .tool-main__outlet .qap-page .register-scroll-area,
+.tool-workspace--window .tool-main__outlet .qap-page .register-sheet-viewport,
+.tool-main__outlet > .qap-page .register-scroll-area,
+.tool-main__outlet > .qap-page .register-sheet-viewport,
+.tool-main__outlet > .qap-page .qap-register__scroll,
+.tool-main__outlet > .qap-page .register-sheet-shell > .register-scroll-area {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: min(28rem, 55dvh) !important;
+  max-height: none !important;
+  overflow: auto !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  touch-action: pan-x pan-y;
 }
 
 /* Legacy stack aliases — keep in sync with .register-tab-body--stack above */
