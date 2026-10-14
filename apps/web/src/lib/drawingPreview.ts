@@ -18,6 +18,8 @@ export type DrawingMarkupPage = {
 
 export type DrawingRevisionPreview = {
   title: string;
+  /** When set, the viewer loads PDF bytes via /api/drawings/revision/:id/pdf (auth + SharePoint fallback). */
+  revisionId?: string;
   pdf?: { fileUrl: string; fileName?: string };
   dwg?: { fileUrl: string; fileName?: string };
   markupPages?: DrawingMarkupPage[];
@@ -67,6 +69,7 @@ export function revisionDwgUrl(rev: {
 export function revisionPreviewFromRecord(
   d: { drawingNumber?: string; currentRev?: string },
   rev: {
+    id?: string;
     revisionNumber?: string;
     pdfFileUrl?: string | null;
     pdfFileName?: string | null;
@@ -85,6 +88,7 @@ export function revisionPreviewFromRecord(
   }));
   return {
     title: `${d.drawingNumber} · ${rev.revisionNumber || d.currentRev || "—"}`,
+    revisionId: rev.id,
     pdf: pdf || undefined,
     dwg: dwg || undefined,
     markupPages,

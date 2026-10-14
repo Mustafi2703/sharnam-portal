@@ -7,6 +7,7 @@ import {
   uploadToProjectLibrary,
   listProjectLibrary,
   PROJECT_LIBRARY_FOLDERS,
+  sanitizeProjectCode,
 } from "./graph.js";
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -61,8 +62,13 @@ export class MockOneDriveService {
     return UPLOAD_DIR;
   }
 
+  /** Stable folder name — never nest on `/` inside project codes (breaks /uploads URLs + PDF viewer). */
+  driveFolderName(projectCode: string) {
+    return sanitizeProjectCode(projectCode);
+  }
+
   projectRoot(projectCode: string) {
-    const p = path.join(this.root(), "onedrive", projectCode);
+    const p = path.join(this.root(), "onedrive", this.driveFolderName(projectCode));
     ensureDir(p);
     return p;
   }
@@ -134,7 +140,7 @@ export class MockOneDriveService {
         name,
         path: rel,
         type: isDir ? "folder" : "file",
-        url: isDir ? undefined : `/uploads/onedrive/${projectCode}/${rel}`,
+        url: isDir ? undefined : `/uploads/onedrive/${this.driveFolderName(projectCode)}/${rel}`,
         size: isDir ? undefined : st.size,
         modifiedAt: st.mtime.toISOString(),
       };
@@ -214,9 +220,10 @@ export class MockOneDriveService {
     }
     fs.writeFileSync(dest, buffer);
     const rel = path.join(relFolder, safe).replace(/\\/g, "/");
+    const folder = this.driveFolderName(projectCode);
     const local = {
       path: rel,
-      url: `/uploads/onedrive/${projectCode}/${rel}`,
+      url: `/uploads/onedrive/${folder}/${rel}`,
       provider: "mock-onedrive" as const,
       sharePointPath: null as string | null,
     };
@@ -254,7 +261,7 @@ export class MockOneDriveService {
   }
 
   getDownloadUrl(projectCode: string, relPath: string) {
-    return `/uploads/onedrive/${projectCode}/${relPath}`;
+    return `/uploads/onedrive/${this.driveFolderName(projectCode)}/${relPath}`;
   }
 
   readFile(projectCode: string, relPath: string): Buffer | null {

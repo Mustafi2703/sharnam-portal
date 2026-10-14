@@ -29,21 +29,55 @@ export function revisionPdfUrl(rev: RevLike): string | null {
   return null;
 }
 
-/** Where a stored file lives: local mock path and the matching SharePoint path. */
+/**
+ * Resolve portal /uploads/onedrive/… URLs → local disk + SharePoint sandbox path.
+ * Project codes may contain `/` and spaces (e.g. SHAR/SNT/26-27/Voltamp…); SharePoint always
+ * uses sanitizeProjectCode. Never take only the first path segment as the project folder.
+ */
 function locate(url: string, projectCode: string): { local: string | null; sp: string | null; code: string; rel: string | null } {
-  const m = url.match(/^\/uploads\/onedrive\/([^/]+)\/(.+)$/);
-  if (m) {
-    const rel = decodeURIComponent(m[2]);
-    return {
-      local: path.join(UPLOAD_DIR, "onedrive", m[1], rel),
-      sp: `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(m[1])}/${rel}`,
-      code: m[1],
-      rel,
-    };
+  const code = sanitizeProjectCode(projectCode);
+  if (/^https?:/i.test(url)) {
+    return { local: null, sp: sharePointPathFromWebUrl(url), code, rel: null };
   }
-  if (url.startsWith("/uploads/")) return { local: path.join(UPLOAD_DIR, decodeURIComponent(url.slice(9))), sp: null, code: projectCode, rel: null };
-  if (/^https?:/i.test(url)) return { local: null, sp: sharePointPathFromWebUrl(url), code: projectCode, rel: null };
-  return { local: null, sp: null, code: projectCode, rel: null };
+  const marker = "/uploads/onedrive/";
+  const idx = url.indexOf(marker);
+  if (idx < 0) {
+    if (url.startsWith("/uploads/")) {
+      return { local: path.join(UPLOAD_DIR, decodeURIComponent(url.slice(9).split("?")[0])), sp: null, code, rel: null };
+    }
+    return { local: null, sp: null, code, rel: null };
+  }
+  const rest = decodeURIComponent(url.slice(idx + marker.length).split("?")[0]).replace(/^\/+/, "");
+  let rel: string | null = null;
+  for (const pfx of [projectCode, code]) {
+    if (!pfx) continue;
+    if (rest === pfx) {
+      rel = "";
+      break;
+    }
+    if (rest.startsWith(`${pfx}/`)) {
+      rel = rest.slice(pfx.length + 1);
+      break;
+    }
+  }
+  if (rel == null) {
+    const iso = rest.match(/(?:^|\/)(\d{2}_[A-Za-z0-9].*)$/);
+    rel = iso ? iso[1] : rest;
+  }
+  const localCandidates = [
+    path.join(UPLOAD_DIR, "onedrive", rest),
+    path.join(UPLOAD_DIR, "onedrive", code, rel),
+    path.join(UPLOAD_DIR, "onedrive", ...projectCode.split("/").filter(Boolean), rel),
+  ];
+  const local = localCandidates.find((p) => {
+    try {
+      return fs.existsSync(p) && fs.statSync(p).isFile();
+    } catch {
+      return false;
+    }
+  }) || localCandidates[0] || null;
+  const sp = rel ? `${SHAREPOINT_SANDBOX_ROOT}/${code}/${rel}` : null;
+  return { local, sp, code, rel };
 }
 
 export async function readRevisionPdf(rev: RevLike, projectCode: string): Promise<{ buffer: Buffer; name: string } | null> {
@@ -56,7 +90,20 @@ export async function readRevisionPdf(rev: RevLike, projectCode: string): Promis
     try {
       return { buffer: await downloadDriveFile(loc.sp), name };
     } catch {
-      /* not in SharePoint either */
+      /* try alternate SharePoint folder names below */
+    }
+  }
+  // Older uploads may live under a second sanitized form or the raw folder name on Graph.
+  const code = sanitizeProjectCode(projectCode);
+  const rel = loc.rel;
+  if (rel) {
+    for (const folder of [code, projectCode.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80)]) {
+      if (!folder || folder === code) continue;
+      try {
+        return { buffer: await downloadDriveFile(`${SHAREPOINT_SANDBOX_ROOT}/${folder}/${rel}`), name };
+      } catch {
+        /* next */
+      }
     }
   }
   return null;

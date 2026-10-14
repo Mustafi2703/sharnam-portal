@@ -18,7 +18,12 @@
  *
  *   UAT_PURGE=1 node scripts/prod-deep-uat.mjs          clear the project's module data first (users, team, communication matrix stay)
  *   UAT_ONLY=DPR,WPR node scripts/prod-deep-uat.mjs     run some sections only (setup always runs)
+ *   UAT_OUT=docs/uat-evidence/modules/CRM               write evidence to a specific folder (per-module runners)
  *   UAT_WEEK1_MONDAY=2026-09-21                         pin week 1
+ *
+ * Per-module entry points (separate scripts + reports):
+ *   node scripts/uat-modules/run.mjs CRM
+ *   node scripts/uat-modules/run.mjs --all
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -57,10 +62,12 @@ const WEEKS = [0, 1, 2].map((i) => {
   return { n: i + 1, mon, sat: addDays(mon, 5), sun: addDays(mon, 6), days: [0, 1, 2, 3, 4].map((d) => addDays(mon, d)), label: `Week ${isoWeek(mon)}` };
 });
 const ALL_DAYS = WEEKS.flatMap((w) => w.days);
-const TAG = `UAT-${TODAY}`;
-const OUT = path.resolve(`docs/uat-evidence/prod-deep-${TODAY}`);
+/** Never stamp "UAT-…" into portal fields — client / vendor / consultant see this data live. */
+const TAG = "";
+const OUT = path.resolve(process.env.UAT_OUT || `docs/uat-evidence/prod-deep-${TODAY}`);
 const SITE_PIN = { lat: 22.0528, lng: 73.1223, radius: 500 }; // Voltamp Transformers, Karjan (Vadodara)
 const LOGO = path.resolve("apps/api/assets/logo-transparent.png");
+const REAL_GFC_PDF = path.resolve("scripts/uat-assets/sample-gfc-drawing.pdf");
 
 const USERS = {
   office: { email: "operations@spdc.in", portal: "office" },
@@ -157,8 +164,14 @@ function signaturePng(seed = 1) {
     return Math.abs(y - cy) < 2.2 || (x > 40 && x < 380 && Math.abs(y - cy2) < 1.4) ? [15, 23, 42] : [255, 255, 255];
   });
 }
-/** A valid one-page A3 landscape PDF drawing sheet with title-block text. */
+/**
+ * Real multi-page A3 GFC PDF (opens in portal viewer + markup). Prefer the seeded asset;
+ * fall back to a generated 3-page sheet if the file is missing.
+ */
 function drawingPdf(number, title, rev, dateIso) {
+  if (fs.existsSync(REAL_GFC_PDF) && fs.statSync(REAL_GFC_PDF).size > 1000) {
+    return fs.readFileSync(REAL_GFC_PDF);
+  }
   const esc = (s) => String(s).replace(/[()\\]/g, (m) => `\\${m}`);
   const lines = [
     `BT /F1 20 Tf 40 780 Td (${esc(title)}) Tj ET`,
@@ -331,24 +344,28 @@ async function sectionSetup() {
     return `client ${client.name} · contractor ${contractor.name} · consultant ${consultant.name}`;
   });
   await step("CRM-2", "CRM activate portals at Demo@1234 and re-login office/site/vendor/client/consultant", "office", async () => {
+    // uat-data/restore is admin-gated on some builds (403). Real proof is Activate-portal password + login.
     const restore = async (email, role) => {
       const r = await call("office", "POST", "/api/uat-data/user/restore", { email, role, password: PASS });
-      if (r.status >= 400 && r.status !== 404) ok(r, `restore ${email}`);
       return r.status;
     };
     const st = [];
-    st.push(`client ${await restore(USERS.client.email, "client")}`);
-    st.push(`vendor ${await restore(USERS.vendor.email, "vendor")}`);
-    st.push(`consultant ${await restore(USERS.consultant.email, "employee")}`);
-    st.push(`site ${await restore(USERS.site.email, "site_employee")}`);
-    st.push(`office ${await restore(USERS.office.email, "office")}`);
-    // Drop cached tokens so next calls use restored passwords.
+    for (const [label, email, role] of [
+      ["client", USERS.client.email, "client"],
+      ["vendor", USERS.vendor.email, "vendor"],
+      ["consultant", USERS.consultant.email, "employee"],
+      ["site", USERS.site.email, "site_employee"],
+      ["office", USERS.office.email, "office"],
+    ]) {
+      const status = await restore(email, role);
+      st.push(`${label} restore=${status}`);
+    }
     tokens.clear();
     for (const who of ["office", "site", "vendor", "client", "consultant"]) {
       const s = await login(who);
-      assert(s.token, `${who} login failed after CRM restore`);
+      assert(s.token, `${who} login failed after CRM portal check — Activate portal / Complete setup with Demo@1234`);
     }
-    return `portals restored · re-login OK · ${st.join(" · ")}`;
+    return `re-login OK (Demo@1234) · ${st.join(" · ")}`;
   });
   await step("CRM-3", "Each portal login sees the Voltamp project (CRM assign / Live project setup membership)", "office", async () => {
     const checks = [];
@@ -431,6 +448,31 @@ async function sectionSetup() {
     }), "client logo");
     return `uploaded · ${up.clientLogoUrl || up.url || "ok"}`;
   });
+  await step("SET-5", "Strip leftover UAT- watermarks from titles / remarks (client-visible data)", "office", async () => {
+    const clean = (s) => String(s || "").replace(/\bUAT-\d{4}-\d{2}-\d{2}\s*/gi, "").replace(/\bUAT[-\s]*/gi, "").replace(/\s{2,}/g, " ").trim();
+    let n = 0;
+    const rfis = await call("office", "GET", `/api/rfis/project/${pid()}`);
+    const rfiRows = Array.isArray(rfis.body) ? rfis.body : rfis.body?.rows || rfis.body?.rfis || [];
+    for (const r of rfiRows) {
+      const subject = clean(r.subject);
+      const question = clean(r.question);
+      if ((subject && subject !== r.subject) || (question && question !== r.question)) {
+        const patch = await call("office", "PATCH", `/api/rfis/${r.id}`, { subject: subject || r.subject, question: question || r.question });
+        if (patch.status < 400) n++;
+      }
+    }
+    const coords = await call("office", "GET", `/api/directory/project/${pid()}/coordination`);
+    const cRows = Array.isArray(coords.body) ? coords.body : coords.body?.rows || coords.body?.issues || [];
+    for (const c of cRows) {
+      const title = clean(c.title);
+      const description = clean(c.description);
+      if ((title && title !== c.title) || (description && description !== c.description)) {
+        const patch = await call("office", "PATCH", `/api/directory/coordination/${c.id}`, { title: title || c.title, description: description || c.description });
+        if (patch.status < 400) n++;
+      }
+    }
+    return n ? `cleaned ${n} RFI / coordination rows` : "no UAT- prefixes left on RFI / coordination";
+  });
 }
 
 // ═══════════════════════════════ 2. Attendance ═══════════════════════════════
@@ -439,7 +481,7 @@ async function sectionAttendance() {
     let n = 0;
     for (const day of ALL_DAYS) {
       const i = ALL_DAYS.indexOf(day);
-      const r = await call("office", "POST", "/api/hrm/attendance/manual", { userId: state.siteUserId, date: day, checkIn: i % 3 === 0 ? "08:40" : "08:55", checkOut: i % 4 === 0 ? "18:20" : "17:50", projectId: pid(), note: `${TAG} site day` });
+      const r = await call("office", "POST", "/api/hrm/attendance/manual", { userId: state.siteUserId, date: day, checkIn: i % 3 === 0 ? "08:40" : "08:55", checkOut: i % 4 === 0 ? "18:20" : "17:50", projectId: pid(), note: `site day` });
       ok(r, `attendance ${day}`);
       n++;
     }
@@ -495,7 +537,7 @@ async function sectionDrawings() {
   await step("DWG-2", "Site engineer Drawing-Checks and uploads R0 GFC PDFs for every register line; office publishes (feeds WPR Design status 100%)", "site", async () => {
     const done = [];
     for (const d of DRAWINGS.filter((x) => x.upload)) {
-      const { token, items } = await drawingCheckUnlock("site", state.drawings[d.no], `${TAG} ${d.no} R0 check`);
+      const { token, items } = await drawingCheckUnlock("site", state.drawings[d.no], `${d.no} R0 check`);
       const rev = await call("site", "POST", `/api/drawings/${state.drawings[d.no]}/revisions`, undefined, {
         form: form({ unlockToken: token, revisionNumber: "R0", revisionLabel: `R0 — issued for construction ${fmt(WEEKS[0].days[1])}`, publish: "true" }, [{ field: "pdf", buffer: drawingPdf(d.no, d.title, "R0", WEEKS[0].days[1]), type: "application/pdf", name: `${d.no}_R0.pdf` }]),
         timeoutMs: 240000,
@@ -507,7 +549,7 @@ async function sectionDrawings() {
         drawingNumber: d.no, drawingTitle: d.title, projectPackage: d.pkg, building: d.area, discipline: d.discipline,
         drawingType: d.type, consultantName: "Shah & Talati", revisionNumber: "R0", revisionDate: WEEKS[0].days[1],
         plannedSubmissionDate: WEEKS[0].mon, actualSubmissionDate: WEEKS[0].days[1], submissionDelayDays: 1,
-        issuedTo: state.vendorName, issueDate: WEEKS[0].days[1], copiesCount: 2, criticalDrawing: d.rev1 ? "Yes" : "No", remarks: `${TAG} issued GFC`,
+        issuedTo: state.vendorName, issueDate: WEEKS[0].days[1], copiesCount: 2, criticalDrawing: d.rev1 ? "Yes" : "No", remarks: `issued GFC`,
       });
       const sp = rev.body?.revisions?.at?.(-1)?.sharePointUrl || rev.body?.sharePointUrl;
       if (sp) state.sharepoint.push({ label: `Drawing ${d.no} R0`, path: "04.02 Drawings", url: sp });
@@ -517,7 +559,7 @@ async function sectionDrawings() {
   });
   await step("DWG-3", "Week 2: VT-ST-101 revised to R1 after the coordination clash (new Drawing Check, R0 superseded)", "site", async () => {
     const d = DRAWINGS.find((x) => x.rev1);
-    const { token } = await drawingCheckUnlock("site", state.drawings[d.no], `${TAG} ${d.no} R1 check — pedestal P3 shifted 300 mm`);
+    const { token } = await drawingCheckUnlock("site", state.drawings[d.no], `${d.no} R1 check — pedestal P3 shifted 300 mm`);
     const rev = await call("site", "POST", `/api/drawings/${state.drawings[d.no]}/revisions`, undefined, {
       form: form({ unlockToken: token, revisionNumber: "R1", revisionLabel: `R1 — P3 shifted clear of cable trench (${fmt(WEEKS[1].days[2])})`, publish: "true" }, [{ field: "pdf", buffer: drawingPdf(d.no, d.title, "R1", WEEKS[1].days[2]), type: "application/pdf", name: `${d.no}_R1.pdf` }]),
       timeoutMs: 240000,
@@ -589,14 +631,14 @@ async function sectionCoordination() {
   await step("DCI-1", "Site logs a Structure / MEP clash (pedestal P3 vs cable trench) to the consultant on the matrix, with a drawing markup", "site", async () => {
     const c = consultant();
     const issue = ok(await call("site", "POST", `/api/directory/project/${pid()}/coordination`, {
-      title: `${TAG} Pedestal P3 fouls the 600 mm cable trench (VT-ST-101 vs VT-ME-101)`,
+      title: `Pedestal P3 fouls the 600 mm cable trench (VT-ST-101 vs VT-ME-101)`,
       description: "Pedestal P3 on grid C/3 sits 250 mm inside the underground cable trench shown on VT-ME-101. Either shift the trench or the pedestal; PEB anchor bolt plan depends on it.",
       discipline: "Structure", location: "Grid C/3", priority: "High", linkedDrawingId: state.drawings["VT-ST-101"],
       assignedToName: c.name, assignedToEmail: c.email, assignedToId: state.consultantId, dueDate: WEEKS[0].days[4],
     }), "coordination issue");
     state.dci1 = issue.id;
     const mk = await call("site", "POST", `/api/drawings/project/${pid()}/markups`, undefined, {
-      form: form({ pageNumbers: [1], targetType: "coordination", targetId: issue.id, drawingId: state.drawings["VT-ST-101"], note: `${TAG} Clash cloud at C/3 — pedestal vs trench. Proposed: shift P3 300 mm towards grid D.` }, [{ field: "files", buffer: markupPage(1), type: "image/png", name: "page-1.png" }]),
+      form: form({ pageNumbers: [1], targetType: "coordination", targetId: issue.id, drawingId: state.drawings["VT-ST-101"], note: `Clash cloud at C/3 — pedestal vs trench. Proposed: shift P3 300 mm towards grid D.` }, [{ field: "files", buffer: markupPage(1), type: "image/png", name: "page-1.png" }]),
       timeoutMs: 240000,
     });
     const m = ok(mk, "markup").markup || ok(mk, "markup");
@@ -633,10 +675,10 @@ async function sectionCoordination() {
   });
   await step("DCI-3", "Consultant answers the escalated RFI with a markup; office closes it and the coordination issue", "consultant", async () => {
     const mk = ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, {
-      form: form({ pageNumbers: [1], targetType: "rfi", targetId: state.escalatedRfiId, drawingId: state.drawings["VT-ST-101"], note: `${TAG} Shift pedestal P3 300 mm towards grid D; trench stays. Revised detail issued as VT-ST-101 R1.` }, [{ field: "files", buffer: markupPage(2), type: "image/png", name: "page-1.png" }]),
+      form: form({ pageNumbers: [1], targetType: "rfi", targetId: state.escalatedRfiId, drawingId: state.drawings["VT-ST-101"], note: `Shift pedestal P3 300 mm towards grid D; trench stays. Revised detail issued as VT-ST-101 R1.` }, [{ field: "files", buffer: markupPage(2), type: "image/png", name: "page-1.png" }]),
       timeoutMs: 240000,
     }), "consultant markup").markup;
-    ok(await call("consultant", "POST", `/api/rfis/${state.escalatedRfiId}/respond`, { responseText: `${TAG} Shift P3 300 mm towards grid D (see markup). Structural check OK; VT-ST-101 R1 issued.`, isOfficialResponse: true, close: true }), "consultant respond");
+    ok(await call("consultant", "POST", `/api/rfis/${state.escalatedRfiId}/respond`, { responseText: `Shift P3 300 mm towards grid D (see markup). Structural check OK; VT-ST-101 R1 issued.`, isOfficialResponse: true, close: true }), "consultant respond");
     ok(await call("office", "PATCH", `/api/rfis/${state.escalatedRfiId}`, { status: "Closed" }), "close RFI");
     ok(await call("office", "PATCH", `/api/directory/coordination/${state.dci1}`, { status: "Closed", ballInCourt: "Closed" }), "close issue");
     state.sharepoint.push({ label: "RFI markup PDF (consultant)", path: mk.sharePointPath || "03.06 Correspondence_Control/Markups", url: mk.sharePointUrl || null });
@@ -644,7 +686,7 @@ async function sectionCoordination() {
   });
   await step("DCI-4", "Second issue (door swing vs DB panel): 2 follow-ups, resolved without escalation; coordination register exports", "site", async () => {
     const c = consultant();
-    const issue = ok(await call("site", "POST", `/api/directory/project/${pid()}/coordination`, { title: `${TAG} Door D4 swing fouls the DB-2 panel (VT-AR-101 vs VT-ME-001)`, description: "Door D4 opens onto the DB-2 wall space. Relocate DB-2 or reverse the door swing.", discipline: "Architecture", location: "Utility block", priority: "Medium", linkedDrawingId: state.drawings["VT-AR-101"], assignedToName: c.name, assignedToEmail: c.email, assignedToId: state.consultantId, dueDate: WEEKS[1].days[4] }), "issue 2");
+    const issue = ok(await call("site", "POST", `/api/directory/project/${pid()}/coordination`, { title: `Door D4 swing fouls the DB-2 panel (VT-AR-101 vs VT-ME-001)`, description: "Door D4 opens onto the DB-2 wall space. Relocate DB-2 or reverse the door swing.", discipline: "Architecture", location: "Utility block", priority: "Medium", linkedDrawingId: state.drawings["VT-AR-101"], assignedToName: c.name, assignedToEmail: c.email, assignedToId: state.consultantId, dueDate: WEEKS[1].days[4] }), "issue 2");
     for (let i = 0; i < 2; i++) ok(await call("office", "POST", `/api/directory/coordination/${issue.id}/follow-up`, {}), "follow-up");
     ok(await call("office", "PATCH", `/api/directory/coordination/${issue.id}`, { status: "Closed", description: "Resolved: door swing reversed on VT-AR-101 R1; DB-2 stays." }), "close");
     const xlsx = await call("office", "GET", `/api/directory/project/${pid()}/coordination/register.xlsx`, undefined, { timeoutMs: 120000 });
@@ -675,7 +717,7 @@ async function sectionRfi() {
     for (const r of RFIS) {
       const wk = WEEKS[r.w];
       const made = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, {
-        rfiKind: "RequestForInformation", subject: `${TAG} ${r.subject}`, question: r.q, assignedToId: state.consultantId, responsibleVendorId: state.vendorId, linkedDrawingId: state.drawings[r.dwg], dueDate: addDays(wk.days[1], 7),
+        rfiKind: "RequestForInformation", subject: `${r.subject}`, question: r.q, assignedToId: state.consultantId, responsibleVendorId: state.vendorId, linkedDrawingId: state.drawings[r.dwg], dueDate: addDays(wk.days[1], 7),
         formDataJson: { contractorSolution: r.sol, priority: r.pri, discipline: r.disc, location: r.loc, dateRaised: wk.days[1], weekLabel: wk.label, raisedBy: "Jaideep Parmar (SPDC site)" },
       }), `rfi ${r.subject}`);
       state.rfis.push({ ...r, id: made.id, number: made.number });
@@ -686,11 +728,11 @@ async function sectionRfi() {
   await step("RFI-2", "Office follow-ups to the consultant (per the matrix) and a consultant markup on the anchor-bolt RFI", "office", async () => {
     let n = 0;
     for (const r of state.rfis) for (let i = 0; i < r.followUps; i++) {
-      ok(await call("office", "POST", `/api/rfis/${r.id}/follow-up`, { note: `${TAG} Follow-up ${i + 1}: response awaited — holds ${r.disc.toLowerCase()} works at ${r.loc}.` }), `follow-up ${r.number}`);
+      ok(await call("office", "POST", `/api/rfis/${r.id}/follow-up`, { note: `Follow-up ${i + 1}: response awaited — holds ${r.disc.toLowerCase()} works at ${r.loc}.` }), `follow-up ${r.number}`);
       n++;
     }
     const m = state.rfis.find((x) => x.markup);
-    const mk = ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, { form: form({ pageNumbers: [1], targetType: "rfi", targetId: m.id, drawingId: state.drawings[m.dwg], note: `${TAG} 8.8 grade bolts — see cloud on the setting plan.` }, [{ field: "files", buffer: markupPage(4), type: "image/png", name: "page-1.png" }]), timeoutMs: 240000 }), "markup").markup;
+    const mk = ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, { form: form({ pageNumbers: [1], targetType: "rfi", targetId: m.id, drawingId: state.drawings[m.dwg], note: `8.8 grade bolts — see cloud on the setting plan.` }, [{ field: "files", buffer: markupPage(4), type: "image/png", name: "page-1.png" }]), timeoutMs: 240000 }), "markup").markup;
     const list = ok(await call("office", "GET", `/api/drawings/project/${pid()}/markups?targetType=rfi&targetId=${m.id}`), "markup list");
     const rows = Array.isArray(list) ? list : list.markups || list.rows || [];
     assert(rows.length >= 1, `markup not listed on the RFI (${rows.length})`);
@@ -700,7 +742,7 @@ async function sectionRfi() {
   await step("RFI-3", "Consultant answers 4 RFIs (official response); office closes 3, one stays answered-open; 2 remain open with reminders", "consultant", async () => {
     const closed = [];
     for (const r of state.rfis.filter((x) => x.answer)) {
-      ok(await call("consultant", "POST", `/api/rfis/${r.id}/respond`, { responseText: `${TAG} ${r.answer}`, isOfficialResponse: true, close: true }), `respond ${r.number}`);
+      ok(await call("consultant", "POST", `/api/rfis/${r.id}/respond`, { responseText: `${r.answer}`, isOfficialResponse: true, close: true }), `respond ${r.number}`);
       if (r.close) {
         ok(await call("office", "PATCH", `/api/rfis/${r.id}`, { status: "Closed" }), `close ${r.number}`);
         closed.push(r.number);
@@ -715,9 +757,9 @@ async function sectionRfi() {
     return `closed ${closed.join(", ")} · register ${noteOf(byStatus)} · vendor sees ${Array.isArray(vendorView.body) ? vendorView.body.length : "?"} · client close ${clientClose.status === 403 ? "refused 403" : `returned ${clientClose.status}`}`;
   });
   await step("RFI-4", "Client raises 2 concerns; office answers and closes one", "client", async () => {
-    const a = ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject: `${TAG} Dust on the approach road`, question: "Approach road near the admin block needs water sprinkling twice a day during excavation." }), "concern 1");
-    const b = ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject: `${TAG} Night-time concreting noise`, question: "Please limit transit-mixer movement after 22:00 near the township side." }), "concern 2");
-    ok(await call("office", "POST", `/api/rfis/${a.id}/respond`, { responseText: `${TAG} Water tanker deployed 10:00 and 15:00 from ${fmt(WEEKS[1].days[0])}; contractor instructed (SI-02).`, isOfficialResponse: true, close: true }), "answer");
+    const a = ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject: `Dust on the approach road`, question: "Approach road near the admin block needs water sprinkling twice a day during excavation." }), "concern 1");
+    const b = ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject: `Night-time concreting noise`, question: "Please limit transit-mixer movement after 22:00 near the township side." }), "concern 2");
+    ok(await call("office", "POST", `/api/rfis/${a.id}/respond`, { responseText: `Water tanker deployed 10:00 and 15:00 from ${fmt(WEEKS[1].days[0])}; contractor instructed (SI-02).`, isOfficialResponse: true, close: true }), "answer");
     ok(await call("office", "PATCH", `/api/rfis/${a.id}`, { status: "Closed" }), "close");
     remember("rfis", a.number, b.number);
     return `${a.number} answered + closed · ${b.number} open`;
@@ -741,22 +783,22 @@ async function assignTemplate(name) {
   return { assignmentId: a.id, templateId: t.id, name: t.name, items: full.items || [], type: t.checklistType };
 }
 function fillForm(tpl, who, signer, extra = {}) {
-  const responses = Object.fromEntries(tpl.items.map((i, k) => [i.id, { answer: "Yes", remarks: k === 0 ? `${TAG} checked on site` : "OK" }]));
+  const responses = Object.fromEntries(tpl.items.map((i, k) => [i.id, { answer: "Yes", remarks: k === 0 ? `checked on site` : "OK" }]));
   const files = [{ field: "signature", buffer: signaturePng(who.length), type: "image/png", name: "signature.png" }];
   // One photo per required line (not 3) — keeps multipart under the ~60s gateway while still enforcing photos.
   for (const it of tpl.items.filter((i) => i.requirePhoto)) files.push({ field: `item_${it.id}_photo`, buffer: sitePhoto(1 + it.id.length), type: "image/png", name: `${it.itemCode || "item"}-1.png` });
-  return form({ responsesJson: responses, remarks: `${TAG} ${tpl.name}`, status: "Submitted", signerNameInspector: signer, ...extra }, files);
+  return form({ responsesJson: responses, remarks: `${tpl.name}`, status: "Submitted", signerNameInspector: signer, ...extra }, files);
 }
 async function sectionFills() {
   await step("CHK-1", "QI fill-RFI: site asks Reeca to fill the Raft/Footing pre-pour inspection; contractor submits with photos + signature; client signs; office approves and closes the RFI", "vendor", async () => {
     const tpl = await assignTemplate("QI — Raft / Footing Pre-Pour Inspection");
-    const rfi = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "QualityInspection", subject: `${TAG} Pre-pour inspection — footings F1–F6 grid A`, question: "Fill the pre-pour inspection before the F1–F6 pour on " + fmt(WEEKS[0].days[3]), responsibleVendorId: state.vendorId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[0].days[3] }), "fill RFI");
+    const rfi = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "QualityInspection", subject: `Pre-pour inspection — footings F1–F6 grid A`, question: "Fill the pre-pour inspection before the F1–F6 pour on " + fmt(WEEKS[0].days[3]), responsibleVendorId: state.vendorId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[0].days[3] }), "fill RFI");
     const denied = await call("client", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "client", "x") });
     assert(denied.status === 403, `client fill returned ${denied.status}`);
     const sub = ok(await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "vendor", "Sanjay Thakor — Reeca site in-charge"), timeoutMs: 300000 }), "vendor submit");
     assert(sub.id, `vendor submit returned no id: ${noteOf(sub)}`);
     const cs = ok(await call("client", "POST", `/api/checklist/assignments/${tpl.assignmentId}/client-signature`, undefined, { form: form({ signerNameClient: "Deven Mody — Voltamp" }, [{ field: "signatureClient", buffer: signaturePng(9), type: "image/png", name: "client-signature.png" }]), timeoutMs: 240000 }), "client signature");
-    const rev = ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `${TAG} verified at site — cleared for pour`, closeRfi: true }), "review");
+    const rev = ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `verified at site — cleared for pour`, closeRfi: true }), "review");
     const after = ok(await call("office", "GET", `/api/rfis/project/${pid()}?kind=QualityInspection`), "qi rfis");
     const row = (Array.isArray(after) ? after : []).find((x) => x.id === rfi.id);
     state.fills = [{ rfi: rfi.number, submission: sub.id, template: tpl.name }];
@@ -768,9 +810,9 @@ async function sectionFills() {
     const out = [];
     for (const [name, w] of [["Checklist For Anchor Bolt Fixing", 1], ["Pour Card", 1], ["Pour Card", 2]]) {
       const tpl = await assignTemplate(name);
-      const rfi = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "SiteExecution", subject: `${TAG} ${tpl.name} — ${WEEKS[w].label}`, question: `Fill ${tpl.name} for the work done in ${WEEKS[w].label}.`, responsibleVendorId: state.vendorId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[w].days[4] }), "fill RFI");
+      const rfi = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "SiteExecution", subject: `${tpl.name} — ${WEEKS[w].label}`, question: `Fill ${tpl.name} for the work done in ${WEEKS[w].label}.`, responsibleVendorId: state.vendorId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[w].days[4] }), "fill RFI");
       const sub = ok(await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "vendor", "Sanjay Thakor — Reeca"), timeoutMs: 300000 }), `submit ${name}`);
-      ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `${TAG} OK`, closeRfi: true }), "review");
+      ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `OK`, closeRfi: true }), "review");
       out.push(`${rfi.number} ${tpl.name}`);
       remember("fills", `${rfi.number} ${tpl.name}`);
     }
@@ -778,16 +820,16 @@ async function sectionFills() {
   });
   await step("CHK-3", "Safety F-01: Reeca requests clearance for work at height; Jaideep inspects (12 lines, photos, signature); office records S1 Cleared", "site", async () => {
     const tpl = await assignTemplate("SPDC/HSE/F-01");
-    const rfi = ok(await call("vendor", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "SafetyIR", subject: `${TAG} Clearance — PEB column erection grid A1–A6 (work at height)`, question: "Request PMC safety clearance for column erection on " + fmt(WEEKS[2].days[1]), assignedToId: state.siteUserId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[2].days[1] }), "F-01 request");
+    const rfi = ok(await call("vendor", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "SafetyIR", subject: `Clearance — PEB column erection grid A1–A6 (work at height)`, question: "Request PMC safety clearance for column erection on " + fmt(WEEKS[2].days[1]), assignedToId: state.siteUserId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[2].days[1] }), "F-01 request");
     const sub = ok(await call("site", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "site", "Jaideep Parmar — SPDC PMC"), timeoutMs: 300000 }), "F-01 fill");
     const cleared = ok(await call("office", "PATCH", `/api/rfis/${rfi.id}`, { formPatch: { clearanceResult: "S1 Cleared", validUpTo: WEEKS[2].days[4], riskRating: "High", actionRequired: "Double-lanyard harness; exclusion zone 6 m; crane lift plan on site." } }), "clearance");
-    ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `${TAG} clearance S1`, closeRfi: true }), "review");
+    ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `clearance S1`, closeRfi: true }), "review");
     remember("fills", `${rfi.number} ${tpl.name}`);
     return `${rfi.number} · ${tpl.items.length} lines · ${tpl.items.filter((i) => i.requirePhoto).length} photos · ${cleared.status}`;
   });
   await step("CHK-4", "PPE & induction checklist (3 photos per line) by Reeca; fill log lists every fill with status", "vendor", async () => {
     const tpl = await assignTemplate("PPE & Site Induction Checklist");
-    const rfi = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "SafetyChecklist", subject: `${TAG} PPE & induction — new gang (${WEEKS[1].label})`, question: "Induct the 12 new workers and fill the PPE checklist.", responsibleVendorId: state.vendorId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[1].days[1] }), "fill RFI");
+    const rfi = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "SafetyChecklist", subject: `PPE & induction — new gang (${WEEKS[1].label})`, question: "Induct the 12 new workers and fill the PPE checklist.", responsibleVendorId: state.vendorId, linkedAssignmentId: tpl.assignmentId, dueDate: WEEKS[1].days[1] }), "fill RFI");
     const noPhotos = await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: form({ responsesJson: Object.fromEntries(tpl.items.map((i) => [i.id, { answer: "Yes" }])), status: "Submitted" }, [{ field: "signature", buffer: signaturePng(2), type: "image/png", name: "signature.png" }]) });
     assert(noPhotos.status === 400, `submit without photos returned ${noPhotos.status}`);
     const sub = ok(await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "vendor", "Sanjay Thakor — Reeca"), timeoutMs: 300000 }), "submit");
@@ -802,7 +844,7 @@ async function sectionFills() {
 }
 
 // ═══════════════════════════════ 7. Quality ═══════════════════════════════
-const NCR_CLOSE = (who, when) => ({ contractorActed: "Yes", followUpEffective: "Yes", pursueFurtherCosts: "No", siteSetupModification: "No", correctiveActionDetail: `${TAG} re-work verified by PMC on ${fmt(when)}.`, actionByWhom: who, actionCompleted: when, verifiedBy: "Jaideep Parmar (SPDC)", signedPmc: "Jaideep Parmar", positionPmc: "Site engineer — PMC" });
+const NCR_CLOSE = (who, when) => ({ contractorActed: "Yes", followUpEffective: "Yes", pursueFurtherCosts: "No", siteSetupModification: "No", correctiveActionDetail: `re-work verified by PMC on ${fmt(when)}.`, actionByWhom: who, actionCompleted: when, verifiedBy: "Jaideep Parmar (SPDC)", signedPmc: "Jaideep Parmar", positionPmc: "Site engineer — PMC" });
 async function raiseNcr({ kind, description, location, type, week, action }) {
   // "Attention to": the contractor's person on the communication matrix (falls back to any contractor-side contact).
   const attn = state.matrixPeople.find((c) => /contractor|vendor/i.test(c.org || "") && c.email === (state.vendorEmail || "")) || state.matrixPeople.find((c) => /contractor|vendor/i.test(c.org || "")) || null;
@@ -821,7 +863,7 @@ async function sectionQuality() {
     const acts = [["Excavation", "Formation level & bearing strata check", "Each footing", "IS 1904"], ["Reinforcement", "Bar dia, spacing, lap & cover check", "Each pour", "IS 456 / SP 34"], ["Concrete", "Slump, cube sampling, pour card", "Each pour", "IS 456 / IS 516"]];
     let n = 0;
     for (const w of WEEKS) for (const [section, activity, freq, code] of acts) {
-      ok(await call("office", "POST", `/api/checklist/project/${pid()}/qap`, { weekLabel: w.label, section, activity: `${activity} — ${w.label}`, description: `${TAG} ${section.toLowerCase()} control for ${w.label}`, frequency: freq, codeOfConformance: code, testAgency: "Site lab / PMC", contractorPerformer: state.vendorName, contractorChecker: "Reeca QC", pmcRole: "Witness", clientRole: "Review", discipline: "Civil", contractorOk: true, pmcOk: w.n < 3, status: w.n < 3 ? "Done" : "Planned", dueDate: w.sat }), `qap ${w.label} ${section}`);
+      ok(await call("office", "POST", `/api/checklist/project/${pid()}/qap`, { weekLabel: w.label, section, activity: `${activity} — ${w.label}`, description: `${section.toLowerCase()} control for ${w.label}`, frequency: freq, codeOfConformance: code, testAgency: "Site lab / PMC", contractorPerformer: state.vendorName, contractorChecker: "Reeca QC", pmcRole: "Witness", clientRole: "Review", discipline: "Civil", contractorOk: true, pmcOk: w.n < 3, status: w.n < 3 ? "Done" : "Planned", dueDate: w.sat }), `qap ${w.label} ${section}`);
       n++;
     }
     const dl = await call("office", "GET", `/api/checklist/project/${pid()}/qap/download.xlsx`, undefined, { timeoutMs: 120000 });
@@ -836,7 +878,7 @@ async function sectionQuality() {
     const out = [];
     state.cubes = [];
     for (const w of WEEKS) {
-      const g = ok(await call("site", "POST", `/api/checklist/project/${pid()}/cubes/group`, { srNo: `C-${w.n}`, description: `${TAG} footings F${w.n * 2 - 1}–F${w.n * 2} grid A pour`, grade: "M30", castDate: w.days[1], testAgency: "Site lab" }), `cube group ${w.label}`);
+      const g = ok(await call("site", "POST", `/api/checklist/project/${pid()}/cubes/group`, { srNo: `C-${w.n}`, description: `footings F${w.n * 2 - 1}–F${w.n * 2} grid A pour`, grade: "M30", castDate: w.days[1], testAgency: "Site lab" }), `cube group ${w.label}`);
       const specs = g.specimens || g.cubes || [];
       state.cubes.push({ week: w.n, specimens: specs });
       for (const [i, s] of specs.slice(0, 3).entries()) {
@@ -857,7 +899,7 @@ async function sectionQuality() {
     for (const [i, [recordType, title, location, severity]] of items.entries()) {
       const w = WEEKS[Math.floor(i / 2)];
       const closed = i < 4;
-      ok(await call("site", "POST", `/api/checklist/project/${pid()}/quality-site-records`, { recordType, title: `${TAG} ${title}`, description: `${title}. Raised ${fmt(w.days[i % 5])}.`, location, severity, issuedTo: state.vendorName, occurredAt: w.days[i % 5], status: closed ? "Closed" : "Open", correctiveAction: closed ? "Rectified and verified by PMC" : "" }), `record ${title}`);
+      ok(await call("site", "POST", `/api/checklist/project/${pid()}/quality-site-records`, { recordType, title: `${title}`, description: `${title}. Raised ${fmt(w.days[i % 5])}.`, location, severity, issuedTo: state.vendorName, occurredAt: w.days[i % 5], status: closed ? "Closed" : "Open", correctiveAction: closed ? "Rectified and verified by PMC" : "" }), `record ${title}`);
       n++;
       const bucket = counts[recordType] || (counts[recordType] = { total: 0, open: 0, closed: 0 });
       bucket.total++;
@@ -875,12 +917,12 @@ async function sectionQuality() {
   });
   await step("QA-4", "Week 1 NCR: site raises → Reeca responds + signs → office follow-up → office verifies and closes with sign-off → NCR form PDF", "site", async () => {
     const w = WEEKS[0];
-    const ncr = await raiseNcr({ kind: "NCR", description: `${TAG} Honeycombing at pedestal P3 after de-shuttering (${w.label})`, location: "Grid A / P3", type: "Workmanship", week: w, action: "Break out loose concrete, treat with bonding agent and recast with proper vibration; submit method statement." });
+    const ncr = await raiseNcr({ kind: "NCR", description: `Honeycombing at pedestal P3 after de-shuttering (${w.label})`, location: "Grid A / P3", type: "Workmanship", week: w, action: "Break out loose concrete, treat with bonding agent and recast with proper vibration; submit method statement." });
     state.ncr1 = ncr.id;
     const vendorClose = await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr.id}`, { status: "Closed" });
     assert(vendorClose.status === 403, `vendor close returned ${vendorClose.status}`);
-    ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr.id}`, { formDataJson: { workCarriedOutNote: `${TAG} Loose concrete chipped, bonding agent applied, recast with M30 and needle vibrator on ${fmt(w.days[4])}.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: state.vendorName, actionCompleted: w.days[4], correctiveActionDetail: "Pour card + vibrator check added to every pedestal pour.", contractorEmail: USERS.vendor.email } }), "vendor response");
-    ok(await call("office", "POST", `/api/checklist/project/${pid()}/ncr/${ncr.id}/follow-up`, { note: `${TAG} PMC to witness the recast before closure.` }), "follow-up");
+    ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr.id}`, { formDataJson: { workCarriedOutNote: `Loose concrete chipped, bonding agent applied, recast with M30 and needle vibrator on ${fmt(w.days[4])}.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: state.vendorName, actionCompleted: w.days[4], correctiveActionDetail: "Pour card + vibrator check added to every pedestal pour.", contractorEmail: USERS.vendor.email } }), "vendor response");
+    ok(await call("office", "POST", `/api/checklist/project/${pid()}/ncr/${ncr.id}/follow-up`, { note: `PMC to witness the recast before closure.` }), "follow-up");
     ok(await call("office", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr.id}`, { status: "Closed", actualClosure: WEEKS[1].days[0], formDataJson: NCR_CLOSE(state.vendorName, WEEKS[1].days[0]) }), "close");
     const pdf = await call("office", "GET", `/api/checklist/project/${pid()}/ncr/${ncr.id}/export.pdf`);
     const act = await call("office", "GET", `/api/checklist/project/${pid()}/ncr/${ncr.id}/activity`);
@@ -890,11 +932,11 @@ async function sectionQuality() {
     return `${ncr.number}${ncr.note ? ` (${ncr.note})` : ""} · vendor close refused 403 · signed by contractor · closed by office · activity ${Array.isArray(act.body) ? act.body.length : act.body?.activityLog?.length ?? "?"} events · PDF ${kb(pdf.bytes)}`;
   });
   await step("QA-5", "Week 2 CAR (repeat cover-block failures): raised, answered with signature, closed; week 3 NCR left open after the contractor's response", "site", async () => {
-    const car = await raiseNcr({ kind: "CAR", description: `${TAG} Repeated cover-block omissions on three pours — corrective action required (${WEEKS[1].label})`, location: "Grid A–C pedestals", type: "Systemic", week: WEEKS[1], action: "Root-cause and corrective action: QC checklist before every pour; toolbox talk on cover." });
-    ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${car.id}`, { formDataJson: { workCarriedOutNote: `${TAG} Root cause: cover blocks not issued to the second gang. Store issue slip now mandatory; QC sign before pour.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: "Reeca QC", actionCompleted: WEEKS[1].days[4], correctiveActionDetail: "Pre-pour checklist + cover-block issue register.", furtherAction: "PMC audit after two pours." } }), "car response");
+    const car = await raiseNcr({ kind: "CAR", description: `Repeated cover-block omissions on three pours — corrective action required (${WEEKS[1].label})`, location: "Grid A–C pedestals", type: "Systemic", week: WEEKS[1], action: "Root-cause and corrective action: QC checklist before every pour; toolbox talk on cover." });
+    ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${car.id}`, { formDataJson: { workCarriedOutNote: `Root cause: cover blocks not issued to the second gang. Store issue slip now mandatory; QC sign before pour.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: "Reeca QC", actionCompleted: WEEKS[1].days[4], correctiveActionDetail: "Pre-pour checklist + cover-block issue register.", furtherAction: "PMC audit after two pours." } }), "car response");
     ok(await call("office", "PATCH", `/api/checklist/project/${pid()}/ncr/${car.id}`, { status: "Closed", actualClosure: WEEKS[2].days[0], formDataJson: NCR_CLOSE("Reeca QC", WEEKS[2].days[0]) }), "car close");
-    const ncr3 = await raiseNcr({ kind: "NCR", description: `${TAG} Anchor bolt projection short by 20 mm at A4 (${WEEKS[2].label})`, location: "Grid A4", type: "Dimensional", week: WEEKS[2], action: "Submit PEB vendor's remedial detail (coupler / extension) for PMC approval before erection." });
-    ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr3.id}`, { formDataJson: { workCarriedOutNote: `${TAG} PEB vendor remedial detail (threaded coupler) submitted ${fmt(WEEKS[2].days[4])}; awaiting PMC approval.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: state.vendorName } }), "ncr3 response");
+    const ncr3 = await raiseNcr({ kind: "NCR", description: `Anchor bolt projection short by 20 mm at A4 (${WEEKS[2].label})`, location: "Grid A4", type: "Dimensional", week: WEEKS[2], action: "Submit PEB vendor's remedial detail (coupler / extension) for PMC approval before erection." });
+    ok(await call("vendor", "PATCH", `/api/checklist/project/${pid()}/ncr/${ncr3.id}`, { formDataJson: { workCarriedOutNote: `PEB vendor remedial detail (threaded coupler) submitted ${fmt(WEEKS[2].days[4])}; awaiting PMC approval.`, signedContractor: "Sanjay Thakor", positionContractor: "Site in-charge — Reeca", actionByWhom: state.vendorName } }), "ncr3 response");
     const log = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-fill-log`);
     const regN = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-register/download.xlsx?kind=NCR`);
     const regC = await call("office", "GET", `/api/checklist/project/${pid()}/ncr-register/download.xlsx?kind=CAR`);
@@ -917,7 +959,7 @@ async function sectionSafety() {
     let n = 0;
     for (const [i, day] of ALL_DAYS.entries()) {
       const manpower = 34 + i * 2 + (i % 3);
-      ok(await call("site", "PUT", `/api/safety/project/${pid()}/daily/${day}`, { manpower, hoursPerHead: 8, safeManHours: manpower * 8, toolboxTalks: 1, tbtTopics: ["Excavation edge protection", "Rebar handling & cut ends", "Concrete pump line", "Working at height", "Crane lift signals"][i % 5], inductions: i % 5 === 0 ? 6 : 0, permitsIssued: 1 + (i % 2), ppeCompliancePct: 92 + (i % 6), lostTimeInjury: 0, majorIncident: 0, remarks: `${TAG} ${fmt(day)}` }), `daily ${day}`);
+      ok(await call("site", "PUT", `/api/safety/project/${pid()}/daily/${day}`, { manpower, hoursPerHead: 8, safeManHours: manpower * 8, toolboxTalks: 1, tbtTopics: ["Excavation edge protection", "Rebar handling & cut ends", "Concrete pump line", "Working at height", "Crane lift signals"][i % 5], inductions: i % 5 === 0 ? 6 : 0, permitsIssued: 1 + (i % 2), ppeCompliancePct: 92 + (i % 6), lostTimeInjury: 0, majorIncident: 0, remarks: `${fmt(day)}` }), `daily ${day}`);
       n++;
     }
     return `${n} days logged · manpower ${34}–${34 + 14 * 2 + 2} · ${n} toolbox talks`;
@@ -940,7 +982,7 @@ async function sectionSafety() {
     let n = 0;
     for (const [w, recordType, title, severity, category] of recs) {
       ok(await call("site", "POST", `/api/safety/project/${pid()}`, {
-        recordType, title: `${TAG} ${title}`, description: title, severity, category, location: "Main plant",
+        recordType, title: `${title}`, description: title, severity, category, location: "Main plant",
         occurredAt: WEEKS[w].days[n % 5], issuedTo: state.vendorName, responsibleParty: state.vendorName,
         correctiveAction: /Talk|Training/i.test(recordType) ? "" : "Rectified on the spot; supervisor briefed",
         status: w < 2 ? "Closed" : "Open",
@@ -952,9 +994,9 @@ async function sectionSafety() {
   });
   await step("SAF-3", "Week 2 safety NCR: site issues → Reeca records root cause / actions (cannot close) → office closes; form PDF", "site", async () => {
     const w = WEEKS[1];
-    const r = ok(await call("site", "POST", `/api/safety/project/${pid()}`, { recordType: "NCR", title: `${TAG} Edge protection missing at the mezzanine slab`, description: "Open edge on the mezzanine slab without guard rail or toe board.", severity: "High", location: "Mezzanine grid C", activityTask: "Mezzanine slab shuttering", category: "Working at height", occurredAt: w.days[1], issuedTo: state.vendorName, responsibleParty: state.vendorName, targetCompletion: w.days[4] }), "safety ncr");
+    const r = ok(await call("site", "POST", `/api/safety/project/${pid()}`, { recordType: "NCR", title: `Edge protection missing at the mezzanine slab`, description: "Open edge on the mezzanine slab without guard rail or toe board.", severity: "High", location: "Mezzanine grid C", activityTask: "Mezzanine slab shuttering", category: "Working at height", occurredAt: w.days[1], issuedTo: state.vendorName, responsibleParty: state.vendorName, targetCompletion: w.days[4] }), "safety ncr");
     state.safetyNcr = r.id;
-    ok(await call("vendor", "PATCH", `/api/safety/${r.id}`, { rootCause: "Guard rail removed for material shifting and not re-fixed.", immediateAction: "Area barricaded; rails re-fixed the same day.", longTermAction: "Permit required before removing any edge protection; daily walk by safety officer.", actionTaken: `${TAG} rails re-fixed ${fmt(w.days[2])}` }), "vendor action");
+    ok(await call("vendor", "PATCH", `/api/safety/${r.id}`, { rootCause: "Guard rail removed for material shifting and not re-fixed.", immediateAction: "Area barricaded; rails re-fixed the same day.", longTermAction: "Permit required before removing any edge protection; daily walk by safety officer.", actionTaken: `rails re-fixed ${fmt(w.days[2])}` }), "vendor action");
     const close = await call("vendor", "PATCH", `/api/safety/${r.id}`, { status: "Closed" });
     assert(close.status === 403, `vendor close returned ${close.status}`);
     ok(await call("office", "PATCH", `/api/safety/${r.id}`, { status: "Closed" }), "office close");
@@ -1008,10 +1050,10 @@ async function sectionProgress() {
   });
   await step("PRG-2", "Hindrances (one per week, site), risks and statutory approvals (office), planned-vs-actual values per week", "site", async () => {
     const hind = [[0, "Excavation", "Hard rock at grid D needs breaker — 2 days", "Site condition", 2], [1, "RCC footings", "Ready-mix supply failed on Thursday (plant breakdown)", "Material", 1], [2, "Anchor bolt fixing", "PEB vendor's template drawing late by 4 days", "Drawing / vendor", 4]];
-    for (const [w, activity, description, type, days] of hind) ok(await call("site", "POST", `/api/progress/${pid()}/hindrances`, { activity, description: `${TAG} ${description}`, type, category: type, occurredAt: WEEKS[w].days[2], resolvedAt: w < 2 ? WEEKS[w].days[4] : null, daysImpacted: days, status: w < 2 ? "Resolved" : "Open", accountable: w === 2 ? "PEB vendor" : state.vendorName, location: "Main plant" }), "hindrance");
+    for (const [w, activity, description, type, days] of hind) ok(await call("site", "POST", `/api/progress/${pid()}/hindrances`, { activity, description: `${description}`, type, category: type, occurredAt: WEEKS[w].days[2], resolvedAt: w < 2 ? WEEKS[w].days[4] : null, daysImpacted: days, status: w < 2 ? "Resolved" : "Open", accountable: w === 2 ? "PEB vendor" : state.vendorName, location: "Main plant" }), "hindrance");
     const risks = [["R1", "Monsoon tail delays roofing", "Medium", "High", "PMC"], ["R2", "Anchor bolt grade change raises cost", "High", "Medium", "Client / PMC"], ["R3", "Crane availability for PEB erection", "Medium", "Medium", state.vendorName]];
-    for (const [code, name, probability, consequence, owner] of risks) ok(await call("office", "POST", `/api/progress/${pid()}/risks`, { code, category: "Schedule", opportunityThreat: "Threat", name: `${TAG} ${name}`, description: name, probability, consequence, status: "Open", riskOwner: owner, contingencyPlan: "Tracked weekly in the WPR", dateLastUpdated: WEEKS[2].sat }), "risk");
-    for (const [id, description, authority, status, w] of [["L1", "Fire NOC — provisional", "Fire department", "Submitted", 0], ["L2", "GPCB consent to establish", "GPCB", "Received", 1]]) ok(await call("office", "POST", `/api/progress/${pid()}/legal`, { approvalId: id, category: "Statutory", authority, description: `${TAG} ${description}`, status, submissionDate: WEEKS[w].days[1], receivedDate: status === "Received" ? WEEKS[w].days[4] : null, requiredBy: WEEKS[2].sun, responsible: "Client / PMC" }), "legal");
+    for (const [code, name, probability, consequence, owner] of risks) ok(await call("office", "POST", `/api/progress/${pid()}/risks`, { code, category: "Schedule", opportunityThreat: "Threat", name: `${name}`, description: name, probability, consequence, status: "Open", riskOwner: owner, contingencyPlan: "Tracked weekly in the WPR", dateLastUpdated: WEEKS[2].sat }), "risk");
+    for (const [id, description, authority, status, w] of [["L1", "Fire NOC — provisional", "Fire department", "Submitted", 0], ["L2", "GPCB consent to establish", "GPCB", "Received", 1]]) ok(await call("office", "POST", `/api/progress/${pid()}/legal`, { approvalId: id, category: "Statutory", authority, description: `${description}`, status, submissionDate: WEEKS[w].days[1], receivedDate: status === "Received" ? WEEKS[w].days[4] : null, requiredBy: WEEKS[2].sun, responsible: "Client / PMC" }), "legal");
     for (const w of WEEKS) ok(await call("office", "POST", `/api/progress/${pid()}/planned-actual`, { packageName: "Civil", periodLabel: w.label, plannedAmount: 1800000 * w.n, actualAmount: 1500000 * w.n + 120000 * (w.n - 1) }), "pva");
     return `3 hindrances (2 resolved) · 3 risks · 2 approvals · 3 PvA weeks`;
   });
@@ -1042,7 +1084,7 @@ async function sectionCost() {
     let lastQty = 0;
     for (const [w, description, nos1, nos2, length, width, height, unit] of mb) {
       if (n % 2 === 0) ok(await call("site", "POST", `/api/cost/${pid()}/mb`, { packageName: state.pkg, rowKind: "subsection", description: `${WEEKS[w].label} measurements` }), "mb subsection");
-      const r = ok(await call("site", "POST", `/api/cost/${pid()}/mb`, { packageName: state.pkg, rowKind: "data", description, nos1, nos2, length, width, height, unit, raBill: w < 2 ? "RA-01" : "RA-02", remark: `${TAG} ${WEEKS[w].label}` }), `mb ${description}`);
+      const r = ok(await call("site", "POST", `/api/cost/${pid()}/mb`, { packageName: state.pkg, rowKind: "data", description, nos1, nos2, length, width, height, unit, raBill: w < 2 ? "RA-01" : "RA-02", remark: `${WEEKS[w].label}` }), `mb ${description}`);
       lastQty = Number(r.qty);
       n++;
     }
@@ -1085,13 +1127,13 @@ async function sectionFinance() {
     const noFile = await call("vendor", "POST", `/api/finance/${pid()}/ra`, undefined, { form: form({ raNumber: "RA-00", discipline: "Civil" }) });
     assert(noFile.status >= 400, `RA without a file accepted (${noFile.status})`);
     const bill = await raBillXlsx("RA-01", `${fmt(WEEKS[0].mon)} – ${fmt(WEEKS[1].sun)}`, [{ item: "Excavation for foundations", unit: "cum", qty: 900, rate: 180 }, { item: "PCC below footings", unit: "cum", qty: 120, rate: 5200 }, { item: "RCC footings & pedestals", unit: "cum", qty: 125, rate: 7800 }]);
-    const r = ok(await call("vendor", "POST", `/api/finance/${pid()}/ra`, undefined, { form: form({ raNumber: "RA-01", discipline: "Civil", packageKey: "Civil", invoiceNumber: "REECA/VT/26-27/01", invoiceDate: WEEKS[1].sun, purchaseOrderId: state.poId, againstBillRaised: bill.total, gstAmount: bill.total * 0.18, totalInvoiceWithGst: bill.total * 1.18, retentionAmount: bill.total * 0.05, description: `${TAG} RA-01 weeks 1–2` }, [{ field: "files", buffer: bill.buffer, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name: "RA-01-Reeca.xlsx" }]), timeoutMs: 240000 }), "ra");
+    const r = ok(await call("vendor", "POST", `/api/finance/${pid()}/ra`, undefined, { form: form({ raNumber: "RA-01", discipline: "Civil", packageKey: "Civil", invoiceNumber: "REECA/VT/26-27/01", invoiceDate: WEEKS[1].sun, purchaseOrderId: state.poId, againstBillRaised: bill.total, gstAmount: bill.total * 0.18, totalInvoiceWithGst: bill.total * 1.18, retentionAmount: bill.total * 0.05, description: `RA-01 weeks 1–2` }, [{ field: "files", buffer: bill.buffer, type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name: "RA-01-Reeca.xlsx" }]), timeoutMs: 240000 }), "ra");
     state.raId = r.id || r.bill?.id;
     assert(state.raId, `RA-01 create returned no id: ${noteOf(r)}`);
     const early = await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Certified" }, [{ field: "file", buffer: bill.buffer, name: "RA-01-certified.xlsx" }]) });
     assert(early.status === 400 || early.status === 404, `Certified before Corrected returned ${early.status}`);
-    ok(await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Corrected", notes: `${TAG} PCC qty corrected to MB (118.4 cum)` }, [{ field: "file", buffer: bill.buffer, name: "RA-01-corrected.xlsx" }]), timeoutMs: 240000 }), "corrected");
-    ok(await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Certified", amountAtStage: Math.round(bill.total * 0.97), notes: `${TAG} certified` }, [{ field: "file", buffer: bill.buffer, name: "RA-01-certified.xlsx" }]), timeoutMs: 240000 }), "certified");
+    ok(await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Corrected", notes: `PCC qty corrected to MB (118.4 cum)` }, [{ field: "file", buffer: bill.buffer, name: "RA-01-corrected.xlsx" }]), timeoutMs: 240000 }), "corrected");
+    ok(await call("office", "POST", `/api/finance/ra/${r.id}/stage`, undefined, { form: form({ stage: "Certified", amountAtStage: Math.round(bill.total * 0.97), notes: `certified` }, [{ field: "file", buffer: bill.buffer, name: "RA-01-certified.xlsx" }]), timeoutMs: 240000 }), "certified");
     const cop = ok(await call("office", "POST", `/api/finance/${pid()}/cop`, undefined, { form: form({ raBillId: r.id }), timeoutMs: 240000 }), "cop");
     state.copId = cop.id;
     const pdf = await call("office", "GET", `/api/finance/${pid()}/cop/${cop.id}/download.pdf`);
@@ -1169,7 +1211,7 @@ async function sectionDpr() {
           lines, manpower,
           equipment: [{ name: "JCB 3DX", qty: 1, workedHrs: i < 10 ? 8 : 2, idleHrs: i < 10 ? 0 : 6 }, { name: "Transit mixer", qty: 2, workedHrs: i >= 2 ? 6 : 0 }, { name: "Needle vibrator", qty: 3, workedHrs: i >= 2 ? 5 : 0 }, { name: "Hydra 14 t", qty: 1, workedHrs: i >= 8 ? 6 : 0 }],
           materials: [{ name: "Cement OPC 53", unit: "bags", opening: 400 + i * 20, received: i % 3 === 0 ? 300 : 0, consumed: i >= 2 ? 90 : 10 }, { name: "Reinforcement steel", unit: "MT", opening: 42 - i, received: i % 5 === 0 ? 20 : 0, consumed: i >= 5 ? 2.5 : 0.5 }, { name: "Coarse aggregate 20 mm", unit: "cum", opening: 120, received: i % 4 === 0 ? 60 : 0, consumed: i >= 2 ? 30 : 0 }],
-          safety: { toolboxTalk: true, safeManHoursToday: md * 8, ltiToday: 0, inductionsToday: i % 5 === 0 ? 6 : 0, remarks: `${TAG} TBT held 08:30` },
+          safety: { toolboxTalk: true, safeManHoursToday: md * 8, ltiToday: 0, inductionsToday: i % 5 === 0 ? 6 : 0, remarks: `TBT held 08:30` },
           highlights: [`${ACTIVITIES.filter((a) => a.daily(i) > 0).map((a) => a.activity).join(", ")} in progress`, i === 9 ? "Excavation completed grid A–K" : i === 7 ? "First anchor bolt template released" : `Day ${i + 1} of ${ALL_DAYS.length}`],
           nextDayPlan: ACTIVITIES.filter((a) => a.daily(i + 1) > 0).map((a) => `${a.activity} — ${a.daily(i + 1)} ${a.unit}`),
           issues: i === 12 ? [{ description: "PEB template drawing awaited for grid B", raisedOn: day, owner: "PEB vendor" }] : [],

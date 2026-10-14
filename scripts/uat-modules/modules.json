@@ -1,0 +1,104 @@
+{
+  "order": [
+    "CRM",
+    "ATT",
+    "DWG",
+    "DCI",
+    "RFI",
+    "CHK",
+    "QA",
+    "SAF",
+    "PRG",
+    "CST",
+    "FIN",
+    "DPR",
+    "WPR",
+    "VER"
+  ],
+  "modules": {
+    "CRM": {
+      "title": "CRM · project · client/vendor portals · logins",
+      "only": "SET",
+      "logins": ["office", "site", "vendor", "client", "consultant"],
+      "creates": "Directory companies, Activate portal (Demo@1234), Voltamp team + matrix + site pin + logo"
+    },
+    "ATT": {
+      "title": "Attendance (site check-in)",
+      "only": "ATT",
+      "logins": ["office", "site"],
+      "creates": "Mon–Fri attendance for site engineer across UAT weeks"
+    },
+    "DWG": {
+      "title": "Drawings / GFC",
+      "only": "DWG",
+      "logins": ["site", "office", "client"],
+      "creates": "Drawing Check fills, GFC uploads R0/R1, exports, client blocked from upload"
+    },
+    "DCI": {
+      "title": "Design coordination",
+      "only": "DCI",
+      "logins": ["site", "consultant", "office"],
+      "creates": "Coordination issue, markup, escalate, consultant answer, register export"
+    },
+    "RFI": {
+      "title": "RFIs",
+      "only": "RFI",
+      "logins": ["site", "office", "consultant", "client"],
+      "creates": "Raise RFI, consultant answer, close, client concern, register"
+    },
+    "CHK": {
+      "title": "Checklists (vendor fills)",
+      "only": "CHK",
+      "logins": ["vendor", "site", "office"],
+      "creates": "Drawing / quality / safety checklist submissions → ISO folders"
+    },
+    "QA": {
+      "title": "Quality (QAP · cubes · NCR/CAR · SOR)",
+      "only": "QA",
+      "logins": ["office", "site", "vendor"],
+      "creates": "QAP lines, cube tests, NCR→vendor→close, SOR, branded exports"
+    },
+    "SAF": {
+      "title": "Safety",
+      "only": "SAF",
+      "logins": ["site", "office", "vendor"],
+      "creates": "Daily log, Site Instruction / Unsafe act, safety NCR, week pack"
+    },
+    "PRG": {
+      "title": "Progress (activities · manpower · S-curve)",
+      "only": "PRG",
+      "logins": ["planning", "office"],
+      "creates": "Activities, milestones, manpower, S-curve export"
+    },
+    "CST": {
+      "title": "Cost (budget · BOQ · MB · BBS · cashflow)",
+      "only": "CST",
+      "logins": ["office", "site"],
+      "creates": "Budget headings, BOQ/monitoring, MB, BBS, cashflow"
+    },
+    "FIN": {
+      "title": "Finance (WO · RA · COP)",
+      "only": "FIN",
+      "logins": ["office", "vendor"],
+      "creates": "Work order, RA bill stages, COP"
+    },
+    "DPR": {
+      "title": "Daily Progress Report",
+      "only": "DPR",
+      "logins": ["site", "office"],
+      "creates": "15 DPRs with day-to-day continuity → SharePoint 07.02"
+    },
+    "WPR": {
+      "title": "Weekly Progress Report (needs DPR + preferably DWG/QA/SAF/PRG)",
+      "only": "WPR",
+      "logins": ["office", "client"],
+      "creates": "3 WPRs — client xlsx + pptx with charts + communication matrix"
+    },
+    "VER": {
+      "title": "SharePoint verify (folder listing)",
+      "only": "VER",
+      "logins": ["office"],
+      "creates": "Lists today’s files across ISO folders"
+    }
+  }
+}

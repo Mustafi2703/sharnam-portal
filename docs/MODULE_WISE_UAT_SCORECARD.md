@@ -32,23 +32,18 @@ Mark each row `[OK]` / `[FIX]` / `[RETEST]` after you check in the UI.
 
 Evidence folder: `docs/uat-evidence/prod-deep-YYYY-MM-DD/REPORT.md` (now includes **Module scorecard**).
 
-### Snapshot — run on `34cada1` (in progress / partial)
+### Snapshot — run on `34cada1` · **24 / 44** · portal dropped mid-run
 
 | Module | Worked | Didn’t / watch | Your mark |
 |---|---|---|---|
-| **CRM / Logins** | All 6 portal logins | CRM-1…3 added in next deploy | `[ ]` |
-| **Setup** | Voltamp team, matrix, logo, pin | — | `[ ]` |
-| **Drawings** | 9/9 GFC + Drawing Check, R1, exports, client read-only, fill log | Settings route 404 (soft); library browse timeout (soft) | `[ ]` |
-| **Design coordination** | Issue + markup + 5 follow-ups + escalate + consultant answer | DCI-4 register export timed out once (softened) | `[ ]` |
-| **RFIs** | (pending this run) | Prior runs: raise / answer / close OK | `[ ]` |
-| **Checklists (CHK)** | — | Often **504** on multi-photo submit (gateway) | `[ ]` |
-| **Quality** | Prior: NCR/CAR/cubes/QAP create OK | QA-1 download timed out once; publish 202 OK | `[ ]` |
-| **Safety** | Prior: daily log + NCR + weekly packs | Need record types Site Instruction / Unsafe act (seeded in script) | `[ ]` |
-| **Progress** | Activities, milestones, manpower, S-curve | — | `[ ]` |
-| **Cost** | Prior: budget/BOQ/MB/BBS/cashflow | — | `[ ]` |
-| **Finance** | Prior: WO + RA + COP | Overview 404 watch | `[ ]` |
-| **DPR** | 15 days continuity (prior full run) | Must run before WPR | `[ ]` |
-| **WPR** | Needs DWG+QA+SAF+PRG+DPR together | WPR-only fails (no DPR); old run 4 charts (fixed template) | `[ ]` |
+| **CRM / Logins** | ✅ All 6 portal logins | CRM-1…3 on newer commit `abaf17f` (not in this run) | `[ ]` |
+| **Setup** | ✅ Team, matrix, logo, pin | — | `[ ]` |
+| **Drawings** | ✅ **9/9 GFC**, R1, exports, client blocked, fill log | Settings 404 soft; library timeout soft | `[ ]` |
+| **Design coordination** | ✅ Issue → escalate → consultant close | ❌ DCI-4 export `0/200` (gateway) | `[ ]` |
+| **Quality** | ✅ QA-3 SOR + QA-4 NCR | ❌ QA-1/2 download timeout; QA-5/6 **fetch failed** (API down) | `[ ]` |
+| **Safety / Progress / DPR / WPR** | — | ❌ All **TypeError: fetch failed** — **portal.spdc.in unreachable** after ~QA-4 | `[ ]` |
+
+**Blocker:** Hostinger / `portal.spdc.in` went offline mid-UAT. Retest `UAT_ONLY=QA,SAF,PRG,DPR,WPR` once health is OK.
 
 ---
 

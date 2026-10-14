@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "./ui";
 import { useAuth } from "../auth";
+import { apiBase } from "../api";
 import type { DrawingPreview, DrawingRevisionPreview } from "../lib/drawingPreview";
 import { latestMarkupByPage } from "../lib/drawingPreview";
 import { canDownloadPortalFiles, isSpdcEmployee, portalFileSrc } from "../lib/driveAccess";
@@ -43,12 +44,58 @@ function RevisionViewer({
     return t;
   }, [revision, markupGroups.length]);
 
+  const { token } = useAuth();
   const [tab, setTab] = useState(tabs[0]?.id || "pdf");
   const [markupPage, setMarkupPage] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(0);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const activeMarkup = markupGroups[markupPage];
   const activeHistory = activeMarkup?.history[historyIdx];
+
+  useEffect(() => {
+    let revoke: string | null = null;
+    let cancelled = false;
+    async function loadPdf() {
+      setPdfError("");
+      setPdfBlobUrl(null);
+      if (!revision.pdf || !canView) return;
+      // Prefer authenticated revision PDF (local disk or SharePoint) — static /uploads often 404 after deploy.
+      if (revision.revisionId && token) {
+        setPdfLoading(true);
+        try {
+          const res = await fetch(`${apiBase()}/api/drawings/revision/${revision.revisionId}/pdf`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => null);
+            throw new Error(err?.error || `Could not open PDF (${res.status})`);
+          }
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          revoke = url;
+          if (!cancelled) setPdfBlobUrl(url);
+        } catch (err) {
+          if (!cancelled) {
+            setPdfError(err instanceof Error ? err.message : "Could not open PDF");
+            // Fall back to static URL if present
+            if (revision.pdf?.fileUrl) setPdfBlobUrl(portalFileSrc(revision.pdf.fileUrl, { allowToolbar }));
+          }
+        } finally {
+          if (!cancelled) setPdfLoading(false);
+        }
+        return;
+      }
+      if (revision.pdf.fileUrl) setPdfBlobUrl(portalFileSrc(revision.pdf.fileUrl, { allowToolbar }));
+    }
+    void loadPdf();
+    return () => {
+      cancelled = true;
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [revision.revisionId, revision.pdf?.fileUrl, revision.pdf, token, canView, allowToolbar]);
 
   return (
     <div className={`flex flex-col min-h-0 ${className}`}>
@@ -94,7 +141,13 @@ function RevisionViewer({
 
       <div className="flex-1 min-h-[280px] bg-sand/60 overflow-auto">
         {tab === "pdf" && revision.pdf && canView && (
-          <iframe title={revision.title} src={portalFileSrc(revision.pdf.fileUrl, { allowToolbar })} className="w-full h-[min(70vh,520px)] min-h-[320px] border-0" />
+          pdfLoading ? (
+            <p className="p-8 text-sm text-steel-muted text-center">Opening drawing PDF…</p>
+          ) : pdfBlobUrl ? (
+            <iframe title={revision.title} src={pdfBlobUrl} className="w-full h-[min(70vh,520px)] min-h-[320px] border-0" />
+          ) : (
+            <p className="p-8 text-sm text-steel-muted text-center">{pdfError || "PDF not available for this revision."}</p>
+          )
         )}
         {tab === "pdf" && revision.pdf && !canView && (
           <p className="p-8 text-sm text-steel-muted text-center">Drawing preview is available to SPDC employees in this viewer.</p>
