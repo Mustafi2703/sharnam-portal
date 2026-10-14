@@ -492,6 +492,36 @@ async function sectionDrawings() {
     assert(list.some((d) => d.drawingNumber === "VT-ST-101"), "client does not see VT-ST-101");
     return `sees ${list.length} drawings · add refused 403`;
   });
+  await step("DWG-6", "Drawing settings pick-lists load for office (disciplines / packages used by register + RFIs)", "office", async () => {
+    const r = await call("office", "GET", `/api/drawings/project/${pid()}/settings`);
+    if (r.status === 404) {
+      const alt = await call("office", "GET", `/api/drawings/project/${pid()}/register-dashboard`);
+      ok(alt, "settings missing — dashboard still OK");
+      return `settings route ${r.status} · dashboard fallback OK`;
+    }
+    ok(r, "settings");
+    return `settings ${r.status} · keys ${Object.keys(r.body || {}).slice(0, 8).join(",") || "ok"}`;
+  });
+  await step("DWG-7", "Drawing files library browses ISO 04.02 design folder", "office", async () => {
+    const folder = "04_DESIGN_AND_INFORMATION_MANAGEMENT/04.02_Drawings_and_Specifications";
+    const r = await call("office", "GET", `/api/dms/${pid()}/browse?path=${encodeURIComponent(folder)}`, undefined, { timeoutMs: 60000 });
+    assert(r.status === 200 || r.status === 404, `library browse ${r.status}`);
+    const n = (r.body?.children || []).length;
+    return `04.02 browse ${r.status} · ${n} children`;
+  });
+  await step("DWG-8", "Drawing Check fill log lists the GFC prechecks; branded export available", "office", async () => {
+    const log = ok(await call("office", "GET", `/api/checklist/project/${pid()}/submissions?family=DrawingCheck`), "fill log");
+    const rows = Array.isArray(log) ? log : log.rows || log.submissions || [];
+    const drawingFills = rows.filter((s) => /drawing|preupload|PreUpload/i.test(String(s.purpose || s.template?.checklistType || s.checklistType || "")));
+    assert(rows.length >= 1 || drawingFills.length >= 1, `no Drawing Check fills in log (${rows.length})`);
+    const one = rows[0] || drawingFills[0];
+    if (one?.id) {
+      const x = await call("office", "GET", `/api/checklist/submissions/${one.id}/branded.xlsx`);
+      assert(x.status === 200 && x.bytes > 500, `branded fill ${x.status}`);
+      return `${rows.length} fills · branded ${kb(x.bytes)}`;
+    }
+    return `${rows.length} fills listed`;
+  });
 }
 
 // ═══════════════════════════════ 4. Design coordination ═══════════════════════════════
@@ -1103,6 +1133,10 @@ async function sectionWpr() {
       state.continuity.wpr.push({ week: w.label, rows: till, breaks });
       const matrixRows = (s.communicationMatrix?.rows || []).length;
       assert(matrixRows >= 3, `communication matrix has only ${matrixRows} rows — fill the project matrix contacts`);
+      // Drawings → WPR: Design status + drawing register must be seeded from GFC/register (July pack + SPDC pack).
+      const designRows = (s.designStatus?.rows || []).length;
+      const dwgRegRows = (s.drawingRegister?.rows || []).length;
+      assert(designRows >= 1 || dwgRegRows >= 1, `WPR missing drawings feed (designStatus=${designRows}, drawingRegister=${dwgRegRows}) — run DWG before WPR`);
       const sizes = [];
       let clientCharts = 0;
       for (const k of ["download.xlsx", "download-client.xlsx", "download.pptx"]) {
@@ -1124,14 +1158,16 @@ async function sectionWpr() {
             const { execSync } = await import("node:child_process");
             const sheets = execSync(`unzip -p "${tmp}" xl/workbook.xml | grep -oE 'name="[^"]+"' || true`, { encoding: "utf8" });
             assert(/Communication Matrix/i.test(sheets), "client pack missing Communication Matrix sheet");
+            assert(/Design status/i.test(sheets), "client pack missing Design status sheet (July template)");
+            assert(/As per drawing status/i.test(sheets), "client pack missing As per drawing status sheet");
             const media = Number(execSync(`unzip -l "${tmp}" | grep -c 'xl/media/' || true`, { encoding: "utf8" }).trim() || 0);
             assert(media >= 2, `client pack logos in media=${media} (need Sharnam + client)`);
           } catch (e) {
-            if (/missing Communication Matrix|logos in media/.test(String(e.message || e))) throw e;
+            if (/missing Communication Matrix|logos in media|missing Design status|missing As per drawing/i.test(String(e.message || e))) throw e;
           }
         }
         if (k === "download.pptx") assert(r.bytes > 200_000, `pptx too small ${r.bytes} — charts/photos likely missing`);
-        sizes.push(`${k.replace("download", "wpr")} ${kb(r.bytes)}${k === "download-client.xlsx" ? ` · ${clientCharts} charts · matrix ${matrixRows} rows` : ""}`);
+        sizes.push(`${k.replace("download", "wpr")} ${kb(r.bytes)}${k === "download-client.xlsx" ? ` · ${clientCharts} charts · matrix ${matrixRows} · design ${designRows} · dwgReg ${dwgRegRows}` : ""}`);
       }
       const pub = await call("office", "POST", `/api/wpr-maker/${pid()}/publish`, { weekEnding: w.sun, reportNumber: pack.reportNumber || pack.header?.reportNumber || w.n }, { timeoutMs: 600000 });
       assert(pub.status < 300 || pub.dropped, `publish ${pub.status} ${noteOf(pub.body)}`);

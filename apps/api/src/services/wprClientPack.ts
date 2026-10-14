@@ -564,9 +564,26 @@ export async function buildWprClientWorkbook(
     writeRows(wb.Sheets[hseKey], 2, obs, { overrideFormulas: true });
   }
 
-  // Design status (client sheet: header row 7, data from row 8) — same discipline status as the WPR.
+  // Design status (July client sheet) — prefer seeded WPR section; else roll up Drawing Register lines by discipline.
   const designKey = findSheet(wb, /^Design status$/i);
-  const designRows = sections?.designStatus?.rows || [];
+  let designRows = sections?.designStatus?.rows || [];
+  if (!designRows.length && registerLines.length) {
+    const byDisc = new Map<string, { total: number; issued: number }>();
+    for (const l of registerLines) {
+      const disc = String(l.discipline || "General");
+      const cur = byDisc.get(disc) || { total: 0, issued: 0 };
+      cur.total += 1;
+      if (l.actualSubmissionDate || l.issueDate || l.drawingId) cur.issued += 1;
+      byDisc.set(disc, cur);
+    }
+    designRows = [...byDisc.entries()].map(([disc, v], i) => [
+      i + 1,
+      disc,
+      v.issued >= v.total ? "Complete" : "In progress",
+      v.total ? `${Math.round((100 * v.issued) / v.total)}%` : "—",
+      `${v.issued}/${v.total} on register`,
+    ]);
+  }
   if (designKey && designRows.length) {
     writeRows(
       wb.Sheets[designKey],
