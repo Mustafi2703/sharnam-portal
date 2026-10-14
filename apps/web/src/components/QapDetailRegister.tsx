@@ -100,12 +100,12 @@ export function QapDetailRegister({
   }, [localRows]);
 
   useEffect(() => {
+    if (!showWeekFilter) return;
     if (weeks.length && !weekFilter) setWeekFilter(preferWeekLabel(weeks));
-  }, [weeks, weekFilter]);
+  }, [weeks, weekFilter, showWeekFilter]);
 
   const filtered = useMemo(() => {
     if (!showWeekFilter) return localRows;
-    if (!weekFilter) return localRows.filter((r) => weekMatchesFilter(r.weekLabel, "Week 50"));
     return localRows.filter((r) => weekMatchesFilter(r.weekLabel, weekFilter));
   }, [localRows, weekFilter, showWeekFilter]);
 

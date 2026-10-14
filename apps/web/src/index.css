@@ -2682,15 +2682,17 @@ html.is-tool-window #root {
   display: block !important;
   width: 100% !important;
   min-width: 0 !important;
-  height: min(70dvh, calc(100dvh - 12rem)) !important;
-  min-height: min(28rem, 55dvh) !important;
-  max-height: min(70dvh, calc(100dvh - 12rem)) !important;
+  /* Grow with rows; cap so a full Week-50 sheet scrolls inside (no empty 70vh void) */
+  height: auto !important;
+  min-height: 12rem !important;
+  max-height: min(72dvh, calc(100dvh - 11rem)) !important;
   overflow: auto !important;
   overflow-x: auto !important;
   overflow-y: auto !important;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
   touch-action: pan-x pan-y;
 }
 

@@ -8,10 +8,8 @@ export function normalizeWeekLabel(label?: string | null): string {
 }
 
 export function weekMatchesFilter(rowWeek?: string | null, filter?: string | null): boolean {
-  if (!filter) {
-    const n = normalizeWeekLabel(rowWeek);
-    return n === "Week 50" || /^w50$/i.test(String(rowWeek || "").trim());
-  }
+  /** Empty filter = all weeks (do not hide non–Week-50 rows). */
+  if (!filter) return true;
   if (rowWeek === filter) return true;
   return normalizeWeekLabel(rowWeek) === normalizeWeekLabel(filter);
 }

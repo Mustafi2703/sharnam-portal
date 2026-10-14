@@ -8,7 +8,7 @@ import { QapDetailRegister, type QapProjectMeta } from "../../components/QapDeta
 import { QapLibraryModal } from "../../components/QapLibraryModal";
 import { QapRegisterAddForm, type QapAddFormState } from "../../components/QapRegisterAddForm";
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
-import { normalizeWeekLabel, preferWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
+import { normalizeWeekLabel, qapNeedsFullResync, weekMatchesFilter } from "../../lib/qapWeek";
 
 /** ISO folder from SharePoint tree — matches MODULE_TO_ISO_FOLDER.qap in graph.ts */
 const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspection_Test_Plans";
@@ -70,10 +70,7 @@ export default function QapPage() {
           clientLogoUrl: (projRes as { clientLogoUrl?: string | null }).clientLogoUrl,
         });
       }
-      if (!weekFilter && dashRes?.qap?.length) {
-        const labels = (dashRes.qap as { weekLabel?: string }[]).map((q) => q.weekLabel).filter(Boolean) as string[];
-        setWeekFilter(preferWeekLabel(labels));
-      }
+      /* Keep week filter as-is (default All weeks) so every loaded line stays visible. */
     } catch {
       setDash(null);
     }
@@ -236,13 +233,44 @@ export default function QapPage() {
       </div>
 
 
-      {(qapRows.length === 0 || qapNeedsFullResync(dash?.qap || [])) && !busy && (
-        <Card className="!p-3 border-line bg-sand/50 shrink-0">
-          <p className="text-sm text-steel-muted">
+      {(qapRows.length === 0 || qapNeedsFullResync(dash?.qap || [])) && (
+        <Card className="!p-3 border-amber-200 bg-amber-50/80 shrink-0 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink max-w-2xl">
             {qapRows.length === 0
-              ? "No QAP lines yet — upload Quality Assurance Plan Week 50.xlsx or Monthly Progress Dashboard (Quality Assurance Plan - Detail). Demo load is on Admin → UAT Data."
-              : `Register looks partial (${qapRows.length} lines) — upload the full client Excel (~250+ activity lines), or use Admin → UAT Data to load the demo template.`}
+              ? "No QAP activity lines on this project yet. Load the full client Week 50 sheet (~250+ lines) so the register is complete and scrollable."
+              : `Only ${qapRows.length} line(s) on file (demo / partial). The full Quality Assurance Plan has ~250+ activity lines — load the Week 50 template or upload the client Excel.`}
           </p>
+          {canManage && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!id) return;
+                  setBusy(true);
+                  setMsg("");
+                  try {
+                    const out = await api<{ imported: number; weekLabel: string }>(
+                      `/api/checklist/project/${id}/qap/sync-template`,
+                      { method: "POST", token },
+                    );
+                    setMsg(`Loaded ${out.imported} QAP lines (${out.weekLabel}).`);
+                    setWeekFilter("");
+                    await load();
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : "Could not load QAP template");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? "Loading…" : "Load full QAP template"}
+              </Button>
+              <Button type="button" variant="secondary" disabled={busy} onClick={() => importRef.current?.click()}>
+                Upload Excel…
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
