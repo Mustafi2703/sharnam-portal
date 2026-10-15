@@ -2757,6 +2757,30 @@ checklistRouter.post(
   }
 );
 
+checklistRouter.delete(
+  "/project/:projectId/ncr/:ncrId",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.qualityNcr.findFirst({
+      where: { id: req.params.ncrId, projectId: req.params.projectId },
+    });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (/close|verified|completed/i.test(existing.status)) {
+      return res.status(409).json({
+        error: "This NCR is closed. It stays on the register. Reopen it before removing it.",
+      });
+    }
+    await prisma.qualityNcr.delete({ where: { id: existing.id } });
+    await audit("quality.ncr.delete", {
+      userId: req.user!.id,
+      entity: "QualityNcr",
+      entityId: existing.id,
+      meta: { number: existing.number, projectId: existing.projectId },
+    });
+    res.json({ ok: true, number: existing.number });
+  },
+);
+
 checklistRouter.get("/project/:projectId/ncr/:ncrId", async (req, res) => {
   const row = await prisma.qualityNcr.findFirst({
     where: { id: req.params.ncrId, projectId: req.params.projectId },

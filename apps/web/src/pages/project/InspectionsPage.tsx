@@ -824,6 +824,26 @@ export default function InspectionsPage() {
                         >
                           PDF
                         </Button>
+                        {isOfficeAdmin && n.status === "Open" && (
+                          <Button
+                            type="button"
+                            variant="danger"
+                            className="!py-1 !px-2 !text-xs"
+                            onClick={async () => {
+                              if (!id) return;
+                              if (!window.confirm(`Delete open ${n.number || "NCR"}? A closed NCR cannot be removed.`)) return;
+                              try {
+                                await api(`/api/checklist/project/${id}/ncr/${n.id}`, { method: "DELETE", token });
+                                setMsg(`${n.number || "NCR"} deleted.`);
+                                await load();
+                              } catch (err) {
+                                setMsg(err instanceof Error ? err.message : "Could not delete");
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        )}
                       </td>
                     )}
                   </tr>

@@ -1496,6 +1496,97 @@ progressRouter.delete(
   }
 );
 
+/** Working-sheet rows. Client and vendor cannot remove them. SharePoint files are left as they are. */
+async function deleteSheetRow(
+  res: { status: (code: number) => { json: (body: unknown) => void }; json: (body: unknown) => void },
+  existing: { id: string } | null,
+  remove: (id: string) => Promise<unknown>,
+) {
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  await remove(existing.id);
+  res.json({ ok: true });
+}
+
+progressRouter.delete(
+  "/:projectId/milestones/:milestoneId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressMilestone.findFirst({
+      where: { id: req.params.milestoneId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressMilestone.delete({ where: { id } }));
+  },
+);
+
+progressRouter.delete(
+  "/:projectId/hindrances/:hindranceId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressHindrance.findFirst({
+      where: { id: req.params.hindranceId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressHindrance.delete({ where: { id } }));
+  },
+);
+
+progressRouter.delete(
+  "/:projectId/risks/:riskId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressRisk.findFirst({
+      where: { id: req.params.riskId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressRisk.delete({ where: { id } }));
+  },
+);
+
+progressRouter.delete(
+  "/:projectId/legal/:legalId",
+  requireRoles("admin", "office", "employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressLegalApproval.findFirst({
+      where: { id: req.params.legalId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressLegalApproval.delete({ where: { id } }));
+  },
+);
+
+progressRouter.delete(
+  "/:projectId/manpower/:rowId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressManpower.findFirst({
+      where: { id: req.params.rowId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressManpower.delete({ where: { id } }));
+  },
+);
+
+progressRouter.delete(
+  "/:projectId/activity-lines/:lineId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressActivityLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressActivityLine.delete({ where: { id } }));
+  },
+);
+
+progressRouter.delete(
+  "/:projectId/planned-actual/:rowId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.progressPlannedActual.findFirst({
+      where: { id: req.params.rowId, projectId: req.params.projectId },
+    });
+    await deleteSheetRow(res, existing, (id) => prisma.progressPlannedActual.delete({ where: { id } }));
+  },
+);
+
 /** MS Project schedule — summary, S-curve, stored XML file */
 progressRouter.get("/:projectId/ms-project/summary", async (req, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });

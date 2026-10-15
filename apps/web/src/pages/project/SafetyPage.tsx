@@ -70,6 +70,7 @@ export default function SafetyPage() {
   const addFormRef = useRef<HTMLFormElement>(null);
   const canCreate = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canEdit = canCreate;
+  const canDeleteOpen = ["admin", "office", "site_employee", "employee"].includes(user?.role || "");
 
   useEffect(() => {
     const defaultType =
@@ -468,22 +469,43 @@ export default function SafetyPage() {
                             </Button>
                           </>
                         ) : n.status === "Open" ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="!py-1 !px-2 !text-xs"
-                            onClick={async () => {
-                              await api(`/api/safety/${n.id}`, {
-                                method: "PATCH",
-                                token,
-                                body: JSON.stringify({ status: "Closed" }),
-                              });
-                              setMsg(`${n.ncrNumber || n.title} closed`);
-                              await load();
-                            }}
-                          >
-                            Close
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="!py-1 !px-2 !text-xs"
+                              onClick={async () => {
+                                await api(`/api/safety/${n.id}`, {
+                                  method: "PATCH",
+                                  token,
+                                  body: JSON.stringify({ status: "Closed" }),
+                                });
+                                setMsg(`${n.ncrNumber || n.title} closed`);
+                                await load();
+                              }}
+                            >
+                              Close
+                            </Button>
+                            {canDeleteOpen && (
+                            <Button
+                              type="button"
+                              variant="danger"
+                              className="!py-1 !px-2 !text-xs"
+                              onClick={async () => {
+                                if (!window.confirm(`Delete this open ${n.recordType || "record"}? Closed records stay.`)) return;
+                                try {
+                                  await api(`/api/safety/${n.id}`, { method: "DELETE", token });
+                                  setMsg("Safety record deleted.");
+                                  await load();
+                                } catch (err) {
+                                  setMsg(err instanceof Error ? err.message : "Could not delete");
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                            )}
+                          </>
                         ) : (
                           <span className="text-xs text-steel-muted">—</span>
                         )}

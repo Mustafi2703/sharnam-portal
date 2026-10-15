@@ -374,6 +374,27 @@ export default function CommsPage() {
                       {new Date(m.meetingDate).toLocaleString()} · {m.status}
                     </div>
                   </button>
+                  {(user?.role === "admin" || user?.role === "office") && /agenda|scheduled/i.test(m.status) && (
+                    <div className="px-3 pb-2">
+                      <button
+                        type="button"
+                        className="text-danger text-[11px]"
+                        onClick={async () => {
+                          if (!window.confirm("Delete this agenda? A meeting that already has minutes stays.")) return;
+                          try {
+                            await api(`/api/comms/meetings/${m.id}`, { method: "DELETE", token });
+                            if (activeMeeting === m.id) setActiveMeeting(null);
+                            setMsg("Agenda deleted.");
+                            await load();
+                          } catch (err) {
+                            setMsg(err instanceof Error ? err.message : "Could not delete");
+                          }
+                        }}
+                      >
+                        Delete agenda
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
               {!listForTab.length && <li className="p-4 text-sm text-steel-muted">None in this stage yet.</li>}

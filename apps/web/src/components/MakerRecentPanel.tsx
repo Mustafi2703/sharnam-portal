@@ -8,6 +8,7 @@ export type MakerRecentItem = {
   subtitle?: string;
   href?: string;
   badge?: { label: string; tone?: "ok" | "warn" | "neutral" };
+  onDelete?: () => void;
 };
 
 type Props = {
@@ -57,6 +58,11 @@ export function MakerRecentPanel({ title, items, previewCount = 5, emptyMessage 
             ) : null}
           </div>
           {r.badge ? <Badge tone={r.badge.tone || "neutral"}>{r.badge.label}</Badge> : null}
+          {r.onDelete ? (
+            <button type="button" className="text-danger text-xs shrink-0" onClick={r.onDelete}>
+              Delete
+            </button>
+          ) : null}
         </li>
       ))}
     </ul>

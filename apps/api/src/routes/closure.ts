@@ -111,6 +111,16 @@ closureRouter.patch(
   }
 );
 
+closureRouter.delete("/snags/:id", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.snagItem.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (!/open/i.test(existing.status)) {
+    return res.status(409).json({ error: "This snag is closed. It stays on the handover list." });
+  }
+  await prisma.snagItem.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
+});
+
 closureRouter.get("/project/:projectId/lessons", async (req, res) => {
   const rows = await prisma.lessonLearnt.findMany({
     where: { projectId: req.params.projectId },

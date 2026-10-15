@@ -1486,6 +1486,16 @@ export default function DprMakerPage() {
           title: `${new Date(r.logDate).toISOString().slice(0, 10)} · ${r.discipline}`,
           subtitle: fileNameFromPublishedPath(r.publishedPath),
           badge: { label: r.status, tone: r.status === "Published" ? "ok" : "warn" },
+          onDelete:
+            user?.role === "client" || user?.role === "vendor"
+              ? undefined
+              : () => {
+                  const day = new Date(r.logDate).toISOString().slice(0, 10);
+                  if (!window.confirm(`Delete the ${day} ${r.discipline} DPR? A later published day must be removed first. The SharePoint file stays.`)) return;
+                  void api(`/api/dpr-maker/${projectId}/snapshots/${r.id}`, { method: "DELETE", token })
+                    .then(() => load())
+                    .catch((err) => setMsg(err instanceof Error ? err.message : "Could not delete"));
+                },
         }))}
       />
 

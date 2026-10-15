@@ -79,6 +79,23 @@ export default function DiaryPage() {
               {log ? "Open / refresh day" : "Create day log"}
             </Button>
           )}
+          {log && log.status === "Open" && ["admin", "office", "site_employee"].includes(user?.role || "") && (
+            <Button
+              type="button"
+              variant="danger"
+              onClick={async () => {
+                if (!window.confirm("Delete this open day log? A completed log stays.")) return;
+                try {
+                  await api(`/api/diary/${log.id}`, { method: "DELETE", token });
+                  setLog(null);
+                } catch (err) {
+                  window.alert(err instanceof Error ? err.message : "Could not delete");
+                }
+              }}
+            >
+              Delete open day
+            </Button>
+          )}
           {log && log.status === "Open" && canEdit && (
             <Button
               type="button"

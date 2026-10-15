@@ -140,7 +140,7 @@ async function downloadWithAuth(url: string, token: string | null | undefined, f
 export default function WprMakerPage() {
   const { id: projectId = "" } = useParams();
   const [searchParams] = useSearchParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [weekEnd, setWeekEnd] = useState<string>(
     () => searchParams.get("end") || new Date().toISOString().slice(0, 10)
   );
@@ -830,6 +830,15 @@ export default function WprMakerPage() {
           subtitle: r.publishedUrl ? "Open in SharePoint" : fileNameFromPublishedPath(r.publishedPath),
           href: r.publishedUrl || undefined,
           badge: { label: r.status, tone: r.status === "Published" ? "ok" : "warn" },
+          onDelete:
+            user?.role === "admin" || user?.role === "office"
+              ? () => {
+                  if (!window.confirm("Delete this weekly report? A later published week must be removed first. The SharePoint file stays.")) return;
+                  void api(`/api/wpr-maker/${projectId}/snapshots/${r.id}`, { method: "DELETE", token })
+                    .then(() => load())
+                    .catch((err) => setMsg(err instanceof Error ? err.message : "Could not delete"));
+                }
+              : undefined,
         }))}
       />
 

@@ -568,6 +568,39 @@ wprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
   });
 });
 
+wprMakerRouter.delete(
+  "/:projectId/snapshots/:snapshotId",
+  requireRoles("admin", "office"),
+  async (req: AuthedRequest, res) => {
+    const row = await prisma.wprSnapshot.findFirst({
+      where: { id: req.params.snapshotId, projectId: req.params.projectId },
+    });
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.status === "Published" && row.reportNumber != null) {
+      const later = await prisma.wprSnapshot.findFirst({
+        where: {
+          projectId: row.projectId,
+          status: "Published",
+          reportNumber: { gt: row.reportNumber },
+        },
+      });
+      if (later) {
+        return res.status(409).json({
+          error: "A later published weekly report exists. Delete that week first so report numbers stay in order.",
+        });
+      }
+    }
+    await prisma.wprSnapshot.delete({ where: { id: row.id } });
+    await audit("wpr.delete", {
+      userId: req.user!.id,
+      entity: "WprSnapshot",
+      entityId: row.id,
+      meta: { projectId: row.projectId, weekEnding: row.weekEnding, reportNumber: row.reportNumber },
+    });
+    res.json({ ok: true });
+  },
+);
+
 wprMakerRouter.get("/:projectId/recent", async (req, res) => {
   const projectId = req.params.projectId;
   const rows = await prisma.wprSnapshot.findMany({

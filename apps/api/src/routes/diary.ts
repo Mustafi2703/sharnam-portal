@@ -96,6 +96,23 @@ diaryRouter.post("/:id/notes", requireRoles("admin", "office", "site_employee", 
   res.status(201).json(entry);
 });
 
+diaryRouter.delete("/:id", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
+  const log = await prisma.dailyLog.findUnique({ where: { id: req.params.id } });
+  if (!log) return res.status(404).json({ error: "Not found" });
+  if (log.status !== "Open" || log.completedAt) {
+    return res.status(409).json({ error: "This day log is completed. It stays as the site record." });
+  }
+  await prisma.$transaction([
+    prisma.dailyLogManpower.deleteMany({ where: { dailyLogId: log.id } }),
+    prisma.dailyLogEquipment.deleteMany({ where: { dailyLogId: log.id } }),
+    prisma.dailyLogNote.deleteMany({ where: { dailyLogId: log.id } }),
+    prisma.dailyLogPhoto.deleteMany({ where: { dailyLogId: log.id } }),
+    prisma.dailyLog.delete({ where: { id: log.id } }),
+  ]);
+  await audit("diary.delete", { userId: req.user!.id, entity: "DailyLog", entityId: log.id, meta: { projectId: log.projectId } });
+  res.json({ ok: true });
+});
+
 diaryRouter.post("/:id/complete", requireRoles("admin", "office", "site_employee"), async (req: AuthedRequest, res) => {
   const log = await prisma.dailyLog.update({
     where: { id: req.params.id },

@@ -1393,6 +1393,12 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
 rfiRouter.delete("/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "RFI not found" });
+  const replies = await prisma.rfiResponse.count({ where: { rfiId: existing.id } });
+  if (existing.closedAt || /close/i.test(existing.status) || replies > 0) {
+    return res.status(409).json({
+      error: "This RFI has a response or is closed. It stays on the correspondence register.",
+    });
+  }
   await prisma.$transaction([
     prisma.inspectionItem.updateMany({ where: { linkedRfiId: existing.id }, data: { linkedRfiId: null } }),
     prisma.designCoordinationIssue.updateMany({ where: { escalatedRfiId: existing.id }, data: { escalatedRfiId: null } }),
@@ -2541,6 +2547,26 @@ safetyRouter.patch("/:id", requireRoles("admin", "office", "site_employee", "emp
     sharePointPending = waited.pending;
   }
   res.json({ ...row, sharePointExports, sharePointPending });
+});
+
+safetyRouter.delete("/:id", requireRoles("admin", "office", "site_employee", "employee"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.safetyRecord.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (/close|verified|completed/i.test(existing.status)) {
+    return res.status(409).json({ error: "This safety record is closed. It stays on the register." });
+  }
+  const office = req.user!.role === "admin" || req.user!.role === "office";
+  if (!office && existing.reportedById !== req.user!.id) {
+    return res.status(403).json({ error: "Only the person who logged this open record, or the office, can remove it." });
+  }
+  await prisma.safetyRecord.delete({ where: { id: existing.id } });
+  await audit("safety.delete", {
+    userId: req.user!.id,
+    entity: "SafetyRecord",
+    entityId: existing.id,
+    meta: { projectId: existing.projectId, recordType: existing.recordType },
+  });
+  res.json({ ok: true });
 });
 
 safetyRouter.post("/:id/follow-up", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

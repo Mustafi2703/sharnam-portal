@@ -188,6 +188,25 @@ export default function ProjectClosurePage() {
                               Close
                             </Button>
                           )}
+                          {s.status === "Open" && (
+                            <Button
+                              type="button"
+                              variant="danger"
+                              className="!py-1 !px-2 !text-xs ml-1"
+                              onClick={async () => {
+                                if (!window.confirm("Delete this open snag? Closed snags stay on the handover list.")) return;
+                                try {
+                                  await api(`/api/closure/snags/${s.id}`, { method: "DELETE", token });
+                                  setMsg("Snag deleted");
+                                  await load();
+                                } catch (err) {
+                                  setMsg(err instanceof Error ? err.message : "Could not delete");
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          )}
                         </td>
                       )}
                     </tr>

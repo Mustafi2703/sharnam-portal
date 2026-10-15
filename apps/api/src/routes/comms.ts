@@ -211,6 +211,36 @@ commsRouter.delete("/contacts/:id", requireRoles("admin", "office"), async (req:
   res.json({ ok: true });
 });
 
+/** Remove one communication-type row (Meeting / RFI / frequency). Contacts are a different list. */
+commsRouter.delete("/matrix/:projectId/:rowId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.communicationMatrix.findFirst({
+    where: { id: req.params.rowId, projectId: req.params.projectId },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  await prisma.communicationMatrix.delete({ where: { id: existing.id } });
+  await audit("comms.matrix.delete", { userId: req.user!.id, entity: "CommunicationMatrix", entityId: existing.id });
+  res.json({ ok: true });
+});
+
+/** Agenda that was never held. Minutes and follow-ups stay. */
+commsRouter.delete("/meetings/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.meeting.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  const held = Boolean(existing.momFileUrl) || !/agenda|scheduled/i.test(existing.status);
+  if (held) {
+    return res.status(409).json({
+      error: "Minutes or follow-ups are on file. This meeting stays. Close the actions instead of deleting it.",
+    });
+  }
+  await prisma.$transaction([
+    prisma.meeting.updateMany({ where: { parentMeetingId: existing.id }, data: { parentMeetingId: null } }),
+    prisma.meetingItem.deleteMany({ where: { meetingId: existing.id } }),
+    prisma.meeting.delete({ where: { id: existing.id } }),
+  ]);
+  await audit("comms.meeting.delete", { userId: req.user!.id, entity: "Meeting", entityId: existing.id, meta: { projectId: existing.projectId } });
+  res.json({ ok: true });
+});
+
 /** Create empty Client / PMC / Consultant / Contractor sections on both matrices. */
 commsRouter.post("/contacts/:projectId/scaffold", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;

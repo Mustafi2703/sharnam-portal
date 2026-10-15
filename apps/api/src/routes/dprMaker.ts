@@ -731,6 +731,40 @@ dprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
 
 // ═══════════════════════════════ GET recent ═══════════════════════════════
 
+dprMakerRouter.delete(
+  "/:projectId/snapshots/:snapshotId",
+  requireRoles("admin", "office", "employee", "site_employee"),
+  async (req: AuthedRequest, res) => {
+    const row = await prisma.dprSnapshot.findFirst({
+      where: { id: req.params.snapshotId, projectId: req.params.projectId },
+    });
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.status === "Published") {
+      const later = await prisma.dprSnapshot.findFirst({
+        where: {
+          projectId: row.projectId,
+          discipline: row.discipline,
+          status: "Published",
+          logDate: { gt: row.logDate },
+        },
+      });
+      if (later) {
+        return res.status(409).json({
+          error: "A later published DPR exists for this discipline. Delete that day first so the cumulative chain stays intact.",
+        });
+      }
+    }
+    await prisma.dprSnapshot.delete({ where: { id: row.id } });
+    await audit("dpr.delete", {
+      userId: req.user!.id,
+      entity: "DprSnapshot",
+      entityId: row.id,
+      meta: { projectId: row.projectId, discipline: row.discipline, logDate: row.logDate },
+    });
+    res.json({ ok: true });
+  },
+);
+
 dprMakerRouter.get("/:projectId/recent", async (req, res) => {
   const projectId = req.params.projectId;
   const rows = await prisma.dprSnapshot.findMany({

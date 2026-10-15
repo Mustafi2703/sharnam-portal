@@ -227,6 +227,18 @@ export default function ProgressPage() {
     }
   }
 
+  async function deleteRegisterRow(path: string, label: string) {
+    if (!id || !canEdit) return;
+    if (!window.confirm(`Delete this ${label}? The row leaves this register. Files already on SharePoint stay.`)) return;
+    try {
+      await api(`/api/progress/${id}/${path}`, { method: "DELETE", token });
+      setMsg(`${label} deleted.`);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
   async function deleteScurvePoint(pointId: string) {
     if (!id || !canEdit) return;
     setScurveBusy(true);
@@ -1033,7 +1045,14 @@ export default function ProgressPage() {
                       <RegisterSheetCell value={m.status} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { status: v })} />
                     </td>
                     <td className="py-2 px-3">
-                      <RegisterSheetCell type="number" value={m.varianceDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { varianceDays: Number(v) })} />
+                      <div className="flex items-center gap-2">
+                        <RegisterSheetCell type="number" value={m.varianceDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { varianceDays: Number(v) })} />
+                        {canEdit && (
+                          <button type="button" className="text-danger text-[11px] shrink-0" onClick={() => void deleteRegisterRow(`milestones/${m.id}`, "milestone")}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1249,7 +1268,16 @@ export default function ProgressPage() {
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{m.shortage}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{pct(m.shortagePct)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums">{m.rank}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      <div className="flex items-center justify-end gap-2">
+                        <span>{m.rank}</span>
+                        {canEdit && (
+                          <button type="button" className="text-danger text-[11px]" onClick={() => void deleteRegisterRow(`manpower/${m.id}`, "manpower row")}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!data.manpower?.length && <RegisterEmptyRow colSpan={6} />}
@@ -1361,7 +1389,16 @@ export default function ProgressPage() {
                     <td className="py-1.5 pr-2 border border-line text-right tabular-nums">
                       <RegisterSheetCell type="number" value={a.weeklyActual} disabled={!canEdit} onCommit={(v) => void patchActivity(a.id, { weeklyActual: Number(v) })} />
                     </td>
-                    <td className="py-1.5 px-2 border border-line text-right tabular-nums">{pct(donePct)}</td>
+                    <td className="py-1.5 px-2 border border-line text-right tabular-nums">
+                      <div className="flex items-center justify-end gap-2">
+                        <span>{pct(donePct)}</span>
+                        {canEdit && (
+                          <button type="button" className="text-danger text-[11px]" onClick={() => void deleteRegisterRow(`activity-lines/${a.id}`, "activity")}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                   );
                 })}
@@ -1539,7 +1576,14 @@ export default function ProgressPage() {
                       <RegisterSheetCell value={h.resolutionDescription} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { resolutionDescription: v })} />
                     </td>
                     <td className="py-2 px-3 max-w-[160px]">
-                      <RegisterSheetCell value={h.remarks} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { remarks: v })} />
+                      <div className="flex items-center gap-2">
+                        <RegisterSheetCell value={h.remarks} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { remarks: v })} />
+                        {canEdit && (
+                          <button type="button" className="text-danger text-[11px] shrink-0" onClick={() => void deleteRegisterRow(`hindrances/${h.id}`, "hindrance")}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1626,7 +1670,14 @@ export default function ProgressPage() {
                       <RegisterSheetCell value={r.riskOwner} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { riskOwner: v })} />
                     </td>
                     <td className="py-2 px-3">
-                      <RegisterSheetCell value={r.status} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { status: v })} />
+                      <div className="flex items-center gap-2">
+                        <RegisterSheetCell value={r.status} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { status: v })} />
+                        {canEdit && user?.role !== "site_employee" && (
+                          <button type="button" className="text-danger text-[11px] shrink-0" onClick={() => void deleteRegisterRow(`risks/${r.id}`, "risk")}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1704,7 +1755,14 @@ export default function ProgressPage() {
                       <RegisterSheetCell value={l.responsible} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { responsible: v })} />
                     </td>
                     <td className="py-2 px-3">
-                      <RegisterSheetCell value={l.remarks} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { remarks: v })} />
+                      <div className="flex items-center gap-2">
+                        <RegisterSheetCell value={l.remarks} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { remarks: v })} />
+                        {canEdit && user?.role !== "site_employee" && (
+                          <button type="button" className="text-danger text-[11px] shrink-0" onClick={() => void deleteRegisterRow(`legal/${l.id}`, "approval")}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

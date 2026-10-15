@@ -57,12 +57,19 @@ const isoWeek = (iso) => {
   return 1 + Math.round(((d - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
 };
 const fmt = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
-const THIS_MONDAY = addDays(TODAY, -((dow(TODAY) + 6) % 7));
-const W1_MONDAY = process.env.UAT_WEEK1_MONDAY || addDays(THIS_MONDAY, -21);
+/**
+ * Project starts 21 days before today (UAT_START overrides). Weeks run from the start weekday for 7 days
+ * (e.g. Thu → Wed) — the WPR week-ending is the project's report day, not snapped to Sunday.
+ * `mon` = week start, `sun` = week end (report day), `sat` = last working day; `days` skips Sundays.
+ */
+const PROJECT_START = process.env.UAT_START || process.env.UAT_WEEK1_MONDAY || addDays(TODAY, -21);
+const W1_MONDAY = PROJECT_START;
 const WEEKS = [0, 1, 2].map((i) => {
-  const mon = addDays(W1_MONDAY, 7 * i);
-  return { n: i + 1, mon, sat: addDays(mon, 5), sun: addDays(mon, 6), days: [0, 1, 2, 3, 4].map((d) => addDays(mon, d)), label: `Week ${isoWeek(mon)}` };
+  const mon = addDays(PROJECT_START, 7 * i);
+  const days = [0, 1, 2, 3, 4, 5, 6].map((d) => addDays(mon, d)).filter((d) => dow(d) !== 0);
+  return { n: i + 1, mon, sat: days.at(-1), sun: addDays(mon, 6), days, label: `Week ${i + 1}`, isoLabel: `ISO W${isoWeek(mon)}` };
 });
+const lastIdx = (w) => ALL_DAYS.indexOf(w.days.at(-1));
 const ALL_DAYS = WEEKS.flatMap((w) => w.days);
 /** Never stamp "UAT-…" into portal fields — client / vendor / consultant see this data live. */
 const TAG = "";
@@ -237,11 +244,15 @@ async function call(who, method, url, payload, opts = {}) {
   let last;
   // Multipart uploads are occasionally cut by the gateway before the last boundary ("Unexpected end of form");
   // the server has not processed anything in that case, so the same upload is sent again.
-  for (let attempt = 1; attempt <= (opts.form ? 3 : 1); attempt++) {
+  // GETs are idempotent: a gateway 502/503/504 or client timeout while background SharePoint jobs drain is retried.
+  const isGet = method === "GET";
+  for (let attempt = 1; attempt <= (opts.form || isGet ? 3 : 1); attempt++) {
     last = await callOnce(who, method, url, payload, opts);
     const cut = last.status === 500 && /unexpected end of form/i.test(noteOf(last.body?.error || last.body));
-    if (!cut) return last;
-    await new Promise((r) => setTimeout(r, 1500 * attempt));
+    const busy = isGet && (last.status === 0 || last.status === 502 || last.status === 503 || last.status === 504);
+    if (!cut && !busy) return last;
+    if (busy) state.retries = (state.retries || 0) + 1;
+    await new Promise((r) => setTimeout(r, (busy ? 20000 : 1500) * attempt));
   }
   return last;
 }
@@ -430,6 +441,12 @@ async function sectionSetup() {
       return `cleared · ${detail.members.length} members kept · ${matrix.length} matrix rows kept · SharePoint files are never deleted by the portal (older files stay; this run's files are listed by date)`;
     });
   }
+  await step("SET-6", `Project start date = ${PROJECT_START} (today − 21 days); WPR week 1 starts here`, "office", async () => {
+    ok(await call("office", "PATCH", `/api/projects/${pid()}/settings`, { startDate: PROJECT_START, status: "In Progress" }), "start date");
+    const d = ok(await call("office", "GET", `/api/projects/${pid()}`), "project");
+    assert(String(d.startDate || "").slice(0, 10) === PROJECT_START || new Date(d.startDate).toISOString().slice(0, 10) <= PROJECT_START, `startDate ${d.startDate}`);
+    return `startDate ${String(d.startDate).slice(0, 10)} · weeks ${WEEKS.map((w) => `${w.label} ${fmt(w.mon)}–${fmt(w.sun)} (${w.days.length} working days)`).join(" · ")}`;
+  });
   await step("SET-3", "Site pin for the attendance geofence", "office", async () => {
     const d = ok(await call("office", "GET", `/api/projects/${pid()}`), "project");
     if (d.siteLat != null && d.siteLng != null) {
@@ -715,10 +732,20 @@ const RFIS = [
 async function sectionRfi() {
   await step("RFI-1", "Site raises 6 SPDC RFIs over 3 weeks to the consultant on the communication matrix (contractor's proposed solution on each)", "site", async () => {
     state.rfis = [];
+    if (!state.drawings) {
+      const dw = ok(await call("office", "GET", `/api/drawings/project/${pid()}`), "drawings");
+      state.drawings = Object.fromEntries((Array.isArray(dw) ? dw : []).map((d) => [d.drawingNumber, d.id]));
+    }
     const bad = await call("site", "POST", `/api/rfis/project/${pid()}`, { rfiKind: "RequestForInformation", subject: "x", question: "no solution", assignedToId: state.consultantId });
     assert(bad.status === 400, `RFI without contractor solution accepted (${bad.status})`);
+    const existing = ok(await call("office", "GET", `/api/rfis/project/${pid()}`), "rfi list").rfis || [];
     for (const r of RFIS) {
       const wk = WEEKS[r.w];
+      const prior = existing.find((x) => x.rfiKind === "RequestForInformation" && x.subject === r.subject);
+      if (prior) {
+        state.rfis.push({ ...r, id: prior.id, number: prior.number, reused: true, status: prior.status });
+        continue;
+      }
       const made = ok(await call("site", "POST", `/api/rfis/project/${pid()}`, {
         rfiKind: "RequestForInformation", subject: `${r.subject}`, question: r.q, assignedToId: state.consultantId, responsibleVendorId: state.vendorId, linkedDrawingId: state.drawings[r.dwg], dueDate: addDays(wk.days[1], 7),
         formDataJson: { contractorSolution: r.sol, priority: r.pri, discipline: r.disc, location: r.loc, dateRaised: wk.days[1], weekLabel: wk.label, raisedBy: "Jaideep Parmar (SPDC site)" },
@@ -726,25 +753,32 @@ async function sectionRfi() {
       state.rfis.push({ ...r, id: made.id, number: made.number });
       remember("rfis", made.number);
     }
-    return `refused without solution (400) · ${state.rfis.map((x) => x.number).join(", ")}`;
+    const reused = state.rfis.filter((x) => x.reused).length;
+    return `refused without solution (400) · ${state.rfis.map((x) => x.number).join(", ")}${reused ? ` (${reused} already on the register)` : ""}`;
   });
   await step("RFI-2", "Office follow-ups to the consultant (per the matrix) and a consultant markup on the anchor-bolt RFI", "office", async () => {
     let n = 0;
-    for (const r of state.rfis) for (let i = 0; i < r.followUps; i++) {
+    for (const r of state.rfis.filter((x) => x.status !== "Closed")) for (let i = 0; i < r.followUps; i++) {
       ok(await call("office", "POST", `/api/rfis/${r.id}/follow-up`, { note: `Follow-up ${i + 1}: response awaited — holds ${r.disc.toLowerCase()} works at ${r.loc}.` }), `follow-up ${r.number}`);
       n++;
     }
     const m = state.rfis.find((x) => x.markup);
-    const mk = ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, { form: form({ pageNumbers: [1], targetType: "rfi", targetId: m.id, drawingId: state.drawings[m.dwg], note: `8.8 grade bolts — see cloud on the setting plan.` }, [{ field: "files", buffer: markupPage(4), type: "image/png", name: "page-1.png" }]), timeoutMs: 240000 }), "markup").markup;
+    const before = ok(await call("office", "GET", `/api/drawings/project/${pid()}/markups?targetType=rfi&targetId=${m.id}`), "markup list");
+    const had = Array.isArray(before) ? before : before.markups || before.rows || [];
+    const mk = had.length ? null : ok(await call("consultant", "POST", `/api/drawings/project/${pid()}/markups`, undefined, { form: form({ pageNumbers: [1], targetType: "rfi", targetId: m.id, drawingId: state.drawings[m.dwg], note: `8.8 grade bolts — see cloud on the setting plan.` }, [{ field: "files", buffer: markupPage(4), type: "image/png", name: "page-1.png" }]), timeoutMs: 240000 }), "markup").markup;
     const list = ok(await call("office", "GET", `/api/drawings/project/${pid()}/markups?targetType=rfi&targetId=${m.id}`), "markup list");
     const rows = Array.isArray(list) ? list : list.markups || list.rows || [];
     assert(rows.length >= 1, `markup not listed on the RFI (${rows.length})`);
-    const row = mk.markup || mk;
+    const row = mk ? mk.markup || mk : rows[0];
     return `${n} follow-ups sent · markup ${row.fileName || row.id} on ${m.number}`;
   });
   await step("RFI-3", "Consultant answers 4 RFIs (official response); office closes 3, one stays answered-open; 2 remain open with reminders", "consultant", async () => {
     const closed = [];
     for (const r of state.rfis.filter((x) => x.answer)) {
+      if (r.status === "Closed") {
+        if (r.close) closed.push(r.number);
+        continue;
+      }
       ok(await call("consultant", "POST", `/api/rfis/${r.id}/respond`, { responseText: `${r.answer}`, isOfficialResponse: true, close: true }), `respond ${r.number}`);
       if (r.close) {
         ok(await call("office", "PATCH", `/api/rfis/${r.id}`, { status: "Closed" }), `close ${r.number}`);
@@ -760,10 +794,15 @@ async function sectionRfi() {
     return `closed ${closed.join(", ")} · register ${noteOf(byStatus)} · vendor sees ${Array.isArray(vendorView.body) ? vendorView.body.length : "?"} · client close ${clientClose.status === 403 ? "refused 403" : `returned ${clientClose.status}`}`;
   });
   await step("RFI-4", "Client raises 2 concerns; office answers and closes one", "client", async () => {
-    const a = ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject: `Dust on the approach road`, question: "Approach road near the admin block needs water sprinkling twice a day during excavation." }), "concern 1");
-    const b = ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject: `Night-time concreting noise`, question: "Please limit transit-mixer movement after 22:00 near the township side." }), "concern 2");
-    ok(await call("office", "POST", `/api/rfis/${a.id}/respond`, { responseText: `Water tanker deployed 10:00 and 15:00 from ${fmt(WEEKS[1].days[0])}; contractor instructed (SI-02).`, isOfficialResponse: true, close: true }), "answer");
-    ok(await call("office", "PATCH", `/api/rfis/${a.id}`, { status: "Closed" }), "close");
+    const prior = ok(await call("office", "GET", `/api/rfis/project/${pid()}`), "rfi list").rfis || [];
+    const concern = async (subject, question, label) =>
+      prior.find((x) => x.rfiKind === "ClientConcern" && x.subject === subject) || ok(await call("client", "POST", `/api/rfis/project/${pid()}`, { subject, question }), label);
+    const a = await concern(`Dust on the approach road`, "Approach road near the admin block needs water sprinkling twice a day during excavation.", "concern 1");
+    const b = await concern(`Night-time concreting noise`, "Please limit transit-mixer movement after 22:00 near the township side.", "concern 2");
+    if (a.status !== "Closed") {
+      ok(await call("office", "POST", `/api/rfis/${a.id}/respond`, { responseText: `Water tanker deployed 10:00 and 15:00 from ${fmt(WEEKS[1].days[0])}; contractor instructed (SI-02).`, isOfficialResponse: true, close: true }), "answer");
+      ok(await call("office", "PATCH", `/api/rfis/${a.id}`, { status: "Closed" }), "close");
+    }
     remember("rfis", a.number, b.number);
     return `${a.number} answered + closed · ${b.number} open`;
   });
@@ -810,7 +849,7 @@ async function sectionFills() {
     const cs = ok(await call("client", "POST", `/api/checklist/assignments/${tpl.assignmentId}/client-signature`, undefined, { form: form({ signerNameClient: "Deven Mody — Voltamp" }, [{ field: "signatureClient", buffer: signaturePng(9), type: "image/png", name: "client-signature.png" }]), timeoutMs: 240000 }), "client signature");
     const rev = ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: `verified at site — cleared for pour`, closeRfi: true }), "review");
     const after = ok(await call("office", "GET", `/api/rfis/project/${pid()}?kind=QualityInspection`), "qi rfis");
-    const row = (Array.isArray(after) ? after : []).find((x) => x.id === rfi.id);
+    const row = (Array.isArray(after) ? after : after?.rfis || []).find((x) => x.id === rfi.id);
     state.fills = [{ rfi: rfi.number, submission: sub.id, template: tpl.name }];
     remember("fills", `${rfi.number} ${tpl.name}`);
     state.sharepoint.push({ label: "Checklist fills (branded)", path: "08_QUALITY_HSE_AND_ENVIRONMENT/08.02_Inspection_Checklists_Pour_Cards", url: null });
@@ -843,7 +882,7 @@ async function sectionFills() {
     const noPhotos = await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: form({ responsesJson: Object.fromEntries(tpl.items.map((i) => [i.id, { answer: "Yes" }])), status: "Submitted" }, [{ field: "signature", buffer: signaturePng(2), type: "image/png", name: "signature.png" }]) });
     assert(noPhotos.status === 400, `submit without photos returned ${noPhotos.status}`);
     const sub = ok(await call("vendor", "POST", `/api/checklist/assignments/${tpl.assignmentId}/submit`, undefined, { form: fillForm(tpl, "vendor", "Sanjay Thakor — Reeca"), timeoutMs: 300000 }), "submit");
-    ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: TAG, closeRfi: true }, { timeoutMs: 120000 }), "review");
+    ok(await call("office", "POST", `/api/checklist/submissions/${sub.id}/review`, { status: "Approved", remarks: TAG, closeRfi: true }, { timeoutMs: 300000 }), "review");
     const log = ok(await call("office", "GET", `/api/checklist/project/${pid()}/submissions`), "fill log");
     const rows = Array.isArray(log) ? log : log.rows || log.submissions || [];
     const statuses = rows.reduce((a, x) => ((a[x.status] = (a[x.status] || 0) + 1), a), {});
@@ -939,7 +978,7 @@ async function sectionQuality() {
     assert(pdf.status === 200 && pdf.bytes > 1000, `ncr pdf ${pdf.status}`);
     remember("ncrs", ncr.number);
     state.sharepoint.push({ label: "NCR / CAR forms + register", path: "08_QUALITY_HSE_AND_ENVIRONMENT/08.06_Control_of_Nonconforming_Output", url: null });
-    return `${ncr.number}${ncr.note ? ` (${ncr.note})` : ""} · vendor close refused 403 · signed by contractor · closed by office · activity ${Array.isArray(act.body) ? act.body.length : act.body?.activityLog?.length ?? "?"} events · PDF ${kb(pdf.bytes)}`;
+    return `${ncr.number}${ncr.note ? ` (${ncr.note})` : ""} · vendor close refused 403 · signed by contractor · closed by office · activity ${Array.isArray(act.body) ? act.body.length : (act.body?.events || act.body?.activityLog || []).length} events · PDF ${kb(pdf.bytes)}`;
   });
   await step("QA-5", "Week 2 CAR (repeat cover-block failures): raised, answered with signature, closed; week 3 NCR left open after the contractor's response", "site", async () => {
     const car = await raiseNcr({ kind: "CAR", description: `Repeated cover-block omissions on three pours — corrective action required (${WEEKS[1].label})`, location: "Grid A–C pedestals", type: "Systemic", week: WEEKS[1], action: "Root-cause and corrective action: QC checklist before every pour; toolbox talk on cover." });
@@ -1152,7 +1191,7 @@ async function sectionFinance() {
     return `RA-01 ${inr(bill.total)} · no-file refused ${noFile.status} · early certify refused 400 · ${cop.certificateNumber} net ${inr(cop.amountPayable)} · PDF ${kb(pdf.bytes)}`;
   });
   await step("FIN-3", "Week 3: measured quantities pushed to the BOQ; office raises RA-02 from the BOQ abstract (MB → bill); vendor sees both bills", "office", async () => {
-    for (const a of ACTIVITIES) ok(await call("site", "PATCH", `/api/cost/${pid()}/monitoring/${state.boq[a.activity]}`, { achievedQty: cumPlanned(a, 14) }), `achieved ${a.activity}`);
+    for (const a of ACTIVITIES) ok(await call("site", "PATCH", `/api/cost/${pid()}/monitoring/${state.boq[a.activity]}`, { achievedQty: cumPlanned(a, ALL_DAYS.length - 1) }), `achieved ${a.activity}`);
     let r = await call("office", "POST", `/api/finance/${pid()}/ra/from-boq`, { packageName: state.pkg, raNumber: "RA-02", vendorId: state.vendorId, discipline: "Civil", purchaseOrderId: state.poId, invoiceDate: WEEKS[2].sun, gstPct: 18, retentionPct: 5 });
     if (r.status >= 400 && /already exists/i.test(noteOf(r.body?.error || r.body))) {
       const list = ok(await call("office", "GET", `/api/finance/${pid()}/ra`), "ra list");
@@ -1165,7 +1204,7 @@ async function sectionFinance() {
     const mine = Array.isArray(own.body) ? own.body : own.body?.rows || [];
     assert(mine.some((b) => b.raNumber === "RA-02"), `vendor sees ${mine.map((b) => b.raNumber).join(",")}`);
     remember("bills", "RA-02");
-    return `RA-02 ${r.status || "Submitted"} · ${Array.isArray(lines.body) ? lines.body.length : "?"} BOQ lines · ${inr(r.againstBillRaised || r.amount || 0)} · vendor sees ${mine.length} bills`;
+    return `RA-02 ${r.status || "Submitted"} · ${(Array.isArray(lines.body) ? lines.body : lines.body?.lines || []).length} BOQ lines · ${inr(r.againstBillRaised || r.amount || 0)} · vendor sees ${mine.length} bills`;
   });
   await step("FIN-4", "COP register PDF, payment summary and PR tracker saved to SharePoint 09.01; finance overview", "office", async () => {
     const out = [];
@@ -1174,9 +1213,10 @@ async function sectionFinance() {
     else out.push(`COP register skipped (${copList.status})`);
     out.push(await toSharePoint("office", "Payment summary", `/api/finance/${pid()}/payment-summary/download.xlsx`, "finance"));
     out.push(await toSharePoint("office", "PR tracker", `/api/finance/${pid()}/pr-tracker/download.xlsx`, "prTracker"));
-    const ov = await call("office", "GET", `/api/finance/${pid()}/overview`);
+    const ov = ok(await call("office", "GET", `/api/finance/${pid()}/summary`), "finance summary");
     const clientPo = await call("client", "POST", `/api/finance/${pid()}/po`, undefined, { form: form({ poNumber: "X" }) });
-    return `overview ${ov.status} · client PO refused ${clientPo.status} · ${out.length} files`;
+    assert(clientPo.status === 403, `client PO returned ${clientPo.status}`);
+    return `summary ${noteOf(ov).slice(0, 120)} · client PO refused ${clientPo.status} · ${out.length} files`;
   });
 }
 
@@ -1276,7 +1316,7 @@ async function sectionWpr() {
       const till = Object.fromEntries(pva.map((r) => [r[iAct], { prev: Number(r[iPrev] || 0), week: Number(r[iWeek] || 0), tillDate: Number(r[iTill] || 0) }]));
       const breaks = [];
       // Expect the WPR's till-date to match what the DPRs of this run published (same ledger the DPR steps track).
-      const dprTill = Object.fromEntries(ACTIVITIES.map((a) => [a.activity, cumPlanned(a, w.n * 5 - 1)]));
+      const dprTill = Object.fromEntries(ACTIVITIES.map((a) => [a.activity, cumPlanned(a, lastIdx(w))]));
       for (const a of ACTIVITIES) {
         const row = till[a.activity];
         const expectTill = dprTill[a.activity];
@@ -1409,7 +1449,7 @@ async function sectionReports() {
     const recent = ok(await call("office", "GET", `/api/dpr-maker/${pid()}/recent`), "dpr recent");
     const rows = Array.isArray(recent) ? recent : recent.rows || recent.reports || [];
     assert(rows.length >= 3, `only ${rows.length} DPRs — run the DPR module (15 working days) before reports`);
-    const fridays = WEEKS.map((w) => w.days[4]);
+    const fridays = WEEKS.map((w) => w.days.at(-1));
     const sizes = [];
     for (const day of fridays) {
       sizes.push(await expectDownload("office", `/api/dpr-maker/${pid()}/download.xlsx?date=${day}&discipline=CIVIL`, 1000, day));

@@ -937,7 +937,22 @@ financeRouter.put("/ra/:id", requireRoles("admin", "office"), async (req: Authed
 
 financeRouter.delete("/ra/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.raBill.findUnique({ where: { id: req.params.id } });
-  await prisma.raBill.delete({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "RA bill not found" });
+  if (/certif|paid/i.test(before.status)) {
+    return res.status(409).json({ error: "A certified or paid RA bill stays. It is the payment record." });
+  }
+  const issuedCop = await prisma.certificateOfPayment.findFirst({
+    where: { raBillId: before.id, NOT: { status: { in: ["Draft", "Rejected"] } } },
+  });
+  if (issuedCop) {
+    return res.status(409).json({ error: "A certificate of payment is already issued against this bill." });
+  }
+  await prisma.$transaction([
+    prisma.raBillAttachment.deleteMany({ where: { raBillId: before.id } }),
+    prisma.raBillRevision.deleteMany({ where: { raBillId: before.id } }),
+    prisma.certificateOfPayment.updateMany({ where: { raBillId: before.id }, data: { raBillId: null } }),
+    prisma.raBill.delete({ where: { id: before.id } }),
+  ]);
   if (before) {
     const { recomputeRaCumulativeChain } = await import("../modules/finance/raCumulative.js");
     await recomputeRaCumulativeChain(prisma, before.projectId, {
@@ -1748,7 +1763,15 @@ financeRouter.put("/cop/:id", requireRoles("admin", "office"), async (req: Authe
 
 financeRouter.delete("/cop/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const before = await prisma.certificateOfPayment.findUnique({ where: { id: req.params.id } });
-  await prisma.certificateOfPayment.delete({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "Certificate not found" });
+  if (/certif|approved|paid|signed/i.test(before.status)) {
+    return res.status(409).json({ error: "An issued certificate stays on the payment register. Only a draft can be removed." });
+  }
+  await prisma.$transaction([
+    prisma.copAttachment.deleteMany({ where: { copId: before.id } }),
+    prisma.copRevision.deleteMany({ where: { copId: before.id } }),
+    prisma.certificateOfPayment.delete({ where: { id: before.id } }),
+  ]);
   if (before) {
     if (before.raBillId) {
       const ra = await prisma.raBill.findUnique({ where: { id: before.raBillId } });
