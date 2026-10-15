@@ -103,13 +103,25 @@ export async function loadMatrixBundle(projectId: string, matrixKind: string) {
   return { project, rows: rows as MatrixRow[], matrixKind };
 }
 
-/** Landscape BPCL-style sheet: both logos large, banner, slate header, full grid. */
-export async function buildMatrixXlsx(projectId: string, matrixKind: string): Promise<Buffer> {
-  const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "Sharnam Portal";
-  wb.created = new Date();
-  const sheet = wb.addWorksheet(kind.slice(0, 31), {
+type MatrixProject = {
+  name: string;
+  clientName: string | null;
+  designConsultant: string | null;
+  pmcName: string | null;
+  clientLogoUrl?: string | null;
+};
+
+/** Landscape BPCL sheet on an existing workbook. Returns temp logo files the caller must delete. */
+async function paintMatrixSheet(
+  wb: ExcelJS.Workbook,
+  project: MatrixProject,
+  rows: MatrixRow[],
+  kind: string,
+): Promise<string[]> {
+  const sheetName = kind.slice(0, 31);
+  const prior = wb.getWorksheet(sheetName);
+  if (prior) wb.removeWorksheet(prior.id);
+  const sheet = wb.addWorksheet(sheetName, {
     views: [{ state: "normal", showGridLines: false, zoomScale: 80 }],
     properties: { defaultRowHeight: 18 },
   });
@@ -281,18 +293,58 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
   foot.alignment = { horizontal: "left", vertical: "middle" };
   sheet.pageSetup.printArea = `A1:I${Math.max(lastDataRow, 7)}`;
   sheet.autoFilter = undefined;
+  return temps;
+}
 
+function unlinkTemps(temps: string[]) {
+  for (const f of temps) {
+    try {
+      fs.unlinkSync(f);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Landscape BPCL-style sheet: both logos large, banner, slate header, full grid. */
+export async function buildMatrixXlsx(projectId: string, matrixKind: string): Promise<Buffer> {
+  const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Sharnam Portal";
+  wb.created = new Date();
+  const temps = await paintMatrixSheet(wb, project, rows, kind);
   try {
     const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
     return Buffer.from(ab);
   } finally {
-    for (const f of temps) {
-      try {
-        fs.unlinkSync(f);
-      } catch {
-        /* ignore */
-      }
+    unlinkTemps(temps);
+  }
+}
+
+/**
+ * Add the full branded TECHNICAL and COMMERCIAL matrices (section bands, logos, every contact)
+ * onto a workbook that was already built. Returns the same buffer when the project has no contacts.
+ */
+export async function appendBrandedMatrixSheets(buffer: Buffer, projectId: string): Promise<Buffer> {
+  const kinds = ["TECHNICAL", "COMMERCIAL"] as const;
+  const bundles = [];
+  for (const kind of kinds) {
+    const bundle = await loadMatrixBundle(projectId, kind);
+    if (bundle.rows.length) bundles.push(bundle);
+  }
+  if (!bundles.length) return buffer;
+
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+  const temps: string[] = [];
+  try {
+    for (const bundle of bundles) {
+      temps.push(...(await paintMatrixSheet(wb, bundle.project, bundle.rows, bundle.matrixKind)));
     }
+    const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+    return Buffer.from(ab);
+  } finally {
+    unlinkTemps(temps);
   }
 }
 

@@ -136,7 +136,8 @@ export async function publishExistingWpr(
 
   const dateStr = weekEnd.toISOString().slice(0, 10);
   const startStr = weekStart.toISOString().slice(0, 10);
-  const spdcBuf = await buildWprWorkbook({ header, sections });
+  const { appendBrandedMatrixSheets } = await import("./matrixExport.js");
+  const spdcBuf = await appendBrandedMatrixSheets(await buildWprWorkbook({ header, sections }), projectId);
   const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd);
   const chartsRaw = await loadWprChartPack(prisma, projectId, weekStart, weekEnd);
   const charts = mergeWprChartsForExport(sections, chartsRaw, startStr, dateStr);

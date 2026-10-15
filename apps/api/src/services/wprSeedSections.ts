@@ -69,9 +69,9 @@ export async function seedWprSections(
     }),
     prisma.communicationMatrix.findMany({ where: { projectId, isActive: true }, take: 40 }),
     prisma.communicationContact.findMany({
-      where: { projectId, isSectionHeader: false, matrixKind: "TECHNICAL" },
-      orderBy: { sortOrder: "asc" },
-      take: 60,
+      where: { projectId },
+      orderBy: [{ matrixKind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+      take: 400,
     }),
     prisma.costBudgetLine.findMany({ where: { projectId }, orderBy: [{ srNo: "asc" }], take: 80 }),
     prisma.purchaseOrder.findMany({ where: { projectId }, take: 40 }),
@@ -216,21 +216,27 @@ export async function seedWprSections(
     ]),
   };
 
-  // Client format: one row per contact (Organisation · Name · Designation · Mobile · Email · TO/CC);
-  // fall back to the routing rules when no contacts are set up yet.
+  // Whole branded matrix: technical and commercial, including Client / PMC / Consultant / Contractor bands.
+  // Fall back to the routing rules when no contacts are set up yet.
   const communicationMatrix: WprSection = matrixContacts.length
     ? {
         title: DEFAULT_WPR_TITLES.communicationMatrix,
-        headers: ["Sr", "Organisation", "Name", "Designation", "Mobile", "Email", "TO / CC"],
-        rows: matrixContacts.map((r: any, i: number) => [
-          i + 1,
-          [r.orgSection, r.orgName || r.company].filter(Boolean).join(" · "),
-          r.personName || "",
-          r.designation || r.spoc || "",
-          r.mobile || "",
-          r.email || "",
-          r.mailRole || "CC",
-        ]),
+        notes: "TECHNICAL and COMMERCIAL — section bands match the branded communication matrix.",
+        headers: ["Matrix", "Sr", "Organisation", "Name", "Designation", "Mobile", "Email", "TO / CC"],
+        rows: matrixContacts.map((r: any, i: number) =>
+          r.isSectionHeader
+            ? [r.matrixKind || "TECHNICAL", "", r.orgSection || "", r.orgName || "", "Section", "", "", ""]
+            : [
+                r.matrixKind || "TECHNICAL",
+                i + 1,
+                [r.orgSection, r.orgName || r.company].filter(Boolean).join(" · "),
+                r.personName || "",
+                r.designation || r.spoc || "",
+                r.mobile || "",
+                r.email || "",
+                r.mailRole || "CC",
+              ]
+        ),
       }
     : {
         title: DEFAULT_WPR_TITLES.communicationMatrix,

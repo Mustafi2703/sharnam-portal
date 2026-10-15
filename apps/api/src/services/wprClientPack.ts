@@ -40,6 +40,9 @@ function resolveWprClientTemplate(): string | null {
       if (fs.existsSync(p)) return p;
     }
   }
+  // Shipped Arvind week pack (registers, dashboards, charts). Checked before the old 4-chart file.
+  const shipped = path.resolve(__dirname, "../../templates/wpr-client/WPR-Client-Week-Template.xlsx");
+  if (fs.existsSync(shipped)) return shipped;
   return findWorkbook(preferred) || findWorkbook(fallback);
 }
 
@@ -123,10 +126,10 @@ export async function buildWprClientWorkbook(
     valueAdditions,
     procurementLines,
   ] = await Promise.all([
-    prisma.drawingRegisterLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
-    prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" }, take: 50 }),
-    prisma.progressLegalApproval.findMany({ where: { projectId }, take: 40 }),
-    prisma.progressMilestone.findMany({ where: { projectId }, take: 60 }),
+    prisma.drawingRegisterLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 400 }),
+    prisma.progressHindrance.findMany({ where: { projectId }, orderBy: { occurredAt: "desc" }, take: 200 }),
+    prisma.progressLegalApproval.findMany({ where: { projectId }, take: 120 }),
+    prisma.progressMilestone.findMany({ where: { projectId }, take: 200 }),
     // Cube Test sheet shows 7-day results: specimens tested this week (cast ~7 days earlier).
     prisma.cubeTest.findMany({
       where: {
@@ -140,15 +143,15 @@ export async function buildWprClientWorkbook(
       orderBy: [{ testDate7: "asc" }, { srNo: "asc" }],
       take: 30,
     }),
-    prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 40 }),
-    prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 20 }),
+    prisma.qualityNcr.findMany({ where: { projectId }, orderBy: { issueDate: "desc" }, take: 200 }),
+    prisma.progressManpower.findMany({ where: { projectId }, orderBy: { rank: "asc" }, take: 80 }),
     prisma.costCashflowPeriod.findMany({
       where: { projectId, NOT: { packageName: "COP-day" } },
       orderBy: { periodDate: "asc" },
-      take: 60,
+      take: 120,
     }),
-    prisma.progressPlannedActual.findMany({ where: { projectId }, take: 40 }),
-    prisma.progressRisk.findMany({ where: { projectId }, take: 40 }),
+    prisma.progressPlannedActual.findMany({ where: { projectId }, take: 200 }),
+    prisma.progressRisk.findMany({ where: { projectId }, take: 200 }),
     prisma.safetyRecord.findMany({
       where: { projectId, occurredAt: { gte: weekStart, lte: weekEnd } },
       orderBy: { occurredAt: "desc" },
@@ -159,10 +162,10 @@ export async function buildWprClientWorkbook(
       where: { projectId, logDate: { gte: weekStart, lte: weekEnd } },
       orderBy: { logDate: "asc" },
     }),
-    prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 250 }),
-    prisma.progressSorStat.findMany({ where: { projectId }, take: 20 }),
-    prisma.progressValueAddition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 30 }),
-    prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 30 }),
+    prisma.progressActivityLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 400 }),
+    prisma.progressSorStat.findMany({ where: { projectId }, take: 40 }),
+    prisma.progressValueAddition.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
+    prisma.progressProcurementLine.findMany({ where: { projectId }, orderBy: { srNo: "asc" }, take: 80 }),
   ]);
 
   const masterKey = findSheet(wb, /Master Drawing Register/i);
@@ -621,110 +624,12 @@ export async function buildWprClientWorkbook(
   return appendCommunicationMatrixSheet(filled, prisma, projectId);
 }
 
-/** Branded Communication Matrix sheet (Sharnam + client logos) so the client week pack carries the same matrix as the PPT. */
-async function appendCommunicationMatrixSheet(buffer: Buffer, prisma: PrismaClient, projectId: string): Promise<Buffer> {
+/** Full BPCL-style TECHNICAL and COMMERCIAL sheets (section bands, logos, every contact). */
+async function appendCommunicationMatrixSheet(buffer: Buffer, _prisma: PrismaClient, projectId: string): Promise<Buffer> {
   try {
-    const ExcelJS = (await import("exceljs")).default;
-    const styled = new ExcelJS.Workbook();
-    await styled.xlsx.load(buffer as unknown as ArrayBuffer);
-    if (styled.getWorksheet("Communication Matrix")) return buffer;
-
-    const [project, contacts] = await Promise.all([
-      prisma.project.findUnique({
-        where: { id: projectId },
-        select: { name: true, code: true, clientName: true, clientLogoUrl: true, designConsultant: true },
-      }),
-      prisma.communicationContact.findMany({
-        where: { projectId, isSectionHeader: false },
-        orderBy: [{ matrixKind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
-        take: 80,
-      }),
-    ]);
-    if (!contacts.length) return buffer;
-
-    const ws = styled.addWorksheet("Communication Matrix", { views: [{ showGridLines: false }] });
-    ws.getColumn(1).width = 6;
-    ws.getColumn(2).width = 28;
-    ws.getColumn(3).width = 22;
-    ws.getColumn(4).width = 22;
-    ws.getColumn(5).width = 16;
-    ws.getColumn(6).width = 32;
-    ws.getColumn(7).width = 10;
-    ws.getColumn(8).width = 14;
-    for (const r of [1, 2, 3]) ws.getRow(r).height = r === 1 ? 36 : 18;
-
-    const { sharnamLogoPath } = await import("./brandedExport.js");
-    const { clientLogoPathForProject } = await import("./clientLogo.js");
-    const sharnam = sharnamLogoPath();
-    const clientLogo = await clientLogoPathForProject(projectId);
-    if (sharnam) {
-      try {
-        const id = styled.addImage({ filename: sharnam, extension: "png" });
-        ws.addImage(id, { tl: { col: 0.1, row: 0.1 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
-      } catch {
-        /* optional */
-      }
-    }
-    if (clientLogo) {
-      try {
-        const id = styled.addImage({
-          filename: clientLogo,
-          extension: /\.jpe?g$/i.test(clientLogo) ? "jpeg" : "png",
-        });
-        ws.addImage(id, { tl: { col: 6.2, row: 0.1 }, ext: { width: 120, height: 40 }, editAs: "oneCell" });
-      } catch {
-        /* optional */
-      }
-    }
-
-    ws.mergeCells(1, 1, 1, 8);
-    ws.getCell(1, 1).value = "COMMUNICATION MATRIX";
-    ws.getCell(1, 1).font = { name: "Arial", bold: true, size: 14, color: { argb: "FF0B2545" } };
-    ws.getCell(1, 1).alignment = { vertical: "middle", horizontal: "center" };
-    ws.mergeCells(2, 1, 2, 8);
-    ws.getCell(2, 1).value = `Project: ${project?.name || project?.code || "—"}  ·  Client: ${project?.clientName || "—"}  ·  PMC: Sharnam Project Development Consultants & Co.`;
-    ws.getCell(2, 1).font = { name: "Arial", size: 9, color: { argb: "FF555555" } };
-    ws.getCell(2, 1).alignment = { horizontal: "center" };
-    ws.mergeCells(3, 1, 3, 8);
-    ws.getCell(3, 1).value = `Consultant: ${project?.designConsultant || "—"}  ·  Generated from the portal communication matrix (TECHNICAL + COMMERCIAL)`;
-    ws.getCell(3, 1).font = { name: "Arial", size: 9, color: { argb: "FF555555" } };
-    ws.getCell(3, 1).alignment = { horizontal: "center" };
-
-    const headers = ["Sr", "Organisation", "Name", "Designation", "Mobile", "Email", "TO / CC", "Matrix"];
-    headers.forEach((h, i) => {
-      const cell = ws.getCell(5, i + 1);
-      cell.value = h;
-      cell.font = { name: "Arial", bold: true, size: 10, color: { argb: "FFFFFFFF" } };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B2545" } };
-      cell.alignment = { vertical: "middle", horizontal: "center" };
-    });
-    contacts.forEach((c, i) => {
-      const r = 6 + i;
-      const vals = [
-        i + 1,
-        [c.orgSection, c.orgName || c.company].filter(Boolean).join(" · "),
-        c.personName || "",
-        c.designation || c.spoc || "",
-        c.mobile || "",
-        c.email || "",
-        c.mailRole || "CC",
-        c.matrixKind || "TECHNICAL",
-      ];
-      vals.forEach((v, col) => {
-        const cell = ws.getCell(r, col + 1);
-        cell.value = v as string | number;
-        cell.font = { name: "Arial", size: 9 };
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFCCCCCC" } },
-          left: { style: "thin", color: { argb: "FFCCCCCC" } },
-          bottom: { style: "thin", color: { argb: "FFCCCCCC" } },
-          right: { style: "thin", color: { argb: "FFCCCCCC" } },
-        };
-        if (i % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7F8FA" } };
-      });
-    });
-
-    const out = Buffer.from(await styled.xlsx.writeBuffer());
+    const { appendBrandedMatrixSheets } = await import("./matrixExport.js");
+    const out = await appendBrandedMatrixSheets(buffer, projectId);
+    if (out === buffer) return buffer;
     // ExcelJS drops the template charts — put them back from the already-filled buffer.
     const { restoreTemplateCharts } = await import("../lib/xlsxCharts.js");
     return restoreTemplateCharts(buffer, out);
