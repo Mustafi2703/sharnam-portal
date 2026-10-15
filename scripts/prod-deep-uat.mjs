@@ -1282,7 +1282,13 @@ async function sectionDpr() {
   }
   await step("DPR-4", "15 published DPRs on the recent list; one DPR Excel downloads; site cannot publish a client's report as client", "site", async () => {
     const recent = ok(await call("site", "GET", `/api/dpr-maker/${pid()}/recent`), "recent");
-    const published = recent.filter((r) => r.status === "Published" && ALL_DAYS.includes(String(r.logDate).slice(0, 10)));
+    // DPR days are stored at India midnight, so the UTC timestamp is the previous evening.
+    const istDay = (value) => {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+      return new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    };
+    const published = recent.filter((r) => r.status === "Published" && ALL_DAYS.includes(istDay(r.logDate)));
     assert(published.length === ALL_DAYS.length, `${published.length} of ${ALL_DAYS.length} DPRs published`);
     const last = ALL_DAYS.at(-1);
     const xlsx = await call("site", "GET", `/api/dpr-maker/${pid()}/download.xlsx?date=${last}&discipline=CIVIL`);
