@@ -12,7 +12,7 @@ export const DRAWING_SHEETS: Sheet[] = [
   { key: "gfc-x", title: "Approval & GFC Drawing Log", hint: "Excel — R0–Rn dates, area, TL", kind: "xlsx", path: (id) => `/api/drawings/project/${id}/gfc-log/export.xlsx`, file: "Approval-GFC-Drawing-Log.xlsx" },
   { key: "gfc-p", title: "Approval & GFC Drawing Log", hint: "Branded PDF", kind: "pdf", path: (id) => `/api/drawings/project/${id}/gfc-log/export.pdf`, file: "Approval-GFC-Drawing-Log.pdf" },
   { key: "dash-p", title: "Drawing register dashboard", hint: "PDF — location, critical, delay, by organisation", kind: "pdf", path: (id) => `/api/drawings/project/${id}/register/dashboard.pdf`, file: "Drawing-Register-Dashboard.pdf" },
-  { key: "rfi-x", title: "RFI register", hint: "Excel — SPDC_RFI_Form_and_Register format", kind: "xlsx", path: (id) => `/api/rfis/project/${id}/register.xlsx`, file: "RFI-Register.xlsx" },
+  { key: "rfi-x", title: "RFI register", hint: "Excel — the register only. Each RFI form downloads from the RFI itself.", kind: "xlsx", path: (id) => `/api/rfis/project/${id}/register.xlsx`, file: "RFI-Register.xlsx" },
 ];
 
 /**

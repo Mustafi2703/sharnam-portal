@@ -382,7 +382,7 @@ export default function RfisPage() {
                   void downloadAuthFile(`/api/rfis/project/${id}/register.xlsx`, token, `RFI-Register.xlsx`)
                 }
               >
-                Download SPDC form + register
+                Download register
               </Button>
               {id ? <DrawingPackMenu projectId={id} token={token} canPublish={user?.role === "admin" || user?.role === "office"} /> : null}
               <Link to={`/projects/${id}/rfis?kind=RequestForInformation&compose=1`}>

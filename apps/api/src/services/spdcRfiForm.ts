@@ -448,12 +448,68 @@ export function isSpdcRfiRegisterKind(kind?: string | null) {
   return !kind || kind === "RequestForInformation" || kind === "Manual";
 }
 
+export type RfiEvidenceFile = { name: string; url?: string | null; kind?: string | null };
+
+/** form = one RFI sheet (blank fields stay blank). register = the log only, no form. */
+export type SpdcRfiScope = "form" | "register";
+
+export function rfiEvidenceFiles(r: SpdcRfiRecord, extra?: RfiEvidenceFile[]): RfiEvidenceFile[] {
+  const out: RfiEvidenceFile[] = [];
+  const raw = r.attachmentsJson;
+  if (raw?.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw) as unknown[];
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (!item || typeof item !== "object") continue;
+          const row = item as { name?: string; url?: string; sharePointUrl?: string; kind?: string };
+          const name = String(row.name || "").trim();
+          const url = row.sharePointUrl || row.url || "";
+          if (name || url) out.push({ name: name || "Evidence", url, kind: row.kind || "file" });
+        }
+      }
+    } catch {
+      /* plain text note, not a file list */
+    }
+  }
+  for (const file of extra || []) {
+    if (file?.name) out.push(file);
+  }
+  return out;
+}
+
+function dropSheet(wb: ExcelJS.Workbook, name: string) {
+  const ws = sheet(wb, name);
+  if (ws) wb.removeWorksheet(ws.id);
+}
+
+function addEvidenceSheet(wb: ExcelJS.Workbook, files: RfiEvidenceFile[]) {
+  if (!files.length) return;
+  const ws = wb.addWorksheet("Evidence", { properties: { tabColor: { argb: "FF0B6A78" } } });
+  ws.getCell(1, 1).value = "Evidence filed with this RFI";
+  ws.getCell(1, 1).font = { bold: true, size: 14 };
+  ws.getCell(2, 1).value = "Kind";
+  ws.getCell(2, 2).value = "File";
+  ws.getRow(2).font = { bold: true };
+  files.forEach((file, i) => {
+    ws.getCell(i + 3, 1).value = file.kind || "file";
+    const cell = ws.getCell(i + 3, 2);
+    if (file.url) cell.value = { text: file.name, hyperlink: file.url };
+    else cell.value = file.name;
+  });
+  ws.getColumn(1).width = 22;
+  ws.getColumn(2).width = 72;
+}
+
 export async function buildSpdcRfiWorkbook(opts: {
   project: SpdcRfiProject;
   rfis: SpdcRfiRecord[];
   selectRfiId?: string | null;
+  scope?: SpdcRfiScope;
+  evidence?: RfiEvidenceFile[];
 }): Promise<ExcelJS.Workbook> {
   const wb = await loadTemplate();
+  const scope: SpdcRfiScope = opts.scope || (opts.selectRfiId ? "form" : "register");
   const control = sheet(wb, "01_CONTROL");
   const formSheet = sheet(wb, "03_RFI_FORM");
   const register = sheet(wb, "04_RFI_REGISTER");
@@ -462,22 +518,36 @@ export async function buildSpdcRfiWorkbook(opts: {
   }
 
   const selected =
-    (opts.selectRfiId && opts.rfis.find((r) => r.id === opts.selectRfiId)) || opts.rfis[0] || null;
+    (opts.selectRfiId && opts.rfis.find((r) => r.id === opts.selectRfiId)) ||
+    (scope === "form" ? opts.rfis[0] : null);
   const selectedForm = selected ? parseForm(selected.formDataJson) : {};
+  const evidence = selected ? rfiEvidenceFiles(selected, opts.evidence) : opts.evidence || [];
 
   fillControl(control, opts.project, selectedForm);
-  if (register) {
+
+  if (scope === "register") {
     clearRegisterSample(register);
-    // The SPDC RFI register is for design queries only — never inspection or checklist-fill requests.
     const filled = opts.rfis.filter((r) => isSpdcRfiRegisterKind(r.rfiKind)).map(fillSpdcRfiRow);
     filled.forEach((row, i) => writeRegisterRow(register, REGISTER_START + i, row));
+    dropSheet(wb, "03_RFI_FORM");
+    return wb;
   }
+
+  // One row only, hidden, so the form's lookup formulas still resolve in Excel.
+  clearRegisterSample(register);
+  if (selected && isSpdcRfiRegisterKind(selected.rfiKind)) {
+    writeRegisterRow(register, REGISTER_START, fillSpdcRfiRow(selected));
+  }
+  register.state = "veryHidden";
+  dropSheet(wb, "05_DASHBOARD");
 
   if (selected) {
     const row = fillSpdcRfiRow(selected);
+    if (evidence.length) row.attachments = evidence.map((f) => f.name).join(", ");
     fillFormSheet(formSheet, opts.project, row, selectedForm);
   }
   embedLogo(wb, formSheet);
+  addEvidenceSheet(wb, evidence);
   return wb;
 }
 
@@ -485,6 +555,8 @@ export async function buildSpdcRfiXlsxBuffer(opts: {
   project: SpdcRfiProject;
   rfis: SpdcRfiRecord[];
   selectRfiId?: string | null;
+  scope?: SpdcRfiScope;
+  evidence?: RfiEvidenceFile[];
 }): Promise<Buffer> {
   const wb = await buildSpdcRfiWorkbook(opts);
   const buf = await wb.xlsx.writeBuffer();
@@ -510,8 +582,11 @@ function block(title: string, inner: string) {
 export function renderSpdcRfiFormHtml(opts: {
   project: SpdcRfiProject;
   rfi: SpdcRfiRecord;
+  evidence?: RfiEvidenceFile[];
 }): string {
+  const evidence = rfiEvidenceFiles(opts.rfi, opts.evidence);
   const row = fillSpdcRfiRow(opts.rfi);
+  if (evidence.length) row.attachments = evidence.map((f) => f.name).join(", ");
   const form = parseForm(opts.rfi.formDataJson);
   const logo = sharnamLogoDataUri();
   const p = opts.project;
@@ -628,6 +703,20 @@ export function renderSpdcRfiFormHtml(opts: {
         ${kv("PMC remarks", row.pmcRemarks, true)}
       </div>`
     )}
+    ${
+      evidence.length
+        ? block(
+            "Evidence",
+            `<ul>${evidence
+              .map((f) =>
+                f.url
+                  ? `<li><a href="${esc(f.url)}">${esc(f.name)}</a></li>`
+                  : `<li>${esc(f.name)}</li>`
+              )
+              .join("")}</ul>`
+          )
+        : ""
+    }
     ${block(
       "8. Signatures",
       `<div class="sigs">

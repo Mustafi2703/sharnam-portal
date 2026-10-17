@@ -76,10 +76,15 @@ export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDrive
   const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
   if (!project) return { exports: [] };
   const rfis = await prisma.rfi.findMany({
-    where: { projectId: rfi.projectId },
+    where: { projectId: rfi.projectId, rfiKind: { in: ["RequestForInformation", "Manual"] } },
     include: rfiInclude,
     orderBy: { createdAt: "asc" },
   });
+  const markups = await prisma.drawingMarkup.findMany({
+    where: { projectId: rfi.projectId, targetType: "rfi", targetId: rfi.id },
+    select: { fileName: true, sharePointUrl: true, fileUrl: true },
+  });
+  const evidence = markups.map((m) => ({ name: m.fileName, url: m.sharePointUrl || m.fileUrl, kind: "markup" }));
 
   const exports: RfiDriveExport[] = [];
   const stamp = new Date().toISOString().slice(0, 10);
@@ -88,7 +93,7 @@ export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDrive
   const base = `${safeName(rfi.number)}_${stamp}`;
 
   try {
-    const xlsxBuf = await buildSpdcRfiXlsxBuffer({ project, rfis, selectRfiId: rfi.id });
+    const xlsxBuf = await buildSpdcRfiXlsxBuffer({ project, rfis: [rfi], selectRfiId: rfi.id, scope: "form", evidence });
     const xlsx = await mockOneDrive.upload(
       project.code,
       folder,
@@ -102,7 +107,7 @@ export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDrive
   }
 
   try {
-    const html = renderSpdcRfiFormHtml({ project, rfi });
+    const html = renderSpdcRfiFormHtml({ project, rfi, evidence });
     const htmlFile = await mockOneDrive.upload(
       project.code,
       folder,
@@ -116,11 +121,11 @@ export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDrive
   }
 
   try {
-    const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis });
+    const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis, scope: "register" });
     const live = await mockOneDrive.upload(
       project.code,
       `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`,
-      "SPDC_RFI_Form_and_Register.xlsx",
+      "SPDC_RFI_Register.xlsx",
       registerBuf,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
@@ -137,11 +142,11 @@ export async function refreshRfiRegisterOnDrive(projectId: string): Promise<void
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
   const rfis = await prisma.rfi.findMany({ where: { projectId }, include: rfiInclude, orderBy: { createdAt: "asc" } });
-  const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis });
+  const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis, scope: "register" });
   await mockOneDrive.upload(
     project.code,
     `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`,
-    "SPDC_RFI_Form_and_Register.xlsx",
+    "SPDC_RFI_Register.xlsx",
     registerBuf,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );

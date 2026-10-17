@@ -507,16 +507,15 @@ wprMakerRouter.post("/:projectId/publish", requireRoles("admin", "office", "empl
   }
 
   const { project, weekStart, header, sections, charts, existing } = pack;
-  const buf = await withBrandedMatrices(await buildWprWorkbook({ header, sections, charts }), projectId);
+  const makerBuf = await withBrandedMatrices(await buildWprWorkbook({ header, sections, charts }), projectId);
   const dateStr = weekEnd.toISOString().slice(0, 10);
   const fname = `WPR-${project.code}-${dateStr}.xlsx`;
-  const clientFname = `WPR-ClientPack-${project.code}-${dateStr}.xlsx`;
   const pptxFname = `WPR-${project.code}-${dateStr}.pptx`;
   const folder = MODULE_TO_ISO_FOLDER.wpr;
-  const saved = await mockOneDrive.upload(project.code, folder, fname, buf);
   const { buildWprClientWorkbook } = await import("../services/wprClientPack.js");
   const clientBuf = await buildWprClientWorkbook(prisma, projectId, weekStart, weekEnd, sections);
-  await mockOneDrive.upload(project.code, folder, clientFname, clientBuf);
+  const saved = await mockOneDrive.upload(project.code, folder, fname, clientBuf);
+  await mockOneDrive.upload(project.code, folder, `WPR-SPDC-${project.code}-${dateStr}.xlsx`, makerBuf);
   const pptxBuf = await buildWprPptx({ header, sections, charts, packExtras: pack.packExtras || undefined });
   const pptxSaved = await mockOneDrive.upload(project.code, folder, pptxFname, pptxBuf);
 

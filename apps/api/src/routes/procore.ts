@@ -941,7 +941,7 @@ export async function buildRfiRegisterXlsxForProject(projectId: string): Promise
     orderBy: { createdAt: "asc" },
   });
   const { buildSpdcRfiXlsxBuffer } = await import("../services/spdcRfiForm.js");
-  return { buffer: await buildSpdcRfiXlsxBuffer({ project, rfis }), code: String(project.code) };
+  return { buffer: await buildSpdcRfiXlsxBuffer({ project, rfis, scope: "register" }), code: String(project.code) };
 }
 
 /** Lean include for register/form exports — full detail include pulls markups and slows gateway. */
@@ -973,12 +973,29 @@ rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
       take: 500,
     });
     const { buildSpdcRfiXlsxBuffer } = await import("../services/spdcRfiForm.js");
-    const buf = await buildSpdcRfiXlsxBuffer({ project, rfis });
+    const buf = await buildSpdcRfiXlsxBuffer({ project, rfis, scope: "register" });
     sendWorkbook(res, buf, `${String(project.code).replace(/[^\w.-]+/g, "_")}-RFI-Register.xlsx`);
   } catch (err) {
     console.error("[RFI] register.xlsx failed:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Register export failed" });
   }
+});
+
+/** Re-file each RFI form (and the separate register) on SharePoint. */
+rfiRouter.post("/project/:projectId/file-forms", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const rows = await prisma.rfi.findMany({
+    where: { projectId: req.params.projectId, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
+    select: { id: true, number: true },
+    orderBy: { createdAt: "asc" },
+    take: 80,
+  });
+  const { syncRfiToDrive } = await import("../services/syncRfiToDrive.js");
+  const filed: string[] = [];
+  for (const row of rows) {
+    await syncRfiToDrive(row.id);
+    filed.push(row.number);
+  }
+  res.json({ ok: true, filed });
 });
 
 rfiRouter.get("/project/:projectId/register.html", async (req, res) => {
@@ -1119,15 +1136,18 @@ rfiRouter.get("/:id/download.xlsx", async (req, res) => {
     const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
     if (!project) return res.status(404).json({ error: "Project not found" });
     // Register sheet only needs design RFIs; keep payload small for gateway.
-    const rfis = await prisma.rfi.findMany({
-      where: { projectId: rfi.projectId, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
-      include: rfiExportInclude,
-      orderBy: { createdAt: "asc" },
-      take: 500,
+    const markups = await prisma.drawingMarkup.findMany({
+      where: { projectId: rfi.projectId, targetType: "rfi", targetId: rfi.id },
+      select: { fileName: true, sharePointUrl: true, fileUrl: true },
     });
-    const list = rfis.some((x) => x.id === rfi.id) ? rfis : [...rfis, rfi];
     const { buildSpdcRfiXlsxBuffer, safeRfiFilename } = await import("../services/spdcRfiForm.js");
-    const buf = await buildSpdcRfiXlsxBuffer({ project, rfis: list, selectRfiId: rfi.id });
+    const buf = await buildSpdcRfiXlsxBuffer({
+      project,
+      rfis: [rfi],
+      selectRfiId: rfi.id,
+      scope: "form",
+      evidence: markups.map((m) => ({ name: m.fileName, url: m.sharePointUrl || m.fileUrl, kind: "markup" })),
+    });
     sendWorkbook(res, buf, safeRfiFilename(rfi.number, "xlsx"));
   } catch (err) {
     console.error("[RFI] download.xlsx failed:", err instanceof Error ? err.message : err);
@@ -1140,8 +1160,16 @@ rfiRouter.get("/:id/download.html", async (req, res) => {
   if (!rfi) return res.status(404).json({ error: "RFI not found" });
   const project = await prisma.project.findUnique({ where: { id: rfi.projectId } });
   if (!project) return res.status(404).json({ error: "Project not found" });
+  const markups = await prisma.drawingMarkup.findMany({
+    where: { projectId: rfi.projectId, targetType: "rfi", targetId: rfi.id },
+    select: { fileName: true, sharePointUrl: true, fileUrl: true },
+  });
   const { renderSpdcRfiFormHtml, safeRfiFilename } = await import("../services/spdcRfiForm.js");
-  const html = renderSpdcRfiFormHtml({ project, rfi });
+  const html = renderSpdcRfiFormHtml({
+    project,
+    rfi,
+    evidence: markups.map((m) => ({ name: m.fileName, url: m.sharePointUrl || m.fileUrl, kind: "markup" })),
+  });
   sendWorkbook(res, Buffer.from(html, "utf8"), safeRfiFilename(rfi.number, "html"), true);
 });
 
