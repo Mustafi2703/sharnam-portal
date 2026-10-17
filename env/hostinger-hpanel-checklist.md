@@ -32,7 +32,7 @@ Paste each **KEY** and **VALUE** in: **Websites → portal.spdc.in → Environme
 | **First deploy** (empty DB) | `RUN_SEED=1` | `SKIP_BUILD_SEED` |
 | **Demo / all later deploys** | `SKIP_BUILD_SEED=1` | `RUN_SEED` *(delete the variable)* |
 
-Each deploy (unless `SKIP_HRMS_LETTER_SAMPLES=1`) regenerates **11 HR letter UAT samples** for `riya.shah@sharnam.demo` — HRMS → Documents.
+Deploys do not create HR letters. Sample letters are only written when someone runs `npm run hrms:seed-letter-samples`.
 
 ## Bulk import (recommended)
 

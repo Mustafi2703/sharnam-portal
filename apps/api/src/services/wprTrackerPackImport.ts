@@ -504,12 +504,22 @@ export async function importWprTrackerPack(prisma: PrismaClient, projectId: stri
         january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
         july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
       };
-      for (const row of cashRows.slice(1)) {
-        const month = str(row[0]);
-        if (!month) continue;
-        const planned = money(row[3]);
-        const actual = money(row[4]);
-        const pkg = str(row[1]) || "Overall";
+      // July sheet: month is column B, RA bill column C, planned column E, actual column F. Column A is blank.
+      const headerAt = cashRows.findIndex((r) => r.some((c) => /^month$/i.test(str(c))));
+      const header = headerAt >= 0 ? cashRows[headerAt] : [];
+      const monthCol = header.findIndex((c) => /^month$/i.test(str(c)));
+      const plannedCol = header.findIndex((c) => /planned/i.test(str(c)));
+      const actualCol = header.findIndex((c) => /actual/i.test(str(c)));
+      const mCol = monthCol >= 0 ? monthCol : 1;
+      const pCol = plannedCol >= 0 ? plannedCol : mCol + 3;
+      const aCol = actualCol >= 0 ? actualCol : pCol + 1;
+      const pkgCol = mCol + 1;
+      for (const row of cashRows.slice(headerAt >= 0 ? headerAt + 1 : 1)) {
+        const month = str(row[mCol]);
+        if (!month || /^month$/i.test(month)) continue;
+        const planned = money(row[pCol]);
+        const actual = money(row[aCol]);
+        const pkg = str(row[pkgCol]) || "Overall";
         await prisma.progressPlannedActual.create({
           data: {
             projectId,

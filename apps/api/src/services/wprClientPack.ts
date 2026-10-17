@@ -50,6 +50,29 @@ function findSheet(wb: WorkBook, pattern: RegExp) {
   return wb.SheetNames.find((n: string) => pattern.test(n)) || "";
 }
 
+/** True when the portal list is at least as long as the July sheet, so a short list cannot blank the pack. */
+function portalCoversTemplate(ws: WorkSheet, startRow: number, col: number, incoming: number): boolean {
+  return incoming > 0 && incoming >= templateFilledCount(ws, startRow, col);
+}
+
+/** How many filled cells the July template already has in one column. A short portal list must not wipe the rest. */
+function templateFilledCount(ws: WorkSheet, startRow: number, col: number): number {
+  let n = 0;
+  let blanks = 0;
+  for (let r = startRow; r < startRow + 400; r++) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c: col })];
+    const v = cell?.v;
+    if (v == null || v === "") {
+      blanks += 1;
+      if (n > 0 && blanks > 2) break;
+      continue;
+    }
+    blanks = 0;
+    n += 1;
+  }
+  return n;
+}
+
 /** Every value written per sheet, replayed onto the styled template at the end (SheetJS drops cell styles). */
 const writesBySheet = new WeakMap<WorkSheet, { r: number; c: number; v: string | number }[]>();
 type Block = { start: number; end: number; minCol: number; maxCol: number; clearTo?: number; overrideFormulas?: boolean };
@@ -200,7 +223,7 @@ export async function buildWprClientWorkbook(
   }
 
   const hindKey = findSheet(wb, /Hinderance Register/i);
-  if (hindKey && hindrances.length) {
+  if (hindKey && portalCoversTemplate(wb.Sheets[hindKey], 2, 1, hindrances.length)) {
     writeRows(
       wb.Sheets[hindKey],
       2,
@@ -218,7 +241,7 @@ export async function buildWprClientWorkbook(
   }
 
   const legalKey = findSheet(wb, /Legal Approval/i);
-  if (legalKey && legal.length) {
+  if (legalKey && portalCoversTemplate(wb.Sheets[legalKey], 1, 1, legal.length)) {
     writeRows(
       wb.Sheets[legalKey],
       1,
@@ -248,7 +271,7 @@ export async function buildWprClientWorkbook(
 
   // Cube Test: header C2, data from C3 — sample no., 7-day strength, IS lower limit.
   const cubeKey = findSheet(wb, /^Cube Test$/i);
-  if (cubeKey && cubes.length) {
+  if (cubeKey && portalCoversTemplate(wb.Sheets[cubeKey], 2, 2, cubes.length)) {
     writeRows(
       wb.Sheets[cubeKey],
       2,
@@ -278,7 +301,7 @@ export async function buildWprClientWorkbook(
   // Weekly Manpower: fixed 20-row trade table B4:E23 (Total row 24 sums it). The template derives C/D from its
   // daily tables, so this block writes the register values over those formulas.
   const mpKey = findSheet(wb, /Weekly Manpower/i);
-  if (mpKey && manpower.length) {
+  if (mpKey && portalCoversTemplate(wb.Sheets[mpKey], 3, 1, manpower.length)) {
     writeRows(
       wb.Sheets[mpKey],
       3,
@@ -289,7 +312,7 @@ export async function buildWprClientWorkbook(
 
   // Project Cashflow: header B3 (Month · RA · Budgeted · Planned · Actual), data from B4.
   const cfKey = findSheet(wb, /Project Cashflow/i);
-  if (cfKey && cashflow.length) {
+  if (cfKey && portalCoversTemplate(wb.Sheets[cfKey], 3, 1, cashflow.length)) {
     writeRows(
       wb.Sheets[cfKey],
       3,
@@ -300,7 +323,7 @@ export async function buildWprClientWorkbook(
   // Client "Planned Vs Actual" sheet: activity quantities (header row 6, data from row 7). Inputs only —
   // the template's own formulas (balance, cumulative, %) stay in place on replay.
   const pvaKey = findSheet(wb, /Planned Vs Actual/i);
-  if (pvaKey && activityLines.length) {
+  if (pvaKey && portalCoversTemplate(wb.Sheets[pvaKey], 6, 2, activityLines.length)) {
     const ws = wb.Sheets[pvaKey];
     const rollup = await activityWeekRollup(prisma, projectId, weekStart, weekEnd);
     const prevDay = new Date(weekStart.getTime() - 86400000);
@@ -335,7 +358,7 @@ export async function buildWprClientWorkbook(
   }
 
   const riskKey = findSheet(wb, /Risk Register/i);
-  if (riskKey && risks.length) {
+  if (riskKey && portalCoversTemplate(wb.Sheets[riskKey], 2, 3, risks.length)) {
     writeRows(
       wb.Sheets[riskKey],
       2,
@@ -435,8 +458,10 @@ export async function buildWprClientWorkbook(
   }
 
   // "As per drawing status" = Weekly Executed Plan: header A5, data from A6 — this week's qty from the DPRs.
+  // The sheet is formula-linked to Planned Vs Actual. A short activity list used to clear the other ~120 rows.
   const drawStatusKey = findSheet(wb, /As per drawing status/i);
-  if (drawStatusKey && activityLines.length) {
+  const drawStatusAlready = drawStatusKey ? templateFilledCount(wb.Sheets[drawStatusKey], 5, 2) : 0;
+  if (drawStatusKey && activityLines.length && activityLines.length >= drawStatusAlready) {
     const rollup = await activityWeekRollup(prisma, projectId, weekStart, weekEnd);
     writeRows(
       wb.Sheets[drawStatusKey],
@@ -461,7 +486,7 @@ export async function buildWprClientWorkbook(
   }
 
   const vaKey = findSheet(wb, /Value Addition/i);
-  if (vaKey && valueAdditions.length) {
+  if (vaKey && portalCoversTemplate(wb.Sheets[vaKey], 2, 1, valueAdditions.length)) {
     writeRows(
       wb.Sheets[vaKey],
       2,
@@ -486,7 +511,7 @@ export async function buildWprClientWorkbook(
   }
 
   const procKey = findSheet(wb, /^Procurement tracker$/i);
-  if (procKey && procurementLines.length) {
+  if (procKey && portalCoversTemplate(wb.Sheets[procKey], 1, 1, procurementLines.length)) {
     writeRows(
       wb.Sheets[procKey],
       1,
@@ -507,7 +532,7 @@ export async function buildWprClientWorkbook(
 
   const qualStatKey = findSheet(wb, /Quality Statistic/i);
   const liveQuality = await qualityWeekStats(prisma, projectId, weekStart, weekEnd);
-  if (qualStatKey && (liveQuality.length || sorStats.length)) {
+  if (qualStatKey && portalCoversTemplate(wb.Sheets[qualStatKey], 2, 2, liveQuality.length || sorStats.length)) {
     // Header B2, data from B3 (F = D - E is the template's formula).
     writeRows(
       wb.Sheets[qualStatKey],
@@ -554,17 +579,21 @@ export async function buildWprClientWorkbook(
       ["FAC", rec(/\bfac\b|first aid/i)],
       ["Near Miss", rec(/near miss/i)],
     ];
-    // Header B2, data B3:F13 (left) and I3:M5 (right); the app's figures replace the template's formulas.
-    writeRows(wb.Sheets[hseKey], 2, lines.map(([label, v], i) => ["", i + 1, label, v[0], v[1], v[2]]), { overrideFormulas: true });
-    const isClosed = (r: { status: string | null; closedAt: Date | null }) =>
-      r.closedAt ? r.closedAt <= weekEnd : /clos|resolved|done/i.test(r.status || "");
-    const obs = (["Unsafe act", "Unsafe condition", "NCR"] as const).map((label, i) => {
-      const re = label === "NCR" ? /\bncr\b|\bncn\b|safety ncr/i : new RegExp(`^${label}`, "i");
-      const all = records.filter((r) => re.test(r.recordType || ""));
-      const closed = all.filter(isClosed).length;
-      return ["", "", "", "", "", "", "", "", i + 1, label, all.length, all.length - closed, closed];
-    });
-    writeRows(wb.Sheets[hseKey], 2, obs, { overrideFormulas: true });
+    // An empty safety log used to replace the July man-hours (and flatten the chart) with zeros.
+    const hseHasFigures = lines.some(([, v]) => v.some((n) => Number(n) > 0));
+    if (hseHasFigures) {
+      // Header B2, data B3:F13 (left) and I3:M5 (right); the app's figures replace the template's formulas.
+      writeRows(wb.Sheets[hseKey], 2, lines.map(([label, v], i) => ["", i + 1, label, v[0], v[1], v[2]]), { overrideFormulas: true });
+      const isClosed = (r: { status: string | null; closedAt: Date | null }) =>
+        r.closedAt ? r.closedAt <= weekEnd : /clos|resolved|done/i.test(r.status || "");
+      const obs = (["Unsafe act", "Unsafe condition", "NCR"] as const).map((label, i) => {
+        const re = label === "NCR" ? /\bncr\b|\bncn\b|safety ncr/i : new RegExp(`^${label}`, "i");
+        const all = records.filter((r) => re.test(r.recordType || ""));
+        const closed = all.filter(isClosed).length;
+        return ["", "", "", "", "", "", "", "", i + 1, label, all.length, all.length - closed, closed];
+      });
+      writeRows(wb.Sheets[hseKey], 2, obs, { overrideFormulas: true });
+    }
   }
 
   // Design status (July client sheet) — prefer seeded WPR section; else roll up Drawing Register lines by discipline.
@@ -587,7 +616,7 @@ export async function buildWprClientWorkbook(
       `${v.issued}/${v.total} on register`,
     ]);
   }
-  if (designKey && designRows.length) {
+  if (designKey && portalCoversTemplate(wb.Sheets[designKey], 7, 1, designRows.length)) {
     writeRows(
       wb.Sheets[designKey],
       7,
