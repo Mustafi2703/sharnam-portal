@@ -539,7 +539,12 @@ export async function buildSpdcRfiWorkbook(opts: {
     writeRegisterRow(register, REGISTER_START, fillSpdcRfiRow(selected));
   }
   register.state = "veryHidden";
+  const readme = sheet(wb, "00_READ_ME");
+  if (readme) readme.state = "veryHidden";
+  control.state = "veryHidden";
   dropSheet(wb, "05_DASHBOARD");
+  const formIndex = wb.worksheets.findIndex((w) => w.name === "03_RFI_FORM");
+  if (formIndex >= 0) wb.views = [{ activeTab: formIndex, firstSheet: formIndex }];
 
   if (selected) {
     const row = fillSpdcRfiRow(selected);

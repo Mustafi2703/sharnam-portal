@@ -983,11 +983,16 @@ rfiRouter.get("/project/:projectId/register.xlsx", async (req, res) => {
 
 /** Re-file each RFI form (and the separate register) on SharePoint. */
 rfiRouter.post("/project/:projectId/file-forms", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const onlyId = String(req.body?.rfiId || "").trim();
   const rows = await prisma.rfi.findMany({
-    where: { projectId: req.params.projectId, rfiKind: { in: SPDC_RFI_REGISTER_KINDS } },
+    where: {
+      projectId: req.params.projectId,
+      rfiKind: { in: SPDC_RFI_REGISTER_KINDS },
+      ...(onlyId ? { id: onlyId } : {}),
+    },
     select: { id: true, number: true },
     orderBy: { createdAt: "asc" },
-    take: 80,
+    take: onlyId ? 1 : 80,
   });
   const { syncRfiToDrive } = await import("../services/syncRfiToDrive.js");
   const filed: string[] = [];
