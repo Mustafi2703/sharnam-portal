@@ -57,6 +57,10 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
     await tx.drawingRevision.deleteMany({ where: { id: { in: revIds } } });
   }
   if (drawingIds.length) {
+    // RFI and inspection rows point at drawings with a restrict FK. Drop the link before the drawing row goes.
+    await tx.rfi.updateMany({ where: { projectId, linkedDrawingId: { not: null } }, data: { linkedDrawingId: null } });
+    await tx.qualityInspection.updateMany({ where: { projectId, linkedDrawingId: { not: null } }, data: { linkedDrawingId: null } });
+    await tx.drawingMarkup.deleteMany({ where: { projectId } });
     await tx.drawingRegisterLine.updateMany({ where: { drawingId: { in: drawingIds } }, data: { drawingId: null } });
     await tx.drawing.deleteMany({ where });
   }
@@ -122,6 +126,7 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
     await tx.communicationContact.deleteMany({ where });
   }
   await tx.communicationLog.deleteMany({ where });
+  await tx.progressActivityLine.deleteMany({ where });
   await tx.costBudgetLine.deleteMany({ where });
   await tx.costMonitoringLine.deleteMany({ where });
   await tx.costCashflowPeriod.deleteMany({ where });
@@ -145,7 +150,8 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
   await tx.progressScurvePoint.deleteMany({ where });
   await tx.progressLegalApproval.deleteMany({ where });
   await tx.progressManpower.deleteMany({ where });
-  await tx.progressActivityLine.deleteMany({ where });
+  await tx.progressScheduleTask.deleteMany({ where });
+  await tx.progressDesignStatus.deleteMany({ where });
   await tx.progressSorStat.deleteMany({ where });
   await tx.progressValueAddition.deleteMany({ where });
   await tx.progressProcurementLine.deleteMany({ where });
@@ -167,6 +173,7 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
   await tx.wprSnapshot.deleteMany({ where });
   await tx.customSheet.deleteMany({ where });
   await tx.attendance.deleteMany({ where });
+  await sweepLeftoverProjectRows(tx, projectId, Boolean(opts?.keepSetup));
 }
 
 /** Clear seeded module fills while keeping the project card, directory, and vendors. */
@@ -277,6 +284,54 @@ export async function purgeProjectChildren(tx: Db, projectId: string) {
 
 function safeIdent(name: string) {
   return /^[A-Za-z0-9_]+$/.test(name) ? name : null;
+}
+
+const MODULE_PURGE_KEEP = new Set([
+  "ProjectMember",
+  "ProjectVendor",
+  "CommunicationMatrix",
+  "CommunicationContact",
+]);
+
+/** CRM cards stay on the company. Only the project link is dropped. */
+const MODULE_PURGE_UNLINK = new Set(["Lead", "Deal", "Quotation", "EmailOutbox", "ExpenseVoucher"]);
+
+/**
+ * Delete any project-scoped table the explicit list missed.
+ * Foreign-key checks are off for this pass so a new child table cannot block Clear module data.
+ */
+async function sweepLeftoverProjectRows(tx: Db, projectId: string, keepSetup: boolean) {
+  const refs = await tx.$queryRaw<Array<{ TABLE_NAME: string; COLUMN_NAME: string }>>`
+    SELECT k.TABLE_NAME AS TABLE_NAME, k.COLUMN_NAME AS COLUMN_NAME
+    FROM information_schema.KEY_COLUMN_USAGE k
+    WHERE k.TABLE_SCHEMA = DATABASE()
+      AND k.REFERENCED_TABLE_NAME = 'Project'
+      AND k.REFERENCED_COLUMN_NAME = 'id'
+      AND k.TABLE_NAME <> 'Project'
+  `;
+  await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
+  try {
+    for (const ref of refs) {
+      const table = safeIdent(ref.TABLE_NAME);
+      const column = safeIdent(ref.COLUMN_NAME);
+      if (!table || !column) continue;
+      if (keepSetup && MODULE_PURGE_KEEP.has(table)) continue;
+      if (MODULE_PURGE_UNLINK.has(table)) {
+        await tx.$executeRawUnsafe(`UPDATE \`${table}\` SET \`${column}\` = NULL WHERE \`${column}\` = ?`, projectId);
+        continue;
+      }
+      await tx.$executeRawUnsafe(`DELETE FROM \`${table}\` WHERE \`${column}\` = ?`, projectId);
+    }
+    const markup = await tx.$queryRaw<Array<{ c: bigint | number }>>`
+      SELECT COUNT(*) AS c FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'DrawingMarkup'
+    `;
+    if (Number(markup[0]?.c || 0) > 0) {
+      await tx.$executeRawUnsafe("DELETE FROM `DrawingMarkup` WHERE `projectId` = ?", projectId);
+    }
+  } finally {
+    await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+  }
 }
 
 /** Catch leftover MySQL FKs that Prisma Cascade never applied on Hostinger. */

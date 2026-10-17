@@ -1118,7 +1118,7 @@ projectsRouter.post("/:id/purge-modules", requireRoles("admin", "office"), async
   try {
     await prisma.$transaction(async (tx) => {
       await purgeProjectModuleData(tx, project.id);
-    }, { timeout: 60_000, maxWait: 10_000 });
+    }, { timeout: 180_000, maxWait: 15_000 });
   } catch (err) {
     console.warn("[project] purge-modules:", err instanceof Error ? err.message : err);
     return res.status(409).json({
