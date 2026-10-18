@@ -1254,6 +1254,7 @@ projectsRouter.get("/:id/sharepoint-folder", requireRoles("admin", "office", "em
     resolveDefaultDrive,
     resolveDriveFolder,
     projectLibraryPath,
+    projectLibraryRoot,
   } = await import("../services/graph.js");
   const cfg = graphConfig();
   if (!cfg.configured || cfg.mock) return res.status(400).json({ error: "SharePoint is not connected on this server." });
@@ -1264,7 +1265,8 @@ projectsRouter.get("/:id/sharepoint-folder", requireRoles("admin", "office", "em
       error: `Unknown SharePoint module key "${key}". Open the tool from Quality / Safety / Drawings / Progress so the right folder is selected.`,
     });
   }
-  const folder = projectLibraryPath(project.code, iso || "");
+  const projectRoot = projectLibraryRoot(project.code);
+  const folder = iso ? projectLibraryPath(project.code, iso) : projectRoot;
   try {
     const drive = await resolveDefaultDrive();
     // Prefer a single Graph GET (cached) — deep ensureDriveFolder walks were timing out the button.

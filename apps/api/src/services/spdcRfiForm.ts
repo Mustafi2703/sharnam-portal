@@ -544,7 +544,9 @@ export async function buildSpdcRfiWorkbook(opts: {
   control.state = "veryHidden";
   dropSheet(wb, "05_DASHBOARD");
   const formIndex = wb.worksheets.findIndex((w) => w.name === "03_RFI_FORM");
-  if (formIndex >= 0) wb.views = [{ activeTab: formIndex, firstSheet: formIndex }];
+  if (formIndex >= 0) {
+    wb.views = [{ activeTab: formIndex, firstSheet: formIndex, visibility: "visible" } as ExcelJS.WorkbookView];
+  }
 
   if (selected) {
     const row = fillSpdcRfiRow(selected);
