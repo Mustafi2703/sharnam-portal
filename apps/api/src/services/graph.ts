@@ -454,6 +454,27 @@ function encodeDrivePath(relPath: string) {
 /** All portal writes stay inside this sandbox — never touch other site folders/files. */
 export const SHAREPOINT_SANDBOX_ROOT = "Sharnam Portal";
 
+/** Inside each project folder, the ISO tree lives under this folder. */
+export const PROJECT_CONTENT_FOLDER = "Sharnam Projects";
+
+/** Sharnam Portal/{project}/Sharnam Projects — where the ISO folders are created. */
+export function projectLibraryRoot(projectCode: string) {
+  return `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(projectCode)}/${PROJECT_CONTENT_FOLDER}`;
+}
+
+export function projectLibraryPath(projectCode: string, rel = "") {
+  const clean = rel.replace(/^\/+|\/+$/g, "");
+  const root = projectLibraryRoot(projectCode);
+  return clean ? `${root}/${clean}` : root;
+}
+
+/** Files saved before the Sharnam Projects folder existed. */
+export function legacyProjectLibraryPath(projectCode: string, rel = "") {
+  const clean = rel.replace(/^\/+|\/+$/g, "");
+  const root = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(projectCode)}`;
+  return clean ? `${root}/${clean}` : root;
+}
+
 export function sanitizeProjectCode(projectCode: string) {
   const clean = projectCode
     .trim()
@@ -629,9 +650,8 @@ export async function driveItemRef(
 }
 
 export async function ensureProjectSharePointTree(projectCode: string) {
-  const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
-  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
+  const rootFolder = projectLibraryRoot(projectCode);
   assertPortalSafePath(rootFolder);
   const created: string[] = [];
 
@@ -683,10 +703,8 @@ export async function uploadToProjectLibrary(
   contentType = "application/octet-stream",
   opts?: { replace?: boolean }
 ) {
-  const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
-  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
-  const folder = relFolder ? `${rootFolder}/${relFolder.replace(/^\/+|\/+$/g, "")}` : rootFolder;
+  const folder = projectLibraryPath(projectCode, relFolder);
   assertPortalSafePath(folder);
   await ensureDriveFolder(drive.driveId, folder);
 
@@ -816,10 +834,8 @@ export async function listDriveFiles(itemPath: string) {
 }
 
 export async function listProjectLibrary(projectCode: string, relFolder = "") {
-  const code = sanitizeProjectCode(projectCode);
   const drive = await resolveDefaultDrive();
-  const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
-  const path = relFolder ? `${rootFolder}/${relFolder.replace(/^\/+|\/+$/g, "")}` : rootFolder;
+  const path = projectLibraryPath(projectCode, relFolder);
   assertPortalSafePath(path);
   try {
     return await listDriveChildren(drive.driveId, path);

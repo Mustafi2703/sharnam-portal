@@ -79,10 +79,10 @@ commsRouter.post("/contacts/:projectId/sharepoint-link", requireRoles("admin", "
   if (!project) return res.status(404).json({ error: "Not found" });
   const { buildMatrixXlsx, buildMatrixPdf } = await import("../services/matrixExport.js");
   const { mockOneDrive } = await import("../services/mockOneDrive.js");
-  const { driveItemRef, sanitizeProjectCode, SHAREPOINT_SANDBOX_ROOT } = await import("../services/graph.js");
+  const { driveItemRef, projectLibraryPath } = await import("../services/graph.js");
   const fileName = `Communication-Matrix-${kind}.xlsx`;
   const pdfName = `Communication-Matrix-${kind}.pdf`;
-  const folderPath = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}/${MATRIX_FOLDER}`;
+  const folderPath = projectLibraryPath(project.code, MATRIX_FOLDER);
   try {
     const wantPdf = req.body?.file === "pdf";
     if (wantPdf && !req.body?.refresh) {

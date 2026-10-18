@@ -1253,8 +1253,7 @@ projectsRouter.get("/:id/sharepoint-folder", requireRoles("admin", "office", "em
     MODULE_TO_ISO_FOLDER,
     resolveDefaultDrive,
     resolveDriveFolder,
-    SHAREPOINT_SANDBOX_ROOT,
-    sanitizeProjectCode,
+    projectLibraryPath,
   } = await import("../services/graph.js");
   const cfg = graphConfig();
   if (!cfg.configured || cfg.mock) return res.status(400).json({ error: "SharePoint is not connected on this server." });
@@ -1265,8 +1264,7 @@ projectsRouter.get("/:id/sharepoint-folder", requireRoles("admin", "office", "em
       error: `Unknown SharePoint module key "${key}". Open the tool from Quality / Safety / Drawings / Progress so the right folder is selected.`,
     });
   }
-  const projectRoot = `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(project.code)}`;
-  const folder = iso ? `${projectRoot}/${iso}` : projectRoot;
+  const folder = projectLibraryPath(project.code, iso || "");
   try {
     const drive = await resolveDefaultDrive();
     // Prefer a single Graph GET (cached) — deep ensureDriveFolder walks were timing out the button.
@@ -2755,8 +2753,10 @@ drawingsRouter.get("/revision/:revId/sharepoint", requireRoles("admin", "office"
   const prefix = `/uploads/onedrive/${code}/`;
   const rel = portalUrl.startsWith(prefix) ? portalUrl.slice(prefix.length) : "";
   if (!rel) return res.json({ sharePointUrl: null, portalUrl: portalUrl || null });
-  const { driveItemWebUrl, SHAREPOINT_SANDBOX_ROOT } = await import("../services/graph.js");
-  const sharePointUrl = await driveItemWebUrl(`${SHAREPOINT_SANDBOX_ROOT}/${code}/${rel}`);
+  const { driveItemWebUrl, projectLibraryPath, legacyProjectLibraryPath } = await import("../services/graph.js");
+  const sharePointUrl =
+    (await driveItemWebUrl(projectLibraryPath(code, rel))) ||
+    (await driveItemWebUrl(legacyProjectLibraryPath(code, rel)));
   res.json({ sharePointUrl, portalUrl: portalUrl || null });
 });
 

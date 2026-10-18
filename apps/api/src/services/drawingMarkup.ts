@@ -10,10 +10,11 @@ import { sharnamLogoPath } from "./brandedExport.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import {
   MODULE_TO_ISO_FOLDER,
-  SHAREPOINT_SANDBOX_ROOT,
   downloadDriveFile,
   driveItemWebUrl,
   graphConfig,
+  legacyProjectLibraryPath,
+  projectLibraryPath,
   sanitizeProjectCode,
   sharePointPathFromWebUrl,
   uploadToProjectLibrary,
@@ -76,7 +77,7 @@ function locate(url: string, projectCode: string): { local: string | null; sp: s
       return false;
     }
   }) || localCandidates[0] || null;
-  const sp = rel ? `${SHAREPOINT_SANDBOX_ROOT}/${code}/${rel}` : null;
+  const sp = rel ? projectLibraryPath(code, rel) : null;
   return { local, sp, code, rel };
 }
 
@@ -90,7 +91,11 @@ export async function readRevisionPdf(rev: RevLike, projectCode: string): Promis
     try {
       return { buffer: await downloadDriveFile(loc.sp), name };
     } catch {
-      /* try alternate SharePoint folder names below */
+      try {
+        return { buffer: await downloadDriveFile(legacyProjectLibraryPath(loc.code, loc.rel || "")), name };
+      } catch {
+        /* try alternate SharePoint folder names below */
+      }
     }
   }
   // Older uploads may live under a second sanitized form or the raw folder name on Graph.
@@ -100,7 +105,7 @@ export async function readRevisionPdf(rev: RevLike, projectCode: string): Promis
     for (const folder of [code, projectCode.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80)]) {
       if (!folder || folder === code) continue;
       try {
-        return { buffer: await downloadDriveFile(`${SHAREPOINT_SANDBOX_ROOT}/${folder}/${rel}`), name };
+        return { buffer: await downloadDriveFile(legacyProjectLibraryPath(folder, rel)), name };
       } catch {
         /* next */
       }
