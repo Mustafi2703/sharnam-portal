@@ -194,7 +194,7 @@ graphRouter.get("/config", requireAuth, requireRoles("admin", "office"), (_req, 
   });
 });
 
-/** Admin/office — create Sharnam Portal/{projectCode} library tree on SharePoint */
+/** Admin/office — create Sharnam Portal/Sharnam Projects/{projectCode} and its ISO folders. */
 graphRouter.post(
   "/ensure-project-tree",
   requireAuth,

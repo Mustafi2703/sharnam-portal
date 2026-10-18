@@ -454,12 +454,19 @@ function encodeDrivePath(relPath: string) {
 /** All portal writes stay inside this sandbox — never touch other site folders/files. */
 export const SHAREPOINT_SANDBOX_ROOT = "Sharnam Portal";
 
-/** Inside each project folder, the ISO tree lives under this folder. */
+/**
+ * Sibling of SPDC_HRMS and SPDC_CRM.
+ * Each project keeps its ISO folders and _Registers under Sharnam Portal/Sharnam Projects/{project}.
+ */
 export const PROJECT_CONTENT_FOLDER = "Sharnam Projects";
 
-/** Sharnam Portal/{project}/Sharnam Projects — where the ISO folders are created. */
+const COMPANY_LIBRARY_CODES = new Set(["SPDC_HRMS", "SPDC_CRM"]);
+
+/** Company libraries stay beside Sharnam Projects. Project ISO trees live inside it. */
 export function projectLibraryRoot(projectCode: string) {
-  return `${SHAREPOINT_SANDBOX_ROOT}/${sanitizeProjectCode(projectCode)}/${PROJECT_CONTENT_FOLDER}`;
+  const code = sanitizeProjectCode(projectCode);
+  if (COMPANY_LIBRARY_CODES.has(code)) return `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
+  return `${SHAREPOINT_SANDBOX_ROOT}/${PROJECT_CONTENT_FOLDER}/${code}`;
 }
 
 export function projectLibraryPath(projectCode: string, rel = "") {
