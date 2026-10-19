@@ -2150,19 +2150,11 @@ hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
     return res.status(403).json({ error: "Only admin can remove admin accounts" });
   }
 
-  await prisma.projectMember.deleteMany({ where: { userId } }).catch(() => undefined);
-  await prisma.employeeProfile.deleteMany({ where: { userId } }).catch(() => undefined);
-
-  const stamp = Date.now();
-  const retiredEmail = `deleted.${stamp}.${existing.email.replace("@", "_at_")}`.slice(0, 180);
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      isActive: false,
-      email: retiredEmail,
-      fullName: `[Removed] ${existing.fullName}`.slice(0, 200),
-    },
-  });
+  const { retirePortalLogin } = await import("../services/crmVendorCredentials.js");
+  const removed = await retirePortalLogin(prisma, userId, { allowStaff: true });
+  if (!removed) {
+    return res.status(403).json({ error: "Nirav Parekh and Saurabh Prajapati stay on the portal. Every other login can be deleted." });
+  }
   await audit("hrm.employee.removed", { userId: req.user?.id, entity: "User", entityId: userId });
   res.json({ ok: true, softDeleted: true });
 });

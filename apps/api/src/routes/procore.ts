@@ -507,9 +507,19 @@ vendorsRouter.post("/:id/contacts/:contactId/activate-portal", requireRoles("adm
 });
 
 vendorsRouter.delete("/:id/contacts/:contactId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  await prisma.vendorContact.deleteMany({
+  const contact = await prisma.vendorContact.findFirst({
     where: { id: req.params.contactId, vendorId: req.params.id },
   });
+  if (!contact) return res.status(404).json({ error: "Person not found on this company" });
+  const login = await prisma.user.findFirst({
+    where: { email: contact.email.trim().toLowerCase(), NOT: { email: { startsWith: "deleted." } } },
+    select: { id: true },
+  });
+  if (login) {
+    const { retirePortalLogin } = await import("../services/crmVendorCredentials.js");
+    await retirePortalLogin(prisma, login.id);
+  }
+  await prisma.vendorContact.deleteMany({ where: { id: contact.id, vendorId: req.params.id } });
   res.json({ ok: true });
 });
 
@@ -545,7 +555,8 @@ vendorsRouter.delete("/:id", requireRoles("admin", "office"), async (req: Authed
     await tx.projectVendor.deleteMany({ where: { vendorId: vendor.id } });
     await tx.user.updateMany({ where: { vendorId: vendor.id }, data: { vendorId: null } });
     await tx.rfi.updateMany({ where: { responsibleVendorId: vendor.id }, data: { responsibleVendorId: null } });
-    await tx.vendor.update({ where: { id: vendor.id }, data: { isActive: false } });
+    await tx.vendorContact.deleteMany({ where: { vendorId: vendor.id } });
+    await tx.vendor.update({ where: { id: vendor.id }, data: { isActive: false, email: null, primaryContactName: null } });
   });
   await audit("vendor.delete", {
     userId: req.user!.id,

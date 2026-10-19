@@ -31,19 +31,34 @@ function isProtectedStaffLogin(user: { role: string; email: string }) {
 
 type LoginDb = Prisma.TransactionClient | typeof prisma;
 
-/** Soft-remove a portal login (Access panel / HRMS). Skips protected SPDC staff. */
-export async function retirePortalLogin(db: LoginDb, userId: string): Promise<boolean> {
+/**
+ * Remove a portal login from Access, HRMS, and CRM.
+ * Office admins stay. Staff logins are removed only when Access or HR asks (allowStaff).
+ * CRM company delete must not remove an office admin who happens to share an email.
+ */
+export async function retirePortalLogin(
+  db: LoginDb,
+  userId: string,
+  opts?: { allowStaff?: boolean },
+): Promise<boolean> {
   const existing = await db.user.findUnique({
     where: { id: userId },
     select: { id: true, email: true, fullName: true, role: true, isActive: true },
   });
-  if (!existing || existing.isActive === false || existing.email.startsWith("deleted.")) return false;
-  if (isProtectedStaffLogin(existing)) return false;
+  if (!existing || existing.email.startsWith("deleted.")) return false;
+  if (isKeptPortalEmail(existing.email)) return false;
+  if (!opts?.allowStaff && isProtectedStaffLogin(existing)) return false;
 
+  const email = existing.email.trim().toLowerCase();
   const stamp = Date.now();
-  const retiredEmail = `deleted.${stamp}.${existing.email.replace("@", "_at_")}`.slice(0, 180);
-  await db.projectMember.deleteMany({ where: { userId } });
-  await db.employeeProfile.deleteMany({ where: { userId } });
+  const retiredEmail = `deleted.${stamp}.${existing.id.slice(-8)}.${email.replace("@", "_at_")}`.slice(0, 180);
+  await db.projectMember.deleteMany({ where: { userId } }).catch(() => undefined);
+  await db.employeeProfile.deleteMany({ where: { userId } }).catch(() => undefined);
+  await db.attendance.deleteMany({ where: { userId } }).catch(() => undefined);
+  await db.leaveRequest.deleteMany({ where: { userId } }).catch(() => undefined);
+  await db.leaveBalance.deleteMany({ where: { userId } }).catch(() => undefined);
+  await db.vendorContact.deleteMany({ where: { email } }).catch(() => undefined);
+  await db.vendor.updateMany({ where: { email }, data: { email: null } }).catch(() => undefined);
   await db.user.update({
     where: { id: userId },
     data: {
@@ -61,14 +76,21 @@ export async function retirePortalLoginsForVendor(
   db: LoginDb,
   vendor: { id: string; email?: string | null },
 ): Promise<number> {
-  const email = String(vendor.email || "")
-    .trim()
-    .toLowerCase();
+  const contacts = await db.vendorContact.findMany({
+    where: { vendorId: vendor.id },
+    select: { email: true },
+  });
+  const emails = [
+    ...new Set(
+      [vendor.email, ...contacts.map((c) => c.email)]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
   const users = await db.user.findMany({
     where: {
-      isActive: true,
       NOT: { email: { startsWith: "deleted." } },
-      OR: [{ vendorId: vendor.id }, ...(email ? [{ email }] : [])],
+      OR: [{ vendorId: vendor.id }, ...(emails.length ? [{ email: { in: emails } }] : [])],
     },
     select: { id: true, email: true, fullName: true, role: true },
   });
@@ -77,6 +99,9 @@ export async function retirePortalLoginsForVendor(
     if (isProtectedStaffLogin(u)) continue;
     if (u.role !== "vendor" && u.role !== "client" && u.role !== "employee") continue;
     if (await retirePortalLogin(db, u.id)) retired++;
+  }
+  if (emails.length) {
+    await db.vendorContact.deleteMany({ where: { vendorId: vendor.id, email: { in: emails } } }).catch(() => undefined);
   }
   return retired;
 }

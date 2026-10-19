@@ -704,6 +704,9 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   void fileWonProjectPack(project.id).catch((err) =>
     console.warn("[CRM] won folder:", err instanceof Error ? err.message : err),
   );
+  void import("../services/graph.js")
+    .then(({ ensureProjectSharePointTree }) => ensureProjectSharePointTree(project.code))
+    .catch((err) => console.warn("[sharepoint] new project tree:", err instanceof Error ? err.message : err));
   res.status(created ? 201 : 200).json({ ...project, alreadyExists: !created });
 });
 
