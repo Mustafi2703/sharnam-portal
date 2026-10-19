@@ -6,7 +6,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
-import { graphConfig, probeSharePoint, listDriveChildren, graphFetch, ensureProjectSharePointTree, uploadToProjectLibrary, listProjectLibrary } from "../services/graph.js";
+import { prisma } from "../prisma.js";
+import {
+  graphConfig,
+  probeSharePoint,
+  listDriveChildren,
+  graphFetch,
+  ensureCompanyLibraries,
+  ensureProjectSharePointTree,
+  uploadToProjectLibrary,
+  listProjectLibrary,
+} from "../services/graph.js";
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
@@ -194,21 +204,83 @@ graphRouter.get("/config", requireAuth, requireRoles("admin", "office"), (_req, 
   });
 });
 
-/** Admin/office — create Sharnam Portal/Sharnam Projects/{projectCode} and its ISO folders. */
+type PortalTreeProject = { code: string; ok: boolean; rootFolder?: string; folderCount?: number; error?: string };
+type PortalTreeJob = {
+  status: "running" | "done" | "error";
+  startedAt: string;
+  finishedAt?: string;
+  companies?: Awaited<ReturnType<typeof ensureCompanyLibraries>>;
+  projects: PortalTreeProject[];
+  error?: string;
+};
+
+let portalTreeJob: PortalTreeJob | null = null;
+
+function startPortalTreeJob(codes: string[]) {
+  if (portalTreeJob?.status === "running") return portalTreeJob;
+  const job: PortalTreeJob = { status: "running", startedAt: new Date().toISOString(), projects: [] };
+  portalTreeJob = job;
+  // Answer the HTTP call without waiting on Graph. The hosting gateway cuts a request off at about 5 minutes,
+  // which used to leave a half-built folder tree. This job keeps going after the response is sent.
+  void (async () => {
+    try {
+      job.companies = await ensureCompanyLibraries();
+      for (const code of codes) {
+        try {
+          const tree = await ensureProjectSharePointTree(code);
+          job.projects.push({ code, ok: true, rootFolder: tree.rootFolder, folderCount: tree.folders.length });
+        } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
+          console.warn(`[sharepoint] project tree ${code}:`, error);
+          job.projects.push({ code, ok: false, error });
+        }
+      }
+      job.status = job.projects.some((row) => !row.ok) ? "error" : "done";
+    } catch (err) {
+      job.status = "error";
+      job.error = err instanceof Error ? err.message : String(err);
+      console.warn("[sharepoint] portal tree:", job.error);
+    }
+    job.finishedAt = new Date().toISOString();
+  })();
+  return job;
+}
+
+/** Admin/office — progress of the SharePoint folder job (CRM, HRMS, and each project ISO tree). */
+graphRouter.get("/ensure-project-tree", requireAuth, requireRoles("admin", "office"), (_req, res) => {
+  res.json(portalTreeJob || { status: "idle" });
+});
+
+/**
+ * Admin/office — create Sharnam Portal/SPDC_CRM, SPDC_HRMS, and
+ * Sharnam Portal/Sharnam Projects/{project}/ISO folders + _Registers.
+ * Pass { all: true } to rebuild every project. The job continues if the gateway times out.
+ */
 graphRouter.post(
   "/ensure-project-tree",
   requireAuth,
   requireRoles("admin", "office"),
   async (req: AuthedRequest, res) => {
-    const projectCode = String(req.body?.projectCode || "SPDC-DEMO-01").trim();
-    if (!projectCode) return res.status(400).json({ error: "projectCode required" });
+    const projectCode = String(req.body?.projectCode || "").trim();
+    const all = req.body?.all === true || !projectCode;
     try {
-      const result = await ensureProjectSharePointTree(projectCode);
+      const codes = all
+        ? (await prisma.project.findMany({ select: { code: true }, orderBy: { code: "asc" } })).map((row) => row.code)
+        : [projectCode];
+      if (!codes.length && !all) return res.status(400).json({ error: "projectCode required" });
+      const job = startPortalTreeJob(codes);
+      // Return before the browser (55s) and the hosting gateway (~5 min) give up.
+      // The folder job keeps running either way, so a timeout cannot leave a half-built tree.
+      const deadline = Date.now() + 8_000;
+      while (job.status === "running" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
       await audit("graph.ensure.project.tree", {
         userId: req.user!.id,
-        meta: { projectCode, rootFolder: result.rootFolder, count: result.folders.length },
+        meta: { codes, status: job.status, projects: job.projects.length },
       });
-      res.json({ ok: true, ...result });
+      const http = job.status === "running" ? 202 : job.status === "error" ? 502 : 200;
+      res.status(http).json({ ok: job.status === "done", ...job });
     } catch (err) {
       res.status(502).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }

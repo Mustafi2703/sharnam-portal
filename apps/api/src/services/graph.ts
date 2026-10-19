@@ -656,25 +656,212 @@ export async function driveItemRef(
   }
 }
 
+type GraphBatchItem = {
+  id: string;
+  status: number;
+  body?: { id?: string; name?: string; webUrl?: string; error?: { code?: string; message?: string } };
+};
+
+function cacheFolder(driveId: string, folderPath: string, item: { id: string; name: string; webUrl?: string }) {
+  if (!item.id) return;
+  folderUrlCache.set(`${driveId}::${folderPath}`, {
+    id: item.id,
+    name: item.name,
+    webUrl: item.webUrl || "",
+    at: Date.now(),
+  });
+}
+
+function folderAlreadyExists(status: number, body?: GraphBatchItem["body"]) {
+  if (status === 409) return true;
+  const text = `${body?.error?.code || ""} ${body?.error?.message || ""}`;
+  return /nameAlreadyExists|already exists/i.test(text);
+}
+
+/** Up to 20 Graph calls in one round trip. Folder trees stay under the hosting gateway limit. */
+async function graphBatch(requests: Array<Record<string, unknown>>) {
+  if (!requests.length) return [] as GraphBatchItem[];
+  const out = await graphFetch<{ responses?: GraphBatchItem[] }>("/$batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requests }),
+  });
+  return out.responses || [];
+}
+
+async function createChildFolder(driveId: string, parentId: string, fullPath: string, name: string) {
+  try {
+    return await graphFetch<{ id: string; name: string; webUrl?: string }>(`/drives/${driveId}/items/${parentId}/children`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        folder: {},
+        "@microsoft.graph.conflictBehavior": "fail",
+      }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/already exists|nameAlreadyExists|conflict/i.test(message)) throw err;
+    return graphFetch<{ id: string; name: string; webUrl?: string }>(
+      `/drives/${driveId}/root:/${encodeDrivePath(fullPath)}?$select=id,name,webUrl,folder`,
+    );
+  }
+}
+
+function expandFolderRels(relFolders: string[]) {
+  const wanted = new Set<string>();
+  for (const rel of relFolders) {
+    const clean = rel.replace(/^\/+|\/+$/g, "");
+    if (!clean) continue;
+    let acc = "";
+    for (const part of clean.split("/").filter(Boolean)) {
+      if (part === ".." || part.includes("\\")) throw new Error(`Invalid folder segment: ${part}`);
+      acc = acc ? `${acc}/${part}` : part;
+      wanted.add(acc);
+    }
+  }
+  return [...wanted];
+}
+
+/**
+ * Create every folder under rootPath.
+ * Parents are created before children, in batches, so a full ISO tree finishes in seconds
+ * instead of walking every ancestor folder one Graph call at a time.
+ */
+export async function ensureDriveFolderTree(driveId: string, rootPath: string, relFolders: string[]) {
+  const root = await ensureDriveFolder(driveId, rootPath);
+  cacheFolder(driveId, rootPath, root);
+  const rels = expandFolderRels(relFolders);
+  const byDepth = new Map<number, string[]>();
+  for (const rel of rels) {
+    const depth = rel.split("/").length;
+    const list = byDepth.get(depth) || [];
+    list.push(rel);
+    byDepth.set(depth, list);
+  }
+  const ids = new Map<string, string>([["", root.id]]);
+
+  for (const depth of [...byDepth.keys()].sort((a, b) => a - b)) {
+    const level = byDepth.get(depth) || [];
+    for (let i = 0; i < level.length; i += 15) {
+      await createFolderChunk(driveId, rootPath, level.slice(i, i + 15), ids);
+    }
+  }
+
+  let missing = await foldersMissing(driveId, rootPath, rels, ids);
+  if (missing.length) {
+    const repairDepth = new Map<number, string[]>();
+    for (const rel of missing) {
+      const depth = rel.split("/").length;
+      const list = repairDepth.get(depth) || [];
+      list.push(rel);
+      repairDepth.set(depth, list);
+    }
+    for (const depth of [...repairDepth.keys()].sort((a, b) => a - b)) {
+      const level = repairDepth.get(depth) || [];
+      for (let i = 0; i < level.length; i += 15) {
+        await createFolderChunk(driveId, rootPath, level.slice(i, i + 15), ids);
+      }
+    }
+    missing = await foldersMissing(driveId, rootPath, rels, ids);
+  }
+  if (missing.length) {
+    throw new Error(`SharePoint folders still missing (${missing.length}): ${missing.slice(0, 8).join(", ")}`);
+  }
+
+  return [rootPath, ...rels.map((rel) => `${rootPath}/${rel}`)];
+}
+
+async function createFolderChunk(driveId: string, rootPath: string, rels: string[], ids: Map<string, string>) {
+  const queued: string[] = [];
+  const requests: Array<Record<string, unknown>> = [];
+  for (const rel of rels) {
+    if (ids.has(rel)) continue;
+    const parentKey = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+    const parentId = ids.get(parentKey);
+    if (!parentId) continue;
+    const name = rel.slice(rel.lastIndexOf("/") + 1);
+    queued.push(rel);
+    requests.push({
+      id: String(queued.length - 1),
+      method: "POST",
+      url: `/drives/${driveId}/items/${parentId}/children`,
+      headers: { "Content-Type": "application/json" },
+      body: { name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" },
+    });
+  }
+  let responses: GraphBatchItem[] = [];
+  try {
+    responses = await graphBatch(requests);
+  } catch (err) {
+    console.warn("[sharepoint] folder batch failed, creating one by one:", err instanceof Error ? err.message : err);
+  }
+  const byId = new Map(responses.map((item) => [item.id, item]));
+  queued.forEach((rel, index) => {
+    const res = byId.get(String(index));
+    if (res && res.status >= 200 && res.status < 300 && res.body?.id) {
+      ids.set(rel, res.body.id);
+      cacheFolder(driveId, `${rootPath}/${rel}`, { id: res.body.id, name: res.body.name || rel, webUrl: res.body.webUrl });
+    }
+  });
+  for (const rel of rels) {
+    if (ids.has(rel)) continue;
+    const parentKey = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+    const parentId = ids.get(parentKey);
+    if (!parentId) throw new Error(`SharePoint parent missing for ${rootPath}/${rel}`);
+    const name = rel.slice(rel.lastIndexOf("/") + 1);
+    const created = await createChildFolder(driveId, parentId, `${rootPath}/${rel}`, name);
+    if (!created.id) throw new Error(`SharePoint did not return a folder id for ${rootPath}/${rel}`);
+    ids.set(rel, created.id);
+    cacheFolder(driveId, `${rootPath}/${rel}`, created);
+  }
+}
+
+async function foldersMissing(driveId: string, rootPath: string, rels: string[], ids: Map<string, string>) {
+  const missing: string[] = [];
+  for (let i = 0; i < rels.length; i += 20) {
+    const chunk = rels.slice(i, i + 20);
+    const requests = chunk.map((rel, n) => ({
+      id: String(n),
+      method: "GET",
+      url: `/drives/${driveId}/root:/${encodeDrivePath(`${rootPath}/${rel}`)}?$select=id,name,webUrl,folder`,
+    }));
+    const responses = await graphBatch(requests);
+    const byId = new Map(responses.map((item) => [item.id, item]));
+    chunk.forEach((rel, n) => {
+      const res = byId.get(String(n));
+      if (res && res.status >= 200 && res.status < 300 && res.body?.id) {
+        ids.set(rel, res.body.id);
+        cacheFolder(driveId, `${rootPath}/${rel}`, { id: res.body.id, name: res.body.name || rel, webUrl: res.body.webUrl });
+        return;
+      }
+      missing.push(rel);
+    });
+  }
+  return missing;
+}
+
+const projectTreeInflight = new Map<string, Promise<{ drive: DriveRef; rootFolder: string; folders: string[] }>>();
+
 export async function ensureProjectSharePointTree(projectCode: string) {
+  const key = sanitizeProjectCode(projectCode);
+  const existing = projectTreeInflight.get(key);
+  if (existing) return existing;
+  const task = ensureProjectSharePointTreeOnce(projectCode).finally(() => {
+    projectTreeInflight.delete(key);
+  });
+  projectTreeInflight.set(key, task);
+  return task;
+}
+
+async function ensureProjectSharePointTreeOnce(projectCode: string) {
   const drive = await resolveDefaultDrive();
   const rootFolder = projectLibraryRoot(projectCode);
   assertPortalSafePath(rootFolder);
-  const created: string[] = [];
-
-  await ensureDriveFolder(drive.driveId, rootFolder);
-  created.push(rootFolder);
-
-  // Each call re-checks every ancestor, so one-by-one takes minutes for the full tree. Run a few at a time
-  // (ensureDriveFolder re-reads on a create race, so siblings under one parent are safe).
-  const todo = PROJECT_LIBRARY_FOLDERS.map((rel) => `${rootFolder}/${rel}`);
-  const CONCURRENCY = 6;
-  for (let i = 0; i < todo.length; i += CONCURRENCY) {
-    await Promise.all(todo.slice(i, i + CONCURRENCY).map((full) => ensureDriveFolder(drive.driveId, full)));
-    created.push(...todo.slice(i, i + CONCURRENCY));
-  }
-
-  return { drive, rootFolder, folders: created };
+  const folders = await ensureDriveFolderTree(drive.driveId, rootFolder, [...PROJECT_LIBRARY_FOLDERS]);
+  console.log(`[sharepoint] ${rootFolder}: ${folders.length} folders verified`);
+  return { drive, rootFolder, folders };
 }
 
 /** SPDC_HRMS / SPDC_CRM trees under Sharnam Portal/{libraryCode}. No-op when Graph is off. */
@@ -683,18 +870,21 @@ export async function ensureSandboxLibraryFolders(libraryCode: string, relFolder
   if (!cfg.configured || cfg.mock) return { created: [] as string[] };
   const code = sanitizeProjectCode(libraryCode);
   const drive = await resolveDefaultDrive();
-  const created: string[] = [];
   const rootFolder = `${SHAREPOINT_SANDBOX_ROOT}/${code}`;
-  await ensureDriveFolder(drive.driveId, rootFolder);
-  created.push(rootFolder);
-  for (const rel of relFolders) {
-    const clean = rel.replace(/^\/+|\/+$/g, "");
-    if (!clean) continue;
-    const full = `${rootFolder}/${clean}`;
-    await ensureDriveFolder(drive.driveId, full);
-    created.push(full);
-  }
+  const created = await ensureDriveFolderTree(drive.driveId, rootFolder, relFolders);
+  console.log(`[sharepoint] ${rootFolder}: ${created.length} folders verified`);
   return { created };
+}
+
+/** Company libraries that sit beside Sharnam Projects. */
+export async function ensureCompanyLibraries() {
+  const { CRM_DRIVE, CRM_LIBRARY_FOLDERS, HR_DRIVE, HR_LIBRARY_FOLDERS, hrFyRecordFolders } = await import("./spdcLibraryFolders.js");
+  const crm = await ensureSandboxLibraryFolders(CRM_DRIVE, [...CRM_LIBRARY_FOLDERS]);
+  const hr = await ensureSandboxLibraryFolders(HR_DRIVE, [...HR_LIBRARY_FOLDERS, ...hrFyRecordFolders()]);
+  return {
+    crm: { root: `${SHAREPOINT_SANDBOX_ROOT}/${CRM_DRIVE}`, count: crm.created.length },
+    hr: { root: `${SHAREPOINT_SANDBOX_ROOT}/${HR_DRIVE}`, count: hr.created.length },
+  };
 }
 
 /**

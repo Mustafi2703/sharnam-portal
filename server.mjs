@@ -2,8 +2,20 @@
  * Hostinger entry — DB migrate/seed runs at BUILD time only (see hostinger-db-push.mjs).
  */
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+// SharePoint folder creation used to sit on one request until nginx returned 504 and the tree stopped halfway.
+// Keep the Node socket open long enough for a slow Graph retry. The folder job itself also continues after the response.
+const listen = http.Server.prototype.listen;
+http.Server.prototype.listen = function listenWithLongTimeout(...args) {
+  const server = listen.apply(this, args);
+  server.requestTimeout = 900_000;
+  server.headersTimeout = 910_000;
+  server.timeout = 0;
+  return server;
+};
 import { applyDatabaseUrl, maskDatabaseUrl } from "./scripts/resolve-database-url.mjs";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));

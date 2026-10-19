@@ -98,8 +98,16 @@ export default function UploadLabPage() {
     if (!project?.code) return;
     setBusy(true);
     try {
-      await api("/api/graph/ensure-project-tree", { method: "POST", token, body: JSON.stringify({ projectCode: project.code }) });
-      setMsg(`SharePoint tree ensured for ${project.code}`);
+      const out = await api<{ status?: string; projects?: Array<{ folderCount?: number; rootFolder?: string }> }>(
+        "/api/graph/ensure-project-tree",
+        { method: "POST", token, body: JSON.stringify({ projectCode: project.code }) },
+      );
+      const row = out.projects?.find((item) => item.rootFolder) || out.projects?.[0];
+      setMsg(
+        out.status === "running"
+          ? `Creating the full SharePoint tree for ${project.code}. ISO folders and registers finish in the background — refresh in a minute.`
+          : `SharePoint tree ready for ${project.code}${row?.folderCount ? ` (${row.folderCount} folders)` : ""}.`,
+      );
       await loadRecent();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Tree setup failed");
