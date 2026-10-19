@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { Button, Card, Input } from "./ui";
+import { Button, Card, Input, TextArea } from "./ui";
 
 export type ManageableProject = {
   id: string;
@@ -12,6 +12,7 @@ export type ManageableProject = {
   designConsultant?: string | null;
   contractorName?: string | null;
   pmcName?: string | null;
+  status?: string | null;
 };
 
 type Props = {
@@ -123,6 +124,14 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
                 value={edit.contractorName || ""}
                 onChange={(e) => setEdit({ ...edit, contractorName: e.target.value })}
                 placeholder="Contractor"
+              />
+              <TextArea
+                label="Status note"
+                hint="Write this in your own words. You can change it any time."
+                rows={3}
+                value={edit.status && edit.status !== "Planning" ? edit.status : ""}
+                placeholder="Example: foundation cast, structure on the third floor"
+                onChange={(e) => setEdit({ ...edit, status: e.target.value })}
               />
               {err ? <p className="text-sm text-danger">{err}</p> : null}
               <div className="flex gap-2 pt-1">

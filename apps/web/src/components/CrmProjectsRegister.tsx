@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CrmDetailLines, CrmDetailPanel } from "./crm/CrmDetailPanel";
 import { RegisterEmptyRow, RegisterSheetFrame } from "./RegisterSheetFrame";
-import { Badge, Button, Input, Select } from "./ui";
-import { PROJECT_STATUSES, projectStatusHint } from "../lib/projectStatus";
+import { Button, Input } from "./ui";
+import { projectStatusHint } from "../lib/projectStatus";
 
 export type CrmProjectRow = {
   id: string;
@@ -68,7 +68,7 @@ function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
   return rows.filter((p) => {
     if (status !== "all" && (p.status || "") !== status) return false;
     if (!needle) return true;
-    const hay = [p.code, p.name, p.clientName, p.location, p.designConsultant, p.contractorName]
+    const hay = [p.code, p.name, p.clientName, p.location, p.designConsultant, p.contractorName, p.status]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -85,7 +85,6 @@ export function CrmProjectsRegister({
   proposalByProjectId = {},
 }: Props) {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
   const [selectedIdLocal, setSelectedIdLocal] = useState<string | null>(null);
   const selectedId = selectedIdProp !== undefined ? selectedIdProp : selectedIdLocal;
@@ -95,12 +94,7 @@ export function CrmProjectsRegister({
     if (row && onSelect) onSelect(row);
   };
 
-  const statusOptions = useMemo(
-    () => [...new Set([...PROJECT_STATUSES, ...projects.map((p) => p.status).filter(Boolean)])] as string[],
-    [projects],
-  );
-
-  const filtered = useMemo(() => filterProjects(projects, q, status), [projects, q, status]);
+  const filtered = useMemo(() => filterProjects(projects, q, "all"), [projects, q]);
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
@@ -110,30 +104,14 @@ export function CrmProjectsRegister({
   return (
     <div className="space-y-3 pb-2">
       <div className="grid lg:grid-cols-[1fr_auto] gap-3 items-end shrink-0">
-        <div className="grid sm:grid-cols-2 gap-2">
-          <Input
-            placeholder="Search code, client, location…"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(0);
-            }}
-          />
-          <Select
-            value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              setPage(0);
-            }}
-          >
-            <option value="all">All statuses</option>
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <Input
+          placeholder="Search code, client, location, status note…"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(0);
+          }}
+        />
         <span className="text-xs text-steel-muted font-mono whitespace-nowrap">
           {pageRows.length} of {filtered.length} · {projects.length} total
         </span>
@@ -188,10 +166,8 @@ export function CrmProjectsRegister({
                   <td className="text-xs max-w-[120px]">
                     <span className="line-clamp-2">{p.contractorName || "—"}</span>
                   </td>
-                  <td>
-                    <Badge tone={p.status === "In Progress" ? "ok" : p.status === "Planning" || !p.status ? "warn" : "neutral"}>
-                      {p.status || "Planning"}
-                    </Badge>
+                  <td className="text-xs max-w-[180px]">
+                    <span className="line-clamp-3 whitespace-pre-wrap break-words">{p.status && p.status !== "Planning" ? p.status : "—"}</span>
                   </td>
                   <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-2">
@@ -244,14 +220,11 @@ export function CrmProjectsRegister({
               <div>
                 <div className="text-[10px] font-mono uppercase text-brand">{selected.code}</div>
                 <h3 className="font-display text-lg leading-snug">{selected.name}</h3>
-                {selected.status && (
-                  <span className="inline-block mt-1">
-                    <Badge tone={selected.status === "In Progress" ? "ok" : selected.status === "Planning" ? "warn" : "neutral"}>
-                      {selected.status}
-                    </Badge>
-                  </span>
+                {selected.status && selected.status !== "Planning" ? (
+                  <p className="text-sm mt-1 whitespace-pre-wrap break-words">{selected.status}</p>
+                ) : (
+                  <p className="text-[11px] text-steel-muted mt-1">{projectStatusHint(selected.status)}</p>
                 )}
-                <p className="text-[11px] text-steel-muted mt-1">{projectStatusHint(selected.status)}</p>
               </div>
               <CrmDetailLines lines={projectDetailLines(selected, selectedProposal)} />
               <div className="flex flex-col gap-2 border-t border-line pt-3">

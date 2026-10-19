@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, Input, PageHeader, TextArea } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
 import { SetupPartyMultiPick } from "../../components/SetupPartyMultiPick";
@@ -10,7 +10,7 @@ import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectClientRepresentativesPanel, type ProjectClientRep } from "../../components/ProjectClientRepresentativesPanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
-import { PROJECT_STATUSES, projectStatusHint } from "../../lib/projectStatus";
+import { projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { uiCopy } from "../../lib/formatUiText";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
@@ -53,6 +53,7 @@ type VendorRow = {
 };
 
 type SetupSummary = {
+  libraryReady?: boolean;
   project: ProjectRow & {
     clientContactName?: string | null;
     clientPhone?: string | null;
@@ -349,7 +350,7 @@ export default function CrmProjectSetupPage() {
           pmcName: details.pmcName || firstPmc?.name || "SPDC",
           startDate: details.startDate || null,
           endDate: details.endDate || null,
-          status: details.status || "Planning",
+          status: (details.status || "").trim(),
           workPackages: sanitizeProjectWorkPackages(projectPackages),
         }),
       });
@@ -462,8 +463,7 @@ export default function CrmProjectSetupPage() {
       const out = await api<CompleteOut & { status?: string }>(`/api/projects/${projectId}/complete-setup`, { method: "POST", token });
       setMsg(
         [
-          `Setup complete. Status is ${out.status || "In Progress"}.`,
-          "SharePoint folders are being created. You can leave this page — they finish on their own.",
+          "Setup saved. SharePoint folders are being created. You can leave this page — they finish on their own.",
           `Matrix contacts added: ${out.comms.contacts.created} (existing contacts are kept).`,
           out.reports.dpr.created || out.reports.wpr.created
             ? "First DPR/WPR drafts created if they were not already there."
@@ -524,7 +524,7 @@ export default function CrmProjectSetupPage() {
   }
 
   const clientOptions = vendors.filter((v) => v.partyType === "Client");
-  const isLaunched = Boolean(summary?.project.status && summary.project.status !== "Planning");
+  const isLaunched = Boolean(summary?.libraryReady);
 
   if (!canManage) {
     return <p className="p-6 text-sm text-steel-muted">Office access is required for project setup.</p>;
@@ -546,9 +546,9 @@ export default function CrmProjectSetupPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="brand">{summary.project.code}</Badge>
             <span className="text-sm font-medium">{summary.project.name}</span>
-            <Badge tone={summary.project.status === "In Progress" ? "ok" : "warn"}>
-              {summary.project.status || "Planning"}
-            </Badge>
+            <span className="text-sm text-ink max-w-md whitespace-pre-wrap break-words">
+              {summary.project.status && summary.project.status !== "Planning" ? summary.project.status : "No status note yet"}
+            </span>
             <ProjectManageActions
               project={summary.project}
               token={token}
@@ -633,29 +633,16 @@ export default function CrmProjectSetupPage() {
                 }
               />
               {projectId ? (
-                <label className="text-xs text-steel-muted sm:col-span-2">
-                  Project status
-                  <Select
-                    value={details.status || "Planning"}
-                    onChange={(e) => setDetails({ ...details, status: e.target.value })}
-                  >
-                    {PROJECT_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
+                <TextArea
+                  label="Status note"
+                  hint="Write this in your own words. You can change it any time."
+                  rows={3}
+                  fieldClassName="sm:col-span-2"
+                  value={details.status === "Planning" ? "" : details.status || ""}
+                  placeholder="Example: foundation cast, structure on the third floor"
+                  onChange={(e) => setDetails({ ...details, status: e.target.value })}
+                />
               ) : null}
-              <Input
-                placeholder="PMC name"
-                value={projectId ? details.pmcName : createForm.pmcName}
-                onChange={(e) =>
-                  projectId
-                    ? setDetails({ ...details, pmcName: e.target.value })
-                    : setCreateForm({ ...createForm, pmcName: e.target.value })
-                }
-              />
               <label className="text-xs text-steel-muted">
                 Start date
                 <Input
@@ -890,8 +877,10 @@ export default function CrmProjectSetupPage() {
                 <p className="text-sm font-semibold leading-snug">{summary.project.name}</p>
                 <p className="text-xs text-steel-muted">{summary.project.clientName || details.clientName || "No client"}</p>
                 <p className="text-xs text-steel-muted">{details.location || summary.project.location || "No location"}</p>
-                <p className="text-xs">
-                  <span className="font-medium">{summary.project.status || "Planning"}</span>
+                <p className="text-xs whitespace-pre-wrap break-words">
+                  <span className="font-medium">
+                    {summary.project.status && summary.project.status !== "Planning" ? summary.project.status : "No status note yet"}
+                  </span>
                   <span className="text-steel-muted">
                     {" "}
                     · {details.startDate || "—"} to {details.endDate || "—"}
@@ -1000,8 +989,7 @@ export default function CrmProjectSetupPage() {
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
               <p className="text-xs text-steel-muted mt-0.5">
-                Saves the launch, then creates the ISO folders in SharePoint after you leave this page. Opens empty Client / PMC / Consultant / Contractor matrix sections, and sets status to{" "}
-                <strong>In Progress</strong>. CRM saves, proposals, and HRMS stay fast until this step. No emails are sent.
+                Saves the launch, then creates the ISO folders in SharePoint after you leave this page. The status note on the card stays as you wrote it. No emails are sent.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

@@ -88,13 +88,7 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     };
   }
 
-  const nextStatus =
-    !project.status || project.status === "Planning" || project.status === "Draft" || project.status === "Active"
-      ? "In Progress"
-      : project.status;
-  if (nextStatus !== project.status) {
-    await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus } });
-  }
+  const nextStatus = project.status || "Planning";
 
   const drive = {
     pending: true,

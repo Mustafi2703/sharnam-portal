@@ -842,8 +842,10 @@ projectsRouter.get("/:id/setup-summary", requireRoles("admin", "office"), async 
   const { parseDisciplinesJson, defaultDisciplines } = await import("../services/comparativeStatement.js");
   const { listClientRepresentativesForProject } = await import("../services/projectDirectoryPeople.js");
   const clientRepresentatives = await listClientRepresentativesForProject(projectId);
+  const libraryFolderCount = await prisma.documentFolder.count({ where: { projectId } });
 
   res.json({
+    libraryReady: libraryFolderCount > 0,
     project,
     lead,
     clientRepresentatives,
@@ -1320,12 +1322,7 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     endDate,
     workPackages,
   } = req.body;
-  const PROJECT_STATUSES = ["Planning", "In Progress", "On Hold", "Completed"];
-  if (status !== undefined && status !== null && String(status).trim()) {
-    if (!PROJECT_STATUSES.includes(String(status))) {
-      return res.status(400).json({ error: "Status must be Planning, In Progress, On Hold, or Completed." });
-    }
-  }
+  const statusNote = status !== undefined && status !== null ? String(status).trim().slice(0, 4000) : undefined;
   const dateOrNull = (v: unknown) => {
     if (v === undefined) return undefined;
     if (!v) return null;
@@ -1378,7 +1375,7 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
             : undefined,
         clientName: clientName !== undefined ? clientName : undefined,
         location: location !== undefined ? location : undefined,
-        status: status !== undefined ? status : undefined,
+        status: statusNote,
         name: name !== undefined ? name : undefined,
         clientContactName: clientContactName !== undefined ? clientContactName : undefined,
         clientEmail: clientEmail !== undefined ? clientEmail : undefined,

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, PageHeader } from "../components/ui";
+import { Button, Card, Input, PageHeader } from "../components/ui";
 import { ProjectManageActions } from "../components/ProjectManageActions";
 import { StatusNote } from "../components/StatusNote";
 
@@ -93,8 +93,12 @@ export default function ProjectsPage() {
                     {p.clientName || "—"}
                     {p.location ? ` · ${p.location}` : ""}
                   </div>
+                  {p.status && p.status !== "Planning" ? (
+                    <p className="text-sm mt-2 whitespace-pre-wrap break-words">{p.status}</p>
+                  ) : (
+                    <p className="text-xs text-steel-muted mt-2">No status note yet</p>
+                  )}
                 </div>
-                <Badge tone="ok">{p.status}</Badge>
               </div>
               <div className="mt-4 pt-3 border-t border-line font-mono text-[11px] text-steel-muted flex gap-4">
                 <span>{p._count?.drawings ?? 0} drawings</span>
