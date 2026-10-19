@@ -1,16 +1,8 @@
-import { LIVE_TEAM } from "./spdcLiveTeamSeed.js";
-
-/** Production SPDC logins — cannot be deleted from HRMS. Twinoxis test emails are NOT kept. */
-export const KEEP_PORTAL_EMAILS = Array.from(
-  new Set([
-    "baibhabmustafi@gmail.com",
-    // UAT mailboxes SPDC owns — client, consultant and contractor test logins.
-    "hello@twinoxis.com",
-    "admin@twinoxis.com",
-    "hello@qryxtech.com",
-    ...LIVE_TEAM.map((t) => t.email.toLowerCase()).filter((e) => e.endsWith("@spdc.in")),
-  ])
-);
+/**
+ * Logins the client asked to keep. Everyone else can be removed from Access / HRMS.
+ * Saurabh has two logins: saurabh@spdc.in (admin) and operations@spdc.in (office).
+ */
+export const KEEP_PORTAL_EMAILS = ["nirav@spdc.in", "saurabh@spdc.in", "operations@spdc.in"];
 
 /** Twinoxis UAT / duplicate test logins — safe to remove when cleaning the portal. */
 export const TWINOXIS_TEST_EMAIL_SUFFIXES = ["@twinoxis.com", "@twinoxis1.com"] as const;

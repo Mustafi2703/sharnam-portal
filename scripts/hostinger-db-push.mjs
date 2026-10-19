@@ -110,7 +110,7 @@ if (skipAllSeed) {
   }
 
   try {
-    console.log("==> Keep Baibhab + Twinoxis test + SPDC live team; prune leftover demo logins…");
+    console.log("==> Keep Nirav and Saurabh; remove every other portal login…");
     execSync("npx tsx seed/prune-demo-users.ts", {
       stdio: "inherit",
       env: seedEnv,

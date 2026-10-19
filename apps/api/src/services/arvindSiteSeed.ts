@@ -463,10 +463,12 @@ export async function seedArvindSitePack(db: PrismaClient, opts: { skipInviteEma
   let portalInvites = { sent: 0, password: process.env.SEED_PASSWORD || "Demo@1234" };
   try {
     const { LIVE_TEAM } = await import("./spdcLiveTeamSeed.js");
+    const { isKeptPortalEmail } = await import("./keepPortalUsers.js");
     const { sendProjectPortalInvites } = await import("./portalInvites.js");
     const inviteOpts = { skipEmail: !!opts.skipInviteEmails };
-    const dormInvites = await sendProjectPortalInvites(dorm.id, office.id, LIVE_TEAM, undefined, inviteOpts);
-    await sendProjectPortalInvites(ntx.id, office.id, LIVE_TEAM.filter((t) => t.role === "site_employee" || t.role === "office"), undefined, inviteOpts);
+    const admins = LIVE_TEAM.filter((t) => isKeptPortalEmail(t.email));
+    const dormInvites = await sendProjectPortalInvites(dorm.id, office.id, admins, undefined, inviteOpts);
+    await sendProjectPortalInvites(ntx.id, office.id, admins, undefined, inviteOpts);
     portalInvites = { sent: dormInvites.sent.length, password: dormInvites.sharePassword };
   } catch (err) {
     console.warn("Arvind portal invites:", err instanceof Error ? err.message : err);

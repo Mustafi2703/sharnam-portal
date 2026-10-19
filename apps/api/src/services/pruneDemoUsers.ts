@@ -12,18 +12,23 @@ export async function pruneDemoUsers(db: PrismaClient) {
     if (isKeptPortalEmail(email)) continue;
     if (email.startsWith("deleted.")) continue;
     const stamp = Date.now();
-    const retiredEmail = `deleted.${stamp}.${email.replace("@", "_at_")}`.slice(0, 180);
-    await db.projectMember.deleteMany({ where: { userId: u.id } });
-    await db.employeeProfile.deleteMany({ where: { userId: u.id } });
+    const retiredEmail = `deleted.${stamp}.${u.id.slice(-8)}.${email.replace("@", "_at_")}`.slice(0, 180);
+    await db.projectMember.deleteMany({ where: { userId: u.id } }).catch(() => undefined);
+    await db.employeeProfile.deleteMany({ where: { userId: u.id } }).catch(() => undefined);
     await db.user.update({
       where: { id: u.id },
       data: {
         isActive: false,
+        vendorId: null,
         email: retiredEmail,
         fullName: `[Removed] ${u.fullName}`.slice(0, 200),
       },
     });
     removed.push(email);
   }
+  await db.user.updateMany({
+    where: { email: { in: ["nirav@spdc.in", "saurabh@spdc.in", "operations@spdc.in"] } },
+    data: { role: "admin", portal: "admin", isActive: true },
+  });
   return { kept: users.filter((u) => isKeptPortalEmail(u.email)).length, removed };
 }

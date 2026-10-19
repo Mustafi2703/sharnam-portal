@@ -2142,7 +2142,7 @@ hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const { isKeptPortalEmail, isDemoSeedLoginEmail } = await import("../services/keepPortalUsers.js");
   if (isKeptPortalEmail(existing.email)) {
     return res.status(403).json({
-      error: "This login is a protected SPDC production account (@spdc.in) and cannot be deleted.",
+      error: "Nirav Parekh and Saurabh Prajapati stay on the portal. Every other login can be deleted.",
     });
   }
   const demoSeed = isDemoSeedLoginEmail(existing.email);
@@ -2150,8 +2150,8 @@ hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
     return res.status(403).json({ error: "Only admin can remove admin accounts" });
   }
 
-  await prisma.projectMember.deleteMany({ where: { userId } });
-  await prisma.employeeProfile.deleteMany({ where: { userId } });
+  await prisma.projectMember.deleteMany({ where: { userId } }).catch(() => undefined);
+  await prisma.employeeProfile.deleteMany({ where: { userId } }).catch(() => undefined);
 
   const stamp = Date.now();
   const retiredEmail = `deleted.${stamp}.${existing.email.replace("@", "_at_")}`.slice(0, 180);

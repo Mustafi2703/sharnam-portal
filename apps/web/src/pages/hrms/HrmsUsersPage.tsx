@@ -393,7 +393,7 @@ export default function HrmsUsersPage() {
             Projects are never assigned automatically. Use <strong>Assign to project</strong>, or remove a project with the × on its chip.
           </span>
           <span className="block mt-1 font-semibold text-warn">
-            Only office, HR, and admin can add or delete users. <strong>@spdc.in</strong> production logins stay protected.
+            Only office, HR, and admin can add or delete users. Nirav Parekh and Saurabh Prajapati stay. Every other login can be removed.
           </span>
         </p>
         <div className="flex flex-wrap gap-2">
