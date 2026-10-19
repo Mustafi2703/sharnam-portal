@@ -43,6 +43,7 @@ import InspectionsPage from "./pages/project/InspectionsPage";
 import InspectionRegisterPage from "./pages/project/InspectionRegisterPage";
 import NcrFormPage from "./pages/project/NcrFormPage";
 import VendorActionsPage from "./pages/VendorActionsPage";
+import AccountPasswordPage from "./pages/AccountPasswordPage";
 import NcrFillLogPage from "./pages/project/NcrFillLogPage";
 import DirectoryPage from "./pages/project/DirectoryPage";
 import DrawingsPage from "./pages/project/DrawingsPage";
@@ -355,6 +356,7 @@ export default function App() {
                 <Route path="/stakeholder" element={<StakeholderDeskPage />} />
                 <Route path="/attendance" element={<SiteAttendancePage />} />
                 <Route path="/vendor-desk" element={<VendorDeskPage />} />
+                <Route path="/account/password" element={<AccountPasswordPage />} />
                 <Route path="/vendor-actions" element={<VendorActionsPage />} />
                 <Route path="/vouchers" element={<ExpenseVouchersPage />} />
               </Routes>

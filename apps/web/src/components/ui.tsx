@@ -116,7 +116,7 @@ export function Card({
   id?: string;
 }) {
   return (
-    <div id={id} className={`surface ${padding ? "p-5 sm:p-6" : ""} ${className}`}>{children}</div>
+    <div id={id} className={`surface min-w-0 whitespace-normal break-words ${padding ? "p-5 sm:p-6" : ""} ${className}`}>{children}</div>
   );
 }
 

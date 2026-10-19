@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { rolesForDepartment, type HrmDesignationRow } from "../lib/hrmOrg";
+import { isKeptPortalEmail } from "../lib/keptPortalUsers";
 import {
   portalAccountKind,
   roleFromAccountKind,
@@ -470,16 +471,22 @@ export function UserAccountEditModal({
           </p>
         )}
 
-        <div className="border-t border-line pt-3 space-y-2">
-          <p className="text-xs text-amber-800 font-semibold">
-            Only office and admin can delete a user. Nirav Parekh and Saurabh Prajapati stay. Every other login can be removed.
+        {isKeptPortalEmail(user.email) ? (
+          <p className="text-xs text-steel-muted border-t border-line pt-3 break-words">
+            Nirav Parekh and Saurabh Prajapati are the office admins. This login stays.
           </p>
-          <div className="flex justify-end">
-            <Button type="button" variant="secondary" className="!text-danger !border-danger/30" disabled={busy} onClick={() => void remove()}>
-              Delete user
-            </Button>
+        ) : (
+          <div className="border-t border-line pt-3 space-y-2">
+            <p className="text-xs text-amber-800 font-semibold break-words">
+              Delete removes this login. Office admins stay.
+            </p>
+            <div className="flex justify-end">
+              <Button type="button" variant="secondary" className="!text-danger !border-danger/30" disabled={busy} onClick={() => void remove()}>
+                Delete user
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </RegisterEntryModal>
   );

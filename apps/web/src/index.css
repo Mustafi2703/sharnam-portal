@@ -2791,11 +2791,20 @@ html.is-tool-window #root {
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--color-line);
   background: var(--color-paper);
+  min-width: 0;
+  white-space: normal;
+}
+.register-modal__head h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .register-modal__body {
   flex: 1 1 0%;
+  min-width: 0;
   min-height: 0 !important;
   max-height: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
   overflow-x: hidden;
   overflow-y: auto !important;
   overscroll-behavior: contain;

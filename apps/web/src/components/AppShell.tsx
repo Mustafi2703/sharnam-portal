@@ -69,6 +69,7 @@ const appNav: { to: string; label: string; icon: ModuleIconKey; roles: string[];
     icon: "reports",
     roles: ["admin", "office", "site_employee", "client", "employee", "vendor"],
   },
+  { to: "/account/password", label: "Password", icon: "master", roles: ["client"] },
   {
     to: "/vouchers",
     label: "Expense vouchers",
@@ -89,6 +90,7 @@ const siteDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
 /** Contractor home — attendance, leave, documents. Not bid tools. */
 const vendorDeskNav: { to: string; label: string; icon: ModuleIconKey }[] = [
   { to: "/vendor-desk", label: "Attendance & leave", icon: "field" },
+  { to: "/account/password", label: "Password", icon: "master" },
 ];
 
 /** Contractor bids — kept apart from the home desk. */

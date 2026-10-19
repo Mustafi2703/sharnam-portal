@@ -194,6 +194,23 @@ authRouter.post("/login", async (req, res) => {
   }
 });
 
+authRouter.post("/change-password", requireAuth, async (req: AuthedRequest, res) => {
+  const currentPassword = String(req.body?.currentPassword || "");
+  const newPassword = String(req.body?.newPassword || "");
+  if (newPassword.length < 6) return res.status(400).json({ error: "New password must be at least 6 characters." });
+  if (newPassword === currentPassword) return res.status(400).json({ error: "Choose a password that is different from the current one." });
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user || user.isActive === false) return res.status(404).json({ error: "Account not found." });
+  const ok = await passwordMatches(currentPassword, user.passwordHash);
+  if (!ok) return res.status(400).json({ error: "Current password is wrong." });
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+  });
+  await audit("auth.password.changed", { userId: user.id, entity: "User", entityId: user.id });
+  res.json({ ok: true });
+});
+
 authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });

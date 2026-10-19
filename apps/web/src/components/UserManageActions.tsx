@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
+import { isKeptPortalEmail } from "../lib/keptPortalUsers";
 import { Button, Card, Input } from "./ui";
 import type { UserAccountRow } from "./UserAccountEditModal";
 
@@ -18,6 +20,7 @@ export function UserManageActions({ user, token, onEdit, onChanged, showEdit = t
   const [confirmEmail, setConfirmEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const protectedLogin = isKeptPortalEmail(user.email);
 
   return (
     <>
@@ -27,28 +30,31 @@ export function UserManageActions({ user, token, onEdit, onChanged, showEdit = t
             Edit
           </Button>
         ) : null}
-        <Button
-          type="button"
-          className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"
-          onClick={() => {
-            setDel(true);
-            setConfirmEmail("");
-            setErr("");
-          }}
-        >
-          Delete
-        </Button>
+        {protectedLogin ? null : (
+          <Button
+            type="button"
+            className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"
+            onClick={() => {
+              setDel(true);
+              setConfirmEmail("");
+              setErr("");
+            }}
+          >
+            Delete
+          </Button>
+        )}
       </div>
 
-      {del && token && (
-        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => setDel(false)}>
-          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <Card className="space-y-3">
-              <h3 className="font-display text-xl">Delete {user.fullName}?</h3>
-              <p className="text-sm text-steel-muted">
-                They lose portal login and project assignments. Nirav Parekh and Saurabh Prajapati stay. Type{" "}
-                <strong>{user.email}</strong> to confirm.
+      {del && token && !protectedLogin
+        ? createPortal(
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 whitespace-normal" onClick={() => setDel(false)}>
+          <div className="w-full max-w-md min-w-0" onClick={(e) => e.stopPropagation()}>
+            <Card className="space-y-3 overflow-hidden">
+              <h3 className="font-display text-xl break-words">Delete {user.fullName}?</h3>
+              <p className="text-sm text-steel-muted whitespace-normal break-words">
+                They lose portal login and project assignments. Type this email to confirm.
               </p>
+              <p className="text-sm font-semibold break-all">{user.email}</p>
               <Input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder={user.email} />
               {err ? <p className="text-sm text-danger">{err}</p> : null}
               <div className="flex gap-2">
@@ -77,8 +83,9 @@ export function UserManageActions({ user, token, onEdit, onChanged, showEdit = t
               </div>
             </Card>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+      ) : null}
     </>
   );
 }

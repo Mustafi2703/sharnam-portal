@@ -373,7 +373,7 @@ export default function HrmsUsersPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-steel-muted max-w-2xl">
+        <p className="text-sm text-steel-muted max-w-2xl break-words">
           SPDC site and office team only — HR manages staff here. Clients, vendors, and consultants are separate: CRM directories +{" "}
           {canOfficeDesk ? (
             <Link to="/roles" className="text-brand font-semibold underline">
