@@ -73,7 +73,7 @@ export class MockOneDriveService {
     return p;
   }
 
-  async ensureProjectTree(projectId: string) {
+  async ensureProjectTree(projectId: string, opts?: { awaitSharePoint?: boolean }) {
     const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
     const root = this.projectRoot(project.code);
     const folders = [...PROJECT_LIBRARY_FOLDERS];
@@ -106,25 +106,33 @@ export class MockOneDriveService {
     );
 
     let sharePoint: { rootFolder: string; folders: string[] } | null = null;
+    let sharePointPending = false;
     if (liveSharePoint()) {
-      try {
-        // Always call Graph. Local folder rows can exist from an earlier attempt that never
-        // reached SharePoint (for example a rejected folder name). ensureDriveFolder leaves
-        // folders that are already there.
-        const sp = await withTimeout(ensureProjectSharePointTree(project.code), 600_000, "SharePoint project tree");
-        sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
-      } catch (err) {
-        console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);
-        // A slow or partial SharePoint folder tree must not stop a data load: files create their own folders on upload.
-        if (!sharePointAlreadyProvisioned && !/timed out/i.test(err instanceof Error ? err.message : String(err))) throw err;
+      // The full ISO tree takes longer than the browser will wait. Start it, and only block when a
+      // background job explicitly asks to wait. Uploads create their own folder if it is not there yet.
+      const pending = ensureProjectSharePointTree(project.code);
+      if (opts?.awaitSharePoint) {
+        try {
+          const sp = await withTimeout(pending, 600_000, "SharePoint project tree");
+          sharePoint = { rootFolder: sp.rootFolder, folders: sp.folders };
+        } catch (err) {
+          console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err);
+          if (!sharePointAlreadyProvisioned && !/timed out/i.test(err instanceof Error ? err.message : String(err))) throw err;
+        }
+      } else {
+        sharePointPending = true;
+        void pending.catch((err) =>
+          console.warn("[SharePoint] ensureProjectTree failed:", err instanceof Error ? err.message : err),
+        );
       }
     }
 
     return {
       root: project.code,
       folders,
-      provider: liveSharePoint() && sharePoint ? ("sharepoint" as const) : ("mock-onedrive" as const),
+      provider: liveSharePoint() && (sharePoint || sharePointPending) ? ("sharepoint" as const) : ("mock-onedrive" as const),
       sharePoint,
+      sharePointPending,
     };
   }
 

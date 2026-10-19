@@ -700,14 +700,13 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
-  const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
-  void fileWonProjectPack(project.id).catch((err) =>
-    console.warn("[CRM] won folder:", err instanceof Error ? err.message : err),
-  );
-  void import("../services/graph.js")
-    .then(({ ensureProjectSharePointTree }) => ensureProjectSharePointTree(project.code))
-    .catch((err) => console.warn("[sharepoint] new project tree:", err instanceof Error ? err.message : err));
   res.status(created ? 201 : 200).json({ ...project, alreadyExists: !created });
+  const projectId = project.id;
+  setImmediate(() => {
+    void import("../services/projectLibraryJob.js")
+      .then(({ queueProjectLibraryFinish }) => queueProjectLibraryFinish(projectId))
+      .catch((err) => console.warn("[sharepoint] new project tree:", err instanceof Error ? err.message : err));
+  });
 });
 
 /** Default bid disciplines configured for a project (CRM package setup). */
@@ -1002,16 +1001,14 @@ projectsRouter.post("/:id/file-drive", requireRoles("admin", "office"), async (r
   if (!project) return res.status(404).json({ error: "Not found" });
   try {
     const folders = await mockOneDrive.ensureProjectTree(project.id);
-    const { publishDrawingRegistersToDrive } = await import("../services/drawingRegisterDrive.js");
-    await publishDrawingRegistersToDrive(project.id);
-    const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
-    const pack = await fileWonProjectPack(project.id);
-    res.json({
+    const { queueProjectLibraryFinish } = await import("../services/projectLibraryJob.js");
+    void queueProjectLibraryFinish(project.id);
+    res.status(202).json({
       ok: true,
+      status: "running",
       folders: folders.folders.length,
       provider: folders.provider,
-      crmFolder: pack?.folder || null,
-      sharePointUrl: pack?.sharePointUrl || null,
+      message: "SharePoint folders are being created. You can leave this page — they finish on their own.",
     });
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : "Could not file this project on SharePoint" });

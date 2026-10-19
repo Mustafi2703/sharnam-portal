@@ -309,7 +309,12 @@ export default function CrmProjectSetupPage() {
           : `Project ${created.code} is on the register as Planning. Matrix filled from this card. No login was created.`
       );
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Create failed");
+      const text = err instanceof Error ? err.message : "Create failed";
+      setMsg(
+        /timed out/i.test(text)
+          ? "The page stopped waiting, but the project is saved and SharePoint keeps creating the folders. Refresh in a few minutes."
+          : text,
+      );
     } finally {
       setBusy(false);
     }
@@ -404,17 +409,22 @@ export default function CrmProjectSetupPage() {
     setBusy(true);
     setMsg("");
     try {
-      const out = await api<{ crmFolder?: string | null; sharePointUrl?: string | null }>(`/api/projects/${projectId}/file-drive`, {
+      const out = await api<{ crmFolder?: string | null; sharePointUrl?: string | null; status?: string }>(`/api/projects/${projectId}/file-drive`, {
         method: "POST",
         token,
       });
       setMsg(
         out.sharePointUrl
           ? `SharePoint folders are ready. Project card filed in CRM: ${out.crmFolder || "04_Orders_Won"}.`
-          : "SharePoint folders are ready. The project card is filed under SPDC_CRM / Orders won, and the drawing register copy is in the project drawings folder.",
+          : "SharePoint folders are being created. You can leave this page — they finish on their own, and folders that are already there are left as they are.",
       );
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not launch SharePoint folders");
+      const text = err instanceof Error ? err.message : "Could not launch SharePoint folders";
+      setMsg(
+        /timed out/i.test(text)
+          ? "The page stopped waiting, but SharePoint keeps creating the folders. Refresh in a few minutes."
+          : text,
+      );
     } finally {
       setBusy(false);
     }
@@ -453,7 +463,8 @@ export default function CrmProjectSetupPage() {
       setMsg(
         [
           `Setup complete. Status is ${out.status || "In Progress"}.`,
-          `Folders: ${out.folders.count} (${out.folders.provider}). Matrix contacts added: ${out.comms.contacts.created} (existing contacts are kept).`,
+          "SharePoint folders are being created. You can leave this page — they finish on their own.",
+          `Matrix contacts added: ${out.comms.contacts.created} (existing contacts are kept).`,
           out.reports.dpr.created || out.reports.wpr.created
             ? "First DPR/WPR drafts created if they were not already there."
             : "DPR/WPR drafts were already on file — nothing duplicated.",
@@ -462,7 +473,12 @@ export default function CrmProjectSetupPage() {
       );
       await loadProject();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Complete setup failed");
+      const text = err instanceof Error ? err.message : "Complete setup failed";
+      setMsg(
+        /timed out/i.test(text)
+          ? "The page stopped waiting, but the project is saved and SharePoint keeps creating the folders. Refresh in a few minutes."
+          : text,
+      );
     } finally {
       setBusy(false);
     }
@@ -984,7 +1000,7 @@ export default function CrmProjectSetupPage() {
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
               <p className="text-xs text-steel-muted mt-0.5">
-                Creates ISO folders in SharePoint (about a minute), opens empty Client / PMC / Consultant / Contractor matrix sections, and sets status to{" "}
+                Saves the launch, then creates the ISO folders in SharePoint after you leave this page. Opens empty Client / PMC / Consultant / Contractor matrix sections, and sets status to{" "}
                 <strong>In Progress</strong>. CRM saves, proposals, and HRMS stay fast until this step. No emails are sent.
               </p>
             </div>

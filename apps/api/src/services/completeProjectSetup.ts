@@ -31,8 +31,10 @@ export async function completeProjectSetup(projectId: string, userId: string) {
   });
   if (!project) throw new Error("Project not found");
 
-  /** Full ISO + SharePoint tree — intentionally slow; only run from Launch / complete-setup. */
+  // Local folder rows now. SharePoint keeps building after this function returns.
   const folders = await mockOneDrive.ensureProjectTree(projectId);
+  const { queueProjectLibraryFinish } = await import("./projectLibraryJob.js");
+  void queueProjectLibraryFinish(projectId);
 
   const matrixCreated = await seedStandardCommsMatrix(projectId);
   await ensureMatrixScaffold(projectId);
@@ -94,16 +96,11 @@ export async function completeProjectSetup(projectId: string, userId: string) {
     await prisma.project.update({ where: { id: projectId }, data: { status: nextStatus } });
   }
 
-  let drive: { folder?: string; sharePointUrl?: string | null; error?: string } = {};
-  try {
-    const { publishDrawingRegistersToDrive } = await import("./drawingRegisterDrive.js");
-    await publishDrawingRegistersToDrive(projectId);
-    const { fileWonProjectPack } = await import("./crmSharePoint.js");
-    const pack = await fileWonProjectPack(projectId);
-    drive = { folder: pack?.folder, sharePointUrl: pack?.sharePointUrl || null };
-  } catch (err) {
-    drive = { error: err instanceof Error ? err.message : "Could not file the project card" };
-  }
+  const drive = {
+    pending: true,
+    folder: undefined as string | undefined,
+    sharePointUrl: null as string | null,
+  };
 
   return {
     projectId,

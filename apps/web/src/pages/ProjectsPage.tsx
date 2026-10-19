@@ -52,9 +52,21 @@ export default function ProjectsPage() {
             className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2"
             onSubmit={async (e) => {
               e.preventDefault();
-              await api("/api/projects", { method: "POST", token, body: JSON.stringify(form) });
-              setForm(EMPTY);
-              await load();
+              setMsg("");
+              try {
+                await api("/api/projects", { method: "POST", token, body: JSON.stringify(form) });
+                setForm(EMPTY);
+                setMsg("Project saved. SharePoint folders keep building in the background.");
+                await load();
+              } catch (err) {
+                const text = err instanceof Error ? err.message : "Could not create the project";
+                setMsg(
+                  /timed out/i.test(text)
+                    ? "The page stopped waiting, but the project is saved and SharePoint keeps creating the folders. Refresh in a few minutes."
+                    : text,
+                );
+                await load().catch(() => undefined);
+              }
             }}
           >
             <Input placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
