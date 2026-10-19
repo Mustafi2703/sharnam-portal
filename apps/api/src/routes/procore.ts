@@ -545,7 +545,7 @@ vendorsRouter.delete("/:id", requireRoles("admin", "office"), async (req: Authed
     select: { id: true, name: true, email: true },
   });
   if (!vendor) return res.status(404).json({ error: "Not found" });
-  if (!confirmName || confirmName.toLowerCase() !== vendor.name.toLowerCase()) {
+  if (!confirmName || confirmName.toLowerCase() !== vendor.name.trim().toLowerCase()) {
     return res.status(400).json({ error: `Type the company name ${vendor.name} to confirm delete.` });
   }
   let portalLoginsRetired = 0;
