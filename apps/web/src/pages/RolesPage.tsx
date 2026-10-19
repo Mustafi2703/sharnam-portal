@@ -15,6 +15,7 @@ import {
 import { useConsultantTypes } from "../lib/consultantTypes";
 import { MODULES, type ModuleKey, type PermissionAction } from "@sharnam/shared";
 import { Badge, Button, Card, Input, PageHero } from "../components/ui";
+import { formatUiText } from "../lib/formatUiText";
 import { isHiddenPortalListUser } from "../lib/portalUserLists";
 import { WORKSPACES } from "../workspaces";
 import { StatusNote } from "../components/StatusNote";
@@ -242,16 +243,16 @@ export default function RolesPage() {
 
       <Card className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-lg text-ink">Portal logins</h2>
-          <Badge tone="neutral">{shownUsers.length}{userQ || kindFilter !== "all" ? ` / ${users.length}` : ""} accounts</Badge>
+          <h2 className="font-display text-lg text-ink">{formatUiText("Portal Logins")}</h2>
+          <Badge tone="neutral">{shownUsers.length}{userQ || kindFilter !== "all" ? ` / ${users.length}` : ""} {formatUiText("Accounts")}</Badge>
         </div>
         {!showDemoLogins ? (
           <p className="text-xs text-steel-muted">
-            Filter by account type below. New external logins: CRM → Clients / Vendors / Consultants (Step 2 · Add person). SPDC staff:{" "}
+            {formatUiText("Filter By Account Type Below. New External Logins: CRM → Clients / Vendors / Consultants (Step 2 · Add Person). SPDC Staff:")}{" "}
             <Link to="/hrm/users" className="text-brand font-semibold underline">
-              HRMS → Users
+              {formatUiText("HRMS → Users")}
             </Link>
-            . Use <strong className="text-ink">Sync CRM logins</strong> when a company email is missing here.
+            {formatUiText(". Use Sync CRM Logins When A Company Email Is Missing Here.")}
           </p>
         ) : null}
         {canManage ? (
@@ -266,7 +267,7 @@ export default function RolesPage() {
                 checked={showDemoLogins}
                 onChange={(e) => setShowDemoLogins(e.target.checked)}
               />
-              Show demo seed logins
+              {formatUiText("Show Demo Seed Logins")}
             </label>
             <Button type="button" variant="secondary" className="!text-xs !py-1.5 !px-3" onClick={() => void purgeUatLogins()}>
               Remove demo &amp; test logins
@@ -301,7 +302,7 @@ export default function RolesPage() {
                 if (k !== "stakeholder") setTypeFilter("");
               }}
             >
-              {k === "all" ? "All" : accountKindLabel(k)}
+              {formatUiText(k === "all" ? "All" : accountKindLabel(k))}
             </button>
           ))}
         </div>
@@ -314,7 +315,7 @@ export default function RolesPage() {
               }`}
               onClick={() => setTypeFilter("")}
             >
-              All types
+              {formatUiText("All Types")}
             </button>
             {consultantTypes.map((t) => (
               <button
@@ -337,9 +338,9 @@ export default function RolesPage() {
             return (
             <li key={u.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-semibold text-ink truncate">{u.fullName}</div>
+                <div className="font-semibold text-ink truncate" data-preserve-case>{u.fullName}</div>
                 <div className="text-xs text-steel-muted truncate">
-                  {u.email} · {accountKindLabel(kind)}
+                  <span data-preserve-case>{u.email}</span> · {formatUiText(accountKindLabel(kind))}
                   {kind === "staff" && u.profile?.designation ? ` · ${u.profile.designation}` : ""}
                   {kind === "stakeholder" && trade ? ` · ${trade}` : ""}
                   {" · "}
@@ -348,7 +349,7 @@ export default function RolesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={u.isActive === false ? "warn" : badgeToneForKind(kind)}>
-                  {u.isActive === false ? "Off" : accountKindLabel(kind)}
+                  {formatUiText(u.isActive === false ? "Off" : accountKindLabel(kind))}
                 </Badge>
                 <UserManageActions
                   user={u}
@@ -363,7 +364,7 @@ export default function RolesPage() {
             </li>
           );
           })}
-          {!shownUsers.length && <li className="py-6 text-steel-muted">No users match this filter.</li>}
+          {!shownUsers.length && <li className="py-6 text-steel-muted">{formatUiText("No Users Match This Filter.")}</li>}
         </ul>
       </Card>
 
@@ -394,11 +395,11 @@ export default function RolesPage() {
               selected === r.key ? "border-[var(--color-mark)] bg-sand shadow-sm" : "border-line bg-paper hover:border-[#c45c26]/40"
             }`}
           >
-            <div className="font-display text-lg text-ink">{r.label}</div>
-            <div className="text-xs font-mono text-steel-muted mt-1">{r.key}</div>
+            <div className="font-display text-lg text-ink">{formatUiText(r.label)}</div>
+            <div className="text-xs font-mono text-steel-muted mt-1">{formatUiText(String(r.key).replaceAll("_", " "))}</div>
             <div className="mt-3 flex flex-wrap gap-1">
               <Badge tone="brand">{r.portal}</Badge>
-              <Badge tone="neutral">{users.filter((u) => u.role === r.key).length} users</Badge>
+              <Badge tone="neutral">{users.filter((u) => u.role === r.key).length} {formatUiText("Users")}</Badge>
             </div>
           </button>
         ))}
@@ -408,8 +409,8 @@ export default function RolesPage() {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="font-display text-xl text-ink">{role.label} permissions</h2>
-              <p className="text-sm text-steel-muted mt-1">Toggle view / create / edit / approve per module.</p>
+              <h2 className="font-display text-xl text-ink">{formatUiText(`${role.label} Permissions`)}</h2>
+              <p className="text-sm text-steel-muted mt-1">{formatUiText("Toggle View / Create / Edit / Approve Per Module.")}</p>
             </div>
             <Button type="button" onClick={() => void saveRole()}>
               Save access
@@ -418,7 +419,7 @@ export default function RolesPage() {
 
           <div className="mb-6">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-steel-muted mb-2">
-              Portal modules (reference)
+              {formatUiText("Portal Modules (Reference)")}
             </h3>
             <div className="flex flex-wrap gap-2">
               {WORKSPACES.map((w) => (
@@ -437,10 +438,10 @@ export default function RolesPage() {
             <table className="w-full text-sm">
               <thead className="bg-sand text-left text-ink">
                 <tr>
-                  <th className="p-3">Module</th>
+                  <th className="p-3">{formatUiText("Module")}</th>
                   {ACTIONS.map((a) => (
-                    <th key={a} className="p-3 capitalize">
-                      {a}
+                    <th key={a} className="p-3">
+                      {formatUiText(a)}
                     </th>
                   ))}
                 </tr>
@@ -448,7 +449,7 @@ export default function RolesPage() {
               <tbody>
                 {MODULES.map((m) => (
                   <tr key={m} className="border-t border-line">
-                    <td className="p-3 font-medium text-ink">{m}</td>
+                    <td className="p-3 font-medium text-ink">{formatUiText(String(m).replaceAll("_", " "))}</td>
                     {ACTIONS.map((a) => (
                       <td key={a} className="p-3">
                         <input

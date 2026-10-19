@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "../api";
 import { isKeptPortalEmail } from "../lib/keptPortalUsers";
 import { Button, Card, Input } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 import type { UserAccountRow } from "./UserAccountEditModal";
 
 type Props = {
@@ -52,7 +53,7 @@ export function UserManageActions({ user, token, onEdit, onChanged, showEdit = t
             <Card className="space-y-3 overflow-hidden">
               <h3 className="font-display text-xl break-words">Delete {user.fullName}?</h3>
               <p className="text-sm text-steel-muted whitespace-normal break-words">
-                They lose portal login and project assignments. Type this email to confirm.
+                {formatUiText("They Lose Portal Login And Project Assignments. Type This Email To Confirm.")}
               </p>
               <p className="text-sm font-semibold break-all">{user.email}</p>
               <Input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder={user.email} />

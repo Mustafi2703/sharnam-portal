@@ -7,6 +7,7 @@ import { EmployeePayslipFields, EMPTY_PAYSLIP_SETUP, UserAccountEditModal, type 
 import { UserManageActions } from "../../components/UserManageActions";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { Badge, Button, Card, Input, Select } from "../../components/ui";
+import HrmsPageHero from "./HrmsPageHero";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ActionReasonDialog, actionReasonFromError, type ActionReason } from "../../components/ActionReasonDialog";
 import { downloadCsv, USER_CSV_DETAILED_SAMPLE, USER_CSV_HEADERS } from "../../lib/csvTemplates";
@@ -19,7 +20,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   office: "Office",
   hr: "HR",
-  site_employee: "Site employee",
+  site_employee: "Site Employee",
   employee: "Employee",
   client: "Client",
   vendor: "Vendor",
@@ -113,14 +114,14 @@ function AddUserModal({
         <Input required type="email" placeholder="Login email" value={form.email} onChange={(ev) => setForm({ ...form, email: ev.target.value })} />
         <Select value={form.role} onChange={(ev) => setForm({ ...form, role: ev.target.value })}>
           {LOGIN_ROLES.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
+            <option key={r.value} value={r.value}>{formatUiText(r.label)}</option>
           ))}
         </Select>
         <Input placeholder="Password" value={form.password} onChange={(ev) => setForm({ ...form, password: ev.target.value })} />
         <Input placeholder="Phone" value={form.phone} onChange={(ev) => setForm({ ...form, phone: ev.target.value })} />
         <Input placeholder="Emp code" value={form.empCode} onChange={(ev) => setForm({ ...form, empCode: ev.target.value })} />
         <Select value={form.department} onChange={(ev) => setForm({ ...form, department: ev.target.value, designation: "" })}>
-          <option value="">Department</option>
+          <option value="">{formatUiText("Department")}</option>
           {departments.map((d) => (
             <option key={d.id} value={d.name}>
               {d.name}
@@ -138,7 +139,7 @@ function AddUserModal({
             });
           }}
         >
-          <option value="">{form.department ? "Company role" : "Company role (pick department to narrow)"}</option>
+          <option value="">{formatUiText(form.department ? "Company Role" : "Company Role (Pick Department To Narrow)")}</option>
           {roleOptions.map((r) => (
             <option key={r.id} value={r.title}>
               {r.title}
@@ -146,9 +147,9 @@ function AddUserModal({
           ))}
         </Select>
         <label className="text-xs font-semibold text-steel-muted">
-          CTC annual (₹)
+          {formatUiText("CTC Annual (₹)")}
           <Input className="mt-1" type="number" value={form.ctcAnnual} onChange={(ev) => setForm({ ...form, ctcAnnual: ev.target.value })} />
-          <span className="mt-1 block text-[10px] font-normal">Saving fills basic and HRA from the CTC calculator.</span>
+          <span className="mt-1 block text-[10px] font-normal">{formatUiText("Saving fills basic and HRA from the CTC calculator.")}</span>
         </label>
       </div>
       <div className="mt-4">
@@ -367,23 +368,23 @@ export default function HrmsUsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="flex flex-wrap gap-2">
+      <HrmsPageHero eyebrow="HRMS" title="Users" subtitle="Add staff and assign them to a project.">
+        <div className="flex flex-wrap gap-2 mt-4">
           {canEdit ? (
-            <Button type="button" onClick={() => setModalOpen(true)}>+ Add user</Button>
+            <Button type="button" onClick={() => setModalOpen(true)}>+ Add User</Button>
           ) : (
-            <span className="text-xs text-warn self-center">Ask office or admin to add a user.</span>
+            <span className="text-xs text-warn self-center">{formatUiText("Ask office or admin to add a user.")}</span>
           )}
           {canEdit ? (
-            <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign to project</Button>
+            <Button type="button" variant="secondary" onClick={() => setAssignOpen(true)}>Assign To Project</Button>
           ) : null}
           {canOfficeDesk ? (
             <Link to="/roles" className="text-sm font-semibold text-brand self-center px-2">
-              Access · all users ↗
+              {formatUiText("Access · All Users")}
             </Link>
           ) : null}
         </div>
-      </div>
+      </HrmsPageHero>
 
       {msg ? (
         <p
@@ -400,7 +401,7 @@ export default function HrmsUsersPage() {
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold">Users ({shownEmployees.length}{userQ.trim() ? ` / ${employees.length}` : ""})</span>
+          <span className="font-semibold">{formatUiText("Users")} ({shownEmployees.length}{userQ.trim() ? ` / ${employees.length}` : ""})</span>
           <div className="flex flex-wrap gap-2">
             <Input
               className="!w-56"
@@ -409,9 +410,9 @@ export default function HrmsUsersPage() {
               onChange={(ev) => setUserQ(ev.target.value)}
             />
             <Select className="!w-40" value={payrollFilter} onChange={(ev) => setPayrollFilter(ev.target.value as typeof payrollFilter)}>
-              <option value="all">All staff</option>
-              <option value="missing">Needs setup</option>
-              <option value="ready">Payroll ready</option>
+              <option value="all">{formatUiText("All Staff")}</option>
+              <option value="missing">{formatUiText("Needs Setup")}</option>
+              <option value="ready">{formatUiText("Payroll Ready")}</option>
             </Select>
             <Button type="button" variant="secondary" onClick={() => downloadCsv("users-empty.csv", [...USER_CSV_HEADERS], [])}>
               Empty CSV
@@ -429,16 +430,10 @@ export default function HrmsUsersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-sand/30 text-left text-xs uppercase tracking-wide text-steel-muted">
-                <th className="px-4 py-2 font-semibold">Name</th>
-                <th className="px-4 py-2 font-semibold">Emp code</th>
-                <th className="px-4 py-2 font-semibold">Role</th>
-                <th className="px-4 py-2 font-semibold">Dept</th>
-                <th className="px-4 py-2 font-semibold">Designation</th>
-                <th className="px-4 py-2 font-semibold">CTC / yr</th>
-                <th className="px-4 py-2 font-semibold">Payroll</th>
-                <th className="px-4 py-2 font-semibold">Projects</th>
-                <th className="px-4 py-2 font-semibold">Status</th>
-                {canEdit ? <th className="px-4 py-2 font-semibold">Actions</th> : null}
+                {["Name", "Emp Code", "Role", "Dept", "Designation", "CTC / Yr", "Payroll", "Projects", "Status"].map((heading) => (
+                  <th key={heading} className="px-4 py-2 font-semibold">{formatUiText(heading)}</th>
+                ))}
+                {canEdit ? <th className="px-4 py-2 font-semibold">{formatUiText("Actions")}</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -449,19 +444,19 @@ export default function HrmsUsersPage() {
                     <div className="text-[10px] text-steel-muted font-mono">{e.email}</div>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs">{e.profile?.empCode || "—"}</td>
-                  <td className="px-4 py-2.5">{ROLE_LABELS[e.role || ""] || e.role?.replace("_", " ")}</td>
+                  <td className="px-4 py-2.5">{formatUiText(ROLE_LABELS[e.role || ""] || e.role?.replaceAll("_", " "))}</td>
                   <td className="px-4 py-2.5">{e.profile?.department || "—"}</td>
                   <td className="px-4 py-2.5 text-xs">{e.profile?.designation || "—"}</td>
                   <td className="px-4 py-2.5 text-xs whitespace-nowrap">{money(e.profile?.ctcAnnual)}</td>
                   <td className="px-4 py-2.5">
                     <Badge tone={hasPayrollSetup(e) ? "ok" : "warn"}>
-                      {hasPayrollSetup(e) ? "Ready" : `Set ${payslipGaps(e).join(", ")}`}
+                      {formatUiText(hasPayrollSetup(e) ? "Ready" : `Set ${payslipGaps(e).join(", ")}`)}
                     </Badge>
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1 max-w-[15rem]">
                       {(e.memberships || []).length === 0 ? (
-                        <span className="text-[10px] text-steel-muted">Not on any project</span>
+                        <span className="text-[10px] text-steel-muted">{formatUiText("Not On Any Project")}</span>
                       ) : null}
                       {(e.memberships || []).map((m) => (
                         <span
@@ -487,7 +482,7 @@ export default function HrmsUsersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-2.5">
-                    <Badge tone={e.isActive !== false ? "ok" : "warn"}>{e.isActive !== false ? "Active" : "Inactive"}</Badge>
+                    <Badge tone={e.isActive !== false ? "ok" : "warn"}>{formatUiText(e.isActive !== false ? "Active" : "Inactive")}</Badge>
                   </td>
                   {canEdit ? (
                     <td className="px-4 py-2.5 whitespace-nowrap">
@@ -579,7 +574,7 @@ export default function HrmsUsersPage() {
           />
           <Select value={assign.role} onChange={(ev) => setAssign({ ...assign, role: ev.target.value })}>
             {["site_employee", "site_engineer", "office", "project_manager", "viewer"].map((r) => (
-              <option key={r} value={r}>{r.replace("_", " ")}</option>
+              <option key={r} value={r}>{formatUiText(r.replaceAll("_", " "))}</option>
             ))}
           </Select>
         </div>
