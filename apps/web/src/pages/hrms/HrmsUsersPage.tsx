@@ -212,11 +212,6 @@ export default function HrmsUsersPage() {
     });
   }, [employees, deferredUserQ, payrollFilter]);
 
-  const payrollStats = useMemo(() => {
-    const ready = employees.filter(hasPayrollSetup).length;
-    return { ready, missing: employees.length - ready, total: employees.length };
-  }, [employees]);
-
   const employeeOptions = useMemo(
     () =>
       employees.map((emp) => ({
@@ -372,30 +367,7 @@ export default function HrmsUsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-steel-muted max-w-2xl break-words">
-          SPDC site and office team only — HR manages staff here. Clients, vendors, and consultants are separate: CRM directories +{" "}
-          {canOfficeDesk ? (
-            <Link to="/roles" className="text-brand font-semibold underline">
-              Office → Access · Users
-            </Link>
-          ) : (
-            <strong className="text-ink">Office → Access · Users</strong>
-          )}{" "}
-          for all portal types.
-          <span className="block mt-1">
-            <strong>{payrollStats.ready}</strong> of <strong>{payrollStats.total}</strong> have PAN, bank, PF, and CTC on file ·{" "}
-            <button type="button" className="text-brand font-semibold underline" onClick={() => setPayrollFilter("missing")}>
-              {payrollStats.missing} need setup
-            </button>
-          </span>
-          <span className="block mt-1">
-            Projects are never assigned automatically. Use <strong>Assign to project</strong>, or remove a project with the × on its chip.
-          </span>
-          <span className="block mt-1 font-semibold text-warn">
-            Only office, HR, and admin can add or delete users. Nirav Parekh and Saurabh Prajapati stay. Every other login can be removed.
-          </span>
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex flex-wrap gap-2">
           {canEdit ? (
             <Button type="button" onClick={() => setModalOpen(true)}>+ Add user</Button>
