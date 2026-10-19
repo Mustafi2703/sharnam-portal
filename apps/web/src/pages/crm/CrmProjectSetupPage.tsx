@@ -279,7 +279,7 @@ export default function CrmProjectSetupPage() {
     setMsg("");
     try {
       const firstConsultant = vendors.find((v) => consultantIds.includes(v.id));
-      const firstContractor = vendors.find((v) => contractorIds.includes(v.id));
+      const selectedContractors = vendors.filter((v) => contractorIds.includes(v.id)).map((v) => v.name).filter(Boolean);
       const firstPmc = vendors.find((v) => pmcIds.includes(v.id));
       const created = await api<ProjectRow>("/api/projects", {
         method: "POST",
@@ -287,7 +287,7 @@ export default function CrmProjectSetupPage() {
         body: JSON.stringify({
           ...createForm,
           designConsultant: createForm.designConsultant || firstConsultant?.name || "",
-          contractorName: createForm.contractorName || firstContractor?.name || "",
+          contractorName: selectedContractors.join(", "),
           pmcName: createForm.pmcName || firstPmc?.name || "SPDC",
           vendorIds: [...consultantIds, ...pmcIds, ...contractorIds, ...(clientId ? [clientId] : [])],
           workPackages: sanitizeProjectWorkPackages(projectPackages),
@@ -327,7 +327,7 @@ export default function CrmProjectSetupPage() {
     setBusy(true);
     try {
       const firstConsultant = vendors.find((v) => consultantIds.includes(v.id));
-      const firstContractor = vendors.find((v) => contractorIds.includes(v.id));
+      const selectedContractors = vendors.filter((v) => contractorIds.includes(v.id)).map((v) => v.name).filter(Boolean);
       const firstPmc = vendors.find((v) => pmcIds.includes(v.id));
       let loginWarn: string | null = null;
       if (clientId) {
@@ -346,7 +346,7 @@ export default function CrmProjectSetupPage() {
           clientGst: details.clientGst,
           location: details.location,
           designConsultant: details.designConsultant || firstConsultant?.name || "",
-          contractorName: details.contractorName || firstContractor?.name || "",
+          contractorName: selectedContractors.join(", "),
           pmcName: details.pmcName || firstPmc?.name || "SPDC",
           startDate: details.startDate || null,
           endDate: details.endDate || null,

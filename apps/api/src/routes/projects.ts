@@ -521,8 +521,31 @@ const PROJECT_LIST_SELECT = {
   endDate: true,
   createdAt: true,
   updatedAt: true,
+  vendors: {
+    orderBy: { createdAt: "asc" as const },
+    select: { vendor: { select: { name: true, partyType: true } } },
+  },
   _count: { select: { drawings: true, members: true } },
 } as const;
+
+async function rememberSelectedContractors(projectId: string) {
+  const links = await prisma.projectVendor.findMany({
+    where: { projectId, vendor: { partyType: { in: ["Contractor", "Vendor"] } } },
+    include: { vendor: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const names = [...new Set(links.map((link) => link.vendor.name.trim()).filter(Boolean))];
+  if (names.length) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { contractorName: names.join(", ") },
+    });
+  }
+  const { syncCommsContactsFromDirectory } = await import("../services/syncCommsFromDirectory.js");
+  await syncCommsContactsFromDirectory(projectId).catch((err) =>
+    console.warn("[comms] contractor sync:", err instanceof Error ? err.message : err),
+  );
+}
 
 projectsRouter.get("/", async (req: AuthedRequest, res) => {
   const { projectPayloadForRole } = await import("../services/projectVisibility.js");
@@ -697,6 +720,7 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
       create: { projectId: project.id, userId: req.user!.id, role: "office" },
       update: {},
     });
+    await rememberSelectedContractors(project.id);
   } catch (err) {
     console.error("Project card extras failed:", err instanceof Error ? err.message : err);
   }
@@ -944,18 +968,13 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
     include: { vendor: { select: { name: true } } },
     orderBy: { createdAt: "asc" },
   });
-  const firstContractor = await prisma.projectVendor.findFirst({
-    where: { projectId, vendor: { partyType: { in: ["Contractor", "Vendor"] } } },
-    include: { vendor: { select: { name: true } } },
-    orderBy: { createdAt: "asc" },
-  });
   await prisma.project.update({
     where: { id: projectId },
     data: {
       ...(firstConsultant ? { designConsultant: firstConsultant.vendor.name } : {}),
-      ...(firstContractor ? { contractorName: firstContractor.vendor.name } : {}),
     },
   });
+  await rememberSelectedContractors(projectId);
 
   await audit("project.assign_parties", {
     userId: req.user!.id,

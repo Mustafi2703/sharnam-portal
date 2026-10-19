@@ -158,6 +158,29 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     });
   }
 
+  const contractorVendorIds = projectVendors
+    .filter((pv) => pv.vendor.partyType === "Contractor" || pv.vendor.partyType === "Vendor")
+    .map((pv) => pv.vendorId);
+  if (contractorVendorIds.length) {
+    const reps = await prisma.vendorContact.findMany({
+      where: { vendorId: { in: contractorVendorIds } },
+      include: { vendor: { select: { name: true, address: true, city: true, state: true } } },
+    });
+    for (const rep of reps) {
+      people.push({
+        orgSection: "Contractor",
+        orgName: rep.vendor.name,
+        personName: rep.fullName || rep.email,
+        designation: rep.role?.trim() || "Contractor",
+        company: rep.vendor.name,
+        mobile: "",
+        email: rep.email,
+        mailRole: "CC",
+        officeAddress: [rep.vendor.address, rep.vendor.city, rep.vendor.state].filter(Boolean).join(", "),
+      });
+    }
+  }
+
   const clientVendorIds = projectVendors.filter((pv) => pv.vendor.partyType === "Client").map((pv) => pv.vendorId);
   if (clientVendorIds.length) {
     const reps = await prisma.vendorContact.findMany({
@@ -259,6 +282,14 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
 
     for (const section of ["Client", "PMC", "Consultant", "Contractor", "Other"] as OrgSection[]) {
       if (!sections.has(section)) continue;
+      const contractorNames = [
+        ...new Set(
+          uniquePeople
+            .filter((p) => p.orgSection === "Contractor")
+            .map((p) => (p.company || p.orgName || "").trim())
+            .filter(Boolean),
+        ),
+      ];
       const orgName =
         section === "PMC"
           ? pmcOrgName(project)
@@ -267,7 +298,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
             : section === "Consultant"
               ? project.designConsultant || uniquePeople.find((p) => p.orgSection === section)?.orgName || section
               : section === "Contractor"
-                ? project.contractorName || uniquePeople.find((p) => p.orgSection === section)?.orgName || section
+                ? contractorNames.join(", ") || project.contractorName || "Contractor"
                 : uniquePeople.find((p) => p.orgSection === section)?.orgName || section;
       const header = existing.find((r) => r.isSectionHeader && r.orgSection === section);
       if (header && header.orgName !== orgName) {

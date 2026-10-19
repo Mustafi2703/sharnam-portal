@@ -18,6 +18,7 @@ export type CrmProjectRow = {
   clientGst?: string | null;
   designConsultant?: string | null;
   contractorName?: string | null;
+  vendors?: { vendor?: { name?: string | null; partyType?: string | null } | null }[];
   pmcName?: string | null;
   location?: string | null;
 };
@@ -59,8 +60,19 @@ function projectDetailLines(p: CrmProjectRow, proposal?: CrmProjectProposalLink 
     { label: "Site location", value: p.location || "—" },
     { label: "Design consultant", value: p.designConsultant || "—" },
     { label: "PMC / SPDC", value: p.pmcName || "—" },
-    { label: "Main contractor", value: p.contractorName || "—" },
+    { label: "Contractors", value: contractorLabel(p) || "—" },
   ];
+}
+
+function contractorLabel(p: CrmProjectRow) {
+  const linked = (p.vendors || [])
+    .map((row) => row.vendor)
+    .filter((vendor) => vendor && (vendor.partyType === "Contractor" || vendor.partyType === "Vendor"))
+    .map((vendor) => (vendor?.name || "").trim())
+    .filter(Boolean);
+  const names = [...new Set(linked)];
+  if (names.length) return names.join(", ");
+  return (p.contractorName || "").trim();
 }
 
 function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
@@ -68,7 +80,7 @@ function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
   return rows.filter((p) => {
     if (status !== "all" && (p.status || "") !== status) return false;
     if (!needle) return true;
-    const hay = [p.code, p.name, p.clientName, p.location, p.designConsultant, p.contractorName, p.status]
+    const hay = [p.code, p.name, p.clientName, p.location, p.designConsultant, contractorLabel(p), p.status]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -164,7 +176,7 @@ export function CrmProjectsRegister({
                     <span className="line-clamp-2">{p.designConsultant || "—"}</span>
                   </td>
                   <td className="text-xs max-w-[120px]">
-                    <span className="line-clamp-2">{p.contractorName || "—"}</span>
+                    <span className="line-clamp-3 whitespace-pre-wrap break-words">{contractorLabel(p) || "—"}</span>
                   </td>
                   <td className="text-xs max-w-[180px]">
                     <span className="line-clamp-3 whitespace-pre-wrap break-words">{p.status && p.status !== "Planning" ? p.status : "—"}</span>

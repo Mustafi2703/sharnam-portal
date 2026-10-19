@@ -51,6 +51,10 @@ commsRouter.post("/matrix/:projectId/seed-standard", requireRoles("admin", "offi
 /** BPCL-style contact matrix (TECHNICAL / COMMERCIAL) */
 commsRouter.get("/contacts/:projectId", async (req, res) => {
   const kind = String(req.query.kind || "TECHNICAL").toUpperCase();
+  const { syncCommsContactsFromDirectory } = await import("../services/syncCommsFromDirectory.js");
+  await syncCommsContactsFromDirectory(req.params.projectId).catch((err) =>
+    console.warn("[comms] contractor sync:", err instanceof Error ? err.message : err),
+  );
   const rows = await prisma.communicationContact.findMany({
     where: { projectId: req.params.projectId, matrixKind: kind },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
