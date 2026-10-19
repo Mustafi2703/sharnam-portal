@@ -1,8 +1,43 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useConsultantTypes } from "../lib/consultantTypes";
-import { SearchableSelect } from "./SearchableSelect";
-import { Button, Input } from "./ui";
+import { Button, Card, Input } from "./ui";
 import { StatusNote } from "./StatusNote";
+
+function ChoiceModal({
+  title,
+  hint,
+  open,
+  onClose,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <Card className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-sm">{title}</h3>
+              {hint ? <p className="text-xs text-steel-muted mt-1">{hint}</p> : null}
+            </div>
+            <button type="button" className="text-xs font-semibold text-steel-muted" onClick={onClose}>
+              Close
+            </button>
+          </div>
+          {children}
+        </Card>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 /** Office/admin — add, rename, or remove consultant type labels. */
 export function ConsultantTypesPanel({ token, canEdit = false }: { token: string | null; canEdit?: boolean }) {
@@ -116,24 +151,128 @@ export function ConsultantTypeSelect({
   onChange,
   types,
   className,
-  placeholder = "Consultant type…",
+  disabled,
 }: {
   value: string;
   onChange: (next: string) => void;
   types: string[];
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
-  const extra = value && !types.includes(value) ? [{ value, label: value }] : [];
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const options = useMemo(() => {
+    const list = value && !types.includes(value) ? [value, ...types] : types;
+    const needle = q.trim().toLowerCase();
+    return needle ? list.filter((t) => t.toLowerCase().includes(needle)) : list;
+  }, [types, value, q]);
+
   return (
     <div className={className}>
-      <SearchableSelect
-        options={[{ value: "", label: placeholder }, ...types.map((t) => ({ value: t, label: t })), ...extra]}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        searchPlaceholder="Search type…"
-      />
+      <span className="text-xs text-steel-muted">Consultant type</span>
+      <button
+        type="button"
+        className="mt-1 w-full rounded border border-line bg-paper px-3 py-2 text-left text-sm disabled:opacity-60"
+        disabled={disabled}
+        onClick={() => {
+          setQ("");
+          setOpen(true);
+        }}
+      >
+        <span data-preserve-case className={value ? "text-ink" : "text-steel-muted"}>
+          {value || "Choose consultant type"}
+        </span>
+      </button>
+      <ChoiceModal
+        title="Consultant type"
+        hint="Same list for a consultant and for a PMC. Pick one, or clear it."
+        open={open}
+        onClose={() => setOpen(false)}
+      >
+        <Input placeholder="Search type" value={q} onChange={(e) => setQ(e.target.value)} />
+        <ul className="max-h-64 overflow-y-auto divide-y border border-line rounded-lg">
+          <li>
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-steel-muted hover:bg-sand"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              No type
+            </button>
+          </li>
+          {options.map((t) => (
+            <li key={t}>
+              <button
+                type="button"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-sand ${t === value ? "bg-brand-soft font-semibold" : ""}`}
+                data-preserve-case
+                onClick={() => {
+                  onChange(t);
+                  setOpen(false);
+                }}
+              >
+                {t}
+              </button>
+            </li>
+          ))}
+          {!options.length ? <li className="px-3 py-3 text-sm text-steel-muted">No matching type.</li> : null}
+        </ul>
+      </ChoiceModal>
+    </div>
+  );
+}
+
+export function ConsultantRoleSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: "Consultant" | "PMC") => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const role = value === "PMC" ? "PMC" : "Consultant";
+  return (
+    <div>
+      <span className="text-xs text-steel-muted">Role</span>
+      <button
+        type="button"
+        className="mt-1 w-full rounded border border-line bg-paper px-3 py-2 text-left text-sm disabled:opacity-60"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        {role}
+      </button>
+      <ChoiceModal
+        title="Consultant or PMC"
+        hint="Choose the role here. The consultant type is the list below, including when this company is a PMC."
+        open={open}
+        onClose={() => setOpen(false)}
+      >
+        {(["Consultant", "PMC"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            className={`w-full text-left rounded-lg border px-3 py-3 text-sm ${
+              role === option ? "border-brand bg-brand-soft font-semibold" : "border-line hover:bg-sand"
+            }`}
+            onClick={() => {
+              onChange(option);
+              setOpen(false);
+            }}
+          >
+            {option}
+            <span className="block text-xs font-normal text-steel-muted mt-0.5">
+              {option === "PMC" ? "Shows on the project card under PMC." : "Shows on the project card under Consultants."}
+            </span>
+          </button>
+        ))}
+      </ChoiceModal>
     </div>
   );
 }

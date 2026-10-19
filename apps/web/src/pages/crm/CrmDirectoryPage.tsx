@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
+import { ConsultantRoleSelect, ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
 import { CompanyRepresentativesPanel } from "../../components/ClientRepresentativesPanel";
 import { useConsultantTypes } from "../../lib/consultantTypes";
 import { VendorManageActions } from "../../components/VendorManageActions";
@@ -199,7 +199,7 @@ export function DirectoryCompaniesPanel({
     const payload = {
       ...form,
       name: trimmedName,
-      partyType,
+      partyType: tab === "stakeholders" ? (form.partyType === "PMC" ? "PMC" : "Consultant") : partyType,
       primaryContactName: trimField(form.primaryContactName),
       businessPhone: trimField(form.businessPhone),
       email: trimField(form.email).toLowerCase(),
@@ -319,7 +319,19 @@ export function DirectoryCompaniesPanel({
                   {r.name}
                 </div>
                 <div className="text-xs text-steel-muted mt-0.5 flex flex-wrap items-center gap-1.5">
-                  {tab === "stakeholders" && r.trade ? <span data-preserve-case>{r.trade}</span> : formatPartyType(r.partyType)}
+                  {tab === "stakeholders" ? (
+                    <>
+                      <span>{r.partyType === "PMC" ? "PMC" : "Consultant"}</span>
+                      {r.trade ? (
+                        <span data-preserve-case>
+                          {" · "}
+                          {r.trade}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    formatPartyType(r.partyType)
+                  )}
                   {r.email ? (
                     <span data-preserve-case>
                       {" · "}
@@ -417,7 +429,21 @@ export function DirectoryCompaniesPanel({
         </div>
         <form className="space-y-3" onSubmit={save}>
           <Input disabled={!canEdit} placeholder="Company name" value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          {tab !== "clients" ? (
+          {tab === "stakeholders" ? (
+            <>
+              <ConsultantRoleSelect
+                value={partyType}
+                disabled={!canEdit}
+                onChange={(next) => setForm({ ...form, partyType: next })}
+              />
+              <ConsultantTypeSelect
+                disabled={!canEdit}
+                value={form.trade ?? ""}
+                onChange={(trade) => setForm({ ...form, trade })}
+                types={consultantTypes}
+              />
+            </>
+          ) : tab !== "clients" ? (
             <Select disabled={!canEdit} value={partyType} onChange={(e) => setForm({ ...form, partyType: e.target.value as VendorPartyType })}>
               {VENDOR_PARTY_TYPES.filter((p) => meta.partyTypes.includes(p.value)).map((p) => (
                 <option key={p.value} value={p.value}>
@@ -427,9 +453,6 @@ export function DirectoryCompaniesPanel({
             </Select>
           ) : null}
           <Input disabled={!canEdit} placeholder="Phone" type="tel" autoComplete="tel" value={form.businessPhone ?? ""} onChange={(e) => setForm({ ...form, businessPhone: e.target.value })} />
-          {tab === "stakeholders" ? (
-            <ConsultantTypeSelect value={form.trade ?? ""} onChange={(trade) => setForm({ ...form, trade })} types={consultantTypes} />
-          ) : null}
           <Input disabled={!canEdit} placeholder="City" value={form.city ?? ""} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           {tab === "clients" ? (
             <>

@@ -886,6 +886,12 @@ export default function CrmProjectSetupPage() {
                     · {details.startDate || "—"} to {details.endDate || "—"}
                   </span>
                 </p>
+                <p className="text-xs">
+                  <span className="font-medium">PMC </span>
+                  <span data-preserve-case>
+                    {vendors.filter((v) => pmcIds.includes(v.id)).map((v) => v.name).join(", ") || "None selected"}
+                  </span>
+                </p>
                 {summary.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
                 <p className="text-[11px] text-steel-muted leading-relaxed">
                   {projectStatusHint(summary.project.status)} {summary.members.filter((m) => isSpdcStaffMember(m)).length} SPDC team ·{" "}
