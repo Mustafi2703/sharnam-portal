@@ -29,8 +29,10 @@ Paste each **KEY** and **VALUE** in: **Websites → portal.spdc.in → Environme
 
 | When | Set | Do not set |
 |------|-----|------------|
-| **First deploy** (empty DB) | `RUN_SEED=1` | `SKIP_BUILD_SEED` |
-| **Demo / all later deploys** | `SKIP_BUILD_SEED=1` | `RUN_SEED` *(delete the variable)* |
+| **First deploy** (empty DB) | `RUN_SEED=1` | — |
+| **Every later redeploy** | nothing | `RUN_SEED` *(delete the variable)* |
+
+A redeploy only updates the database shape. It does not load demo projects, demo users, or sample letters, and it does not remove people already on the portal. Consultant types are stored in MySQL, not in a file that the rebuild deletes.
 
 Deploys do not create HR letters. Sample letters are only written when someone runs `npm run hrms:seed-letter-samples`.
 

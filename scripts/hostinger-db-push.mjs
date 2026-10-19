@@ -1,10 +1,11 @@
 /**
- * MySQL migrate + seed at BUILD time only (Hostinger runtime cannot run tsx/esbuild).
+ * MySQL schema sync at BUILD time only (Hostinger runtime cannot run tsx/esbuild).
  * Uses npx — available during Hostinger build with full PATH.
  *
- * RUN_SEED=1     — full seed once (seed.ts includes demo screenshot pack). Remove after first OK deploy.
- * SKIP_BUILD_SEED=1 — skip all seed (fast redeploy when DB already populated).
- * Otherwise      — lightweight demo pack refresh only (no full seed.ts).
+ * A normal redeploy only updates the schema. It does not insert demo rows and it does
+ * not delete users, projects, consultant types, or anything else already in MySQL.
+ *
+ * RUN_SEED=1 — one-time full seed for an empty database. Leave it unset after that.
  */
 import { execSync } from "node:child_process";
 import { applyDatabaseUrl, maskDatabaseUrl } from "./resolve-database-url.mjs";
@@ -49,16 +50,13 @@ try {
   process.exit(1);
 }
 
-/** Local mock only during build — avoids slow/failing SharePoint calls on every DPR discipline. */
-const seedEnv = { ...process.env, MOCK_ONEDRIVE: "true" };
 const runFullSeed = process.env.RUN_SEED === "1";
-const skipAllSeed = process.env.SKIP_BUILD_SEED === "1";
 
-if (skipAllSeed) {
-  console.log("==> SKIP_BUILD_SEED=1 — no database seed during this build");
-} else if (runFullSeed) {
-  console.log("==> RUN_SEED=1 — full seed (users, sheets, DPR week, WPR, pilot week, demo pack)…");
-  console.log("    Tip: set RUN_SEED=0 and SKIP_BUILD_SEED=1 on later deploys for faster builds.");
+if (!runFullSeed) {
+  console.log("==> Schema only. Existing portal data is left as it is. No demo pack and no user cleanup.");
+} else {
+  console.log("==> RUN_SEED=1 — one-time full seed. Unset RUN_SEED after this deploy so later builds do not load demo data.");
+  const seedEnv = { ...process.env, MOCK_ONEDRIVE: "true" };
   try {
     execSync("npx tsx seed/seed.ts", {
       stdio: "inherit",
@@ -66,59 +64,10 @@ if (skipAllSeed) {
       cwd: rootDir,
       timeout: 1_800_000,
     });
-    console.log("==> Full seed complete. Remove RUN_SEED=1 from Hostinger env after verifying login.");
+    console.log("==> Full seed complete. Remove RUN_SEED=1 from Hostinger env before the next deploy.");
   } catch {
     console.error("FATAL: seed failed during build — Hostinger will retry on next deploy after the seed bug is fixed.");
     process.exit(1);
-  }
-} else {
-  console.log("==> Incremental demo refresh (set RUN_SEED=1 once for empty DB)…");
-  try {
-    console.log("==> Demo screenshot pack (quality, safety, drawing register, DPR/WPR week)…");
-    execSync("npx tsx seed/demoScreenshotsPack.ts", {
-      stdio: "inherit",
-      env: seedEnv,
-      cwd: rootDir,
-      timeout: 900_000,
-    });
-  } catch {
-    console.warn("WARN: Demo screenshot pack skipped (non-fatal — run npm run db:seed-demo-screenshots)");
-  }
-
-  try {
-    console.log("==> BBS demo bend diagrams (idempotent)…");
-    execSync("npx tsx seed/runBbsDemoShapes.ts", {
-      stdio: "inherit",
-      env: seedEnv,
-      cwd: rootDir,
-      timeout: 120_000,
-    });
-  } catch {
-    console.warn("WARN: BBS demo shapes skipped (non-fatal)");
-  }
-
-  try {
-    console.log("==> Arvind week pack (NTX + Dorm fills, 7 DPRs, published WPR, RA/COP)…");
-    execSync("npx tsx scripts/seed-arvind-week-test.mts", {
-      stdio: "inherit",
-      env: seedEnv,
-      cwd: rootDir,
-      timeout: 900_000,
-    });
-  } catch {
-    console.warn("WARN: Arvind week pack skipped (non-fatal — run npm run db:walk-arvind-week)");
-  }
-
-  try {
-    console.log("==> Keep Nirav and Saurabh; remove every other portal login…");
-    execSync("npx tsx seed/prune-demo-users.ts", {
-      stdio: "inherit",
-      env: seedEnv,
-      cwd: rootDir,
-      timeout: 120_000,
-    });
-  } catch {
-    console.warn("WARN: prune leftover users skipped (non-fatal)");
   }
 }
 

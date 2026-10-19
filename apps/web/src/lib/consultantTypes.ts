@@ -7,7 +7,8 @@ export const FALLBACK_CONSULTANT_TYPES = [...STAKEHOLDER_CONSULTANT_TRADES];
 export async function fetchConsultantTypes(token: string | null): Promise<string[]> {
   if (!token) return [...FALLBACK_CONSULTANT_TYPES];
   const r = await api<{ types: string[] }>("/api/vendors/consultant-types", { token }).catch(() => null);
-  return r?.types?.length ? r.types : [...FALLBACK_CONSULTANT_TYPES];
+  if (!r || !Array.isArray(r.types)) return [...FALLBACK_CONSULTANT_TYPES];
+  return r.types;
 }
 
 export function useConsultantTypes(token: string | null) {
