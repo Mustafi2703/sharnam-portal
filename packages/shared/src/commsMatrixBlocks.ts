@@ -57,6 +57,34 @@ export function matrixCompanyKey(name?: string | null): string {
 const text = (v?: string | null) => String(v ?? "").trim();
 
 /** A row naming the company instead of a person (no e-mail). Shown only when the company has nobody else. */
+/** Designations offered for any matrix person — BPCL Communication Matrix first, then common site titles. Custom values are allowed. */
+export const MATRIX_DESIGNATIONS = [
+  "Director",
+  "Project Manager",
+  "Project Co-ordinator",
+  "Billing Engineer",
+  "HR & Safety Compliance",
+  "Head – Procurement",
+  "Managing Director",
+  "General Manager",
+  "Project Head",
+  "Site In-charge",
+  "Site Engineer",
+  "Planning Engineer",
+  "QA/QC Engineer",
+  "Safety Officer",
+  "Design Manager",
+  "Architect",
+  "Structural Engineer",
+  "MEP Engineer",
+  "Quantity Surveyor",
+  "Procurement Manager",
+  "Purchase Officer",
+  "Accounts / Finance",
+  "Store In-charge",
+  "Supervisor",
+] as const;
+
 export function isMatrixPlaceholder(row: MatrixRowLike): boolean {
   if (text(row.email)) return false;
   const person = matrixCompanyKey(row.personName);

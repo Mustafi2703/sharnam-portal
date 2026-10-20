@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SPDC_COMPANY_ROLES } from "@sharnam/shared";
+import { MATRIX_DESIGNATIONS, SPDC_COMPANY_ROLES } from "@sharnam/shared";
 import { api } from "../api";
 import { portalAccountKind } from "../lib/portalAccounts";
 import { vendorDesk } from "../lib/vendorTypes";
@@ -182,7 +182,7 @@ function fillFromVendor(form: MatrixFormState, v: MatrixVendor): MatrixFormState
     personName: person,
     email: v.email || form.email,
     mobile: v.businessPhone || form.mobile,
-    designation: v.trade || form.designation,
+    designation: form.designation,
     officeAddress: [v.address, v.city].filter(Boolean).join(", ") || form.officeAddress,
     spoc: v.primaryContactName || person || form.spoc,
     createDirectory: "none",
@@ -231,6 +231,34 @@ function fillFromUser(form: MatrixFormState, u: MatrixUser): MatrixFormState {
     spoc: form.spoc || u.fullName,
     userRole: u.role === "client" || u.role === "vendor" || u.role === "office" || u.role === "employee" ? u.role : "site_employee",
   };
+}
+
+const CUSTOM_DESIGNATIONS_KEY = "matrix.customDesignations";
+
+function customDesignations(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CUSTOM_DESIGNATIONS_KEY) || "[]");
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberDesignation(value: string): string {
+  const name = value.trim();
+  if (name && !customDesignations().some((d) => d.toLowerCase() === name.toLowerCase())) {
+    localStorage.setItem(CUSTOM_DESIGNATIONS_KEY, JSON.stringify([...customDesignations(), name].slice(-40)));
+  }
+  return name;
+}
+
+/** Person designations for every party; SPDC roles lead for the PMC. */
+function designationOptions(orgSection: string, current: string) {
+  const base: string[] = orgSection === "PMC" ? [...SPDC_COMPANY_ROLES, ...MATRIX_DESIGNATIONS] : [...MATRIX_DESIGNATIONS];
+  const seen = new Set<string>();
+  return [current.trim(), ...base, ...customDesignations()]
+    .filter((d) => d && !seen.has(d.toLowerCase()) && seen.add(d.toLowerCase()))
+    .map((d) => ({ value: d, label: d }));
 }
 
 /** Searchable, auto-filled matrix fields — company / person / SPOC / email stay editable after pick. */
@@ -460,23 +488,16 @@ export function MatrixPartyFields({
         </label>
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Designation</span>
-          {form.orgSection === "Consultant" ? (
-            <ConsultantTypeSelect value={form.designation} onChange={(designation) => onChange({ ...form, designation })} types={consultantTypes} />
-          ) : form.orgSection === "PMC" ? (
-            <Select value={form.designation} onChange={(e) => onChange({ ...form, designation: e.target.value })}>
-              <option value="">Company role…</option>
-              {(form.designation && !(SPDC_COMPANY_ROLES as readonly string[]).includes(form.designation)
-                ? [form.designation, ...SPDC_COMPANY_ROLES]
-                : [...SPDC_COMPANY_ROLES]
-              ).map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <Input placeholder="Designation" value={form.designation} onChange={(e) => onChange({ ...form, designation: e.target.value })} />
-          )}
+          <SearchableSelect
+            key={`des-${form.orgSection}`}
+            options={designationOptions(form.orgSection, form.designation)}
+            value={form.designation}
+            onChange={(designation) => onChange({ ...form, designation })}
+            onCreate={(q) => onChange({ ...form, designation: rememberDesignation(q) })}
+            createLabel="Use this designation"
+            placeholder="Select designation…"
+            searchPlaceholder="Search or type a new designation…"
+          />
         </label>
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company (editable)</span>

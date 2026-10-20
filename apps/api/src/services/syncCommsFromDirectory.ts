@@ -97,7 +97,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       orgSection: "Client",
       orgName: project.clientName || "Client",
       personName: project.clientContactName || project.clientName || "Client contact",
-      designation: "Client representative",
+      designation: "",
       company: project.clientName || "Client",
       mobile: project.clientPhone || "",
       email: project.clientEmail || "",
@@ -111,7 +111,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       orgSection: "Client",
       orgName: project.clientName,
       personName: project.clientName,
-      designation: "Client",
+      designation: "",
       company: project.clientName,
       mobile: project.clientPhone || "",
       email: "",
@@ -128,12 +128,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       orgSection,
       orgName,
       personName: m.user.fullName,
-      designation:
-        orgSection === "PMC"
-          ? companyRole
-          : orgSection === "Client"
-            ? "Client representative"
-            : m.role.replace(/_/g, " "),
+      designation: orgSection === "PMC" ? companyRole : "",
       company: orgName,
       mobile: m.user.phone || "",
       email: m.user.email,
@@ -154,7 +149,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       orgSection,
       orgName: v.name,
       personName: v.primaryContactName || v.name,
-      designation: pv.tradeRole || v.trade || v.partyType,
+      designation: "",
       company: v.name,
       mobile: v.businessPhone || "",
       email: v.email || "",
@@ -176,7 +171,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
         orgSection: "Contractor",
         orgName: rep.vendor.name,
         personName: rep.fullName || rep.email,
-        designation: rep.role?.trim() || "Contractor",
+        designation: rep.role?.trim() || "",
         company: rep.vendor.name,
         mobile: "",
         email: rep.email,
@@ -197,7 +192,7 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
         orgSection: "Client",
         orgName: rep.vendor.name,
         personName: rep.fullName || rep.email,
-        designation: rep.role?.trim() || "Client representative",
+        designation: rep.role?.trim() || "",
         company: rep.vendor.name,
         mobile: "",
         email: rep.email,

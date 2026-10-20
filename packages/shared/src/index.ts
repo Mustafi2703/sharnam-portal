@@ -451,6 +451,7 @@ export {
   MATRIX_SECTION_ORDER,
   buildMatrixBlocks,
   isMatrixPlaceholder,
+  MATRIX_DESIGNATIONS,
   matrixBlockRows,
   letterFor,
   matrixCompanyKey,
