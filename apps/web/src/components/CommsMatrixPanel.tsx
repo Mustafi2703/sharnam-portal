@@ -4,8 +4,8 @@ import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useClientLogo } from "../lib/useClientLogo";
-import { matrixSubtitle, useMatrixPortalStatus } from "./MatrixOnboard";
-import { MatrixBlocksTable, MatrixCompanyEditor } from "./MatrixBlocksTable";
+import { matrixSubtitle } from "./MatrixOnboard";
+import { MatrixBlocksTable, MatrixCompanyEditor, deleteMatrixCompanyBlock } from "./MatrixBlocksTable";
 import type { MatrixBlock } from "@sharnam/shared";
 import {
   EMPTY_MATRIX_FORM,
@@ -76,7 +76,6 @@ export function CommsMatrixPanel({
   const [users, setUsers] = useState<MatrixUser[]>([]);
   const [vendors, setVendors] = useState<MatrixVendor[]>([]);
   const [assignedVendors, setAssignedVendors] = useState<AssignedVendor[]>([]);
-  const portal = useMatrixPortalStatus(projectId, token, canEdit);
   const [companyBlock, setCompanyBlock] = useState<MatrixBlock<MatrixContact & { id: string }> | null>(null);
 
   function addPersonTo(block: MatrixBlock) {
@@ -119,10 +118,6 @@ export function CommsMatrixPanel({
     void loadDirectory();
   }, [loadDirectory]);
 
-  const { reloadStatus } = portal;
-  useEffect(() => {
-    void reloadStatus();
-  }, [contacts, reloadStatus]);
 
   async function addContact(e: FormEvent) {
     e.preventDefault();
@@ -381,7 +376,20 @@ export function CommsMatrixPanel({
         matrixKind={matrixKind}
         canEdit={canEdit}
         busy={busy}
-        portal={portal}
+        onDeleteCompany={async (block) => {
+          setBusy(true);
+          try {
+            const msg = await deleteMatrixCompanyBlock({ projectId, token, matrixKind, block });
+            if (msg) {
+              onMsg(msg);
+              await onReload();
+            }
+          } catch (err) {
+            onMsg(err instanceof Error ? err.message : "Could not delete the company");
+          } finally {
+            setBusy(false);
+          }
+        }}
         onEditPerson={startEdit}
         onDeleteRow={(id, label) => void deleteContact(id, label)}
         onEditCompany={setCompanyBlock}

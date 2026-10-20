@@ -2,8 +2,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useClientLogo } from "../lib/useClientLogo";
-import { matrixSubtitle, useMatrixPortalStatus } from "./MatrixOnboard";
-import { MatrixBlocksTable, MatrixCompanyEditor } from "./MatrixBlocksTable";
+import { matrixSubtitle } from "./MatrixOnboard";
+import { MatrixBlocksTable, MatrixCompanyEditor, deleteMatrixCompanyBlock } from "./MatrixBlocksTable";
 import type { MatrixBlock } from "@sharnam/shared";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
@@ -65,8 +65,6 @@ export function ProjectSetupMatrixDesk({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const clientLogoSrc = useClientLogo(projectId, project?.clientLogoUrl, token);
-  const portal = useMatrixPortalStatus(projectId, token, canEdit);
-  const { reloadStatus } = portal;
   const [companyBlock, setCompanyBlock] = useState<MatrixBlock<MatrixContact & { id: string }> | null>(null);
 
   function addPersonTo(block: MatrixBlock) {
@@ -85,7 +83,6 @@ export function ProjectSetupMatrixDesk({
   }
 
   const load = useCallback(async () => {
-    void reloadStatus();
     const [tech, comm] = await Promise.all([
       api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=TECHNICAL`, { token }).catch(() => []),
       api<MatrixContact[]>(`/api/comms/contacts/${projectId}?kind=COMMERCIAL`, { token }).catch(() => []),
@@ -93,7 +90,7 @@ export function ProjectSetupMatrixDesk({
     const people = (rows: MatrixContact[]) => rows.filter((r) => !r.isSectionHeader).length;
     setCounts({ technical: people(tech), commercial: people(comm) });
     setContacts(matrixKind === "COMMERCIAL" ? comm : tech);
-  }, [projectId, token, matrixKind, reloadStatus]);
+  }, [projectId, token, matrixKind]);
 
   useEffect(() => {
     void load();
@@ -460,7 +457,20 @@ export function ProjectSetupMatrixDesk({
         matrixKind={matrixKind}
         canEdit={canEdit}
         busy={busy}
-        portal={portal}
+        onDeleteCompany={async (block) => {
+          setBusy(true);
+          try {
+            const msg = await deleteMatrixCompanyBlock({ projectId, token, matrixKind, block });
+            if (msg) {
+              onMsg(msg);
+              await load();
+            }
+          } catch (err) {
+            onMsg(err instanceof Error ? err.message : "Could not delete the company");
+          } finally {
+            setBusy(false);
+          }
+        }}
         onEditPerson={startEdit}
         onDeleteRow={(id, label) => void deleteContact(id, label)}
         onEditCompany={setCompanyBlock}

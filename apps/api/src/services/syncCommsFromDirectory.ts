@@ -379,6 +379,26 @@ export async function saveMatrixCompany(projectId: string, input: MatrixCompanyI
   return { updated };
 }
 
+/** Remove a whole company block (its heading, people and company-only rows) from one or both matrix sheets. */
+export async function deleteMatrixCompany(projectId: string, input: { matrixKind?: string; bothMatrices?: boolean; orgSection: string; company: string }) {
+  const { buildMatrixBlocks, matrixSectionOf, matrixCompanyKey } = await import("@sharnam/shared");
+  const section = matrixSectionOf(input.orgSection);
+  const key = matrixCompanyKey(input.company);
+  const kinds = input.bothMatrices ? [...KINDS] : [input.matrixKind === "COMMERCIAL" ? "COMMERCIAL" : "TECHNICAL"];
+  let deleted = 0;
+  for (const kind of kinds) {
+    const rows = await prisma.communicationContact.findMany({ where: { projectId, matrixKind: kind } });
+    const block = buildMatrixBlocks(rows, { keepEmpty: true }).find(
+      (b) => b.orgSection === section && (section === "PMC" || matrixCompanyKey(b.company) === key || b.key === `${section}|${key}`),
+    );
+    if (!block) continue;
+    const ids = [block.headerId, ...block.people.map((r) => r.id), ...block.placeholders.map((r) => r.id)].filter((id): id is string => Boolean(id));
+    const out = await prisma.communicationContact.deleteMany({ where: { projectId, id: { in: ids } } });
+    deleted += out.count;
+  }
+  return { deleted };
+}
+
 const DEFAULT_SECTIONS: { orgSection: OrgSection; fallback: string }[] = [
   { orgSection: "Client", fallback: "Client" },
   { orgSection: "PMC", fallback: PMC_ORG },

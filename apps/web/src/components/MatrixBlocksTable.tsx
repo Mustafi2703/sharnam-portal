@@ -1,10 +1,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { buildMatrixBlocks, matrixBlockRows, type MatrixBlock } from "@sharnam/shared";
 import { api } from "../api";
-import { Badge, Button, Card, Input, TextArea } from "./ui";
+import { Button, Card, Input, TextArea } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import type { MatrixContact } from "./CommsMatrixPanel";
-import { PortalStateCell, useMatrixPortalStatus } from "./MatrixOnboard";
 
 type Block = MatrixBlock<MatrixContact & { id: string }>;
 
@@ -13,21 +12,26 @@ type Props = {
   matrixKind: "TECHNICAL" | "COMMERCIAL";
   canEdit: boolean;
   busy: boolean;
-  portal: ReturnType<typeof useMatrixPortalStatus>;
   onEditPerson: (row: MatrixContact) => void;
   onDeleteRow: (rowId: string, label: string) => void;
   onEditCompany: (block: Block) => void;
   onAddPerson: (block: Block) => void;
+  onDeleteCompany: (block: Block) => void;
   emptyText: string;
 };
 
-const COLS = 9;
+/** BPCL Communication Matrix_BPCL (2).xlsx column widths, A–I. */
+const SHEET_WIDTHS = [10.8, 27.1, 27.8, 23.3, 24.3, 25.3, 37.7, 31, 30.3];
+const SHEET_TOTAL = SHEET_WIDTHS.reduce((a, b) => a + b, 0);
+const HEADERS = ["SR.NO", "NAME", "DESIGNATION", "NAME OF COMPANY", "SINGLE POINT OF CONTACT", "MOBILE", "E-MAIL", "GENERAL MAIL COMMUNICATION", "OFFICE ADD."];
+const GRID = "border border-[#445469]";
+const CELL = `${GRID} px-2 py-2 align-middle font-semibold text-[13px] text-[#111]`;
 
-/** BPCL layout: one lettered row per company; company, SPOC and office address merged down that company's people. */
-export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, portal, onEditPerson, onDeleteRow, onEditCompany, onAddPerson, emptyText }: Props) {
+/** Sheet-style BPCL matrix: one lettered row per company; company, SPOC and office address merged down that company's people. */
+export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditPerson, onDeleteRow, onEditCompany, onAddPerson, onDeleteCompany, emptyText }: Props) {
   const blocks = useMemo(() => buildMatrixBlocks(contacts as (MatrixContact & { id: string })[], { keepEmpty: true }), [contacts]);
   const people = blocks.reduce((n, b) => n + b.people.length, 0);
-  const width = COLS + (canEdit ? 2 : 0);
+  const width = HEADERS.length + (canEdit ? 1 : 0);
 
   return (
     <Card padding={false} className="overflow-x-auto">
@@ -37,119 +41,106 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, portal,
           {blocks.length} {formatUiText("companies")} · {people} {formatUiText("people")}
         </span>
       </div>
-      <table className="w-full text-sm min-w-[1100px] border-collapse">
-        <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
+      <table className="w-full min-w-[1180px] table-fixed border-collapse bg-white" style={{ fontFamily: "Calibri, 'Segoe UI', system-ui, sans-serif" }}>
+        <colgroup>
+          {SHEET_WIDTHS.map((w, i) => (
+            <col key={i} style={{ width: `${((w / SHEET_TOTAL) * (canEdit ? 88 : 100)).toFixed(2)}%` }} />
+          ))}
+          {canEdit ? <col style={{ width: "12%" }} /> : null}
+        </colgroup>
+        <thead>
           <tr>
-            <th className="p-3">SR.NO</th>
-            <th className="p-3">NAME</th>
-            <th className="p-3">DESIGNATION</th>
-            <th className="p-3 text-center">NAME OF COMPANY</th>
-            <th className="p-3 text-center">SINGLE POINT OF CONTACT</th>
-            <th className="p-3">MOBILE</th>
-            <th className="p-3">E-MAIL</th>
-            <th className="p-3 text-center">GENERAL MAIL COMMUNICATION</th>
-            <th className="p-3">OFFICE ADD.</th>
-            {canEdit && <th className="p-3">PORTAL</th>}
-            {canEdit && <th className="p-3 w-28">Actions</th>}
+            {HEADERS.map((h) => (
+              <th key={h} className={`${GRID} bg-[#445469] px-2 py-3 text-center text-[12px] font-bold uppercase leading-tight text-white`}>
+                {h}
+              </th>
+            ))}
+            {canEdit ? <th className="border border-line bg-sand px-2 py-3 text-[11px] font-semibold text-steel-muted">Actions</th> : null}
           </tr>
         </thead>
         {blocks.map((block) => {
           const rows = matrixBlockRows(block);
           const extras = block.people.length ? block.placeholders : [];
           const span = rows.length + extras.length;
-          const companyCell = (
-            <>
-              <td rowSpan={span} className="p-3 text-center font-semibold border-x border-line align-middle" data-preserve-case>
-                {block.company}
-              </td>
-              <td rowSpan={span} className="p-3 text-center text-xs whitespace-pre-line border-x border-line align-middle" data-preserve-case>
-                {block.spoc || "—"}
-                {canEdit && !block.spocIsSet && block.spoc ? (
-                  <div className="mt-1 text-[10px] font-normal text-amber-700">{formatUiText("not set · showing TO people")}</div>
-                ) : null}
-              </td>
-            </>
-          );
-          const addressCell = (
-            <td rowSpan={span} className="p-3 text-xs text-steel-muted whitespace-pre-line max-w-[200px] border-x border-line align-middle" data-preserve-case>
-              {block.officeAddress || "—"}
+          const merged = (value: string, extra = "") => (
+            <td rowSpan={span} className={`${CELL} ${extra} whitespace-pre-line`} data-preserve-case>
+              {value || ""}
             </td>
           );
           return (
-            <tbody key={block.key} className="border-t-2 border-line">
-              <tr className="bg-brand-soft/80">
-                <td className="p-3 font-mono font-semibold text-brand">{block.letter}</td>
-                <td className="p-3 font-semibold text-ink uppercase" colSpan={canEdit ? width - 2 : width - 1} data-preserve-case>
+            <tbody key={block.key}>
+              <tr className="bg-[#e8eef8]">
+                <td className={`${CELL} text-center`}>{block.letter}</td>
+                <td className={`${CELL} uppercase`} colSpan={HEADERS.length - 1} data-preserve-case>
                   {block.company}
-                  <span className="ml-2 text-[10px] font-normal normal-case text-steel-muted">{block.orgSection}</span>
+                  {canEdit && !block.spocIsSet ? (
+                    <span className="ml-3 text-[10px] font-normal normal-case text-amber-700">{formatUiText("spoc not set · showing to people")}</span>
+                  ) : null}
                 </td>
-                {canEdit && (
-                  <td className="p-2">
-                    <div className="flex flex-col gap-1">
-                      <Button type="button" className="!text-xs !py-1" disabled={busy} onClick={() => onEditCompany(block)}>
-                        Edit company
+                {canEdit ? (
+                  <td className="border border-line px-2 py-1.5 align-middle">
+                    <div className="flex flex-wrap gap-1">
+                      <Button type="button" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onEditCompany(block)}>
+                        Edit
                       </Button>
-                      <Button type="button" variant="secondary" className="!text-xs !py-1" disabled={busy} onClick={() => onAddPerson(block)}>
-                        Add person
+                      <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onAddPerson(block)}>
+                        Add Person
                       </Button>
-                      {!block.people.length && !block.placeholders.length && block.headerId ? (
-                        <Button type="button" variant="secondary" className="!text-xs !py-1" disabled={busy} onClick={() => onDeleteRow(block.headerId!, block.company)}>
-                          Delete
-                        </Button>
-                      ) : null}
+                      <Button type="button" variant="danger" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onDeleteCompany(block)}>
+                        Delete
+                      </Button>
                     </div>
                   </td>
-                )}
+                ) : null}
               </tr>
               {rows.map((r, i) => (
-                <tr key={r?.id || `${block.key}-empty`} className="border-t border-line hover:bg-sand/40">
-                  <td className="p-3 font-mono text-xs text-steel-muted">{i + 1}</td>
-                  <td className="p-3 font-medium whitespace-pre-line" data-preserve-case>
-                    {r ? r.personName || "—" : <span className="text-steel-muted font-normal">{formatUiText("no people yet")}</span>}
+                <tr key={r?.id || `${block.key}-empty`} className="hover:bg-sand/40">
+                  <td className={`${CELL} text-center`}>{i + 1}</td>
+                  <td className={`${CELL} whitespace-pre-line`} data-preserve-case>
+                    {r?.personName || ""}
                   </td>
-                  <td className="p-3" data-preserve-case>{r?.designation || "—"}</td>
-                  {i === 0 ? companyCell : null}
-                  <td className="p-3 font-mono text-xs">{r?.mobile || "—"}</td>
-                  <td className="p-3 text-xs break-all" data-preserve-case>{r?.email || "—"}</td>
-                  <td className="p-3 text-center">{r ? <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge> : null}</td>
-                  {i === 0 ? addressCell : null}
-                  {canEdit && <td className="p-3">{r ? <PortalStateCell row={r} state={portal.stateOf(r)} /> : null}</td>}
-                  {canEdit && (
-                    <td className="p-3">
+                  <td className={CELL} data-preserve-case>{r?.designation || ""}</td>
+                  {i === 0 ? merged(block.company, "text-center") : null}
+                  {i === 0 ? merged(block.spoc, "text-center") : null}
+                  <td className={CELL}>{r?.mobile || ""}</td>
+                  <td className={`${CELL} break-all text-[#0563c1]`} data-preserve-case>{r?.email || ""}</td>
+                  <td className={`${CELL} text-center`}>{r?.mailRole || ""}</td>
+                  {i === 0 ? merged(block.officeAddress, "text-[12px]") : null}
+                  {canEdit ? (
+                    <td className="border border-line px-2 py-1.5 align-middle">
                       {r ? (
-                        <div className="flex flex-col gap-1">
-                          <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => onEditPerson(r)}>
+                        <div className="flex flex-wrap gap-1">
+                          <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onEditPerson(r)}>
                             Edit
                           </Button>
-                          <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => onDeleteRow(r.id, r.personName || "")}>
+                          <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onDeleteRow(r.id, r.personName || "")}>
                             Delete
                           </Button>
                         </div>
                       ) : null}
                     </td>
-                  )}
+                  ) : null}
                 </tr>
               ))}
               {extras.map((r) => (
-                <tr key={r.id} className="border-t border-line bg-sand/30 text-steel-muted">
-                  <td className="p-3 text-xs">—</td>
-                  <td className="p-3 text-xs italic" colSpan={2}>
-                    {formatUiText("company-only row — edit it to name the person, or delete it")}
+                <tr key={r.id} className="bg-sand/30 text-steel-muted">
+                  <td className={`${CELL} text-center font-normal`}>—</td>
+                  <td className={`${CELL} font-normal italic text-steel-muted`} colSpan={2}>
+                    {formatUiText("company-only row — not printed")}
                   </td>
-                  <td className="p-3" colSpan={3} />
-                  {canEdit && <td className="p-3" />}
-                  {canEdit && (
-                    <td className="p-3">
-                      <div className="flex flex-col gap-1">
-                        <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => onEditPerson(r)}>
+                  <td className={CELL} colSpan={3} />
+                  {canEdit ? (
+                    <td className="border border-line px-2 py-1.5 align-middle">
+                      <div className="flex flex-wrap gap-1">
+                        <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onEditPerson(r)}>
                           Edit
                         </Button>
-                        <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => onDeleteRow(r.id, `${block.company} (company-only row)`)}>
+                        <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onDeleteRow(r.id, `${block.company} (company-only row)`)}>
                           Delete
                         </Button>
                       </div>
                     </td>
-                  )}
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -284,4 +275,24 @@ export function MatrixCompanyEditor({
       </Card>
     </div>
   );
+}
+
+/** Confirm, then delete a company block from this sheet (and optionally the other one). */
+export async function deleteMatrixCompanyBlock(opts: {
+  projectId: string;
+  token: string;
+  matrixKind: "TECHNICAL" | "COMMERCIAL";
+  block: Block;
+}): Promise<string | null> {
+  const { projectId, token, matrixKind, block } = opts;
+  const count = block.people.length + block.placeholders.length;
+  if (!window.confirm(`Delete ${block.company} and its ${count} row(s) from the ${matrixKind} matrix?`)) return null;
+  const other = matrixKind === "TECHNICAL" ? "COMMERCIAL" : "TECHNICAL";
+  const both = window.confirm(`Also delete ${block.company} from the ${other} matrix?`);
+  const r = await api<{ deleted: number }>(`/api/comms/contacts/${projectId}/company/delete`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ matrixKind, bothMatrices: both, orgSection: block.orgSection, company: block.company }),
+  });
+  return `${block.company} removed — ${r.deleted} row(s)${both ? " from both matrices" : ""}.`;
 }
