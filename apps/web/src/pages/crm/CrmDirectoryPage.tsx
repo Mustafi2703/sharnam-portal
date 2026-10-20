@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { ConsultantRoleSelect, ConsultantTypeSelect, ConsultantTypesPanel } from "../../components/ConsultantTypesPanel";
@@ -118,7 +118,8 @@ export function DirectoryCompaniesPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<VendorFormState>({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
   const [msg, setMsg] = useState("");
-  const [listSearch, setListSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  const [listSearch, setListSearch] = useState(() => searchParams.get("q") || "");
   const [typeFilter, setTypeFilter] = useState("");
   const [creatingNew, setCreatingNew] = useState(false);
   const [saving, setSaving] = useState(false);

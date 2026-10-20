@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useClientLogo } from "../lib/useClientLogo";
-import { MatrixOnboardBar, MatrixOnboardResult, PortalStateBadge, matrixSubtitle, useMatrixOnboard } from "./MatrixOnboard";
+import { PortalStateCell, matrixSubtitle, useMatrixPortalStatus } from "./MatrixOnboard";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import type { MatrixContact } from "./CommsMatrixPanel";
@@ -63,8 +63,8 @@ export function ProjectSetupMatrixDesk({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const clientLogoSrc = useClientLogo(projectId, project?.clientLogoUrl, token);
-  const onboard = useMatrixOnboard({ projectId, token, enabled: canEdit, onMsg });
-  const { reloadStatus } = onboard;
+  const portal = useMatrixPortalStatus(projectId, token, canEdit);
+  const { reloadStatus } = portal;
 
   const load = useCallback(async () => {
     void reloadStatus();
@@ -420,8 +420,6 @@ export function ProjectSetupMatrixDesk({
         </div>
       ) : null}
 
-      <MatrixOnboardResult onboard={onboard} />
-
       <Card className="!p-4 border border-line">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
@@ -439,8 +437,6 @@ export function ProjectSetupMatrixDesk({
         </div>
       </Card>
 
-      {canEdit ? <MatrixOnboardBar onboard={onboard} rows={contacts} /> : null}
-
       <Card padding={false} className="overflow-x-auto">
         <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white flex justify-between gap-2">
           <span>{formatUiText(`${matrixKind} contact register`)}</span>
@@ -449,7 +445,6 @@ export function ProjectSetupMatrixDesk({
         <table className="w-full text-sm min-w-[980px]">
           <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
             <tr>
-              {canEdit && <th className="p-3 w-8" aria-label="Select" />}
               <th className="p-3">SR.NO</th>
               <th className="p-3">NAME</th>
               <th className="p-3">DESIGNATION</th>
@@ -473,7 +468,6 @@ export function ProjectSetupMatrixDesk({
                   personInSection = 0;
                   return (
                     <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
-                      {canEdit && <td className="p-3" />}
                       <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + sectionIdx)}</td>
                       <td className="p-3 font-semibold text-ink" colSpan={canEdit ? 10 : 8}>
                         {r.orgName}
@@ -484,17 +478,6 @@ export function ProjectSetupMatrixDesk({
                 personInSection += 1;
                 return (
                   <tr key={r.id} className="border-t border-line hover:bg-sand/40">
-                    {canEdit && (
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${r.personName || r.email || "row"}`}
-                          disabled={!onboard.canSelect(r)}
-                          checked={onboard.selected.has(r.id)}
-                          onChange={() => onboard.toggle(r.id)}
-                        />
-                      </td>
-                    )}
                     <td className="p-3 font-mono text-xs text-steel-muted">{personInSection}</td>
                     <td className="p-3 font-medium whitespace-pre-line">{r.personName || "—"}</td>
                     <td className="p-3">{r.designation || "—"}</td>
@@ -508,7 +491,7 @@ export function ProjectSetupMatrixDesk({
                     <td className="p-3 text-xs text-steel-muted max-w-[180px] whitespace-pre-line">{r.officeAddress || "—"}</td>
                     {canEdit && (
                       <td className="p-3">
-                        <PortalStateBadge state={onboard.stateOf(r)} />
+                        <PortalStateCell row={r} state={portal.stateOf(r)} />
                       </td>
                     )}
                     {canEdit && (
@@ -529,7 +512,7 @@ export function ProjectSetupMatrixDesk({
             })()}
             {!contacts.length && (
               <tr>
-                <td colSpan={canEdit ? 12 : 9} className="p-8 text-center text-steel-muted text-sm">
+                <td colSpan={canEdit ? 11 : 9} className="p-8 text-center text-steel-muted text-sm">
                   Sections will appear after the first save. Add Client, PMC, Consultant, and Contractor rows above.
                 </td>
               </tr>
