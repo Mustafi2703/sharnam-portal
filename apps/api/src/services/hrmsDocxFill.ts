@@ -20,6 +20,20 @@ function fmtDate(d: Date | string | null | undefined): string {
   return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
 }
 
+/** Date inputs send 2026-04-01. Letters print 01 April 2026, including dates inside a typed phrase. */
+function formatIsoDatesIn(value: string): string {
+  return value.replace(/\b(\d{4}-\d{2}-\d{2})(?:T[\d:.]+Z?)?\b/g, (match, iso: string) => {
+    const dt = new Date(`${iso}T12:00:00`);
+    return Number.isNaN(dt.getTime()) ? match : fmtDate(dt);
+  });
+}
+
+function withLetterDates(merged: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(merged)) out[k] = typeof v === "string" ? formatIsoDatesIn(v) : v;
+  return out;
+}
+
 function inrPlain(v: unknown): string {
   const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
   if (!Number.isFinite(n) || n <= 0) return "";
@@ -76,9 +90,10 @@ function genderTokens(gender: unknown) {
 /** Build {{TOKEN}} → value map for any SPDC HR letter template. */
 export function buildHrmsDocxTokenMap(
   row: Pick<HrmsDocument, "refNo" | "kind" | "issueDate" | "effectiveDate" | "employeeName" | "designation" | "department" | "candidateEmail">,
-  merged: Record<string, unknown>,
+  rawMerged: Record<string, unknown>,
   breakdown?: CtcBreakdown | null,
 ): Record<string, string> {
+  const merged = withLetterDates(rawMerged);
   const ref = parseRefNo(row.refNo);
   const name = String(merged.employeeName || merged.candidateName || row.employeeName || "").trim();
   const designation = String(merged.designation || row.designation || "").trim();
@@ -155,7 +170,7 @@ export function buildHrmsDocxTokenMap(
     JOINING_DATE: joinDate,
     EFFECTIVE_DATE: effectiveDate,
     CONFIRMATION_DATE: effectiveDate,
-    LAST_WORKING_DATE: effectiveDate,
+    LAST_WORKING_DATE: String(merged.lastWorkingDate || effectiveDate),
     RESIGNATION_DATE: String(merged.resignationDate || effectiveDate),
     PROBATION_END_DATE: String(merged.probationEndDate || effectiveDate),
     OFFER_DATE: String(merged.offerDate || issueDate),
@@ -215,7 +230,15 @@ export function buildHrmsDocxTokenMap(
     LETTER_TYPE: String(merged.letterType || row.kind),
     "REPLY_HOURS e.g. 72": String(merged.replyHours || "72"),
     ASSETS: String(merged.assets || "____________"),
-    OTHER_ITEM: String(merged.otherItem || merged.assets || "____________"),
+    OTHER_ITEM:
+      [
+        String(merged.otherItem || "").trim(),
+        [String(merged.assets || "").trim(), String(merged.serials || "").trim() && `Serial no. ${String(merged.serials).trim()}`]
+          .filter(Boolean)
+          .join(" — "),
+      ]
+        .filter(Boolean)
+        .join("; ") || "____________",
     REMARKS: String(merged.notes || merged.remarks || "—"),
     SUBMISSION_DATE: String(merged.submissionDate || effectiveDate),
     FORWARD_TO: String(merged.forwardTo || "HR & Admin"),

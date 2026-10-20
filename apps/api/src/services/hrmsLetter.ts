@@ -94,6 +94,9 @@ function formatInr(v: unknown): string {
   return `₹ ${n.toLocaleString("en-IN")}`;
 }
 
+/** On these letters the effective date is the leaving date, so joining comes from the form or the profile. */
+const LEAVING_LETTER_KINDS = new Set(["AssetReturn", "Exit", "Relieving", "Experience", "NdaPostEmployment"]);
+
 function numOrNull(v: unknown): number | null {
   const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -103,7 +106,7 @@ function numOrNull(v: unknown): number | null {
 export async function enrichHrmsLetterDataFromProfile(
   row: Pick<
     HrmsDocument,
-    "employeeUserId" | "employeeName" | "candidateEmail" | "designation" | "department" | "effectiveDate"
+    "kind" | "employeeUserId" | "employeeName" | "candidateEmail" | "designation" | "department" | "effectiveDate"
   >,
   data: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -172,7 +175,8 @@ export async function enrichHrmsLetterDataFromProfile(
   pick("clientProject", projectName);
   pick("ctcAnnual", profile?.ctcAnnual, candidate?.expectedCtc);
   pick("fixedCtcAnnual", profile?.ctcAnnual, candidate?.expectedCtc);
-  pick("joinDate", profile?.joinDate, row.effectiveDate);
+  if (LEAVING_LETTER_KINDS.has(row.kind)) pick("joinDate", profile?.joinDate);
+  else pick("joinDate", profile?.joinDate, row.effectiveDate);
   pick("effectiveDate", row.effectiveDate, profile?.joinDate);
   pick("nomineeName", profile?.nomineeName);
   pick("fatherOrSpouseName", profile?.nomineeName);
@@ -194,8 +198,12 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
   const designation = String(row.designation || data.designation || "").trim();
   const department = String(row.department || data.department || "").trim();
   const location = String(data.location || data.placeOfPosting || "SPDC Corporate Office, Vadodara");
-  const joinRaw = row.effectiveDate || data.joinDate || data.joiningDate || data.effectiveDate;
+  const leaving = LEAVING_LETTER_KINDS.has(row.kind);
+  const joinRaw = leaving
+    ? data.joinDate || data.joiningDate
+    : row.effectiveDate || data.joinDate || data.joiningDate || data.effectiveDate;
   const join = fmtDate(joinRaw as Date | string | null);
+  const effective = leaving ? fmtDate((row.effectiveDate || data.effectiveDate) as Date | string | null) : join;
   const ctcRaw = data.fixedCtcAnnual ?? data.ctcAnnual ?? data.ctc ?? "";
   const ctcInr = formatInr(ctcRaw);
   const issue = fmtDate(row.issueDate);
@@ -218,7 +226,7 @@ export function letterMergeContext(row: HrmsDocument, data: Record<string, unkno
     department,
     location,
     placeOfPosting: location,
-    effectiveDate: join,
+    effectiveDate: effective,
     joinDate: join,
     joiningDate: join,
     ctcAnnual: ctcInr,

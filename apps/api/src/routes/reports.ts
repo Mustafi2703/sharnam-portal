@@ -1512,8 +1512,9 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
     onboardedUsers,
     onboardingInProgress,
   ] = await Promise.all([
-    safeCount("headcount", () =>
-      prisma.user.count({
+    safeCount("headcount", async () => {
+      const { isHiddenPortalListUser } = await import("../services/keepPortalUsers.js");
+      const staff = await prisma.user.findMany({
         where: {
           isActive: true,
           NOT: { email: { startsWith: "deleted." } },
@@ -1522,8 +1523,11 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
             { role: "employee", vendorId: null },
           ],
         },
-      })
-    ),
+        select: { email: true, fullName: true },
+      });
+      // Same people as HRMS → Users: demo seed logins and removed accounts are not staff.
+      return staff.filter((u) => !isHiddenPortalListUser(u.email) && !u.fullName.startsWith("[Removed]")).length;
+    }),
     safeCount("openOffers", () => prisma.offer.count({ where: { status: { in: ["Draft", "Approved", "Sent"] } } })),
     safeCount("pendingLeave", () => prisma.leaveRequest.count({ where: { status: "Pending" } })),
     safeCount("punchesToday", () =>
@@ -1899,7 +1903,22 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
     });
   }
   const existing = await prisma.user.findUnique({ where: { email: String(email).trim().toLowerCase() } });
-  if (existing) return res.status(409).json({ error: "Email already has a login" });
+  if (existing) {
+    return res.status(409).json({
+      error:
+        existing.isActive === false
+          ? `${existing.email} belongs to a switched-off login (${existing.fullName}). Turn that login back on from Access · Users, or delete it first.`
+          : `${existing.email} already has a login (${existing.fullName}).`,
+    });
+  }
+  const typedEmpCode = String(empCode || "").trim();
+  if (typedEmpCode && roleKey !== "client" && roleKey !== "vendor") {
+    const taken = await prisma.employeeProfile.findUnique({ where: { empCode: typedEmpCode }, select: { userId: true } });
+    if (taken) {
+      const holder = await prisma.user.findUnique({ where: { id: taken.userId }, select: { fullName: true } });
+      return res.status(409).json({ error: `Employee code ${typedEmpCode} is already used by ${holder?.fullName || "another login"}.` });
+    }
+  }
   const hash = await bcrypt.hash(password || process.env.SEED_PASSWORD || "Demo@1234", 10);
   let linkedVendorId: string | null =
     roleKey === "client" || roleKey === "vendor" || roleKey === "employee"
@@ -1942,7 +1961,7 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   } else {
     const createdProfile: Record<string, unknown> = {
       userId: user.id,
-      empCode: empCode || `EMP-${Date.now().toString().slice(-6)}`,
+      empCode: typedEmpCode || `EMP-${Date.now().toString().slice(-6)}`,
       department: department || null,
       designation: designation || null,
       joinDate: new Date(),
@@ -2935,8 +2954,15 @@ hrmRouter.get("/designations", hrmStaff, async (req, res) => {
       where: includeClosed ? {} : { isActive: true },
       orderBy: [{ department: "asc" }, { sortOrder: "asc" }, { title: "asc" }],
     });
-    const inUse = await prisma.employeeProfile.groupBy({ by: ["designation"], _count: { _all: true } }).catch(() => []);
-    const counts = new Map(inUse.map((r) => [String(r.designation || ""), r._count._all]));
+    const liveStaff = await prisma.user.findMany({
+      where: { isActive: true, NOT: { email: { startsWith: "deleted." } } },
+      select: { id: true },
+    });
+    const inUse = await prisma.employeeProfile
+      .findMany({ where: { userId: { in: liveStaff.map((u) => u.id) } }, select: { designation: true } })
+      .catch(() => []);
+    const counts = new Map<string, number>();
+    for (const p of inUse) counts.set(String(p.designation || ""), (counts.get(String(p.designation || "")) || 0) + 1);
     res.json(rows.map((r) => ({ ...r, employees: counts.get(r.title) || 0 })));
   } catch {
     // Table not migrated yet: fall back to the built-in list.
@@ -3671,9 +3697,21 @@ hrmRouter.post(
     if (!req.file) return res.status(400).json({ error: "file required" });
     const safeRef = row.refNo.replace(/[^a-zA-Z0-9._-]/g, "_");
     const ext = /\.([a-zA-Z0-9]{2,5})$/.exec(req.file.originalname || "")?.[0] || ".bin";
+    // Same person folder as the generated letter ({EmpCode}_{Name}), not a second name-only folder.
+    let letterEmpCode = "";
+    try {
+      letterEmpCode = String((JSON.parse(row.dataJson || "{}") as { empCode?: unknown }).empCode || "").trim();
+    } catch {
+      letterEmpCode = "";
+    }
+    if (!letterEmpCode && row.employeeUserId) {
+      const profile = await prisma.employeeProfile.findUnique({ where: { userId: row.employeeUserId }, select: { empCode: true } });
+      letterEmpCode = profile?.empCode || "";
+    }
+    if (/to be assigned/i.test(letterEmpCode)) letterEmpCode = "";
     const saved = await mockOneDrive.upload(
       HR_DRIVE,
-      employeeLetterFolder(null, row.employeeName, row.kind),
+      employeeLetterFolder(letterEmpCode || null, row.employeeName, row.kind),
       `${row.kind}-${safeRef}-signed-${Date.now()}${ext}`,
       req.file.buffer
     );

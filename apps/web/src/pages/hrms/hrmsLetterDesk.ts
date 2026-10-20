@@ -226,6 +226,8 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
     ? staff.find((s) => s.id === emp.profile!.reportingManagerId)?.fullName || form.reportingManager
     : form.reportingManager;
   const project = emp.memberships?.[0]?.project?.name || form.projectName;
+  const joined = emp.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : "";
+  const leaving = isLeavingLetter(form.kind);
   return {
     ...form,
     employeeUserId: emp.id,
@@ -236,7 +238,8 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
     department: emp.profile?.department || form.department,
     ctcAnnual: emp.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.ctcAnnual,
     previousCtc: emp.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.previousCtc,
-    effectiveDate: emp.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : form.effectiveDate,
+    effectiveDate: !leaving && joined ? joined : form.effectiveDate,
+    sheet: leaving && joined && !form.sheet.joinDate ? { ...form.sheet, joinDate: joined } : form.sheet,
     reportingManager: mgr,
     empCode: emp.profile?.empCode || form.empCode,
     pan: emp.profile?.panNumber || form.pan,
@@ -247,10 +250,15 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
   };
 }
 
+/** Exit-stage letters: the effective date is the leaving date, so joining is its own field. */
+export function isLeavingLetter(kind: DocKind) {
+  return kind === "AssetReturn" || kind === "Exit" || kind === "Relieving" || kind === "Experience" || kind === "NdaPostEmployment";
+}
+
 export function letterDataPayload(form: LetterFormState) {
   return {
     candidateName: form.employeeName,
-    joinDate: form.effectiveDate,
+    joinDate: isLeavingLetter(form.kind) ? "" : form.effectiveDate,
     fixedCtcAnnual: form.ctcAnnual,
     ctcAnnual: form.ctcAnnual,
     location: form.location,
@@ -280,7 +288,7 @@ export function letterDataPayload(form: LetterFormState) {
     facts: form.issueInBrief || form.reason,
     separationReason: form.reason || "resignation",
     natureOfWork: form.sheet.natureOfWork || "site supervision, planning, quality control and billing verification",
-    period: form.sheet.period || (form.effectiveDate ? `${form.effectiveDate} to ${form.effectiveDate}` : ""),
+    period: form.sheet.period || "",
     ...filledSheet(form),
   };
 }
@@ -478,8 +486,9 @@ export function letterFormUsesAssetExtras(kind: DocKind): boolean {
   return kind === "AssetReturn";
 }
 
-export function letterFormUsesSeparationReason(kind: DocKind): boolean {
-  return kind === "Warning" || kind === "Exit" || kind === "Relieving";
+/** None of the SPDC templates has a free reason line: Warning uses issue / facts, Asset uses its own reason field. */
+export function letterFormUsesSeparationReason(_kind: DocKind): boolean {
+  return false;
 }
 
 export type LetterVar = {
@@ -520,8 +529,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     ...TERMS,
     { key: "lateMarks", label: "Late marks allowed", default: "3" },
     { key: "payDay", label: "Pay day", default: "7th" },
-    { key: "giftLimit", label: "Gift limit (INR)", default: "1,000" },
-    { key: "trainingThreshold", label: "Training threshold (INR)", default: "10,000" },
     { key: "retirementAge", label: "Retirement age", default: "58" },
     { key: "noOfCheques", label: "Number of security cheques" },
     { key: "bank", label: "Bank" },
@@ -551,6 +558,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "remarks", label: "Remarks", type: "textarea", wide: true },
   ],
   Relieving: [
+    { key: "joinDate", label: "Joining date", type: "date" },
     { key: "resignationDate", label: "Resignation date", type: "date" },
     { key: "exitLetterRef", label: "Exit letter reference" },
     { key: "noticeServed", label: "Notice served" },
@@ -575,7 +583,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "postExitAddress", label: "Address after exit", wide: true },
     { key: "personalEmail", label: "Personal email" },
     { key: "newEmployer", label: "New employer" },
-    { key: "separationReason", label: "Separation", default: "resignation" },
   ],
   Promotion: [
     { key: "achievement", label: "Achievement", wide: true },
@@ -610,6 +617,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "reviewer", label: "Reviewer" },
   ],
   Experience: [
+    { key: "joinDate", label: "Joining date", type: "date" },
     { key: "from1", label: "Role 1 from", type: "date" },
     { key: "to1", label: "Role 1 to", type: "date" },
     { key: "designation2", label: "Later designation (if promoted)" },
@@ -633,6 +641,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "fatherOrSpouseName", label: "Father or spouse name" },
     { key: "age", label: "Age" },
     { key: "permanentAddress", label: "Permanent address", type: "textarea", wide: true },
+    { key: "joinDate", label: "Joining date", type: "date" },
     { key: "appointmentRefNo", label: "Appointment reference no." },
     { key: "ndaJoiningRef", label: "Joining NDA reference" },
     { key: "ndaJoiningDate", label: "Joining NDA date", type: "date" },
