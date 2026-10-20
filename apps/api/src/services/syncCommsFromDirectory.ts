@@ -142,9 +142,14 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     });
   }
 
+  const companyOnly: { orgSection: OrgSection; company: string; officeAddress: string }[] = [];
   for (const pv of projectVendors) {
     const v = pv.vendor;
     const orgSection = partyToSection(v.partyType);
+    if (!v.primaryContactName?.trim() && !v.email?.trim()) {
+      companyOnly.push({ orgSection, company: v.name, officeAddress: [v.address, v.city, v.state].filter(Boolean).join(", ") });
+      continue;
+    }
     people.push({
       orgSection,
       orgName: v.name,
@@ -205,50 +210,16 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
   const hasName = (section: OrgSection, name?: string | null) => {
     const n = String(name || "").trim().toLowerCase();
     if (!n) return true;
-    return people.some((p) => p.orgSection === section && p.company.trim().toLowerCase() === n);
+    return [...people, ...companyOnly].some((p) => p.orgSection === section && p.company.trim().toLowerCase() === n);
   };
-
   if (project.designConsultant && !hasName("Consultant", project.designConsultant)) {
-    people.push({
-      orgSection: "Consultant",
-      orgName: project.designConsultant,
-      personName: project.designConsultant,
-      designation: "Design consultant",
-      company: project.designConsultant,
-      mobile: "",
-      email: "",
-      mailRole: "CC",
-      officeAddress: "",
-    });
+    companyOnly.push({ orgSection: "Consultant", company: project.designConsultant, officeAddress: "" });
   }
-
-  if (project.contractorName && !hasName("Contractor", project.contractorName)) {
-    people.push({
-      orgSection: "Contractor",
-      orgName: project.contractorName,
-      personName: project.contractorName,
-      designation: "Main contractor",
-      company: project.contractorName,
-      mobile: "",
-      email: "",
-      mailRole: "CC",
-      officeAddress: "",
-    });
+  for (const name of String(project.contractorName || "").split(",").map((n) => n.trim()).filter(Boolean)) {
+    if (!hasName("Contractor", name)) companyOnly.push({ orgSection: "Contractor", company: name, officeAddress: "" });
   }
-
   if (!people.some((p) => p.orgSection === "PMC")) {
-    const pmcName = pmcOrgName(project);
-    people.push({
-      orgSection: "PMC",
-      orgName: pmcName,
-      personName: pmcName,
-      designation: "PMC",
-      company: pmcName,
-      mobile: "",
-      email: "",
-      mailRole: "CC",
-      officeAddress: "",
-    });
+    companyOnly.push({ orgSection: "PMC", company: pmcOrgName(project), officeAddress: "" });
   }
 
   const seenPeople = new Set<string>();
@@ -259,12 +230,6 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     return true;
   });
 
-  const sections = new Set<OrgSection>(uniquePeople.map((p) => p.orgSection));
-  if (sections.size === 0) {
-    sections.add("Client");
-    sections.add("PMC");
-  }
-
   const result: SyncCommsResult = { created: 0, skipped: 0, headers: 0, technical: 0, commercial: 0 };
 
   for (const kind of KINDS) {
@@ -274,55 +239,6 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     const existingKeys = new Set(
       existing.filter((r) => !r.isSectionHeader).map((r) => contactKey(r.email, r.personName, r.orgSection))
     );
-    const existingHeaders = new Set(
-      existing.filter((r) => r.isSectionHeader).map((r) => `${r.orgSection}|${r.orgName}`.toLowerCase())
-    );
-
-    let maxSort = existing.reduce((n, r) => Math.max(n, r.sortOrder || 0), 0);
-
-    for (const section of ["Client", "PMC", "Consultant", "Contractor", "Other"] as OrgSection[]) {
-      if (!sections.has(section)) continue;
-      const contractorNames = [
-        ...new Set(
-          uniquePeople
-            .filter((p) => p.orgSection === "Contractor")
-            .map((p) => (p.company || p.orgName || "").trim())
-            .filter(Boolean),
-        ),
-      ];
-      const orgName =
-        section === "PMC"
-          ? pmcOrgName(project)
-          : section === "Client"
-            ? project.clientName || "Client"
-            : section === "Consultant"
-              ? project.designConsultant || uniquePeople.find((p) => p.orgSection === section)?.orgName || section
-              : section === "Contractor"
-                ? contractorNames.join(", ") || project.contractorName || "Contractor"
-                : uniquePeople.find((p) => p.orgSection === section)?.orgName || section;
-      const header = existing.find((r) => r.isSectionHeader && r.orgSection === section);
-      if (header && header.orgName !== orgName) {
-        await prisma.communicationContact.update({ where: { id: header.id }, data: { orgName } });
-        result.headers += 1;
-      }
-      const headerKey = `${section}|${orgName}`.toLowerCase();
-      if (!existingHeaders.has(headerKey) && !existing.some((r) => r.isSectionHeader && r.orgSection === section)) {
-        maxSort = Math.max(maxSort, sectionBase(section));
-        await prisma.communicationContact.create({
-          data: {
-            projectId,
-            matrixKind: kind,
-            orgSection: section,
-            orgName,
-            isSectionHeader: true,
-            sortOrder: sectionBase(section),
-          },
-        });
-        result.created += 1;
-        result.headers += 1;
-        existingHeaders.add(headerKey);
-      }
-    }
 
     let offset = 0;
     for (const person of uniquePeople) {
@@ -368,9 +284,99 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       if (kind === "TECHNICAL") result.technical += 1;
       else result.commercial += 1;
     }
+
+    const companies = new Map<string, { orgSection: OrgSection; company: string; officeAddress: string }>();
+    for (const c of [...uniquePeople.map((p) => ({ orgSection: p.orgSection, company: p.company || p.orgName, officeAddress: p.officeAddress })), ...companyOnly]) {
+      const k = `${c.orgSection}|${c.company.trim().toLowerCase()}`;
+      if (c.company.trim() && !companies.has(k)) companies.set(k, c);
+    }
+    const before = await prisma.communicationContact.count({ where: { projectId, matrixKind: kind, isSectionHeader: true } });
+    for (const c of companies.values()) {
+      const headerId = await ensureCompanyHeader(projectId, kind, c.orgSection, c.company);
+      if (c.officeAddress) {
+        await prisma.communicationContact.updateMany({ where: { id: headerId, officeAddress: null }, data: { officeAddress: c.officeAddress } });
+      }
+    }
+    result.headers += (await prisma.communicationContact.count({ where: { projectId, matrixKind: kind, isSectionHeader: true } })) - before;
   }
 
   return result;
+}
+
+/** Section-header row for one company on one matrix sheet (holds the company SPOC and office address). */
+export async function ensureCompanyHeader(projectId: string, kind: string, orgSection: string, company: string) {
+  const { buildMatrixBlocks, matrixSectionOf, matrixCompanyKey } = await import("@sharnam/shared");
+  const section = matrixSectionOf(orgSection);
+  const name = company.trim() || section;
+  const key = matrixCompanyKey(name);
+  const rows = await prisma.communicationContact.findMany({ where: { projectId, matrixKind: kind } });
+  const block = buildMatrixBlocks(rows, { keepEmpty: true }).find(
+    (b) => b.orgSection === section && (section === "PMC" || matrixCompanyKey(b.company) === key || b.key === `${section}|${key}`),
+  );
+  if (block?.headerId) return block.headerId;
+  const firstSort = block ? Math.min(...[...block.people, ...block.placeholders].map((r) => r.sortOrder ?? 0)) : null;
+  const header = await prisma.communicationContact.create({
+    data: {
+      projectId,
+      matrixKind: kind,
+      orgSection: section,
+      orgName: block?.company || name,
+      isSectionHeader: true,
+      sortOrder: firstSort != null && Number.isFinite(firstSort) ? firstSort : sectionBase(section as OrgSection),
+    },
+  });
+  return header.id;
+}
+
+export type MatrixCompanyInput = {
+  matrixKind?: string;
+  bothMatrices?: boolean;
+  orgSection: string;
+  company: string;
+  newCompany?: string;
+  spoc?: string;
+  officeAddress?: string;
+};
+
+/** Company-level fields (name, SPOC, office address) written once on the header and onto every person row of the company. */
+export async function saveMatrixCompany(projectId: string, input: MatrixCompanyInput) {
+  const { buildMatrixBlocks, matrixSectionOf, matrixCompanyKey } = await import("@sharnam/shared");
+  const section = matrixSectionOf(input.orgSection);
+  const kinds = input.bothMatrices ? [...KINDS] : [input.matrixKind === "COMMERCIAL" ? "COMMERCIAL" : "TECHNICAL"];
+  const rename = String(input.newCompany ?? "").trim();
+  const spoc = input.spoc !== undefined ? String(input.spoc).trim() : undefined;
+  const officeAddress = input.officeAddress !== undefined ? String(input.officeAddress).trim() : undefined;
+  let updated = 0;
+  for (const kind of kinds) {
+    const rows = await prisma.communicationContact.findMany({ where: { projectId, matrixKind: kind } });
+    const key = matrixCompanyKey(input.company);
+    const block = buildMatrixBlocks(rows, { keepEmpty: true }).find(
+      (b) => b.orgSection === section && (section === "PMC" || matrixCompanyKey(b.company) === key || b.key === `${section}|${key}`),
+    );
+    if (!block && kind !== kinds[0]) continue;
+    const headerId = block?.headerId || (await ensureCompanyHeader(projectId, kind, section, input.company));
+    await prisma.communicationContact.update({
+      where: { id: headerId },
+      data: {
+        ...(rename ? { orgName: rename } : {}),
+        ...(spoc !== undefined ? { spoc: spoc || null } : {}),
+        ...(officeAddress !== undefined ? { officeAddress: officeAddress || null } : {}),
+      },
+    });
+    const ids = block ? [...block.people, ...block.placeholders].map((r) => r.id) : [];
+    if (ids.length) {
+      const out = await prisma.communicationContact.updateMany({
+        where: { id: { in: ids } },
+        data: {
+          ...(rename ? { company: rename, orgName: rename } : {}),
+          ...(spoc !== undefined ? { spoc: spoc || null } : {}),
+          ...(officeAddress !== undefined ? { officeAddress: officeAddress || null } : {}),
+        },
+      });
+      updated += out.count;
+    }
+  }
+  return { updated };
 }
 
 const DEFAULT_SECTIONS: { orgSection: OrgSection; fallback: string }[] = [
@@ -464,7 +470,6 @@ function defaultUserRole(section: OrgSection, requested?: string): "client" | "v
 export async function addSetupMatrixContact(projectId: string, body: SetupMatrixInput) {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new Error("Project not found");
-  await ensureMatrixScaffold(projectId);
 
   const orgSection = sectionFromParty(String(body.orgSection || "Other"));
   const orgName = String(body.orgName || body.company || orgSection).trim() || orgSection;
@@ -532,6 +537,10 @@ export async function addSetupMatrixContact(projectId: string, body: SetupMatrix
       },
     });
     contacts.push({ id: row.id, matrixKind: kind, created: true });
+  }
+  for (const kind of kinds) {
+    const headerId = await ensureCompanyHeader(projectId, kind, orgSection, company || orgName);
+    if (officeAddress) await prisma.communicationContact.updateMany({ where: { id: headerId, officeAddress: null }, data: { officeAddress } });
   }
 
   const createDirectory = String(body.createDirectory || "none");

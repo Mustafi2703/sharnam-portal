@@ -210,6 +210,32 @@ commsRouter.patch("/contacts/:id", requireRoles("admin", "office"), async (req: 
   res.json(row);
 });
 
+/** Company-wide fields of a matrix block: name, single point of contact, office address. */
+commsRouter.put("/contacts/:projectId/company", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const company = String(req.body?.company || "").trim();
+  const orgSection = String(req.body?.orgSection || "").trim();
+  if (!company || !orgSection) return res.status(400).json({ error: "Company and section are required" });
+  const { saveMatrixCompany } = await import("../services/syncCommsFromDirectory.js");
+  const out = await saveMatrixCompany(req.params.projectId, {
+    matrixKind: req.body.matrixKind,
+    bothMatrices: !!req.body.bothMatrices,
+    orgSection,
+    company,
+    newCompany: req.body.newCompany,
+    spoc: req.body.spoc,
+    officeAddress: req.body.officeAddress,
+  });
+  await audit("comms.contact.company", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: req.params.projectId,
+    meta: { company, orgSection, renamed: req.body.newCompany || undefined, rows: out.updated },
+  });
+  const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
+  void fileWonProjectPack(req.params.projectId).catch(() => undefined);
+  res.json({ ok: true, ...out });
+});
+
 commsRouter.delete("/contacts/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   await prisma.communicationContact.delete({ where: { id: req.params.id } });
   res.json({ ok: true });

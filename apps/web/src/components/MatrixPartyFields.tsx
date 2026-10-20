@@ -456,7 +456,7 @@ export function MatrixPartyFields({
         </label>
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Name (editable)</span>
-          <Input placeholder="Name" value={form.personName} onChange={(e) => onChange({ ...form, personName: e.target.value, spoc: form.spoc || e.target.value })} />
+          <Input placeholder="Name" value={form.personName} onChange={(e) => onChange({ ...form, personName: e.target.value })} />
         </label>
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Designation</span>
@@ -481,21 +481,6 @@ export function MatrixPartyFields({
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company (editable)</span>
           <Input placeholder="Company" value={form.company} onChange={(e) => onChange({ ...form, company: e.target.value, orgName: e.target.value })} />
-        </label>
-        <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">SPOC · search people</span>
-          <SearchableSelect
-            options={peopleOptions.map((o) => ({ ...o, value: o.label }))}
-            value={form.spoc}
-            onChange={(spoc) => {
-              const person = peopleOptions.find((o) => o.label === spoc);
-              const u = person?.value.startsWith("user:") ? users.find((x) => x.id === person.value.slice(5)) : null;
-              onChange({ ...form, spoc, ...(u?.phone && !form.mobile ? { mobile: u.phone } : {}) });
-            }}
-            allowCustom
-            placeholder="SPOC"
-            searchPlaceholder="Search SPOC by name…"
-          />
         </label>
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Mobile</span>
@@ -531,10 +516,15 @@ export function MatrixPartyFields({
             <option value="CC">CC</option>
           </Select>
         </label>
-        <label className="block space-y-1 sm:col-span-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Office address</span>
-          <Input placeholder="Office address" value={form.officeAddress} onChange={(e) => onChange({ ...form, officeAddress: e.target.value })} />
-        </label>
+        {!editing ? (
+          <label className="block space-y-1 sm:col-span-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company office address · used when the company has none yet</span>
+            <Input placeholder="Office address" value={form.officeAddress} onChange={(e) => onChange({ ...form, officeAddress: e.target.value })} />
+          </label>
+        ) : null}
+        <p className="sm:col-span-2 text-[11px] text-steel-muted">
+          Single point of contact and office address are company-wide — set them with Edit company on the company row.
+        </p>
       </div>
 
       {adding && allowCreateCompany && !editing ? (

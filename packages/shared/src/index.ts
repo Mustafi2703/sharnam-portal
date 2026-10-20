@@ -446,6 +446,17 @@ export {
   cubeGroupKey,
 } from "./cubeStrength.js";
 export { QAP_PICKERS, QAP_LEGENDS, type QapPickerKey } from "./qapPickers.js";
+export {
+  MATRIX_SECTION_ORDER,
+  buildMatrixBlocks,
+  isMatrixPlaceholder,
+  matrixBlockRows,
+  letterFor,
+  matrixCompanyKey,
+  matrixSectionOf,
+  type MatrixBlock,
+  type MatrixRowLike,
+} from "./commsMatrixBlocks.js";
 
 /** Monday (UTC midnight) of the week holding `d`. */
 function mondayUtc(d: Date): number {

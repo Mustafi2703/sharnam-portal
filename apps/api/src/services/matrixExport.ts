@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import fs from "fs";
 import { prisma } from "../prisma.js";
-import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
+import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME, buildMatrixBlocks, matrixBlockRows, type MatrixBlock } from "@sharnam/shared";
 import { sharnamLogoPath } from "./brandedExport.js";
 import { clientLogoForProject, imagePixelSize, sniffLogoExt, type LogoExt } from "./clientLogo.js";
 
@@ -107,6 +107,11 @@ function sharnamMatrixLogo(): MatrixLogo | null {
 export async function loadMatrixLogos(projectId: string): Promise<MatrixLogos> {
   const client = await clientLogoForProject(projectId);
   return { sharnam: sharnamMatrixLogo(), client: matrixLogoFromBuffer(client?.buffer) };
+}
+
+/** Company blocks for the sheet; company-only placeholder rows are left out of the export. */
+function matrixBlocks(rows: MatrixRow[]): MatrixBlock<MatrixRow>[] {
+  return buildMatrixBlocks(rows).filter((b) => b.people.length || b.placeholders.length);
 }
 
 const dataUri = (logo: MatrixLogo) => `data:image/${logo.ext};base64,${logo.buffer.toString("base64")}`;
@@ -262,67 +267,67 @@ export function paintMatrixSheet(wb: ExcelJS.Workbook, bundle: MatrixBundle, log
     cell.border = BOX;
   });
 
-  const paint = (row: ExcelJS.Row, opts: { bold?: boolean; section?: boolean; height?: number }) => {
-    row.height = opts.height ?? (opts.section ? SECTION_ROW_PT : 32);
+  const font = (bold = true): Partial<ExcelJS.Font> => ({ bold, size: 12, name: "Calibri", color: { argb: "FF111111" } });
+  const MERGED_COLS = [4, 5, 9];
+  const charsPerLine = (col: number) => Math.max(8, Math.floor(COL_WIDTHS[col - 1] * 1.05));
+  const linesIn = (value: string, col: number) =>
+    value.split(/\n/).reduce((n, line) => n + Math.max(1, Math.ceil(line.length / charsPerLine(col))), 0);
+
+  let lastDataRow = 7;
+  for (const block of matrixBlocks(rows)) {
+    const head = sheet.addRow([block.letter, block.company.toUpperCase()]);
+    head.height = SECTION_ROW_PT;
+    sheet.mergeCells(head.number, 2, head.number, 9);
     for (let c = 1; c <= 9; c++) {
-      const cell = row.getCell(c);
-      cell.font = {
-        bold: !!opts.bold || !!opts.section,
-        size: 11,
-        name: "Calibri",
-        color: { argb: "FF111111" },
-      };
-      if (opts.section) {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: SECTION_FILL } };
-      }
-      cell.alignment = {
-        vertical: "middle",
-        wrapText: true,
-        horizontal: c === 1 || c === 8 ? "center" : "left",
-      };
+      const cell = head.getCell(c);
+      cell.font = font();
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: SECTION_FILL } };
+      cell.alignment = { vertical: "middle", horizontal: c === 1 ? "center" : "left", wrapText: true };
       cell.border = BOX;
     }
-  };
 
-  let sectionIdx = -1;
-  let personInSection = 0;
-  let lastDataRow = 7;
-  for (const r of rows) {
-    if (r.isSectionHeader) {
-      sectionIdx += 1;
-      personInSection = 0;
-      const row = sheet.addRow([String.fromCharCode(65 + sectionIdx), (r.orgName || "").trim(), "", "", "", "", "", "", ""]);
-      sheet.mergeCells(row.number, 2, row.number, 9);
-      paint(row, { bold: true, section: true, height: SECTION_ROW_PT });
-      lastDataRow = row.number;
-      continue;
+    const people = matrixBlockRows(block);
+    const first = sheet.rowCount + 1;
+    const heights: number[] = [];
+    people.forEach((p, i) => {
+      const email = (p?.email || "").trim();
+      const row = sheet.addRow([
+        i + 1,
+        p?.personName || "",
+        p?.designation || "",
+        i === 0 ? block.company : "",
+        i === 0 ? block.spoc : "",
+        p?.mobile || "",
+        email,
+        p?.mailRole || "",
+        i === 0 ? block.officeAddress : "",
+      ]);
+      for (let c = 1; c <= 9; c++) {
+        const cell = row.getCell(c);
+        cell.font = font();
+        cell.alignment = { vertical: "middle", wrapText: true, horizontal: c === 1 || c === 4 || c === 5 || c === 8 ? "center" : "left" };
+        cell.border = BOX;
+      }
+      if (email.includes("@")) {
+        row.getCell(7).value = { text: email, hyperlink: `mailto:${email}` };
+        row.getCell(7).font = { ...font(), color: { argb: "FF0563C1" }, underline: true };
+      }
+      const own = Math.max(linesIn(p?.personName || "", 2), linesIn(p?.designation || "", 3), linesIn(email, 7));
+      heights.push(Math.max(28.5, 16 * own + 8));
+    });
+    const last = first + people.length - 1;
+    const merged = Math.max(linesIn(block.company, 4), linesIn(block.spoc, 5), linesIn(block.officeAddress, 9));
+    const need = 16 * merged + 10;
+    const have = heights.reduce((a, b) => a + b, 0);
+    if (need > have) {
+      const extra = (need - have) / heights.length;
+      for (let i = 0; i < heights.length; i++) heights[i] += extra;
     }
-    personInSection += 1;
-    const email = (r.email || "").trim();
-    const row = sheet.addRow([
-      personInSection,
-      r.personName || "",
-      r.designation || "",
-      r.company || r.orgName || "",
-      r.spoc || "",
-      r.mobile || "",
-      email,
-      r.mailRole || "",
-      r.officeAddress || "",
-    ]);
-    if (email && email.includes("@")) {
-      row.getCell(7).value = { text: email, hyperlink: `mailto:${email}` };
-    }
-    const lines = Math.max(
-      String(r.officeAddress || "").split(/\n/).length,
-      String(r.spoc || "").split(/\n/).length,
-      1,
-    );
-    paint(row, { height: Math.max(32, 14 * lines + 10) });
-    if (email && email.includes("@")) {
-      row.getCell(7).font = { size: 11, name: "Calibri", color: { argb: "FF0563C1" }, underline: true };
-    }
-    lastDataRow = row.number;
+    heights.forEach((h, i) => {
+      sheet.getRow(first + i).height = Math.round(h * 10) / 10;
+    });
+    if (last > first) for (const c of MERGED_COLS) sheet.mergeCells(first, c, last, c);
+    lastDataRow = last;
   }
 
   sheet.addRow([]);
@@ -375,27 +380,28 @@ export async function appendBrandedMatrixSheets(buffer: Buffer, projectId: strin
 export function renderMatrixHtml(bundle: MatrixBundle, logos: MatrixLogos, at = new Date()): string {
   const { project, rows, matrixKind: kind } = bundle;
   const date = matrixDate(at);
-  let sectionIdx = -1;
-  let personInSection = 0;
-  const bodyRows = rows
-    .map((r) => {
-      if (r.isSectionHeader) {
-        sectionIdx += 1;
-        personInSection = 0;
-        return `<tr class="section"><td class="mono">${String.fromCharCode(65 + sectionIdx)}</td><td colspan="8"><strong>${esc(r.orgName)}</strong></td></tr>`;
-      }
-      personInSection += 1;
-      return `<tr>
-        <td class="mono">${personInSection}</td>
-        <td>${esc(r.personName)}</td>
-        <td>${esc(r.designation)}</td>
-        <td>${esc(r.company || r.orgName)}</td>
-        <td class="spoc">${esc(r.spoc)}</td>
-        <td class="mono">${esc(r.mobile)}</td>
-        <td>${esc(r.email)}</td>
-        <td class="to">${esc(r.mailRole)}</td>
-        <td class="addr">${esc(r.officeAddress)}</td>
+  const bodyRows = matrixBlocks(rows)
+    .map((block) => {
+      const people = matrixBlockRows(block);
+      const span = people.length > 1 ? ` rowspan="${people.length}"` : "";
+      const head = `<tr class="section"><td class="mono">${esc(block.letter)}</td><td colspan="8">${esc(block.company.toUpperCase())}</td></tr>`;
+      const body = people
+        .map((p, i) => {
+          const merged = (cls: string, value: string) => (i === 0 ? `<td class="${cls}"${span}>${esc(value)}</td>` : "");
+          return `<tr>
+        <td class="mono">${i + 1}</td>
+        <td>${esc(p?.personName)}</td>
+        <td>${esc(p?.designation)}</td>
+        ${merged("company", block.company)}
+        ${merged("spoc", block.spoc)}
+        <td>${esc(p?.mobile)}</td>
+        <td>${p?.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}</td>
+        <td class="to">${esc(p?.mailRole)}</td>
+        ${merged("addr", block.officeAddress)}
       </tr>`;
+        })
+        .join("\n");
+      return `${head}\n${body}`;
     })
     .join("\n");
   const [projectLine, clientLine, designLine, pmcLine, subjectLine, dateLine] = bannerLines(project, kind, date);
@@ -417,12 +423,15 @@ export function renderMatrixHtml(bundle: MatrixBundle, logos: MatrixLogos, at = 
     .logo .fallback { font-size: 12px; color: #888; text-align: center; line-height: 1.3; }
     .banner { font-size: 13px; line-height: 1.45; color: #1e3a5f; font-weight: 700; min-width: 0; }
     .banner .subject { font-size: 15px; letter-spacing: 0.03em; text-transform: uppercase; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
     th { background: #445469; color: #fff; text-align: center; padding: 10px 6px; border: 1px solid #445469; font-weight: 700; }
-    td { border: 1px solid #445469; padding: 8px 6px; vertical-align: middle; word-wrap: break-word; }
-    tr.section td { background: #e8eef8; font-weight: 700; }
+    td { border: 1px solid #445469; padding: 8px 6px; vertical-align: middle; word-wrap: break-word; font-weight: 700; }
+    td a { color: #0563c1; }
+    tr.section td { background: #e8eef8; }
+    .company { text-align: center; }
     .mono { font-family: ui-monospace, "Courier New", monospace; font-size: 11px; text-align: center; }
     .spoc, .addr { white-space: pre-line; }
+    .spoc { text-align: center; }
     .to { font-weight: 700; text-align: center; }
     footer { margin-top: 14px; font-size: 10px; color: #445469; border-top: 2px solid #c9a227; padding-top: 8px; }
   </style>
@@ -525,61 +534,99 @@ export async function renderMatrixPdf(bundle: MatrixBundle, logos: MatrixLogos, 
     };
 
     let y = drawHead();
-    let sectionIdx = -1;
-    let personInSection = 0;
+    const bottom = () => doc.page.height - 40;
+    const MERGED = new Set([3, 4, 8]);
+    doc.font("Helvetica-Bold").fontSize(8);
+    const textH = (value: string, i: number) => doc.heightOfString(value || "", { width: cellW(i) });
 
-    const drawRow = (cells: string[], section: boolean) => {
-      doc.font(section ? "Helvetica-Bold" : "Helvetica").fontSize(8);
-      const height = section
-        ? 20
-        : Math.max(22, ...cells.map((cell, i) => doc.heightOfString(cell || "", { width: cellW(i) }) + 8));
-      if (y + height > doc.page.height - 40) {
+    const drawSection = (letter: string, name: string) => {
+      const height = 20;
+      if (y + height + 24 > bottom()) {
         doc.addPage();
         y = drawHead();
-        doc.font(section ? "Helvetica-Bold" : "Helvetica").fontSize(8);
       }
-      if (section) doc.rect(left, y, right - left, height).fill("#e8eef8");
+      doc.rect(left, y, right - left, height).fill("#e8eef8");
       doc.rect(left, y, right - left, height).stroke("#445469");
-      const dividers = section ? [1] : cols.slice(1, -1).map((_, i) => i + 1);
-      for (const i of dividers) doc.moveTo(cols[i], y).lineTo(cols[i], y + height).stroke("#445469");
-      doc.fillColor("#111111");
-      if (section) {
-        doc.text(cells[0], cols[0] + 3, y + 6, { width: cellW(0), align: "center" });
-        doc.text(cells[1], cols[1] + 3, y + 6, { width: right - cols[1] - 6 });
-      } else {
-        cells.forEach((cell, i) => {
-          doc.text(cell || "", cols[i] + 3, y + 4, {
-            width: cellW(i),
-            height: height - 6,
-            align: i === 0 || i === 7 ? "center" : "left",
-          });
-        });
-      }
+      doc.moveTo(cols[1], y).lineTo(cols[1], y + height).stroke("#445469");
+      doc.fillColor("#111111").font("Helvetica-Bold").fontSize(8);
+      doc.text(letter, cols[0] + 3, y + 6, { width: cellW(0), align: "center" });
+      doc.text(name, cols[1] + 3, y + 6, { width: right - cols[1] - 6 });
       y += height;
     };
 
-    for (const r of rows) {
-      if (r.isSectionHeader) {
-        sectionIdx += 1;
-        personInSection = 0;
-        drawRow([String.fromCharCode(65 + sectionIdx), (r.orgName || "").trim()], true);
-        continue;
+    const drawSegment = (cellsList: string[][], merged: string[]) => {
+      const heights = cellsList.map((cells) => Math.max(22, ...cells.map((c, i) => (MERGED.has(i) ? 0 : textH(c, i) + 8))));
+      const need = Math.max(...[3, 4, 8].map((i) => textH(merged[i], i) + 8));
+      const have = heights.reduce((a, b) => a + b, 0);
+      if (need > have) heights[heights.length - 1] += need - have;
+      const total = heights.reduce((a, b) => a + b, 0);
+      doc.font("Helvetica-Bold").fontSize(8).fillColor("#111111");
+      let rowY = y;
+      cellsList.forEach((cells, r) => {
+        const h = heights[r];
+        cells.forEach((cell, i) => {
+          if (MERGED.has(i)) return;
+          doc.rect(cols[i], rowY, cols[i + 1] - cols[i], h).stroke("#445469");
+          const th = textH(cell, i);
+          doc.fillColor(i === 6 && cell ? "#0563c1" : "#111111");
+          doc.text(cell || "", cols[i] + 3, rowY + Math.max(4, (h - th) / 2), { width: cellW(i), align: i === 0 || i === 7 ? "center" : "left" });
+        });
+        rowY += h;
+      });
+      for (const i of MERGED) {
+        doc.rect(cols[i], y, cols[i + 1] - cols[i], total).stroke("#445469");
+        const th = textH(merged[i], i);
+        doc.fillColor("#111111").text(merged[i] || "", cols[i] + 3, y + Math.max(4, (total - th) / 2), {
+          width: cellW(i),
+          align: i === 8 ? "left" : "center",
+        });
       }
-      personInSection += 1;
-      drawRow(
-        [
-          String(personInSection),
-          r.personName || "",
-          r.designation || "",
-          r.company || r.orgName || "",
-          r.spoc || "",
-          r.mobile || "",
-          r.email || "",
-          r.mailRole || "",
-          r.officeAddress || "",
-        ],
-        false,
-      );
+      y += total;
+    };
+
+    for (const block of matrixBlocks(rows)) {
+      drawSection(block.letter, block.company.toUpperCase());
+      const people = matrixBlockRows(block);
+      const merged = ["", "", "", block.company, block.spoc, "", "", "", block.officeAddress];
+      const cellsList = people.map((p, i) => [
+        String(i + 1),
+        p?.personName || "",
+        p?.designation || "",
+        "",
+        "",
+        p?.mobile || "",
+        p?.email || "",
+        p?.mailRole || "",
+        "",
+      ]);
+      let start = 0;
+      let freshPage = false;
+      while (start < cellsList.length) {
+        doc.font("Helvetica-Bold").fontSize(8);
+        let end = start;
+        let used = 0;
+        const room = bottom() - y;
+        while (end < cellsList.length) {
+          const h = Math.max(22, ...cellsList[end].map((c, i) => (MERGED.has(i) ? 0 : textH(c, i) + 8)));
+          if (end > start && used + h > room) break;
+          used += h;
+          end += 1;
+        }
+        if (used > room && !freshPage) {
+          doc.addPage();
+          y = drawHead();
+          freshPage = true;
+          continue;
+        }
+        drawSegment(cellsList.slice(start, end), merged);
+        start = end;
+        freshPage = false;
+        if (start < cellsList.length) {
+          doc.addPage();
+          y = drawHead();
+          freshPage = true;
+        }
+      }
     }
 
     y += 10;

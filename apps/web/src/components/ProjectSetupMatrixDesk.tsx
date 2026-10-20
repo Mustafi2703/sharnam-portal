@@ -2,7 +2,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useClientLogo } from "../lib/useClientLogo";
-import { PortalStateCell, matrixSubtitle, useMatrixPortalStatus } from "./MatrixOnboard";
+import { matrixSubtitle, useMatrixPortalStatus } from "./MatrixOnboard";
+import { MatrixBlocksTable, MatrixCompanyEditor } from "./MatrixBlocksTable";
+import type { MatrixBlock } from "@sharnam/shared";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import type { MatrixContact } from "./CommsMatrixPanel";
@@ -65,6 +67,22 @@ export function ProjectSetupMatrixDesk({
   const clientLogoSrc = useClientLogo(projectId, project?.clientLogoUrl, token);
   const portal = useMatrixPortalStatus(projectId, token, canEdit);
   const { reloadStatus } = portal;
+  const [companyBlock, setCompanyBlock] = useState<MatrixBlock<MatrixContact & { id: string }> | null>(null);
+
+  function addPersonTo(block: MatrixBlock) {
+    setEditingId(null);
+    setForm({
+      ...EMPTY_MATRIX_FORM,
+      bothMatrices: form.bothMatrices,
+      orgSection: block.orgSection,
+      company: block.company,
+      orgName: block.company,
+      mailRole: "CC",
+      vendorPartyType: partyForSection(block.orgSection),
+      userRole: roleForSection(block.orgSection),
+    });
+    document.getElementById("matrix-add-person")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const load = useCallback(async () => {
     void reloadStatus();
@@ -348,7 +366,7 @@ export function ProjectSetupMatrixDesk({
       </div>
 
       {canEdit && (
-        <Card className="!p-4 space-y-3">
+        <Card id="matrix-add-person" className="!p-4 space-y-3">
           <h4 className="font-semibold text-sm">Add person to matrix</h4>
           <p className="text-[11px] text-steel-muted">
             Use this form only to add someone extra. To change an existing row, click Edit on that contact.
@@ -437,89 +455,30 @@ export function ProjectSetupMatrixDesk({
         </div>
       </Card>
 
-      <Card padding={false} className="overflow-x-auto">
-        <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white flex justify-between gap-2">
-          <span>{formatUiText(`${matrixKind} contact register`)}</span>
-          <span className="text-[11px] font-normal text-white/70">{peopleRows.length} people</span>
-        </div>
-        <table className="w-full text-sm min-w-[980px]">
-          <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
-            <tr>
-              <th className="p-3">SR.NO</th>
-              <th className="p-3">NAME</th>
-              <th className="p-3">DESIGNATION</th>
-              <th className="p-3">NAME OF COMPANY</th>
-              <th className="p-3">SINGLE POINT OF CONTACT</th>
-              <th className="p-3">MOBILE</th>
-              <th className="p-3">E-MAIL</th>
-              <th className="p-3">GENERAL MAIL COMMUNICATION</th>
-              <th className="p-3">OFFICE ADD.</th>
-              {canEdit && <th className="p-3">PORTAL</th>}
-              {canEdit && <th className="p-3 w-28">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {(() => {
-              let sectionIdx = -1;
-              let personInSection = 0;
-              return contacts.map((r) => {
-                if (r.isSectionHeader) {
-                  sectionIdx += 1;
-                  personInSection = 0;
-                  return (
-                    <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
-                      <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + sectionIdx)}</td>
-                      <td className="p-3 font-semibold text-ink" colSpan={canEdit ? 10 : 8}>
-                        {r.orgName}
-                      </td>
-                    </tr>
-                  );
-                }
-                personInSection += 1;
-                return (
-                  <tr key={r.id} className="border-t border-line hover:bg-sand/40">
-                    <td className="p-3 font-mono text-xs text-steel-muted">{personInSection}</td>
-                    <td className="p-3 font-medium whitespace-pre-line">{r.personName || "—"}</td>
-                    <td className="p-3">{r.designation || "—"}</td>
-                    <td className="p-3">{r.company || r.orgName || "—"}</td>
-                    <td className="p-3 text-xs whitespace-pre-line">{r.spoc || "—"}</td>
-                    <td className="p-3 font-mono text-xs">{r.mobile || "—"}</td>
-                    <td className="p-3 text-xs break-all">{r.email || "—"}</td>
-                    <td className="p-3">
-                      <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge>
-                    </td>
-                    <td className="p-3 text-xs text-steel-muted max-w-[180px] whitespace-pre-line">{r.officeAddress || "—"}</td>
-                    {canEdit && (
-                      <td className="p-3">
-                        <PortalStateCell row={r} state={portal.stateOf(r)} />
-                      </td>
-                    )}
-                    {canEdit && (
-                      <td className="p-3">
-                        <div className="flex flex-col gap-1">
-                          <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => startEdit(r)}>
-                            Edit
-                          </Button>
-                          <Button type="button" variant="secondary" className="!text-xs" disabled={busy} onClick={() => void deleteContact(r.id, r.personName || "")}>
-                            Delete
-                          </Button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              });
-            })()}
-            {!contacts.length && (
-              <tr>
-                <td colSpan={canEdit ? 11 : 9} className="p-8 text-center text-steel-muted text-sm">
-                  Sections will appear after the first save. Add Client, PMC, Consultant, and Contractor rows above.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      <MatrixBlocksTable
+        contacts={contacts}
+        matrixKind={matrixKind}
+        canEdit={canEdit}
+        busy={busy}
+        portal={portal}
+        onEditPerson={startEdit}
+        onDeleteRow={(id, label) => void deleteContact(id, label)}
+        onEditCompany={setCompanyBlock}
+        onAddPerson={addPersonTo}
+        emptyText="Sections will appear after the first save. Add Client, PMC, Consultant, and Contractor people above."
+      />
+      {companyBlock ? (
+        <MatrixCompanyEditor
+          key={companyBlock.key}
+          projectId={projectId}
+          token={token}
+          matrixKind={matrixKind}
+          block={companyBlock}
+          onClose={() => setCompanyBlock(null)}
+          onSaved={load}
+          onMsg={onMsg}
+        />
+      ) : null}
         </>
       )}
 
