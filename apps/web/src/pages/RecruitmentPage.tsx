@@ -333,6 +333,26 @@ function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, t
       setMsg(err instanceof Error ? err.message : "Failed");
     }
   }
+  async function setStatus(p: any, status: "Open" | "Closed") {
+    try {
+      await api(`/api/hrm/postings/${p.id}`, { method: "PATCH", token, body: JSON.stringify({ status }) });
+      setMsg(status === "Closed" ? "Posting closed." : "Posting reopened.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed");
+    }
+  }
+  async function remove(p: any) {
+    const n = p._count?.candidates ?? 0;
+    if (!window.confirm(`Delete the posting "${p.title}"?${n ? ` Its ${n} applicant(s) stay in the Resume DB, unlinked.` : ""}`)) return;
+    try {
+      await api(`/api/hrm/postings/${p.id}`, { method: "DELETE", token });
+      setMsg("Posting deleted.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed");
+    }
+  }
   const approvedReqs = reqs.filter((r: any) => r.status === "Approved");
   return (
     <div className="space-y-3">
@@ -409,6 +429,16 @@ function PostingsTab({ reqs, postings, departments, canManage, reload, setMsg, t
               <div className="text-right text-xs">
                 <div className="font-semibold text-ink">{p._count?.candidates ?? 0} applicants</div>
                 <div className="text-steel-muted">Resume DB</div>
+                {canManage && (
+                  <div className="mt-1 flex justify-end gap-1">
+                    <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => void setStatus(p, p.status === "Open" ? "Closed" : "Open")}>
+                      {p.status === "Open" ? "Close" : "Reopen"}
+                    </Button>
+                    <Button type="button" variant="danger" className="!text-xs !py-1" onClick={() => void remove(p)}>
+                      Delete
+                    </Button>
+                  </div>
+                )}
               </div>
             </li>
           ))}

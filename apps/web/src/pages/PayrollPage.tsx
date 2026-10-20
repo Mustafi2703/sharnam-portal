@@ -656,6 +656,17 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
     await api(`/api/hrm/pay-hikes/${id}`, { method: "PATCH", token, body: JSON.stringify({ status }) });
     await reload();
   }
+  async function removeHike(h: any, name: string) {
+    const applied = h.status === "Approved" || h.status === "Applied";
+    if (!window.confirm(`Delete this pay hike${name ? ` for ${name}` : ""}?${applied ? " The salary already written onto the employee stays as it is." : ""}`)) return;
+    try {
+      await api(`/api/hrm/pay-hikes/${h.id}`, { method: "DELETE", token });
+      setMsg("Pay hike deleted.");
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Failed");
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -726,7 +737,7 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
         <div className="overflow-x-auto">
           <table className="min-w-[1000px] w-full text-xs">
             <thead className="text-left text-steel-muted bg-sand/20">
-              <tr><th className="p-2">Employee</th><th>Effective</th><th className="text-right">Old CTC</th><th className="text-right">New CTC</th><th className="text-right">Hike %</th><th>Rating</th><th>Reason</th><th>Status</th></tr>
+              <tr><th className="p-2">Employee</th><th>Effective</th><th className="text-right">Old CTC</th><th className="text-right">New CTC</th><th className="text-right">Hike %</th><th>Rating</th><th>Reason</th><th>Status</th>{canWrite && <th />}</tr>
             </thead>
             <tbody>
               {hikes.map((h: any) => {
@@ -752,10 +763,17 @@ function HikeTab({ employees, hikes, canWrite, setMsg, reload, token }: any) {
                         <Badge tone={h.status === "Applied" ? "ok" : h.status === "Rejected" ? "danger" : "brand"}>{h.status}</Badge>
                       )}
                     </td>
+                    {canWrite && (
+                      <td className="p-2">
+                        <Button type="button" variant="danger" className="!text-xs !py-1" onClick={() => void removeHike(h, who.name || "")}>
+                          Delete
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
-              {!hikes.length && <tr><td colSpan={8} className="py-4 text-center text-steel-muted">No pay hikes yet.</td></tr>}
+              {!hikes.length && <tr><td colSpan={canWrite ? 9 : 8} className="py-4 text-center text-steel-muted">No pay hikes yet.</td></tr>}
             </tbody>
           </table>
         </div>

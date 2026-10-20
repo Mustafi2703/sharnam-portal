@@ -244,6 +244,20 @@ hrmRecruitmentRouter.patch("/postings/:id", requireRoles("admin", "office", "hr"
   res.json(row);
 });
 
+hrmRecruitmentRouter.delete("/postings/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const before = await prisma.jobPosting.findUnique({ where: { id: req.params.id }, select: { id: true, title: true, status: true } });
+  if (!before) return res.status(404).json({ error: "This posting was already removed" });
+  const detached = await prisma.candidate.updateMany({ where: { postingId: before.id }, data: { postingId: null } });
+  await prisma.jobPosting.delete({ where: { id: before.id } });
+  await audit("hrms.posting.delete", {
+    userId: req.user!.id,
+    entity: "JobPosting",
+    entityId: before.id,
+    meta: { title: before.title, status: before.status, candidatesDetached: detached.count },
+  });
+  res.json({ ok: true, candidatesDetached: detached.count });
+});
+
 /* ═════════════════════════════════════  CANDIDATES (Resume DB)  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/candidates", async (req, res) => {
@@ -2513,6 +2527,20 @@ hrmRecruitmentRouter.patch("/pay-hikes/:id", requireRoles("admin", "office", "hr
 
   await audit(isApproving ? "hrms.payHike.approve" : `hrms.payHike.${nextStatus.toLowerCase()}`, { userId: req.user!.id, entity: "PayHike", entityId: row.id });
   res.json(row);
+});
+
+/** Removes the hike record only; a salary already written onto the employee by approval stays as it is. */
+hrmRecruitmentRouter.delete("/pay-hikes/:id", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
+  const before = await prisma.payHike.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "This hike was already removed" });
+  await prisma.payHike.delete({ where: { id: before.id } });
+  await audit("hrms.payHike.delete", {
+    userId: req.user!.id,
+    entity: "PayHike",
+    entityId: before.id,
+    meta: { userId: before.userId, status: before.status, reason: before.reason },
+  });
+  res.json({ ok: true });
 });
 
 /* ═════════════════════════════════════  PAYSLIP  ═════════════════════════════════════ */
