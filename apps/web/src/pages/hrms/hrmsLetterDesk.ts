@@ -570,7 +570,7 @@ export type LetterVar = {
   key: string;
   label: string;
   hint?: string;
-  type?: "text" | "date" | "textarea";
+  type?: "text" | "date" | "textarea" | "role";
   wide?: boolean;
   default?: string;
 };
@@ -649,7 +649,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "waivedDays", label: "Days waived", default: "0" },
     { key: "approver", label: "Approver" },
     { key: "successorName", label: "Successor name" },
-    { key: "successorDesignation", label: "Successor designation" },
+    { key: "successorDesignation", label: "Successor designation", type: "role" },
     { key: "handoverDate", label: "Handover date", type: "date" },
     { key: "clientName", label: "Client name" },
     { key: "postExitAddress", label: "Address after exit", wide: true },
@@ -662,7 +662,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "reviewMonths", label: "Review after (months)", default: "6" },
     { key: "previousGrade", label: "Current grade" },
     { key: "newGrade", label: "New grade" },
-    { key: "previousDepartment", label: "Current department" },
     { key: "currentTeam", label: "Current team" },
     { key: "newTeam", label: "New team" },
     { key: "previousReporting", label: "Current reporting" },

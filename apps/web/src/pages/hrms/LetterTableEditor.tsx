@@ -5,12 +5,14 @@ type Props = {
   spec: HrLetterTable;
   rows: string[][];
   onChange: (rows: string[][]) => void;
+  /** Role-master titles. The Designation column picks from these instead of free text. */
+  roles?: string[];
 };
 
 const CELL = "w-full bg-transparent px-2 py-1.5 text-[12px] text-ink outline-none focus:bg-sky-50";
 
 /** Editable grid for a multi-row table in an SPDC letter (assets, KRAs, cheques, projects…). */
-export default function LetterTableEditor({ spec, rows, onChange }: Props) {
+export default function LetterTableEditor({ spec, rows, onChange, roles }: Props) {
   const fixed = Boolean(spec.fixedRows);
   const setCell = (r: number, c: number, value: string) =>
     onChange(rows.map((row, i) => (i === r ? row.map((v, j) => (j === c ? value : v)) : row)));
@@ -61,13 +63,24 @@ export default function LetterTableEditor({ spec, rows, onChange }: Props) {
                 {fixed && <td className="px-2 py-1.5 text-[12px] text-ink">{spec.fixedRows![r]}</td>}
                 {spec.columns.map((c, j) => (
                   <td key={c.label} className="border-l border-line p-0">
-                    <input
-                      className={CELL}
-                      type={c.type === "date" ? "date" : "text"}
-                      value={row[j] ?? ""}
-                      aria-label={`${c.label} row ${r + 1}`}
-                      onChange={(e) => setCell(r, j, e.target.value)}
-                    />
+                    {roles && c.label === "Designation" ? (
+                      <select className={CELL} value={row[j] ?? ""} aria-label={`${c.label} row ${r + 1}`} onChange={(e) => setCell(r, j, e.target.value)}>
+                        <option value="">Role…</option>
+                        {roles.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className={CELL}
+                        type={c.type === "date" ? "date" : "text"}
+                        value={row[j] ?? ""}
+                        aria-label={`${c.label} row ${r + 1}`}
+                        onChange={(e) => setCell(r, j, e.target.value)}
+                      />
+                    )}
                   </td>
                 ))}
                 {!fixed && (

@@ -2032,6 +2032,17 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
       linkedVendorId = await ensureConsultantCompany({ firm: designation, fullName: String(fullName), email: String(email), trade: department });
     }
   }
+  let masteredDesignation = designation ? String(designation).trim() : "";
+  let masteredDepartment = department ? String(department).trim() : "";
+  if (roleKey !== "client" && roleKey !== "vendor" && masteredDesignation) {
+    const { roleFromMaster } = await import("../services/hrmsLetter.js");
+    const mastered = await roleFromMaster(masteredDesignation);
+    if (!mastered) {
+      return res.status(400).json({ error: `"${masteredDesignation}" is not an open role. Choose a designation from the role master.` });
+    }
+    masteredDesignation = mastered.designation;
+    masteredDepartment = mastered.department;
+  }
   const user = await prisma.user.create({
     data: {
       email: String(email).trim().toLowerCase(),
@@ -2061,8 +2072,8 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
     const createdProfile: Record<string, unknown> = {
       userId: user.id,
       empCode: typedEmpCode || `EMP-${Date.now().toString().slice(-6)}`,
-      department: department || null,
-      designation: designation || null,
+      department: masteredDepartment || null,
+      designation: masteredDesignation || null,
       joinDate: new Date(),
       ...payslipIdentityPatch(req.body as Record<string, unknown>),
       ...(req.body.ctcAnnual ? { ctcAnnual: Number(req.body.ctcAnnual) } : {}),
@@ -2238,8 +2249,29 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (!externalRole && empCode !== undefined) {
     profilePatch.empCode = typedEmpCode || `EMP-${Date.now().toString().slice(-6)}`;
   }
-  if (department !== undefined) profilePatch.department = department || null;
-  if (designation !== undefined) profilePatch.designation = designation || null;
+  if (externalRole) {
+    if (department !== undefined) profilePatch.department = department || null;
+    if (designation !== undefined) profilePatch.designation = designation || null;
+  } else if (designation !== undefined && String(designation || "").trim()) {
+    const { roleFromMaster } = await import("../services/hrmsLetter.js");
+    const mastered = await roleFromMaster(String(designation));
+    if (!mastered) {
+      return res.status(400).json({ error: `"${String(designation).trim()}" is not an open role. Choose a designation from the role master.` });
+    }
+    profilePatch.designation = mastered.designation;
+    profilePatch.department = mastered.department;
+  } else {
+    if (designation !== undefined) profilePatch.designation = null;
+    if (department !== undefined) {
+      const name = String(department || "").trim();
+      if (!name) profilePatch.department = null;
+      else {
+        const dept = await prisma.hrmDepartment.findFirst({ where: { name, isActive: true } });
+        if (!dept) return res.status(400).json({ error: "Choose the department from the department master." });
+        profilePatch.department = dept.name;
+      }
+    }
+  }
   if (ctcAnnual !== undefined && ctcAnnual !== "") profilePatch.ctcAnnual = Number(ctcAnnual);
   if (basicMonthly !== undefined && basicMonthly !== "") profilePatch.basicMonthly = Number(basicMonthly);
   if (hraMonthly !== undefined && hraMonthly !== "") profilePatch.hraMonthly = Number(hraMonthly);
@@ -3533,6 +3565,21 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
   return `SPDC/HR/${codeMap[kind]}/${yn}-${nx}/${seq}`;
 }
 
+/** Designation and department on a letter come from the role and department masters. */
+async function letterFromMasters(
+  body: { designation?: string; employeeUserId?: string | null; data?: unknown },
+  writeProfile: boolean,
+) {
+  const { alignLetterWithMasters } = await import("../services/hrmsLetter.js");
+  const data = body.data && typeof body.data === "object" ? (body.data as Record<string, unknown>) : {};
+  return alignLetterWithMasters({
+    designation: body.designation,
+    data,
+    employeeUserId: body.employeeUserId,
+    writeProfile,
+  });
+}
+
 /** Live HTML preview from form fields — does not create a register row. */
 hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, res) => {
   const kindRaw = String(req.body.kind || "");
@@ -3541,8 +3588,12 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
   }
   const employeeName = String(req.body.employeeName || "").trim();
   if (!employeeName) return res.status(400).json({ error: "Employee name is required" });
-  const data =
-    req.body.data && typeof req.body.data === "object" ? (req.body.data as Record<string, unknown>) : {};
+  let mastered: Awaited<ReturnType<typeof letterFromMasters>>;
+  try {
+    mastered = await letterFromMasters(req.body, false);
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
+  }
   const { previewHrmsLetterDraft } = await import("../services/hrmsLetter.js");
   try {
     const html = await previewHrmsLetterDraft({
@@ -3550,10 +3601,10 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
       employeeName,
       employeeUserId: req.body.employeeUserId || null,
       candidateEmail: req.body.candidateEmail || null,
-      designation: req.body.designation || null,
-      department: req.body.department || null,
+      designation: mastered.designation,
+      department: mastered.department,
       effectiveDate: req.body.effectiveDate || null,
-      data,
+      data: mastered.data,
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
@@ -3570,8 +3621,12 @@ hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedReques
   }
   const employeeName = String(req.body.employeeName || "").trim();
   if (!employeeName) return res.status(400).json({ error: "Employee name is required" });
-  const data =
-    req.body.data && typeof req.body.data === "object" ? (req.body.data as Record<string, unknown>) : {};
+  let mastered: Awaited<ReturnType<typeof letterFromMasters>>;
+  try {
+    mastered = await letterFromMasters(req.body, false);
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
+  }
   const { buildHrmsLetterDraftDocx } = await import("../services/hrmsLetter.js");
   try {
     const buf = await buildHrmsLetterDraftDocx({
@@ -3579,10 +3634,10 @@ hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedReques
       employeeName,
       employeeUserId: req.body.employeeUserId || null,
       candidateEmail: req.body.candidateEmail || null,
-      designation: req.body.designation || null,
-      department: req.body.department || null,
+      designation: mastered.designation,
+      department: mastered.department,
       effectiveDate: req.body.effectiveDate || null,
-      data,
+      data: mastered.data,
     });
     const safeName = `${kindRaw}-${employeeName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40)}.docx`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
@@ -3637,7 +3692,13 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
   }
 
   const refNo = String(req.body.refNo || hrmsDocRefNo(kind));
-  const dataJson = req.body.data && typeof req.body.data === "object" ? JSON.stringify(req.body.data) : String(req.body.data || "{}");
+  let mastered: Awaited<ReturnType<typeof letterFromMasters>>;
+  try {
+    mastered = await letterFromMasters(req.body, Boolean(req.body.employeeUserId));
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
+  }
+  const dataJson = JSON.stringify(mastered.data);
 
   const row = await prisma.hrmsDocument.create({
     data: {
@@ -3646,8 +3707,8 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
       employeeUserId: req.body.employeeUserId || null,
       employeeName,
       candidateEmail: req.body.candidateEmail || null,
-      designation: req.body.designation || null,
-      department: req.body.department || null,
+      designation: mastered.designation,
+      department: mastered.department,
       effectiveDate: req.body.effectiveDate ? new Date(req.body.effectiveDate) : null,
       dataJson,
       status: "Draft",
@@ -3706,17 +3767,32 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
     }
   }
 
+  let source = row;
+  try {
+    const stored = source.dataJson ? (JSON.parse(source.dataJson) as Record<string, unknown>) : {};
+    const mastered = await letterFromMasters(
+      { designation: source.designation || "", employeeUserId: source.employeeUserId, data: stored },
+      Boolean(source.employeeUserId),
+    );
+    source = await prisma.hrmsDocument.update({
+      where: { id: source.id },
+      data: { designation: mastered.designation, department: mastered.department, dataJson: JSON.stringify(mastered.data) },
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
+  }
+
   const { generateHrmsLetter } = await import("../services/hrmsLetter.js");
   let gen: Awaited<ReturnType<typeof generateHrmsLetter>>;
   try {
-    gen = await generateHrmsLetter(row);
+    gen = await generateHrmsLetter(source);
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : "Letter generate failed" });
   }
 
   let dataJsonObj: Record<string, unknown> = {};
   try {
-    dataJsonObj = row.dataJson ? JSON.parse(row.dataJson) : {};
+    dataJsonObj = source.dataJson ? JSON.parse(source.dataJson) : {};
   } catch {
     dataJsonObj = {};
   }
@@ -3891,7 +3967,25 @@ hrmRouter.patch("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) 
     if (effective && Number.isNaN(effective.getTime())) return res.status(400).json({ error: "Effective date is not a valid date" });
     data.effectiveDate = effective;
   }
-  if (req.body.data && typeof req.body.data === "object") data.dataJson = JSON.stringify(req.body.data);
+  if (req.body.designation != null || (req.body.data && typeof req.body.data === "object")) {
+    try {
+      const mastered = await letterFromMasters(
+        {
+          designation: req.body.designation ?? before.designation ?? "",
+          employeeUserId: before.employeeUserId,
+          data: req.body.data && typeof req.body.data === "object" ? req.body.data : {},
+        },
+        Boolean(before.employeeUserId),
+      );
+      data.designation = mastered.designation;
+      data.department = mastered.department;
+      data.dataJson = JSON.stringify(mastered.data);
+    } catch (err) {
+      return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
+    }
+  } else if (req.body.data && typeof req.body.data === "object") {
+    data.dataJson = JSON.stringify(req.body.data);
+  }
   const row = await prisma.hrmsDocument.update({ where: { id: req.params.id }, data });
   res.json(row);
 });

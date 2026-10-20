@@ -192,6 +192,73 @@ export async function enrichHrmsLetterDataFromProfile(
   return data;
 }
 
+/** A designation must be an open role, and its department is that role's department master row. */
+export async function roleFromMaster(title: string): Promise<{ designation: string; department: string } | null> {
+  const name = title.trim();
+  if (!name) return null;
+  const { ensureSpdcDepartmentMasters, ensureSpdcDesignationMasters } = await import("./spdcOrgSeed.js");
+  await ensureSpdcDepartmentMasters();
+  await ensureSpdcDesignationMasters();
+  const role = await prisma.hrmDesignation.findFirst({ where: { title: name, isActive: true } });
+  if (!role) return null;
+  const dept = await prisma.hrmDepartment.findFirst({ where: { name: role.department, isActive: true } });
+  if (!dept) return null;
+  return { designation: role.title, department: dept.name };
+}
+
+/**
+ * Rewrite a letter's designation and department (and the previous / successor roles) from the masters.
+ * When writeProfile is set, the employee's profile is updated to the same role and department.
+ */
+export async function alignLetterWithMasters(input: {
+  designation?: string | null;
+  data?: Record<string, unknown> | null;
+  employeeUserId?: string | null;
+  writeProfile?: boolean;
+}): Promise<{ designation: string; department: string; data: Record<string, unknown> }> {
+  const data: Record<string, unknown> = { ...(input.data || {}) };
+  const main = await roleFromMaster(String(input.designation || data.designation || ""));
+  if (!main) {
+    throw new Error("Choose the designation from the role master. The department then comes from the department master.");
+  }
+  data.designation = main.designation;
+  data.newDesignation = main.designation;
+  data.department = main.department;
+
+  for (const key of ["previousDesignation", "successorDesignation"] as const) {
+    const title = String(data[key] || "").trim();
+    if (!title) continue;
+    const role = await roleFromMaster(title);
+    if (!role) throw new Error(`"${title}" is not an open role. Choose it from the role master.`);
+    data[key] = role.designation;
+    if (key === "previousDesignation") data.previousDepartment = role.department;
+  }
+
+  if (data.designationRows != null) {
+    const { parseHrLetterTable } = await import("@sharnam/shared");
+    const rows = parseHrLetterTable(data.designationRows);
+    const next: string[][] = [];
+    for (const row of rows) {
+      if (!String(row[0] || "").trim()) {
+        next.push(row);
+        continue;
+      }
+      const role = await roleFromMaster(row[0]);
+      if (!role) throw new Error(`"${row[0]}" is not an open role. Designations held must come from the role master.`);
+      next.push([role.designation, ...row.slice(1)]);
+    }
+    data.designationRows = JSON.stringify(next);
+  }
+
+  if (input.writeProfile && input.employeeUserId) {
+    await prisma.employeeProfile.updateMany({
+      where: { userId: input.employeeUserId },
+      data: { designation: main.designation, department: main.department },
+    });
+  }
+  return { designation: main.designation, department: main.department, data };
+}
+
 /** Map form + row into every placeholder the SPDC templates use. */
 export function letterMergeContext(row: HrmsDocument, data: Record<string, unknown>): Record<string, unknown> {
   const name = String(row.employeeName || data.candidateName || data.employeeName || "").trim();

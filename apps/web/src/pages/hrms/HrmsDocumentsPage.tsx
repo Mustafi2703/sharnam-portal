@@ -5,6 +5,7 @@ import { api, apiBase } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
+import { rolesForDepartment, useHrmOrg } from "../../lib/hrmOrg";
 import HrmsDocxPreview from "../../components/HrmsDocxPreview";
 import HrmsPageHero from "./HrmsPageHero";
 import LetterTableEditor from "./LetterTableEditor";
@@ -47,6 +48,8 @@ import { formatUiText } from "../../lib/formatUiText";
 
 export default function HrmsDocumentsPage() {
   const { token, user } = useAuth();
+  const org = useHrmOrg(token);
+  const roleTitles = org.designations.filter((d) => d.isActive).map((d) => d.title);
   const [searchParams] = useSearchParams();
   const canManage = canManageHrms(user);
   const [rows, setRows] = useState<DocRow[]>([]);
@@ -70,6 +73,12 @@ export default function HrmsDocumentsPage() {
   const [previewFromComposer, setPreviewFromComposer] = useState(false);
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyLetterForm());
+
+  useEffect(() => {
+    if (!org.loaded) return;
+    const role = org.designations.find((d) => d.isActive && d.title === form.designation);
+    if (role && form.department !== role.department) setForm((f) => ({ ...f, department: role.department }));
+  }, [org.loaded, org.designations, form.designation, form.department]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [registerScope, setRegisterScope] = useState<"all" | "person">("all");
   const formPanelRef = useRef<HTMLDivElement | null>(null);
@@ -600,12 +609,40 @@ export default function HrmsDocumentsPage() {
                         <Input value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Designation</span>
-                        <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} />
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Department · department master</span>
+                        <Select
+                          value={org.departments.some((d) => d.name === form.department) ? form.department : ""}
+                          onChange={(e) => {
+                            const department = e.target.value;
+                            const stillValid = rolesForDepartment(org.designations, department).some((r) => r.title === form.designation);
+                            setForm({ ...form, department, designation: stillValid ? form.designation : "" });
+                          }}
+                        >
+                          <option value="">Department…</option>
+                          {org.departments.map((d) => (
+                            <option key={d.id} value={d.name}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </Select>
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Department</span>
-                        <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Designation · role master</span>
+                        <Select
+                          value={roleTitles.includes(form.designation) ? form.designation : ""}
+                          onChange={(e) => {
+                            const designation = e.target.value;
+                            const department = org.designations.find((d) => d.title === designation)?.department || form.department;
+                            setForm({ ...form, designation, department });
+                          }}
+                        >
+                          <option value="">Role…</option>
+                          {rolesForDepartment(org.designations, form.department).map((r) => (
+                            <option key={r.id} value={r.title}>
+                              {r.title}
+                            </option>
+                          ))}
+                        </Select>
                       </label>
                       <label className="space-y-1">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">Email</span>
@@ -644,11 +681,26 @@ export default function HrmsDocumentsPage() {
                           {letterFormUsesPromotionExtras(form.kind) && (
                             <>
                               <label className="space-y-1">
-                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation</span>
-                                <Input
-                                  value={form.previousDesignation}
-                                  onChange={(e) => setForm({ ...form, previousDesignation: e.target.value })}
-                                />
+                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation · role master</span>
+                                <Select
+                                  value={roleTitles.includes(form.previousDesignation) ? form.previousDesignation : ""}
+                                  onChange={(e) => {
+                                    const previousDesignation = e.target.value;
+                                    const previousDepartment = org.designations.find((d) => d.title === previousDesignation)?.department || "";
+                                    setForm({ ...form, previousDesignation, sheet: { ...form.sheet, previousDepartment } });
+                                  }}
+                                >
+                                  <option value="">Role…</option>
+                                  {roleTitles.map((title) => (
+                                    <option key={title} value={title}>
+                                      {title}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous department · department master</span>
+                                <Input value={form.sheet.previousDepartment || ""} readOnly />
                               </label>
                               <label className="space-y-1">
                                 <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
@@ -702,7 +754,16 @@ export default function HrmsDocumentsPage() {
                             return (
                               <label key={field.key} className={`space-y-1 ${field.wide ? "sm:col-span-3" : ""}`}>
                                 <span className="text-[11px] text-steel-muted uppercase font-mono">{field.label}</span>
-                                {field.type === "textarea" ? (
+                                {field.type === "role" ? (
+                                  <Select value={roleTitles.includes(value) ? value : ""} onChange={(e) => onChange(e.target.value)}>
+                                    <option value="">Role…</option>
+                                    {roleTitles.map((title) => (
+                                      <option key={title} value={title}>
+                                        {title}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                ) : field.type === "textarea" ? (
                                   <TextArea rows={2} value={value} placeholder={field.hint} onChange={(e) => onChange(e.target.value)} />
                                 ) : (
                                   <Input type={field.type === "date" ? "date" : "text"} value={value} placeholder={field.hint} onChange={(e) => onChange(e.target.value)} />
@@ -716,6 +777,7 @@ export default function HrmsDocumentsPage() {
                             key={spec.key}
                             spec={spec}
                             rows={letterTableRows(form, spec)}
+                            roles={spec.key === "designationRows" ? roleTitles : undefined}
                             onChange={(rows) => setForm(setLetterTableRows(form, spec, rows))}
                           />
                         ))}
