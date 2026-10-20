@@ -4,6 +4,7 @@
  */
 import JSZip from "jszip";
 import type { HrmsDocument } from "@prisma/client";
+import { HR_LETTER_TABLES, hrLetterTableHasData, parseHrLetterTable, type HrLetterTable } from "@sharnam/shared";
 import type { CtcBreakdown } from "./ctcAnnexure.js";
 
 function escapeXml(s: string): string {
@@ -459,7 +460,103 @@ function stripPlaceholderHighlightFromXml(xml: string): string {
   return out;
 }
 
-export async function fillHrmsDocx(template: Buffer, tokens: Record<string, string>): Promise<Buffer> {
+function xmlText(xml: string): string {
+  return xml
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+}
+
+/** Rewrite a cell keeping its borders, paragraph style and first run's font. */
+function setCellText(tc: string, value: string): string {
+  const open = tc.match(/^<w:tc\b[^>]*>/)?.[0] || "<w:tc>";
+  const tcPr = tc.match(/<w:tcPr>[\s\S]*?<\/w:tcPr>/)?.[0] || "";
+  const p = tc.match(/<w:p\b[\s\S]*?<\/w:p>/)?.[0] || "<w:p></w:p>";
+  const pPr = p.match(/<w:pPr>[\s\S]*?<\/w:pPr>/)?.[0] || "";
+  const rPr = p.replace(pPr, "").match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] || "";
+  const runs = value
+    .split(/\r?\n/)
+    .map((line) => `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`)
+    .join(`<w:r>${rPr}<w:br/></w:r>`);
+  return `${open}${tcPr}<w:p>${pPr}${value ? runs : ""}</w:p></w:tc>`;
+}
+
+function rowCells(tr: string): string[] {
+  return tr.match(/<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g) || [];
+}
+
+function setRowCells(tr: string, values: Map<number, string>): string {
+  let i = 0;
+  return tr.replace(/<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g, (tc) => {
+    const idx = i++;
+    return values.has(idx) ? setCellText(tc, values.get(idx)!) : tc;
+  });
+}
+
+function cellValue(spec: HrLetterTable, col: number, raw: string): string {
+  const value = formatIsoDatesIn(raw);
+  if (/last 4/i.test(spec.columns[col]?.label || "") && /^\d{4}$/.test(value)) return `XXXX${value}`;
+  return value;
+}
+
+function fillTable(tbl: string, spec: HrLetterTable, rows: string[][]): string {
+  const trs = tbl.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || [];
+  if (trs.length < 2) return tbl;
+  const header = trs[0]!;
+  const last = trs[trs.length - 1]!;
+  const body = trs.slice(1);
+  const out: string[] = [];
+  if (spec.fixedRows) {
+    body.forEach((tr, i) => {
+      const values = new Map<number, string>();
+      (rows[i] || []).forEach((v, j) => {
+        if (v) values.set(spec.startCol + j, cellValue(spec, j, v));
+      });
+      out.push(values.size ? setRowCells(tr, values) : tr);
+    });
+  } else {
+    const data = rows.filter((r) => r.some(Boolean));
+    const width = rowCells(last).length;
+    const blankLast = setRowCells(last, new Map(Array.from({ length: width }, (_, k) => [k, ""])));
+    data.forEach((r, i) => {
+      const values = new Map<number, string>();
+      if (spec.numbered) values.set(0, String(i + 1));
+      spec.columns.forEach((_, j) => values.set(spec.startCol + j, cellValue(spec, j, r[j] || "")));
+      out.push(setRowCells(body[i] ?? blankLast, values));
+    });
+    for (const tr of body.slice(data.length)) {
+      const values = new Map<number, string>();
+      rowCells(tr).forEach((tc, k) => {
+        if (k >= spec.startCol && tc.includes("{{")) values.set(k, "");
+      });
+      out.push(values.size ? setRowCells(tr, values) : tr);
+    }
+  }
+  const before = tbl.slice(0, tbl.indexOf(header));
+  const after = tbl.slice(tbl.lastIndexOf(last) + last.length);
+  return `${before}${header}${out.join("")}${after}`;
+}
+
+/** Multi-row tables (assets, KRAs, cheques, projects…) — see HR_LETTER_TABLES. */
+export function fillHrmsTables(xml: string, kind: string, data: Record<string, unknown>): string {
+  const specs = HR_LETTER_TABLES[kind] || [];
+  if (!specs.length) return xml;
+  return xml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tbl) => {
+    const header = xmlText(tbl.match(/<w:tr\b[\s\S]*?<\/w:tr>/)?.[0] || "");
+    const spec = specs.find((s) => header.includes(s.headerMatch));
+    if (!spec) return tbl;
+    const rows = parseHrLetterTable(data[spec.key]);
+    return hrLetterTableHasData(rows) ? fillTable(tbl, spec, rows) : tbl;
+  });
+}
+
+export async function fillHrmsDocx(
+  template: Buffer,
+  tokens: Record<string, string>,
+  tables?: { kind: string; data: Record<string, unknown> },
+): Promise<Buffer> {
   const zip = await JSZip.loadAsync(template);
   const xmlParts = Object.keys(zip.files).filter((k) =>
     /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(k),
@@ -468,6 +565,7 @@ export async function fillHrmsDocx(template: Buffer, tokens: Record<string, stri
     const entry = zip.file(part);
     if (!entry) continue;
     let xml = await entry.async("string");
+    if (tables && part === "word/document.xml") xml = fillHrmsTables(xml, tables.kind, tables.data);
     xml = replacePlaceholderRuns(xml, tokens);
     xml = stripPlaceholderHighlightFromXml(xml);
     zip.file(part, xml);

@@ -8,6 +8,7 @@ import JSZip from "jszip";
 import { buildHrmsDocxTokenMap, fillHrmsDocx } from "../apps/api/src/services/hrmsDocxFill.ts";
 import { letterMergeContext } from "../apps/api/src/services/hrmsLetter.ts";
 import { computeCtcBreakdown } from "../apps/api/src/services/ctcAnnexure.ts";
+import { HR_LETTER_TABLES } from "../packages/shared/src/hrLetterTables.ts";
 
 const KINDS = [
   "Offer",
@@ -97,6 +98,44 @@ function mockData(kind: string) {
   };
 }
 
+/** Sample rows for each multi-row table: every fixed row, and 6 free rows (more than any template has). */
+function mockTables(kind: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const spec of HR_LETTER_TABLES[kind] || []) {
+    const n = spec.fixedRows ? spec.fixedRows.length : 6;
+    const rows = Array.from({ length: n }, (_, i) =>
+      spec.columns.map((c, j) => (c.type === "date" ? `2026-05-0${(i % 9) + 1}` : /last 4/i.test(c.label) ? "1234" : `${spec.key}-r${i + 1}-c${j + 1}`)),
+    );
+    out[spec.key] = JSON.stringify(rows);
+  }
+  return out;
+}
+
+async function tableProblems(kind: string, docxBuf: Buffer): Promise<string[]> {
+  const xml = await (await JSZip.loadAsync(docxBuf)).file("word/document.xml")!.async("string");
+  const tables = (xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || []).map((t) =>
+    (t.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || []).map((r) => (r.match(/<w:tc\b[^>]*>[\s\S]*?<\/w:tc>/g) || []).map((c) => c.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim())),
+  );
+  const problems: string[] = [];
+  for (const spec of HR_LETTER_TABLES[kind] || []) {
+    const t = tables.find((rows) => rows[0]?.join(" ").includes(spec.headerMatch));
+    if (!t) {
+      problems.push(`${spec.key}: table not found`);
+      continue;
+    }
+    const n = spec.fixedRows ? spec.fixedRows.length : 6;
+    for (let i = 0; i < n; i++) {
+      const row = t[i + 1] || [];
+      spec.columns.forEach((c, j) => {
+        const want = c.type === "date" ? `May 2026` : /last 4/i.test(c.label) ? "XXXX1234" : `${spec.key}-r${i + 1}-c${j + 1}`;
+        if (!(row[spec.startCol + j] || "").includes(want)) problems.push(`${spec.key} row ${i + 1} col ${j + 1}: "${row[spec.startCol + j] ?? ""}"`);
+      });
+      if (spec.numbered && !spec.fixedRows && row[0] !== String(i + 1)) problems.push(`${spec.key} row ${i + 1}: No. "${row[0]}"`);
+    }
+  }
+  return problems;
+}
+
 async function main() {
   const fmtDir = path.join(process.cwd(), "apps/api/formats/hrms");
   const outDir = path.join(process.cwd(), "uploads/hrms-smoke-test");
@@ -111,7 +150,7 @@ async function main() {
       continue;
     }
     const row = mockRow(kind, `SPDC/HR/SMOKE/${kind}/0001`);
-    const ctx = mockData(kind);
+    const ctx = { ...mockData(kind), ...mockTables(kind) };
     const merged = letterMergeContext(row as any, ctx);
     const ctcNum = Number(String(ctx.fixedCtcAnnual).replace(/[^\d.]/g, ""));
     const breakdown =
@@ -123,11 +162,15 @@ async function main() {
           })
         : null;
     const tokens = buildHrmsDocxTokenMap(row as any, merged, breakdown);
-    const filled = await fillHrmsDocx(fs.readFileSync(templatePath), tokens);
+    const filled = await fillHrmsDocx(fs.readFileSync(templatePath), tokens, { kind, data: merged });
     const outPath = path.join(outDir, `${kind}.docx`);
     fs.writeFileSync(outPath, filled);
     const unfilled = await unfilledTokens(filled);
-    if (unfilled.length) {
+    const tableIssues = await tableProblems(kind, filled);
+    if (tableIssues.length) {
+      failed++;
+      console.log(`${kind.padEnd(18)} ⚠️  tables: ${tableIssues.slice(0, 6).join("; ")}`);
+    } else if (unfilled.length) {
       failed++;
       console.log(`${kind.padEnd(18)} ⚠️  ${unfilled.length} unfilled: ${unfilled.join(", ")}`);
     } else {

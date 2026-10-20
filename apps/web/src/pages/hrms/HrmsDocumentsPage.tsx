@@ -7,6 +7,7 @@ import { Badge, Button, Card, Input, Select, TextArea } from "../../components/u
 import { canManageHrms } from "../../lib/portalAccounts";
 import HrmsDocxPreview from "../../components/HrmsDocxPreview";
 import HrmsPageHero from "./HrmsPageHero";
+import LetterTableEditor from "./LetterTableEditor";
 import {
   KIND_OPTIONS,
   LETTER_STAGES,
@@ -32,6 +33,9 @@ import {
   letterFormUsesAssetExtras,
   letterFormUsesCtc,
   missingLetterFields,
+  letterTables,
+  letterTableRows,
+  setLetterTableRows,
   letterFormUsesPromotionExtras,
   letterFormUsesSeparationReason,
   letterFormUsesWarningExtras,
@@ -707,6 +711,14 @@ export default function HrmsDocumentsPage() {
                             );
                           })}
                         </div>
+                        {letterTables(form.kind).map((spec) => (
+                          <LetterTableEditor
+                            key={spec.key}
+                            spec={spec}
+                            rows={letterTableRows(form, spec)}
+                            onChange={(rows) => setForm(setLetterTableRows(form, spec, rows))}
+                          />
+                        ))}
                       </div>
                       {letterFormUsesWarningExtras(form.kind) && (
                         <>

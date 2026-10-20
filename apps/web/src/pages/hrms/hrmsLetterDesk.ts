@@ -1,6 +1,6 @@
 /** Shared HR letter desk — one person picker, pack generate, preview payload. */
 
-import { SPDC_OFFICE_ADDRESS } from "@sharnam/shared";
+import { HR_LETTER_TABLES, SPDC_OFFICE_ADDRESS, parseHrLetterTable, type HrLetterTable } from "@sharnam/shared";
 
 export const DEFAULT_LOCATION = SPDC_OFFICE_ADDRESS;
 
@@ -292,7 +292,6 @@ export function letterDataPayload(form: LetterFormState) {
     facts: form.issueInBrief || form.reason,
     separationReason: form.reason || "resignation",
     natureOfWork: form.sheet.natureOfWork || "site supervision, planning, quality control and billing verification",
-    period: form.sheet.period || "",
     ...filledSheet(form),
   };
 }
@@ -303,7 +302,66 @@ function filledSheet(form: LetterFormState): Record<string, string> {
     const v = (form.sheet[field.key] || field.default || "").trim();
     if (v) out[field.key] = v;
   }
+  for (const spec of letterTables(form.kind)) {
+    const rows = letterTableRows(form, spec).filter((r) => r.some((c) => c.trim()));
+    if (rows.length) out[spec.key] = JSON.stringify(rows);
+  }
   return out;
+}
+
+export function letterTables(kind: DocKind): HrLetterTable[] {
+  return HR_LETTER_TABLES[kind] || [];
+}
+
+const KRA_DEFAULTS: string[][] = [
+  ["Deliver assigned projects to approved schedule", "SPI ≥ 0.95"],
+  ["Client satisfaction and stakeholder communication", "No escalations; feedback ≥ 4/5"],
+  ["Cost control and billing accuracy", ""],
+  ["HSE performance and compliance", "Zero reportable incidents"],
+  ["Team development and mentoring", ""],
+];
+
+/** Starting rows before HR edits a table — built from the fields above and older single-field letters. */
+function seedTableRows(form: LetterFormState, spec: HrLetterTable): string[][] {
+  const s = form.sheet;
+  const blank = () => spec.columns.map(() => "");
+  if (spec.fixedRows) return spec.fixedRows.map(blank);
+  switch (spec.key) {
+    case "designationRows": {
+      const rows = [[form.designation, s.from1 || s.joinDate || "", s.to1 || (s.designation2 ? "" : form.effectiveDate)]];
+      if (s.designation2) rows.push([s.designation2, s.from2 || "", s.to2 || form.effectiveDate]);
+      return rows;
+    }
+    case "projectRows": {
+      const rows = [[s.project1 || form.projectName, form.location, s.period || ""]];
+      if (s.project2) rows.push([s.project2, "", ""]);
+      return rows;
+    }
+    case "kraRows":
+      return KRA_DEFAULTS.map(([kra, target], i) => [s[`kra${i + 1}`] || kra, target]);
+    case "chequeRows":
+      return s.bank || s.last4 || s.chqNo ? [[s.bank || "", s.last4 || "", s.chqNo || "", ""]] : [blank()];
+    case "incidentRows":
+      return [["", s.facts || form.issueInBrief, s.evidence || "DPR, email records"]];
+    case "projectAccessRows":
+      return [[form.projectName, s.clientName || "", s.fromTo || "", s.confidentialItems || "drawings, BOQ, rates, RA bills, claims"]];
+    default:
+      return [blank()];
+  }
+}
+
+export function letterTableRows(form: LetterFormState, spec: HrLetterTable): string[][] {
+  const stored = form.sheet[spec.key];
+  if (stored != null) {
+    const rows = parseHrLetterTable(stored);
+    if (spec.fixedRows) return spec.fixedRows.map((_, i) => spec.columns.map((_, j) => rows[i]?.[j] ?? ""));
+    return rows.length ? rows.map((r) => spec.columns.map((_, j) => r[j] ?? "")) : [spec.columns.map(() => "")];
+  }
+  return seedTableRows(form, spec);
+}
+
+export function setLetterTableRows(form: LetterFormState, spec: HrLetterTable, rows: string[][]): LetterFormState {
+  return { ...form, sheet: { ...form.sheet, [spec.key]: JSON.stringify(rows) } };
 }
 
 export function docMatchesSubject(row: DocRow, form: Pick<LetterFormState, "employeeUserId" | "employeeName" | "candidateEmail">) {
@@ -394,9 +452,19 @@ export function hydrateLetterFormFromDoc(row: DocRow, form: LetterFormState): Le
   };
 }
 
+/** Single fields older letters used for table rows; read once to seed the table. */
+const LEGACY_TABLE_FIELDS = [
+  "from1", "to1", "designation2", "from2", "to2", "project1", "project2",
+  "kra1", "kra2", "kra3", "kra4", "kra5", "bank", "last4", "chqNo", "facts", "evidence",
+];
+
 function sheetFromData(data: Record<string, unknown>, prev: Record<string, string>): Record<string, string> {
   const sheet = { ...prev };
-  const keys = new Set(Object.values(LETTER_VARIABLES).flat().map((f) => f.key));
+  const keys = new Set([
+    ...Object.values(LETTER_VARIABLES).flat().map((f) => f.key),
+    ...Object.values(HR_LETTER_TABLES).flat().map((t) => t.key),
+    ...LEGACY_TABLE_FIELDS,
+  ]);
   for (const key of keys) {
     const v = data[key];
     if (v != null && String(v).trim()) sheet[key] = String(v);
@@ -538,9 +606,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "payDay", label: "Pay day", default: "7th" },
     { key: "retirementAge", label: "Retirement age", default: "58" },
     { key: "noOfCheques", label: "Number of security cheques" },
-    { key: "bank", label: "Bank" },
-    { key: "last4", label: "Account last 4" },
-    { key: "chqNo", label: "Cheque numbers" },
     { key: "kraNote", label: "Role KRAs", default: "KRAs as per SPDC role master for this designation", type: "textarea", wide: true },
   ],
   Confirmation: [
@@ -605,17 +670,10 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "newNotice", label: "New notice (days)", default: "60" },
     { key: "currentLimit", label: "Current authority limit" },
     { key: "newLimit", label: "New authority limit" },
-    { key: "kra1", label: "KRA 1", default: "Deliver assigned projects to approved schedule", wide: true },
-    { key: "kra2", label: "KRA 2", default: "Client satisfaction and stakeholder communication", wide: true },
-    { key: "kra3", label: "KRA 3", default: "Cost control and billing accuracy", wide: true },
-    { key: "kra4", label: "KRA 4", default: "HSE performance and compliance", wide: true },
-    { key: "kra5", label: "KRA 5", default: "Team development and mentoring", wide: true },
   ],
   Warning: [
     { key: "letterType", label: "Letter type", default: "Concern" },
     { key: "severity", label: "Severity", default: "minor" },
-    { key: "facts", label: "Facts (what, where, who reported)", type: "textarea", wide: true },
-    { key: "evidence", label: "Evidence", default: "DPR, email records", wide: true },
     { key: "clausePolicy", label: "Clause / policy", default: "Clause 14 of your Appointment Letter", wide: true },
     { key: "previousWarnings", label: "Previous warnings", default: "None", wide: true },
     { key: "replyHours", label: "Reply within (hours)", default: "72" },
@@ -625,14 +683,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
   ],
   Experience: [
     { key: "joinDate", label: "Joining date", type: "date" },
-    { key: "from1", label: "Role 1 from", type: "date" },
-    { key: "to1", label: "Role 1 to", type: "date" },
-    { key: "designation2", label: "Later designation (if promoted)" },
-    { key: "from2", label: "Role 2 from", type: "date" },
-    { key: "to2", label: "Role 2 to", type: "date" },
-    { key: "project1", label: "Project 1", wide: true },
-    { key: "project2", label: "Project 2" },
-    { key: "period", label: "Period of service", wide: true },
     { key: "natureOfWork", label: "Nature of work", default: "site supervision, planning, quality control and billing verification", type: "textarea", wide: true },
     { key: "exitMode", label: "Issued", default: "on resignation" },
   ],

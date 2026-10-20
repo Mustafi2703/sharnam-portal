@@ -603,7 +603,7 @@ async function filledDocxBufferForRow(
   const templateBuf = fs.readFileSync(docxPath);
   const { buildHrmsDocxTokenMap, fillHrmsDocx } = await import("./hrmsDocxFill.js");
   const tokens = buildHrmsDocxTokenMap(row, merged, breakdown);
-  return fillHrmsDocx(templateBuf, tokens);
+  return fillHrmsDocx(templateBuf, tokens, { kind: row.kind, data: merged });
 }
 
 /** HTML preview from the same filled .docx as Generate — WYSIWYG with Word template. */
