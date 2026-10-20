@@ -541,10 +541,14 @@ async function rememberSelectedContractors(projectId: string) {
       data: { contractorName: names.join(", ") },
     });
   }
-  const { syncCommsContactsFromDirectory } = await import("../services/syncCommsFromDirectory.js");
-  await syncCommsContactsFromDirectory(projectId).catch((err) =>
-    console.warn("[comms] contractor sync:", err instanceof Error ? err.message : err),
-  );
+  const { ensureCompanyHeader } = await import("../services/syncCommsFromDirectory.js");
+  for (const kind of ["TECHNICAL", "COMMERCIAL"]) {
+    for (const name of names) {
+      await ensureCompanyHeader(projectId, kind, "Contractor", name).catch((err) =>
+        console.warn("[comms] contractor team:", err instanceof Error ? err.message : err),
+      );
+    }
+  }
 }
 
 projectsRouter.get("/", async (req: AuthedRequest, res) => {

@@ -3,7 +3,7 @@ import { api } from "../api";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useClientLogo } from "../lib/useClientLogo";
 import { matrixSubtitle } from "./MatrixOnboard";
-import { MatrixBlocksTable, MatrixCompanyEditor, deleteMatrixCompanyBlock } from "./MatrixBlocksTable";
+import { MatrixBlocksTable, MatrixCompanyEditor, clearMatrixPeople, deleteMatrixCompanyBlock } from "./MatrixBlocksTable";
 import type { MatrixBlock } from "@sharnam/shared";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
@@ -467,6 +467,20 @@ export function ProjectSetupMatrixDesk({
             }
           } catch (err) {
             onMsg(err instanceof Error ? err.message : "Could not delete the company");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        onClearPeople={async () => {
+          setBusy(true);
+          try {
+            const msg = await clearMatrixPeople({ projectId, token, matrixKind });
+            if (msg) {
+              onMsg(msg);
+              await load();
+            }
+          } catch (err) {
+            onMsg(err instanceof Error ? err.message : "Could not clear the matrix");
           } finally {
             setBusy(false);
           }

@@ -26,6 +26,8 @@ export type MatrixBlock<R extends MatrixRowLike = MatrixRowLike> = {
   orgSection: string;
   company: string;
   headerId: string | null;
+  /** Every header row for this company (duplicates included) so delete and clean-up remove them all. */
+  headerIds: string[];
   /** Company SPOC as entered on the block; falls back to the TO people when nobody set one. */
   spoc: string;
   spocIsSet: boolean;
@@ -89,7 +91,7 @@ export function buildMatrixBlocks<R extends MatrixRowLike>(rows: R[], opts: { ke
     const key = blockKey(section, company);
     let b = blocks.get(key);
     if (!b) {
-      b = { key, letter: "", orgSection: section, company, headerId: null, spoc: "", spocIsSet: false, officeAddress: "", people: [], placeholders: [], firstSort: sort };
+      b = { key, letter: "", orgSection: section, company, headerId: null, headerIds: [], spoc: "", spocIsSet: false, officeAddress: "", people: [], placeholders: [], firstSort: sort };
       blocks.set(key, b);
     }
     b.firstSort = Math.min(b.firstSort, sort);
@@ -111,6 +113,7 @@ export function buildMatrixBlocks<R extends MatrixRowLike>(rows: R[], opts: { ke
     const existing = blocks.get(key);
     if (!existing && !opts.keepEmpty) continue;
     const b = existing ?? ensure(section, text(h.orgName) || section, h.sortOrder ?? 0);
+    b.headerIds.push(h.id);
     if (b.headerId) continue;
     b.headerId = h.id;
     if (text(h.orgName)) b.company = text(h.orgName);

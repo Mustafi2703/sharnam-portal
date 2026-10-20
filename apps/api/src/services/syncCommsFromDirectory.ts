@@ -392,11 +392,30 @@ export async function deleteMatrixCompany(projectId: string, input: { matrixKind
       (b) => b.orgSection === section && (section === "PMC" || matrixCompanyKey(b.company) === key || b.key === `${section}|${key}`),
     );
     if (!block) continue;
-    const ids = [block.headerId, ...block.people.map((r) => r.id), ...block.placeholders.map((r) => r.id)].filter((id): id is string => Boolean(id));
+    const ids = [...block.headerIds, ...block.people.map((r) => r.id), ...block.placeholders.map((r) => r.id)];
     const out = await prisma.communicationContact.deleteMany({ where: { projectId, id: { in: ids } } });
     deleted += out.count;
   }
   return { deleted };
+}
+
+/** Empty the matrix down to its teams: one header row per company, no people, no duplicate headers. */
+export async function clearMatrixToTeams(projectId: string, input: { matrixKind?: string; bothMatrices?: boolean }) {
+  const { buildMatrixBlocks } = await import("@sharnam/shared");
+  const kinds = input.bothMatrices ? [...KINDS] : [input.matrixKind === "COMMERCIAL" ? "COMMERCIAL" : "TECHNICAL"];
+  let deleted = 0;
+  let teams = 0;
+  for (const kind of kinds) {
+    const rows = await prisma.communicationContact.findMany({ where: { projectId, matrixKind: kind } });
+    const ids: string[] = [];
+    for (const block of buildMatrixBlocks(rows, { keepEmpty: true })) {
+      if (!block.headerId) await ensureCompanyHeader(projectId, kind, block.orgSection, block.company);
+      ids.push(...block.headerIds.slice(1), ...block.people.map((r) => r.id), ...block.placeholders.map((r) => r.id));
+      teams += 1;
+    }
+    if (ids.length) deleted += (await prisma.communicationContact.deleteMany({ where: { projectId, id: { in: ids } } })).count;
+  }
+  return { deleted, teams };
 }
 
 const DEFAULT_SECTIONS: { orgSection: OrgSection; fallback: string }[] = [

@@ -5,7 +5,7 @@ import { formatUiText } from "../lib/formatUiText";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { useClientLogo } from "../lib/useClientLogo";
 import { matrixSubtitle } from "./MatrixOnboard";
-import { MatrixBlocksTable, MatrixCompanyEditor, deleteMatrixCompanyBlock } from "./MatrixBlocksTable";
+import { MatrixBlocksTable, MatrixCompanyEditor, clearMatrixPeople, deleteMatrixCompanyBlock } from "./MatrixBlocksTable";
 import type { MatrixBlock } from "@sharnam/shared";
 import {
   EMPTY_MATRIX_FORM,
@@ -386,6 +386,20 @@ export function CommsMatrixPanel({
             }
           } catch (err) {
             onMsg(err instanceof Error ? err.message : "Could not delete the company");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        onClearPeople={async () => {
+          setBusy(true);
+          try {
+            const msg = await clearMatrixPeople({ projectId, token, matrixKind });
+            if (msg) {
+              onMsg(msg);
+              await onReload();
+            }
+          } catch (err) {
+            onMsg(err instanceof Error ? err.message : "Could not clear the matrix");
           } finally {
             setBusy(false);
           }

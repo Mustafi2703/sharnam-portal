@@ -51,10 +51,6 @@ commsRouter.post("/matrix/:projectId/seed-standard", requireRoles("admin", "offi
 /** BPCL-style contact matrix (TECHNICAL / COMMERCIAL) */
 commsRouter.get("/contacts/:projectId", async (req, res) => {
   const kind = String(req.query.kind || "TECHNICAL").toUpperCase();
-  const { syncCommsContactsFromDirectory } = await import("../services/syncCommsFromDirectory.js");
-  await syncCommsContactsFromDirectory(req.params.projectId).catch((err) =>
-    console.warn("[comms] contractor sync:", err instanceof Error ? err.message : err),
-  );
   const rows = await prisma.communicationContact.findMany({
     where: { projectId: req.params.projectId, matrixKind: kind },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -255,6 +251,21 @@ commsRouter.post("/contacts/:projectId/company/delete", requireRoles("admin", "o
   });
   const { fileWonProjectPack } = await import("../services/crmSharePoint.js");
   void fileWonProjectPack(req.params.projectId).catch(() => undefined);
+  res.json({ ok: true, ...out });
+});
+
+commsRouter.post("/contacts/:projectId/clear-to-teams", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { clearMatrixToTeams } = await import("../services/syncCommsFromDirectory.js");
+  const out = await clearMatrixToTeams(req.params.projectId, {
+    matrixKind: req.body?.matrixKind,
+    bothMatrices: !!req.body?.bothMatrices,
+  });
+  await audit("comms.contact.clear_to_teams", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: req.params.projectId,
+    meta: { both: !!req.body?.bothMatrices, ...out },
+  });
   res.json({ ok: true, ...out });
 });
 

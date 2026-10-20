@@ -17,6 +17,7 @@ type Props = {
   onEditCompany: (block: Block) => void;
   onAddPerson: (block: Block) => void;
   onDeleteCompany: (block: Block) => void;
+  onClearPeople?: () => void;
   emptyText: string;
 };
 
@@ -28,7 +29,7 @@ const GRID = "border border-[#445469]";
 const CELL = `${GRID} px-2 py-2 align-middle font-semibold text-[13px] text-[#111]`;
 
 /** Sheet-style BPCL matrix: one lettered row per company; company, SPOC and office address merged down that company's people. */
-export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditPerson, onDeleteRow, onEditCompany, onAddPerson, onDeleteCompany, emptyText }: Props) {
+export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditPerson, onDeleteRow, onEditCompany, onAddPerson, onDeleteCompany, onClearPeople, emptyText }: Props) {
   const blocks = useMemo(() => buildMatrixBlocks(contacts as (MatrixContact & { id: string })[], { keepEmpty: true }), [contacts]);
   const people = blocks.reduce((n, b) => n + b.people.length, 0);
   const width = HEADERS.length + (canEdit ? 1 : 0);
@@ -37,8 +38,13 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
     <Card padding={false} className="overflow-x-auto">
       <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white flex justify-between gap-2">
         <span>{formatUiText(`${matrixKind} contact register`)}</span>
-        <span className="text-[11px] font-normal text-white/70">
+        <span className="flex items-center gap-3 text-[11px] font-normal text-white/70">
           {blocks.length} {formatUiText("companies")} · {people} {formatUiText("people")}
+          {canEdit && onClearPeople ? (
+            <button type="button" disabled={busy} className="rounded border border-white/40 px-2 py-0.5 text-white hover:bg-white/10 disabled:opacity-50" onClick={onClearPeople}>
+              {formatUiText("Clear people · keep teams")}
+            </button>
+          ) : null}
         </span>
       </div>
       <table className="w-full min-w-[1180px] table-fixed border-collapse bg-white" style={{ fontFamily: "Calibri, 'Segoe UI', system-ui, sans-serif" }}>
@@ -295,4 +301,18 @@ export async function deleteMatrixCompanyBlock(opts: {
     body: JSON.stringify({ matrixKind, bothMatrices: both, orgSection: block.orgSection, company: block.company }),
   });
   return `${block.company} removed — ${r.deleted} row(s)${both ? " from both matrices" : ""}.`;
+}
+
+/** Confirm, then empty the matrix to one row per company (team), removing every person and duplicate row. */
+export async function clearMatrixPeople(opts: { projectId: string; token: string; matrixKind: "TECHNICAL" | "COMMERCIAL" }): Promise<string | null> {
+  const { projectId, token, matrixKind } = opts;
+  if (!window.confirm(`Remove every person from the ${matrixKind} matrix and keep only the company teams?`)) return null;
+  const other = matrixKind === "TECHNICAL" ? "COMMERCIAL" : "TECHNICAL";
+  const both = window.confirm(`Also clear the ${other} matrix?`);
+  const r = await api<{ deleted: number; teams: number }>(`/api/comms/contacts/${projectId}/clear-to-teams`, {
+    method: "POST",
+    token,
+    body: JSON.stringify({ matrixKind, bothMatrices: both }),
+  });
+  return `Matrix cleared — ${r.deleted} row(s) removed, ${r.teams} team(s) kept${both ? " on both sheets" : ""}.`;
 }
