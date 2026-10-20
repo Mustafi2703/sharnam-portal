@@ -45,6 +45,7 @@ export default function CrmPage() {
   const [leadAddOpen, setLeadAddOpen] = useState(false);
   const leadFormRef = useRef<HTMLDivElement>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [leadSaving, setLeadSaving] = useState(false);
   const [leadForm, setLeadForm] = useState({
     title: "",
     contactName: "",
@@ -100,13 +101,17 @@ export default function CrmPage() {
   }
 
   async function updateLeadStage(leadId: string, stage: string) {
-    await api(`/api/crm/leads/${leadId}`, {
-      method: "PATCH",
-      token,
-      body: JSON.stringify({ stage }),
-    });
-    setMsg(`Pipeline stage → ${stage}`);
-    await load();
+    try {
+      await api(`/api/crm/leads/${leadId}`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ stage }),
+      });
+      setMsg(`Pipeline stage → ${stage}`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update the pipeline stage");
+    }
   }
 
   const load = async () => {
@@ -166,15 +171,40 @@ export default function CrmPage() {
 
   async function createLead(e: FormEvent) {
     e.preventDefault();
-    await api("/api/crm/leads", {
-      method: "POST",
-      token,
-      body: JSON.stringify({ ...leadForm, value: leadForm.value ? Number(leadForm.value) : null }),
-    });
-    setLeadForm({ title: "", contactName: "", email: "", phone: "", stage: "New", value: "" });
-    setLeadAddOpen(false);
-    setMsg("Lead added.");
-    await load();
+    if (leadSaving) return;
+    const title = leadForm.title.trim();
+    if (!title) {
+      setMsg("Opportunity title is required.");
+      return;
+    }
+    const value = leadForm.value.trim() ? Number(leadForm.value.replace(/,/g, "")) : null;
+    if (value != null && !Number.isFinite(value)) {
+      setMsg("Value must be a number.");
+      return;
+    }
+    setLeadSaving(true);
+    try {
+      await api("/api/crm/leads", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          title,
+          contactName: leadForm.contactName.trim(),
+          email: leadForm.email.trim().toLowerCase(),
+          phone: leadForm.phone.trim(),
+          stage: leadForm.stage,
+          value,
+        }),
+      });
+      setLeadForm({ title: "", contactName: "", email: "", phone: "", stage: "New", value: "" });
+      setLeadAddOpen(false);
+      setMsg("Lead added.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add the lead");
+    } finally {
+      setLeadSaving(false);
+    }
   }
 
   return (
@@ -194,7 +224,7 @@ export default function CrmPage() {
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Card className="!p-4">
-              <div className="text-[10px] font-mono uppercase text-steel-muted">Total projects</div>
+              <div className="text-[10px] font-mono uppercase text-steel-muted">Total leads</div>
               <div className="font-display text-3xl text-brand">{leads.length}</div>
               <div className="text-xs text-steel-muted mt-1">Active pipeline register</div>
             </Card>
@@ -272,7 +302,9 @@ export default function CrmPage() {
                 ))}
               </Select>
               <Input placeholder="Value (INR)" value={leadForm.value} onChange={(e) => setLeadForm({ ...leadForm, value: e.target.value })} />
-              <Button type="submit" className="md:col-span-3">Save lead</Button>
+              <Button type="submit" className="md:col-span-3" disabled={leadSaving}>
+                {leadSaving ? "Saving…" : "Save lead"}
+              </Button>
               <Button type="button" variant="secondary" className="md:col-span-3" onClick={() => setLeadAddOpen(false)}>Cancel</Button>
             </form>
           </Card>

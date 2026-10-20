@@ -27,14 +27,17 @@ export async function getProjectMatrixEmails(
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
 
-  const to: string[] = [];
-  const cc: string[] = [];
+  // The same person usually sits on both TECHNICAL and COMMERCIAL; each address goes out once, TO wins over CC.
+  const toSet = new Set<string>();
+  const ccSet = new Set<string>();
   for (const r of rows) {
     const email = normEmail(r.email);
     if (!email) continue;
-    if (r.mailRole === "TO") to.push(email);
-    else cc.push(email);
+    if (r.mailRole === "TO") toSet.add(email);
+    else ccSet.add(email);
   }
+  const to = [...toSet];
+  const cc = [...ccSet].filter((e) => !toSet.has(e));
 
   const all = Array.from(new Set([...to, ...cc]));
   return { to, cc, all, csv: all.join(", ") };

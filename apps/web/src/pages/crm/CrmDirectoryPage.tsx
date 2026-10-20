@@ -121,12 +121,20 @@ export function DirectoryCompaniesPanel({
   const [listSearch, setListSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [creatingNew, setCreatingNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const formPanelRef = useRef<HTMLDivElement>(null);
   const { types: consultantTypes } = useConsultantTypes(token);
 
   const load = useCallback(async () => {
-    const list = await api<VendorRow[]>(`/api/vendors${directoryVendorsQuery(tab)}`, { token });
-    setRows(list.filter((r) => !meta.partyTypes.length || meta.partyTypes.includes(r.partyType as VendorPartyType)));
+    try {
+      const list = await api<VendorRow[]>(`/api/vendors${directoryVendorsQuery(tab)}`, { token });
+      setRows(list.filter((r) => !meta.partyTypes.length || meta.partyTypes.includes(r.partyType as VendorPartyType)));
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not load the directory");
+    } finally {
+      setLoaded(true);
+    }
   }, [token, meta.partyTypes, tab]);
 
   useEffect(() => {
@@ -189,7 +197,7 @@ export function DirectoryCompaniesPanel({
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!canEdit) return;
+    if (!canEdit || saving) return;
     setMsg("");
     const trimmedName = trimField(form.name);
     if (!trimmedName) {
@@ -209,6 +217,7 @@ export function DirectoryCompaniesPanel({
       trade: trimField(form.trade),
       notes: trimField(form.notes),
     };
+    setSaving(true);
     try {
       if (selectedId) {
         if (!selected || vendorDesk(selected.partyType) !== vendorDesk(meta.defaultParty)) {
@@ -243,7 +252,7 @@ export function DirectoryCompaniesPanel({
           {
             method: "POST",
             token,
-            body: JSON.stringify({ ...payload, createLogin: false }),
+            body: JSON.stringify({ ...payload, createLogin: false, createOnly: true }),
           },
         );
         setCreatingNew(false);
@@ -257,6 +266,8 @@ export function DirectoryCompaniesPanel({
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -366,7 +377,11 @@ export function DirectoryCompaniesPanel({
               ) : null}
             </li>
           ))}
-          {!visibleRows.length && <li className="px-4 py-8 text-center text-steel-muted">No records yet.</li>}
+          {!visibleRows.length && (
+            <li className="px-4 py-8 text-center text-steel-muted">
+              {!loaded ? "Loading…" : rows.length ? "No companies match this search." : "No records yet."}
+            </li>
+          )}
         </ul>
       </Card>
 
@@ -471,7 +486,9 @@ export function DirectoryCompaniesPanel({
           <TextArea disabled={!canEdit} placeholder="Notes" rows={2} value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           {canEdit && (
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit">Save</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
               {creatingNew ? (
                 <Button
                   type="button"

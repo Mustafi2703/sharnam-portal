@@ -1,12 +1,11 @@
 import ExcelJS from "exceljs";
 import fs from "fs";
-import os from "os";
-import path from "path";
 import { prisma } from "../prisma.js";
 import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
-import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
+import { sharnamLogoPath } from "./brandedExport.js";
+import { clientLogoForProject, imagePixelSize, sniffLogoExt, type LogoExt } from "./clientLogo.js";
 
-type MatrixRow = {
+export type MatrixRow = {
   id: string;
   orgSection?: string | null;
   orgName?: string | null;
@@ -21,12 +20,42 @@ type MatrixRow = {
   officeAddress?: string | null;
 };
 
+export type MatrixProject = {
+  id: string;
+  name: string;
+  clientName: string | null;
+  designConsultant: string | null;
+  pmcName: string | null;
+  clientLogoUrl?: string | null;
+};
+
+export type MatrixBundle = { project: MatrixProject; rows: MatrixRow[]; matrixKind: string };
+
+export type MatrixLogo = { buffer: Buffer; ext: LogoExt; width: number; height: number };
+export type MatrixLogos = { sharnam: MatrixLogo | null; client: MatrixLogo | null };
+
 /** BPCL Communication Matrix_BPCL (2).xlsx header slate. */
 const HEADER_FILL = "FF445469";
 const SECTION_FILL = "FFE8EEF8";
+const BANNER_INK = "FF1E3A5F";
 const THIN = { style: "thin" as const, color: { argb: "FF445469" } };
 const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
-const COL_WIDTHS = [11, 27, 28, 24, 25, 16, 32, 18, 34];
+/** Column widths of the BPCL TECHNICAL / COMMERCIAL sheets (A–I). */
+const COL_WIDTHS = [10.8, 27.1, 27.8, 23.3, 24.3, 25.3, 37.7, 31, 30.3];
+const BANNER_ROW_PT = 17.25;
+const HEADER_ROW_PT = 31;
+const SECTION_ROW_PT = 25.4;
+const HEADERS = [
+  "SR.NO",
+  "NAME",
+  "DESIGNATION",
+  "NAME OF COMPANY",
+  "SINGLE POINT OF CONTACT",
+  "MOBILE",
+  "E-MAIL",
+  "GENERAL MAIL COMMUNICATION",
+  "OFFICE ADD.",
+];
 
 function esc(s: unknown) {
   return String(s ?? "")
@@ -36,52 +65,59 @@ function esc(s: unknown) {
     .replace(/"/g, "&quot;");
 }
 
-const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
-
-async function imageDataUriFromUrl(raw: string | null | undefined): Promise<string> {
-  const url = String(raw || "").trim();
-  if (!url) return "";
-  if (url.startsWith("data:image/")) return url;
-
-  const localMarker = "/uploads/onedrive/";
-  const idx = url.indexOf(localMarker);
-  if (idx >= 0) {
-    const rel = decodeURIComponent(url.slice(idx + "/uploads/".length));
-    const file = path.join(UPLOAD_ROOT, rel);
-    if (fs.existsSync(file)) {
-      const ext = path.extname(file).toLowerCase() === ".jpg" || path.extname(file).toLowerCase() === ".jpeg" ? "jpeg" : "png";
-      return `data:image/${ext};base64,${fs.readFileSync(file).toString("base64")}`;
-    }
-  }
-
-  if (/^https?:\/\//i.test(url)) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 2500);
-      const res = await fetch(url, { signal: ctrl.signal });
-      clearTimeout(timer);
-      if (!res.ok) return "";
-      const buf = Buffer.from(await res.arrayBuffer());
-      const type = (res.headers.get("content-type") || "image/png").split(";")[0];
-      if (!type.startsWith("image/")) return "";
-      return `data:${type};base64,${buf.toString("base64")}`;
-    } catch {
-      return "";
-    }
-  }
-  return "";
+function matrixDate(at = new Date()) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+    .format(at)
+    .replace(/\//g, "-");
 }
 
-function dataUriToTempFile(dataUri: string, name: string): { file: string; ext: "png" | "jpeg" } | null {
-  const m = dataUri.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/i);
-  if (!m) return null;
-  const ext = m[1].toLowerCase() === "png" ? "png" : "jpeg";
-  const file = path.join(os.tmpdir(), `${name}-${Date.now()}.${ext === "png" ? "png" : "jpg"}`);
-  fs.writeFileSync(file, Buffer.from(m[2], "base64"));
-  return { file, ext };
+function bannerLines(project: MatrixProject, kind: string, date: string) {
+  return [
+    `PROJECT : ${project.name}`,
+    `CLIENT: ${project.clientName || "—"}`,
+    `DESIGN CONSULTANT : ${project.designConsultant || "—"}`,
+    `PROJECT MANAGEMENT CONSULTANTS : ${project.pmcName || SPDC_PMC_NAME}`,
+    `SUBJECT : ${kind} COMMUNICATION MATRIX`,
+    `DATE : ${date}`,
+  ];
 }
 
-export async function loadMatrixBundle(projectId: string, matrixKind: string) {
+export function matrixLogoFromBuffer(buffer: Buffer | null | undefined): MatrixLogo | null {
+  const ext = sniffLogoExt(buffer);
+  const size = buffer && ext ? imagePixelSize(buffer) : null;
+  if (!buffer || !ext || !size || !size.width || !size.height) return null;
+  return { buffer, ext, ...size };
+}
+
+function sharnamMatrixLogo(): MatrixLogo | null {
+  const file = sharnamLogoPath();
+  if (!file) return null;
+  try {
+    return matrixLogoFromBuffer(fs.readFileSync(file));
+  } catch {
+    return null;
+  }
+}
+
+export async function loadMatrixLogos(projectId: string): Promise<MatrixLogos> {
+  const client = await clientLogoForProject(projectId);
+  return { sharnam: sharnamMatrixLogo(), client: matrixLogoFromBuffer(client?.buffer) };
+}
+
+const dataUri = (logo: MatrixLogo) => `data:image/${logo.ext};base64,${logo.buffer.toString("base64")}`;
+
+/** Largest size that fits `boxW × boxH` with the logo's aspect ratio. */
+function fitInto(logo: MatrixLogo, boxW: number, boxH: number) {
+  const scale = Math.min(boxW / logo.width, boxH / logo.height);
+  return { width: Math.max(1, Math.round(logo.width * scale)), height: Math.max(1, Math.round(logo.height * scale)) };
+}
+
+export async function loadMatrixBundle(projectId: string, matrixKind: string): Promise<MatrixBundle> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
@@ -103,21 +139,55 @@ export async function loadMatrixBundle(projectId: string, matrixKind: string) {
   return { project, rows: rows as MatrixRow[], matrixKind };
 }
 
-type MatrixProject = {
-  name: string;
-  clientName: string | null;
-  designConsultant: string | null;
-  pmcName: string | null;
-  clientLogoUrl?: string | null;
-};
+const EMU_PER_PX = 9525;
+const colPx = (width: number) => Math.round(width * 7);
+const rowPx = (pt: number) => Math.round((pt * 4) / 3);
 
-/** Landscape BPCL sheet on an existing workbook. Returns temp logo files the caller must delete. */
-async function paintMatrixSheet(
-  wb: ExcelJS.Workbook,
-  project: MatrixProject,
-  rows: MatrixRow[],
-  kind: string,
-): Promise<string[]> {
+/**
+ * Centre an image in the box starting at column `col0` / row 0. Native EMU offsets — ExcelJS scales fractional
+ * `tl.col` by `width × 10000` EMU, which is several times too small for custom-width columns.
+ */
+function placeInBox(
+  sheet: ExcelJS.Worksheet,
+  imageId: number,
+  logo: MatrixLogo,
+  col0: number,
+  cols: number,
+  rows: number,
+) {
+  const widths = COL_WIDTHS.slice(col0, col0 + cols).map(colPx);
+  const boxW = widths.reduce((a, b) => a + b, 0);
+  const rowH = rowPx(BANNER_ROW_PT);
+  const boxH = rowH * rows;
+  const pad = 6;
+  const size = fitInto(logo, boxW - pad * 2, boxH - pad * 2);
+  let dx = Math.round((boxW - size.width) / 2);
+  let col = col0;
+  for (const w of widths) {
+    if (dx < w) break;
+    dx -= w;
+    col += 1;
+  }
+  const dy = Math.round((boxH - size.height) / 2);
+  const tl = {
+    nativeCol: col,
+    nativeColOff: dx * EMU_PER_PX,
+    nativeRow: Math.floor(dy / rowH),
+    nativeRowOff: (dy % rowH) * EMU_PER_PX,
+  };
+  sheet.addImage(imageId, {
+    tl: tl as unknown as { col: number; row: number },
+    ext: size,
+    editAs: "oneCell",
+  });
+}
+
+/** Both matrix sheets of one workbook share the same embedded logo files. */
+const workbookImageIds = new WeakMap<ExcelJS.Workbook, Map<Buffer, number>>();
+
+/** Landscape BPCL sheet on an existing workbook: Sharnam logo A1:B6, banner C1:H6, client logo I1:I6. */
+export function paintMatrixSheet(wb: ExcelJS.Workbook, bundle: MatrixBundle, logos: MatrixLogos, at = new Date()): void {
+  const { project, rows, matrixKind: kind } = bundle;
   const sheetName = kind.slice(0, 31);
   const prior = wb.getWorksheet(sheetName);
   if (prior) wb.removeWorksheet(prior.id);
@@ -125,19 +195,6 @@ async function paintMatrixSheet(
     views: [{ state: "normal", showGridLines: false, zoomScale: 80 }],
     properties: { defaultRowHeight: 18 },
   });
-  const spdcLogo = sharnamLogoPath();
-  const clientUri = await imageDataUriFromUrl(project.clientLogoUrl);
-  const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo") : null;
-  const temps = clientFile ? [clientFile.file] : [];
-
-  const matrixDate = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-    .format(new Date())
-    .replace(/\//g, "-");
 
   COL_WIDTHS.forEach((width, i) => {
     sheet.getColumn(i + 1).width = width;
@@ -152,71 +209,51 @@ async function paintMatrixSheet(
     margins: { left: 0.2, right: 0.2, top: 0.35, bottom: 0.4, header: 0.2, footer: 0.2 },
   };
 
-  const banner = [
-    `PROJECT : ${project.name}`,
-    `CLIENT: ${project.clientName || "—"}`,
-    `DESIGN CONSULTANT : ${project.designConsultant || "—"}`,
-    `PROJECT MANAGEMENT CONSULTANTS : ${project.pmcName || SPDC_PMC_NAME}`,
-    `SUBJECT : ${kind} COMMUNICATION MATRIX`,
-    `DATE : ${matrixDate}`,
-  ];
-  banner.forEach((line, i) => {
+  bannerLines(project, kind, matrixDate(at)).forEach((line, i) => {
     const rowNo = i + 1;
-    sheet.mergeCells(rowNo, 1, rowNo, 7);
-    const cell = sheet.getCell(rowNo, 1);
+    sheet.getRow(rowNo).height = BANNER_ROW_PT;
+    sheet.mergeCells(rowNo, 3, rowNo, 8);
+    const cell = sheet.getCell(rowNo, 3);
     cell.value = line;
-    cell.font = {
-      bold: true,
-      size: rowNo === 5 ? 14 : 12,
-      name: "Calibri",
-      color: { argb: "FF1E3A5F" },
-    };
+    cell.font = { bold: true, size: 12, name: "Calibri", color: { argb: BANNER_INK } };
     cell.alignment = { vertical: "middle", horizontal: "left", wrapText: false };
-    sheet.getRow(rowNo).height = rowNo === 5 ? 24 : 20;
-    for (let c = 1; c <= 9; c++) {
-      sheet.getCell(rowNo, c).border = {
-        bottom: rowNo === 6 ? { style: "medium", color: { argb: "FF1E3A5F" } } : undefined,
-      };
+    if (rowNo === 6) {
+      for (let c = 1; c <= 9; c++) sheet.getCell(rowNo, c).border = { bottom: { style: "medium", color: { argb: BANNER_INK } } };
     }
   });
+  sheet.mergeCells(1, 1, 6, 2);
+  sheet.mergeCells(1, 9, 6, 9);
 
-  // Large logos in the top-right, spanning the banner rows (BPCL layout).
-  if (spdcLogo) {
-    const imgId = wb.addImage({ filename: spdcLogo, extension: "png" });
-    sheet.addImage(imgId, {
-      tl: { col: 7.05, row: 0.2 },
-      ext: { width: 150, height: 100 },
-      editAs: "oneCell",
-    });
-  }
-  if (clientFile) {
-    const imgId = wb.addImage({ filename: clientFile.file, extension: clientFile.ext });
-    sheet.addImage(imgId, {
-      tl: { col: 8.05, row: 0.2 },
-      ext: { width: 150, height: 100 },
-      editAs: "oneCell",
-    });
+  const ids = workbookImageIds.get(wb) ?? new Map<Buffer, number>();
+  workbookImageIds.set(wb, ids);
+  const imageId = (logo: MatrixLogo) => {
+    let id = ids.get(logo.buffer);
+    if (id === undefined) {
+      id = wb.addImage({ buffer: logo.buffer as unknown as ExcelJS.Buffer, extension: logo.ext });
+      ids.set(logo.buffer, id);
+    }
+    return id;
+  };
+  if (logos.sharnam) {
+    placeInBox(sheet, imageId(logos.sharnam), logos.sharnam, 0, 2, 6);
   } else {
-    const placeholder = sheet.getCell(2, 9);
+    const brand = sheet.getCell(1, 1);
+    brand.value = "SPDC";
+    brand.font = { bold: true, size: 16, name: "Calibri", color: { argb: BANNER_INK } };
+    brand.alignment = { vertical: "middle", horizontal: "center" };
+  }
+  if (logos.client) {
+    placeInBox(sheet, imageId(logos.client), logos.client, 8, 1, 6);
+  } else {
+    const placeholder = sheet.getCell(1, 9);
     placeholder.value = project.clientName || "Client logo";
-    placeholder.font = { italic: true, size: 9, color: { argb: "FF888888" }, name: "Calibri" };
+    placeholder.font = { italic: true, size: 10, color: { argb: "FF888888" }, name: "Calibri" };
     placeholder.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
   }
 
-  const header = [
-    "SR.NO",
-    "NAME",
-    "DESIGNATION",
-    "NAME OF COMPANY",
-    "SINGLE POINT OF CONTACT",
-    "MOBILE",
-    "E-MAIL",
-    "GENERAL MAIL COMMUNICATION",
-    "OFFICE ADD.",
-  ];
   const hr = sheet.getRow(7);
-  hr.height = 36;
-  header.forEach((label, i) => {
+  hr.height = HEADER_ROW_PT;
+  HEADERS.forEach((label, i) => {
     const cell = hr.getCell(i + 1);
     cell.value = label;
     cell.font = { bold: true, size: 11, name: "Calibri", color: { argb: "FFFFFFFF" } };
@@ -226,7 +263,7 @@ async function paintMatrixSheet(
   });
 
   const paint = (row: ExcelJS.Row, opts: { bold?: boolean; section?: boolean; height?: number }) => {
-    row.height = opts.height ?? (opts.section ? 26 : 32);
+    row.height = opts.height ?? (opts.section ? SECTION_ROW_PT : 32);
     for (let c = 1; c <= 9; c++) {
       const cell = row.getCell(c);
       cell.font = {
@@ -256,7 +293,7 @@ async function paintMatrixSheet(
       personInSection = 0;
       const row = sheet.addRow([String.fromCharCode(65 + sectionIdx), (r.orgName || "").trim(), "", "", "", "", "", "", ""]);
       sheet.mergeCells(row.number, 2, row.number, 9);
-      paint(row, { bold: true, section: true, height: 26 });
+      paint(row, { bold: true, section: true, height: SECTION_ROW_PT });
       lastDataRow = row.number;
       continue;
     }
@@ -275,7 +312,6 @@ async function paintMatrixSheet(
     ]);
     if (email && email.includes("@")) {
       row.getCell(7).value = { text: email, hyperlink: `mailto:${email}` };
-      row.getCell(7).font = { size: 11, name: "Calibri", color: { argb: "FF0563C1" }, underline: true };
     }
     const lines = Math.max(
       String(r.officeAddress || "").split(/\n/).length,
@@ -283,6 +319,9 @@ async function paintMatrixSheet(
       1,
     );
     paint(row, { height: Math.max(32, 14 * lines + 10) });
+    if (email && email.includes("@")) {
+      row.getCell(7).font = { size: 11, name: "Calibri", color: { argb: "FF0563C1" }, underline: true };
+    }
     lastDataRow = row.number;
   }
 
@@ -292,33 +331,24 @@ async function paintMatrixSheet(
   foot.font = { size: 9, name: "Calibri", italic: true, color: { argb: "FF445469" } };
   foot.alignment = { horizontal: "left", vertical: "middle" };
   sheet.pageSetup.printArea = `A1:I${Math.max(lastDataRow, 7)}`;
+  sheet.pageSetup.printTitlesRow = "1:7";
   sheet.autoFilter = undefined;
-  return temps;
 }
 
-function unlinkTemps(temps: string[]) {
-  for (const f of temps) {
-    try {
-      fs.unlinkSync(f);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-/** Landscape BPCL-style sheet: both logos large, banner, slate header, full grid. */
-export async function buildMatrixXlsx(projectId: string, matrixKind: string): Promise<Buffer> {
-  const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
+/** Workbook with one BPCL sheet per bundle. */
+export async function renderMatrixXlsx(bundles: MatrixBundle[], logos: MatrixLogos, at = new Date()): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Sharnam Portal";
-  wb.created = new Date();
-  const temps = await paintMatrixSheet(wb, project, rows, kind);
-  try {
-    const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
-    return Buffer.from(ab);
-  } finally {
-    unlinkTemps(temps);
-  }
+  wb.created = at;
+  for (const bundle of bundles) paintMatrixSheet(wb, bundle, logos, at);
+  const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  return Buffer.from(ab);
+}
+
+/** Landscape BPCL-style sheet: Sharnam logo left, client logo right, banner, slate header, full grid. */
+export async function buildMatrixXlsx(projectId: string, matrixKind: string): Promise<Buffer> {
+  const bundle = await loadMatrixBundle(projectId, matrixKind);
+  return renderMatrixXlsx([bundle], await loadMatrixLogos(projectId));
 }
 
 /**
@@ -327,39 +357,24 @@ export async function buildMatrixXlsx(projectId: string, matrixKind: string): Pr
  */
 export async function appendBrandedMatrixSheets(buffer: Buffer, projectId: string): Promise<Buffer> {
   const kinds = ["TECHNICAL", "COMMERCIAL"] as const;
-  const bundles = [];
+  const bundles: MatrixBundle[] = [];
   for (const kind of kinds) {
     const bundle = await loadMatrixBundle(projectId, kind);
     if (bundle.rows.length) bundles.push(bundle);
   }
   if (!bundles.length) return buffer;
 
+  const logos = await loadMatrixLogos(projectId);
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
-  const temps: string[] = [];
-  try {
-    for (const bundle of bundles) {
-      temps.push(...(await paintMatrixSheet(wb, bundle.project, bundle.rows, bundle.matrixKind)));
-    }
-    const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
-    return Buffer.from(ab);
-  } finally {
-    unlinkTemps(temps);
-  }
+  for (const bundle of bundles) paintMatrixSheet(wb, bundle, logos);
+  const ab = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  return Buffer.from(ab);
 }
 
-export async function buildMatrixHtml(projectId: string, matrixKind: string): Promise<string> {
-  const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
-  const logo = sharnamLogoDataUri();
-  const clientLogo = await imageDataUriFromUrl(project.clientLogoUrl);
-  const matrixDate = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-    .format(new Date())
-    .replace(/\//g, "-");
+export function renderMatrixHtml(bundle: MatrixBundle, logos: MatrixLogos, at = new Date()): string {
+  const { project, rows, matrixKind: kind } = bundle;
+  const date = matrixDate(at);
   let sectionIdx = -1;
   let personInSection = 0;
   const bodyRows = rows
@@ -383,6 +398,8 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
       </tr>`;
     })
     .join("\n");
+  const [projectLine, clientLine, designLine, pmcLine, subjectLine, dateLine] = bannerLines(project, kind, date);
+  const colPct = COL_WIDTHS.map((w) => ((w / COL_WIDTHS.reduce((a, b) => a + b, 0)) * 100).toFixed(1));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -394,11 +411,12 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
     * { box-sizing: border-box; }
     body { font-family: Calibri, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 16px 20px; color: #111; background: #fff; }
     .sheet { max-width: 1400px; margin: 0 auto; }
-    .head { display: grid; grid-template-columns: 180px 1fr 180px; gap: 16px; align-items: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 14px; }
-    .brand, .client { display: flex; align-items: center; justify-content: center; min-height: 88px; }
-    .brand img, .client img { height: 84px; max-width: 170px; width: auto; object-fit: contain; }
-    .banner { font-size: 13px; line-height: 1.45; color: #1e3a5f; font-weight: 700; }
-    .banner .subject { font-size: 16px; letter-spacing: 0.03em; margin-top: 4px; text-transform: uppercase; }
+    .head { display: grid; grid-template-columns: auto 1fr auto; gap: 20px; align-items: center; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 14px; }
+    .logo { width: 140px; height: 70px; display: flex; align-items: center; justify-content: center; }
+    .logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .logo .fallback { font-size: 12px; color: #888; text-align: center; line-height: 1.3; }
+    .banner { font-size: 13px; line-height: 1.45; color: #1e3a5f; font-weight: 700; min-width: 0; }
+    .banner .subject { font-size: 15px; letter-spacing: 0.03em; text-transform: uppercase; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
     th { background: #445469; color: #fff; text-align: center; padding: 10px 6px; border: 1px solid #445469; font-weight: 700; }
     td { border: 1px solid #445469; padding: 8px 6px; vertical-align: middle; word-wrap: break-word; }
@@ -412,28 +430,20 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
 <body>
   <div class="sheet">
     <div class="head">
-      <div class="brand">${logo ? `<img src="${logo}" alt="Sharnam" />` : `<strong>SPDC</strong>`}</div>
+      <div class="logo brand">${logos.sharnam ? `<img src="${dataUri(logos.sharnam)}" alt="Sharnam" />` : `<strong>SPDC</strong>`}</div>
       <div class="banner">
-        <div>PROJECT : ${esc(project.name)}</div>
-        <div>CLIENT: ${esc(project.clientName || "—")}</div>
-        <div>DESIGN CONSULTANT : ${esc(project.designConsultant || "—")}</div>
-        <div>PROJECT MANAGEMENT CONSULTANTS : ${esc(project.pmcName || SPDC_PMC_NAME)}</div>
-        <div class="subject">SUBJECT : ${esc(kind)} COMMUNICATION MATRIX</div>
-        <div>DATE : ${esc(matrixDate)}</div>
+        <div>${esc(projectLine)}</div>
+        <div>${esc(clientLine)}</div>
+        <div>${esc(designLine)}</div>
+        <div>${esc(pmcLine)}</div>
+        <div class="subject">${esc(subjectLine)}</div>
+        <div>${esc(dateLine)}</div>
       </div>
-      <div class="client">${clientLogo ? `<img src="${clientLogo}" alt="Client" />` : `<span style="font-size:12px;color:#888;text-align:center">${esc(project.clientName || "Client logo")}</span>`}</div>
+      <div class="logo client">${logos.client ? `<img src="${dataUri(logos.client)}" alt="Client" />` : `<span class="fallback">${esc(project.clientName || "Client logo")}</span>`}</div>
     </div>
     <table>
       <thead><tr>
-        <th style="width:5%">SR.NO</th>
-        <th style="width:12%">NAME</th>
-        <th style="width:12%">DESIGNATION</th>
-        <th style="width:12%">NAME OF COMPANY</th>
-        <th style="width:12%">SINGLE POINT OF CONTACT</th>
-        <th style="width:9%">MOBILE</th>
-        <th style="width:14%">E-MAIL</th>
-        <th style="width:8%">GENERAL MAIL COMMUNICATION</th>
-        <th style="width:16%">OFFICE ADD.</th>
+        ${HEADERS.map((h, i) => `<th style="width:${colPct[i]}%">${esc(h)}</th>`).join("\n        ")}
       </tr></thead>
       <tbody>${bodyRows || `<tr><td colspan="9" style="text-align:center;padding:24px;color:#888">No rows</td></tr>`}</tbody>
     </table>
@@ -443,141 +453,143 @@ export async function buildMatrixHtml(projectId: string, matrixKind: string): Pr
 </html>`;
 }
 
-/** Landscape PDF of the matrix — filed next to the Excel on SharePoint (no Graph Office convert). */
-export async function buildMatrixPdf(projectId: string, matrixKind: string): Promise<Buffer> {
+export async function buildMatrixHtml(projectId: string, matrixKind: string): Promise<string> {
+  const bundle = await loadMatrixBundle(projectId, matrixKind);
+  return renderMatrixHtml(bundle, await loadMatrixLogos(projectId));
+}
+
+/** A3 landscape PDF: Sharnam logo left, client logo right, banner between; logo row and header repeat per page. */
+export async function renderMatrixPdf(bundle: MatrixBundle, logos: MatrixLogos, at = new Date()): Promise<Buffer> {
   const { createRequire } = await import("node:module");
   const require = createRequire(import.meta.url);
   const PDFDocument = require("pdfkit") as typeof import("pdfkit");
-  const { project, rows, matrixKind: kind } = await loadMatrixBundle(projectId, matrixKind);
-  const matrixDate = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-    .format(new Date())
-    .replace(/\//g, "-");
-  const clientUri = await imageDataUriFromUrl(project.clientLogoUrl);
-  const clientFile = clientUri ? dataUriToTempFile(clientUri, "client-logo-pdf") : null;
-  const spdcLogo = sharnamLogoPath();
-  const temps = clientFile ? [clientFile.file] : [];
+  const { project, rows, matrixKind: kind } = bundle;
+  const banner = bannerLines(project, kind, matrixDate(at));
 
-  try {
-    return await new Promise<Buffer>((resolve, reject) => {
-      const doc = new PDFDocument({
-        size: "A3",
-        layout: "landscape",
-        margin: 28,
-        info: { Title: `${kind} Communication Matrix — ${project.name}`, Author: "Sharnam Portal" },
-      });
-      const chunks: Buffer[] = [];
-      doc.on("data", (c: Buffer) => chunks.push(c));
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
-      doc.on("error", reject);
+  return new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: "A3",
+      layout: "landscape",
+      margin: 28,
+      info: { Title: `${kind} Communication Matrix — ${project.name}`, Author: "Sharnam Portal" },
+    });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
 
-      const pageW = doc.page.width;
-      const left = 28;
-      const right = pageW - 28;
-      if (spdcLogo) {
+    const left = 28;
+    const right = doc.page.width - 28;
+    const logoBox: [number, number] = [110, 72];
+    const totalW = COL_WIDTHS.reduce((a, b) => a + b, 0);
+    const cols = [left];
+    for (const w of COL_WIDTHS) cols.push(cols[cols.length - 1] + ((right - left) * w) / totalW);
+    cols[cols.length - 1] = right;
+    const cellW = (i: number) => cols[i + 1] - cols[i] - 6;
+
+    const drawLogo = (logo: MatrixLogo | null, x: number, fallback: string) => {
+      if (logo) {
         try {
-          doc.image(spdcLogo, left, 24, { fit: [110, 72] });
+          doc.image(logo.buffer, x, 24, { fit: logoBox, align: "center", valign: "center" });
+          return;
         } catch {
-          /* optional */
+          /* fall through to text */
         }
       }
-      if (clientFile) {
-        try {
-          doc.image(clientFile.file, right - 110, 24, { fit: [110, 72] });
-        } catch {
-          /* optional */
-        }
-      }
+      doc.fillColor("#888888").font("Helvetica-Oblique").fontSize(9);
+      doc.text(fallback, x, 24 + logoBox[1] / 2 - 6, { width: logoBox[0], align: "center" });
+    };
 
-      const bannerX = left + 120;
-      const bannerW = right - left - 240;
+    const drawHead = () => {
+      drawLogo(logos.sharnam, left, "SPDC");
+      drawLogo(logos.client, right - logoBox[0], project.clientName || "Client logo");
+      const bannerX = left + logoBox[0] + 16;
+      const bannerW = right - left - 2 * (logoBox[0] + 16);
       doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(10);
-      const banner = [
-        `PROJECT : ${project.name}`,
-        `CLIENT: ${project.clientName || "—"}`,
-        `DESIGN CONSULTANT : ${project.designConsultant || "—"}`,
-        `PROJECT MANAGEMENT CONSULTANTS : ${project.pmcName || SPDC_PMC_NAME}`,
-        `SUBJECT : ${kind} COMMUNICATION MATRIX`,
-        `DATE : ${matrixDate}`,
-      ];
-      let y = 28;
+      let y = 26;
       for (const line of banner) {
-        doc.text(line, bannerX, y, { width: bannerW, lineBreak: false });
-        y += line.startsWith("SUBJECT") ? 16 : 13;
+        doc.text(line, bannerX, y, { width: bannerW, lineBreak: false, ellipsis: true });
+        y += line.startsWith("SUBJECT") ? 14 : 12;
       }
-
-      y = Math.max(y, 108) + 8;
-      const cols = [left, left + 36, left + 130, left + 230, left + 340, left + 460, left + 530, left + 680, left + 760, right];
-      const headers = ["SR", "NAME", "DESIGNATION", "COMPANY", "SPOC", "MOBILE", "E-MAIL", "MAIL", "OFFICE ADD."];
-      doc.rect(left, y, right - left, 22).fill("#445469");
+      y = Math.max(y, 24 + logoBox[1]) + 6;
+      doc.moveTo(left, y).lineTo(right, y).lineWidth(1.5).stroke("#1e3a5f").lineWidth(1);
+      y += 6;
+      const headH = 28;
+      doc.rect(left, y, right - left, headH).fill("#445469");
       doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
-      headers.forEach((h, i) => {
-        doc.text(h, cols[i] + 2, y + 6, { width: cols[i + 1] - cols[i] - 4, align: i === 0 || i === 7 ? "center" : "left", lineBreak: false });
+      HEADERS.forEach((h, i) => {
+        const textH = doc.heightOfString(h, { width: cellW(i) });
+        doc.text(h, cols[i] + 3, y + Math.max(2, (headH - textH) / 2), { width: cellW(i), align: "center" });
       });
-      y += 22;
+      return y + headH;
+    };
 
-      let sectionIdx = -1;
-      let personInSection = 0;
-      const drawRow = (cells: string[], section: boolean, height: number) => {
-        if (y + height > doc.page.height - 40) {
-          doc.addPage();
-          y = 28;
-        }
-        if (section) doc.rect(left, y, right - left, height).fill("#e8eef8");
-        doc.rect(left, y, right - left, height).stroke("#445469");
-        for (let i = 1; i < cols.length - 1; i++) doc.moveTo(cols[i], y).lineTo(cols[i], y + height).stroke("#445469");
-        doc.fillColor("#111111").font(section ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+    let y = drawHead();
+    let sectionIdx = -1;
+    let personInSection = 0;
+
+    const drawRow = (cells: string[], section: boolean) => {
+      doc.font(section ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      const height = section
+        ? 20
+        : Math.max(22, ...cells.map((cell, i) => doc.heightOfString(cell || "", { width: cellW(i) }) + 8));
+      if (y + height > doc.page.height - 40) {
+        doc.addPage();
+        y = drawHead();
+        doc.font(section ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      }
+      if (section) doc.rect(left, y, right - left, height).fill("#e8eef8");
+      doc.rect(left, y, right - left, height).stroke("#445469");
+      const dividers = section ? [1] : cols.slice(1, -1).map((_, i) => i + 1);
+      for (const i of dividers) doc.moveTo(cols[i], y).lineTo(cols[i], y + height).stroke("#445469");
+      doc.fillColor("#111111");
+      if (section) {
+        doc.text(cells[0], cols[0] + 3, y + 6, { width: cellW(0), align: "center" });
+        doc.text(cells[1], cols[1] + 3, y + 6, { width: right - cols[1] - 6 });
+      } else {
         cells.forEach((cell, i) => {
-          doc.text(cell || "", cols[i] + 2, y + 4, {
-            width: cols[i + 1] - cols[i] - 4,
+          doc.text(cell || "", cols[i] + 3, y + 4, {
+            width: cellW(i),
             height: height - 6,
             align: i === 0 || i === 7 ? "center" : "left",
           });
         });
-        y += height;
-      };
-
-      for (const r of rows) {
-        if (r.isSectionHeader) {
-          sectionIdx += 1;
-          personInSection = 0;
-          drawRow([String.fromCharCode(65 + sectionIdx), r.orgName || "", "", "", "", "", "", "", ""], true, 20);
-          continue;
-        }
-        personInSection += 1;
-        const lines = Math.max(1, String(r.officeAddress || r.spoc || "").split(/\n/).length);
-        drawRow(
-          [
-            String(personInSection),
-            r.personName || "",
-            r.designation || "",
-            r.company || r.orgName || "",
-            r.spoc || "",
-            r.mobile || "",
-            r.email || "",
-            r.mailRole || "",
-            r.officeAddress || "",
-          ],
-          false,
-          Math.max(22, 12 * lines + 8),
-        );
       }
+      y += height;
+    };
 
-      y += 10;
-      doc.fillColor("#445469").font("Helvetica-Oblique").fontSize(8).text(SPDC_OFFICE_FOOTER, left, y, { width: right - left });
-      doc.end();
-    });
-  } finally {
-    for (const f of temps) {
-      try {
-        fs.unlinkSync(f);
-      } catch {
-        /* ignore */
+    for (const r of rows) {
+      if (r.isSectionHeader) {
+        sectionIdx += 1;
+        personInSection = 0;
+        drawRow([String.fromCharCode(65 + sectionIdx), (r.orgName || "").trim()], true);
+        continue;
       }
+      personInSection += 1;
+      drawRow(
+        [
+          String(personInSection),
+          r.personName || "",
+          r.designation || "",
+          r.company || r.orgName || "",
+          r.spoc || "",
+          r.mobile || "",
+          r.email || "",
+          r.mailRole || "",
+          r.officeAddress || "",
+        ],
+        false,
+      );
     }
-  }
+
+    y += 10;
+    doc.fillColor("#445469").font("Helvetica-Oblique").fontSize(8).text(SPDC_OFFICE_FOOTER, left, y, { width: right - left });
+    doc.end();
+  });
+}
+
+/** Landscape PDF of the matrix — filed next to the Excel on SharePoint (no Graph Office convert). */
+export async function buildMatrixPdf(projectId: string, matrixKind: string): Promise<Buffer> {
+  const bundle = await loadMatrixBundle(projectId, matrixKind);
+  return renderMatrixPdf(bundle, await loadMatrixLogos(projectId));
 }

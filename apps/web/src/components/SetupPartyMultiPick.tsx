@@ -27,11 +27,19 @@ type Props = {
   directoryLabel: string;
 };
 
-function matchesKind(v: SetupVendor, kind: QuickKind) {
+/** Which setup picker a company belongs to. Consultants whose trade is project management are listed under PMC. */
+export function setupPartyKind(v: Pick<SetupVendor, "partyType" | "trade">): QuickKind | null {
   const t = v.partyType || "";
-  if (kind === "PMC") return t === "PMC";
-  if (kind === "Consultant") return t === "Consultant" || t === "Designer";
-  return t === "Contractor" || t === "Vendor";
+  if (t === "PMC") return "PMC";
+  if (t === "Consultant" || t === "Designer") {
+    return /project management/i.test(v.trade || "") ? "PMC" : "Consultant";
+  }
+  if (t === "Contractor" || t === "Vendor") return "Contractor";
+  return null;
+}
+
+function matchesKind(v: SetupVendor, kind: QuickKind) {
+  return setupPartyKind(v) === kind;
 }
 
 function noun(kind: QuickKind) {

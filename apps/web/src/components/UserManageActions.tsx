@@ -4,7 +4,7 @@ import { api } from "../api";
 import { isKeptPortalEmail } from "../lib/keptPortalUsers";
 import { Button, Card, Input } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
-import type { UserAccountRow } from "./UserAccountEditModal";
+import { DELETE_EFFECT, type UserAccountRow } from "./UserAccountEditModal";
 
 type Props = {
   user: UserAccountRow;
@@ -53,7 +53,7 @@ export function UserManageActions({ user, token, onEdit, onChanged, showEdit = t
             <Card className="space-y-3 overflow-hidden">
               <h3 className="font-display text-xl break-words">Delete {user.fullName}?</h3>
               <p className="text-sm text-steel-muted whitespace-normal break-words">
-                {formatUiText("They Lose Portal Login And Project Assignments. Type This Email To Confirm.")}
+                {formatUiText(`${DELETE_EFFECT} Type this email to confirm.`)}
               </p>
               <p className="text-sm font-semibold break-all">{user.email}</p>
               <Input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder={user.email} />

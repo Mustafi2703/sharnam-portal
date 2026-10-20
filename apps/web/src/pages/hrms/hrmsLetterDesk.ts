@@ -98,6 +98,10 @@ export const KIND_OPTIONS: { key: DocKind; label: string; hint: string; stage: L
   { key: "NdaPostEmployment", label: "NDA post-employment", hint: "Post-exit confidentiality reminder", stage: "Exit" },
 ];
 
+export function letterKindLabel(kind: string): string {
+  return KIND_OPTIONS.find((k) => k.key === kind)?.label || kind;
+}
+
 /** Standard pack after offer accept / pre-join. */
 export const ONBOARDING_LETTER_PACK: DocKind[] = ["Offer", "Appointment", "NdaJoining", "Confirmation"];
 
@@ -465,6 +469,9 @@ export function missingLetterFields(form: LetterFormState): string[] {
   if (!form.designation.trim()) missing.push("Designation");
   if (!form.department.trim()) missing.push("Department");
   if (!form.effectiveDate.trim()) missing.push("Effective date");
+  if ((form.kind === "Offer" || form.kind === "Appointment") && !(Number(String(form.ctcAnnual).replace(/[^\d.]/g, "")) > 0)) {
+    missing.push("Fixed CTC");
+  }
   for (const field of LETTER_VARIABLES[form.kind] || []) {
     if (field.default) continue;
     const value = (form.sheet[field.key] || "").trim();

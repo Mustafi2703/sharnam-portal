@@ -23,9 +23,48 @@ export type OpenPortalResult = {
   contacts: number;
 };
 
-export async function openPortalForMatrix(projectId: string): Promise<OpenPortalResult> {
+export type MatrixPortalStatus = {
+  email: string;
+  state: "on_project" | "has_login" | "inactive" | "none";
+  role?: string;
+};
+
+/** Per-e-mail portal state for the people in a project's matrix, so the desk can show who still needs onboarding. */
+export async function matrixPortalStatus(projectId: string): Promise<Record<string, MatrixPortalStatus>> {
   const contacts = await prisma.communicationContact.findMany({
     where: { projectId, isSectionHeader: false, email: { not: null } },
+    select: { email: true },
+  });
+  const emails = [...new Set(contacts.map((c) => String(c.email || "").trim().toLowerCase()).filter(Boolean))];
+  if (!emails.length) return {};
+  const users = await prisma.user.findMany({
+    where: { email: { in: emails } },
+    select: { id: true, email: true, role: true, isActive: true },
+  });
+  const members = await prisma.projectMember.findMany({
+    where: { projectId, userId: { in: users.map((u) => u.id) } },
+    select: { userId: true },
+  });
+  const onProject = new Set(members.map((m) => m.userId));
+  const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]));
+  const out: Record<string, MatrixPortalStatus> = {};
+  for (const email of emails) {
+    const u = byEmail.get(email);
+    out[email] = !u
+      ? { email, state: "none" }
+      : { email, role: u.role, state: u.isActive === false ? "inactive" : onProject.has(u.id) ? "on_project" : "has_login" };
+  }
+  return out;
+}
+
+export async function openPortalForMatrix(projectId: string, contactIds?: string[]): Promise<OpenPortalResult> {
+  const contacts = await prisma.communicationContact.findMany({
+    where: {
+      projectId,
+      isSectionHeader: false,
+      email: { not: null },
+      ...(contactIds?.length ? { id: { in: contactIds } } : {}),
+    },
     orderBy: [{ matrixKind: "asc" }, { orgSection: "asc" }],
   });
   const out: OpenPortalResult = { opened: [], skipped: [], contacts: 0 };

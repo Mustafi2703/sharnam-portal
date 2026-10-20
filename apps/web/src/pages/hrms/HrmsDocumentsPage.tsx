@@ -28,6 +28,7 @@ import {
   applyPriorLetters,
   hydrateLetterFormFromDoc,
   letterFormFingerprint,
+  letterKindLabel,
   letterFormUsesAssetExtras,
   letterFormUsesCtc,
   missingLetterFields,
@@ -62,6 +63,8 @@ export default function HrmsDocumentsPage() {
   const [generateBusy, setGenerateBusy] = useState(false);
   const [previewFingerprint, setPreviewFingerprint] = useState("");
   const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewFromComposer, setPreviewFromComposer] = useState(false);
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyLetterForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [registerScope, setRegisterScope] = useState<"all" | "person">("all");
@@ -127,6 +130,7 @@ export default function HrmsDocumentsPage() {
 
   function setSubjectKey(key: string) {
     clearPreview();
+    setEditingId(null);
     setForm((f) => applyPriorLetters(applySubjectKey(key, staff, offers, f), rows));
   }
 
@@ -139,6 +143,8 @@ export default function HrmsDocumentsPage() {
   function selectKind(kind: DocKind) {
     const existing = subjectRows.find((r) => r.kind === kind && r.status !== "Cancelled");
     clearPreview();
+    // Editing one letter must not turn it into another kind on Generate.
+    if (editingId && rows.find((r) => r.id === editingId)?.kind !== kind) setEditingId(null);
     setForm((f) => {
       const next = { ...f, kind };
       if (existing) return hydrateLetterFormFromDoc(existing, next);
@@ -229,8 +235,9 @@ export default function HrmsDocumentsPage() {
       const body = { ...createBodyFromForm(form), kind: form.kind };
       const blob = await fetchPreviewDocx(`${apiBase()}/api/hrm/hrms-documents/preview.docx`, body);
       setPreviewDocxBlob(blob);
-      setPreviewTitle(`${KIND_OPTIONS.find((k) => k.key === form.kind)?.label || form.kind} · ${form.employeeName}`);
+      setPreviewTitle(`${letterKindLabel(form.kind)} · ${form.employeeName}`);
       setPreviewFingerprint(letterFormFingerprint(form));
+      setPreviewFromComposer(true);
       setPreviewExpanded(true);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Preview failed");
@@ -259,9 +266,11 @@ export default function HrmsDocumentsPage() {
         }
       }
       setFiledSharePoint(sp || "");
-      setMsg(sp ? `${kind} is filed on SharePoint. Open it from the full screen preview or the register.` : `${kind} was generated. The SharePoint link is not ready yet — use Open in SharePoint on the register.`);
+      const label = letterKindLabel(kind);
+      setMsg(sp ? `${label} is filed on SharePoint. Open it from the full screen preview or the register.` : `${label} was generated. The SharePoint link is not ready yet — use Open in SharePoint on the register.`);
+      setEditingId(null);
       await load();
-      await openPreview(id, `${KIND_OPTIONS.find((k) => k.key === kind)?.label || kind} · ${form.employeeName}`);
+      await openPreview(id, `${label} · ${form.employeeName}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Generate failed");
     } finally {
@@ -298,6 +307,7 @@ export default function HrmsDocumentsPage() {
       const blob = await fetchPreviewDocx(`${apiBase()}/api/hrm/hrms-documents/${id}/preview.docx`);
       setPreviewDocxBlob(blob);
       setPreviewTitle(title);
+      setPreviewFromComposer(false);
       setPreviewExpanded(true);
       try {
         setFiledSharePoint(await sharePointFor(id));
@@ -313,12 +323,12 @@ export default function HrmsDocumentsPage() {
     setForm((f) => hydrateLetterFormFromDoc(row, f));
     setEditingId(row.id);
     clearPreview();
-    setMsg(`Editing ${row.refNo} · ${row.kind}. Change the fields, preview, then Generate to update this letter.`);
+    setMsg(`Editing ${row.refNo} · ${letterKindLabel(row.kind)}. Change the fields, preview, then Generate to update this letter.`);
     window.setTimeout(() => formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
   }
 
   async function deleteLetter(row: DocRow) {
-    if (!window.confirm(`Delete ${row.kind} ${row.refNo} for ${row.employeeName}?`)) return;
+    if (!window.confirm(`Delete ${letterKindLabel(row.kind)} ${row.refNo} for ${row.employeeName}?`)) return;
     try {
       await api(`/api/hrm/hrms-documents/${row.id}`, { method: "DELETE", token });
       if (editingId === row.id) setEditingId(null);
@@ -347,13 +357,17 @@ export default function HrmsDocumentsPage() {
   }
 
   async function regenerate(id: string) {
-    setMsg("");
+    if (rowBusyId) return;
+    setMsg("Regenerating…");
+    setRowBusyId(id);
     try {
       await api(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
       setMsg("Regenerated with the latest logo & formatting.");
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Regenerate failed");
+    } finally {
+      setRowBusyId(null);
     }
   }
 
@@ -368,6 +382,8 @@ export default function HrmsDocumentsPage() {
   async function onUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !uploadForId) return;
+    setRowBusyId(uploadForId);
+    setMsg(`Uploading ${file.name}…`);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -378,6 +394,7 @@ export default function HrmsDocumentsPage() {
       setMsg(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploadForId(null);
+      setRowBusyId(null);
     }
   }
 
@@ -761,7 +778,7 @@ export default function HrmsDocumentsPage() {
               {registerVisible.map((r) => (
                 <tr key={r.id} className={`border-t border-line align-top ${editingId === r.id ? "bg-brand/5" : ""}`}>
                   <td className="p-2 font-mono text-[11px]">{r.refNo}</td>
-                  <td>{r.kind}</td>
+                  <td>{letterKindLabel(r.kind)}</td>
                   <td>{r.employeeName}</td>
                   <td>{[r.designation, r.department].filter(Boolean).join(" · ") || "—"}</td>
                   <td>{r.effectiveDate ? new Date(r.effectiveDate).toLocaleDateString("en-IN") : "—"}</td>
@@ -821,22 +838,24 @@ export default function HrmsDocumentsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void openPreview(r.id, `${r.kind} · ${r.employeeName}`)}
+                          onClick={() => void openPreview(r.id, `${letterKindLabel(r.kind)} · ${r.employeeName}`)}
                           className="text-[11px] px-2 py-0.5 rounded border border-line text-ink hover:bg-sand"
                         >
                           Preview
                         </button>
                         <button
                           type="button"
+                          disabled={!!rowBusyId}
                           onClick={() => void regenerate(r.id)}
-                          className="text-[11px] px-2 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/5"
+                          className="text-[11px] px-2 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/5 disabled:opacity-50"
                         >
-                          Regenerate
+                          {rowBusyId === r.id && !uploadForId ? "Regenerating…" : "Regenerate"}
                         </button>
                         <button
                           type="button"
+                          disabled={!!rowBusyId}
                           onClick={() => pickUpload(r.id)}
-                          className="text-[11px] px-2 py-0.5 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 ml-1"
+                          className="text-[11px] px-2 py-0.5 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50 ml-1 disabled:opacity-50"
                         >
                           + Signed copy
                         </button>
@@ -878,14 +897,21 @@ export default function HrmsDocumentsPage() {
                         Open in SharePoint
                       </a>
                     ) : null}
-                    <Button type="button" className="!py-1 !text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
-                      {generateBusy ? "Filing…" : "Generate & file"}
-                    </Button>
+                    {previewFromComposer ? (
+                      <Button type="button" className="!py-1 !text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
+                        {generateBusy ? "Filing…" : "Generate & file"}
+                      </Button>
+                    ) : null}
                     <Button type="button" variant="secondary" className="!py-1 !text-xs" onClick={() => setPreviewExpanded(false)}>
                       Close
                     </Button>
                   </div>
                 </div>
+                {msg ? (
+                  <div className="px-5 py-2 border-b border-line bg-sand/40">
+                    <StatusNote msg={msg} compact />
+                  </div>
+                ) : null}
                 <HrmsDocxPreview blob={previewDocxBlob} layout="modal" />
               </div>
             </div>,

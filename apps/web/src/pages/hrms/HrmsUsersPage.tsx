@@ -38,7 +38,7 @@ const EMPTY_USER_FORM = {
   role: "site_employee",
   phone: "",
   empCode: "",
-  department: "Site",
+  department: "",
   designation: "",
   password: "Demo@1234",
   desk: "hrm",
@@ -63,6 +63,16 @@ function hasPayrollSetup(row: UserAccountRow) {
   return payslipGaps(row).length === 0;
 }
 
+/** Same rule as the staff count on HR home: SPDC roles, or `employee` not tied to a client / vendor company. */
+function isHrmsStaffRow(row: UserAccountRow) {
+  if (row.role === "employee") return !row.vendorId;
+  return isSpdcStaffAccount(row);
+}
+
+function roleLabel(role?: string | null) {
+  return ROLE_LABELS[role || ""] || formatUiText(String(role || "").replaceAll("_", " "));
+}
+
 function AddUserModal({
   open,
   token,
@@ -85,6 +95,16 @@ function AddUserModal({
   const roleOptions = rolesForDepartment(designations, form.department, form.designation);
 
   async function createUser() {
+    const missing = [
+      !form.fullName.trim() && "Full name",
+      !form.email.trim() && "Login email",
+      !form.department && "Department",
+      !form.designation && "Company role",
+    ].filter(Boolean);
+    if (missing.length) {
+      onError({ title: "Could not create login", message: `Fill in: ${missing.join(", ")}.` });
+      return;
+    }
     setBusy(true);
     try {
       await api("/api/hrm/employees", { method: "POST", token, body: JSON.stringify({ ...form, ...payslip }) });
@@ -199,29 +219,35 @@ export default function HrmsUsersPage() {
     void load();
   }, [load]);
 
+  const staffRows = useMemo(
+    () => employees.filter((e) => isHrmsStaffRow(e) && !isHiddenPortalListUser(e.email)),
+    [employees]
+  );
+  const inactiveCount = useMemo(() => staffRows.filter((e) => e.isActive === false).length, [staffRows]);
+
   const shownEmployees = useMemo(() => {
     const needle = deferredUserQ.trim().toLowerCase();
-    return employees.filter((e) => {
-      if (!isSpdcStaffAccount(e)) return false;
-      if (isHiddenPortalListUser(e.email)) return false;
+    return staffRows.filter((e) => {
       if (payrollFilter === "ready" && !hasPayrollSetup(e)) return false;
       if (payrollFilter === "missing" && hasPayrollSetup(e)) return false;
       if (!needle) return true;
-      return `${e.fullName} ${e.email} ${e.role} ${e.profile?.department || ""} ${e.profile?.empCode || ""} ${e.profile?.designation || ""}`
+      return `${e.fullName} ${e.email} ${roleLabel(e.role)} ${e.profile?.department || ""} ${e.profile?.empCode || ""} ${e.profile?.designation || ""}`
         .toLowerCase()
         .includes(needle);
     });
-  }, [employees, deferredUserQ, payrollFilter]);
+  }, [staffRows, deferredUserQ, payrollFilter]);
 
   const employeeOptions = useMemo(
     () =>
-      employees.map((emp) => ({
-        value: emp.id,
-        label: emp.fullName,
-        sublabel: `${emp.email || ""} · ${emp.role}`,
-        keywords: `${emp.fullName} ${emp.email || ""} ${emp.role} ${emp.phone || ""} ${emp.profile?.empCode || ""}`,
-      })),
-    [employees]
+      staffRows
+        .filter((emp) => emp.isActive !== false)
+        .map((emp) => ({
+          value: emp.id,
+          label: emp.fullName,
+          sublabel: `${emp.email || ""} · ${roleLabel(emp.role)}${emp.profile?.empCode ? ` · ${emp.profile.empCode}` : ""}`,
+          keywords: `${emp.fullName} ${emp.email || ""} ${roleLabel(emp.role)} ${emp.phone || ""} ${emp.profile?.empCode || ""}`,
+        })),
+    [staffRows]
   );
   const projectOptions = useMemo(
     () =>
@@ -401,7 +427,15 @@ export default function HrmsUsersPage() {
 
       <Card padding={false}>
         <div className="px-4 py-3 border-b bg-sand/40 flex flex-wrap items-center justify-between gap-2">
-          <span className="font-semibold">{formatUiText("Users")} ({shownEmployees.length}{userQ.trim() ? ` / ${employees.length}` : ""})</span>
+          <span className="font-semibold">
+            {formatUiText("Users")} ({shownEmployees.length}
+            {userQ.trim() || payrollFilter !== "all" ? ` / ${staffRows.length}` : ""})
+            {inactiveCount ? (
+              <span className="ml-2 text-xs font-normal text-steel-muted">
+                {formatUiText(`${inactiveCount} switched off — not counted on HR home`)}
+              </span>
+            ) : null}
+          </span>
           <div className="flex flex-wrap gap-2">
             <Input
               className="!w-56"
@@ -444,7 +478,7 @@ export default function HrmsUsersPage() {
                     <div className="text-[10px] text-steel-muted font-mono">{e.email}</div>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs">{e.profile?.empCode || "—"}</td>
-                  <td className="px-4 py-2.5">{formatUiText(ROLE_LABELS[e.role || ""] || e.role?.replaceAll("_", " "))}</td>
+                  <td className="px-4 py-2.5">{roleLabel(e.role)}</td>
                   <td className="px-4 py-2.5">{e.profile?.department || "—"}</td>
                   <td className="px-4 py-2.5 text-xs">{e.profile?.designation || "—"}</td>
                   <td className="px-4 py-2.5 text-xs whitespace-nowrap">{money(e.profile?.ctcAnnual)}</td>

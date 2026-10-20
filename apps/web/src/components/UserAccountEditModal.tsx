@@ -14,6 +14,10 @@ import { Button, Input, Select } from "./ui";
 
 type DepartmentRow = { id: string; name: string };
 
+/** What `retirePortalLogin` actually clears — HR must know before removing a person who has left. */
+export const DELETE_EFFECT =
+  "Delete removes the login and project access, and clears their attendance, leave and HR profile (emp code, CTC, bank). Letters, payslips and files stay. For someone who has left, switch the login off instead.";
+
 export type UserAccountRow = {
   id: string;
   fullName: string;
@@ -203,12 +207,14 @@ export function UserAccountEditModal({
   const [kind, setKind] = useState<PortalAccountKind>("staff");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [memberships, setMemberships] = useState<NonNullable<UserAccountRow["memberships"]>>([]);
 
   useEffect(() => {
     if (!user) return;
     const nextKind = forceKind || portalAccountKind(user.role, user.profile, user.vendorId);
     setKind(nextKind);
     setForm(formFromUser(user));
+    setMemberships(user.memberships || []);
     setPayroll({
       ctcAnnual: user.profile?.ctcAnnual != null ? String(user.profile.ctcAnnual) : "",
       basicMonthly: user.profile?.basicMonthly != null ? String(user.profile.basicMonthly) : "",
@@ -299,13 +305,12 @@ export function UserAccountEditModal({
 
   async function remove() {
     if (!user || !token) return;
-    if (!window.confirm(`Remove ${user.fullName}? They will lose portal access and project assignments.`)) return;
+    if (!window.confirm(`Remove ${user.fullName}? ${DELETE_EFFECT}`)) return;
     setBusy(true);
     setErr("");
     try {
       await api(`/api/hrm/employees/${user.id}`, { method: "DELETE", token });
-      await onDeleted?.();
-      await onSaved();
+      await (onDeleted ? onDeleted() : onSaved());
       onClose();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Delete failed");
@@ -324,6 +329,7 @@ export function UserAccountEditModal({
         token,
         body: JSON.stringify({ projectId, userId: user.id }),
       });
+      setMemberships((rows) => rows.filter((m) => m.project.id !== projectId));
       await onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not remove project");
@@ -449,11 +455,11 @@ export function UserAccountEditModal({
           </div>
         )}
 
-        {user.memberships?.length ? (
+        {memberships.length ? (
           <div className="border-t border-line pt-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-steel-muted mb-2">Project assignments</p>
             <ul className="space-y-2 text-sm">
-              {user.memberships.map((m) => (
+              {memberships.map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-2">
                   <span>
                     {m.project.code} — {m.project.name}
@@ -477,9 +483,7 @@ export function UserAccountEditModal({
           </p>
         ) : (
           <div className="border-t border-line pt-3 space-y-2">
-            <p className="text-xs text-amber-800 font-semibold break-words">
-              Delete removes this login. Office admins stay.
-            </p>
+            <p className="text-xs text-amber-800 font-semibold break-words">{DELETE_EFFECT}</p>
             <div className="flex justify-end">
               <Button type="button" variant="secondary" className="!text-danger !border-danger/30" disabled={busy} onClick={() => void remove()}>
                 Delete user

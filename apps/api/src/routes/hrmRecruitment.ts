@@ -8,6 +8,7 @@ import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
+import { isDemoSeedLoginEmail } from "../services/keepPortalUsers.js";
 import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, listDriveFiles, moveDriveItem, SHAREPOINT_SANDBOX_ROOT, uploadToProjectLibrary } from "../services/graph.js";
 import { mimeForFileName, mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
@@ -60,6 +61,11 @@ async function safeHrmList<T>(label: string, fn: () => Promise<T[]>, res: import
 }
 
 /** Payslip and hike rows store only userId. Attach the staff name so the register does not depend on a filtered employee list. */
+/** Same people as HRMS → Users: removed logins and hidden demo seed logins are never paid. */
+function isPayrollPerson(user: { email: string; fullName: string }) {
+  return !user.email.startsWith("deleted.") && !user.fullName.startsWith("[Removed]") && !isDemoSeedLoginEmail(user.email);
+}
+
 async function attachStaffNames<T extends { userId: string }>(rows: T[]) {
   const ids = [...new Set(rows.map((r) => r.userId).filter(Boolean))];
   if (!ids.length) return rows.map((r) => ({ ...r, staffName: "", empCode: "" }));
@@ -917,14 +923,23 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
   let created = false;
   if (!user) {
     const bcrypt = await import("bcryptjs");
-    const { portalForRole } = await import("@sharnam/shared");
+    const { portalForRole, suggestedLoginRoleForCompanyRole } = await import("@sharnam/shared");
     const hash = await bcrypt.hash(process.env.SEED_PASSWORD || "Demo@1234", 10);
+    // Role `employee` without a company reads as an outside consultant on HRMS → Users; joiners get the staff login of their role.
+    const hiredTitle = hiredAs?.requisition?.designation || candidate.currentDesign || "";
+    const master = hiredTitle
+      ? await prisma.hrmDesignation.findUnique({ where: { title: hiredTitle }, select: { loginRole: true } }).catch(() => null)
+      : null;
+    const staffRole = (master?.loginRole && master.loginRole !== "admin" ? master.loginRole : suggestedLoginRoleForCompanyRole(hiredTitle)) as
+      | "office"
+      | "hr"
+      | "site_employee";
     user = await prisma.user.create({
       data: {
         email,
         fullName: candidate.fullName,
-        role: "employee",
-        portal: portalForRole("employee"),
+        role: staffRole,
+        portal: portalForRole(staffRole),
         phone: candidate.phone,
         passwordHash: hash,
       },
@@ -2818,9 +2833,9 @@ hrmRecruitmentRouter.delete("/payroll-staff/:userId", requireRoles("admin", "off
   if (!profile?.payrollOnly) return res.status(404).json({ error: "Payroll-only staff record not found" });
   const slips = await prisma.payslip.count({ where: { userId: profile.userId } });
   if (slips) return res.status(400).json({ error: `${slips} payslip(s) exist for this person. Delete those first, or keep the record.` });
-  await prisma.employeeProfile.delete({ where: { userId: profile.userId } });
-  await prisma.user.delete({ where: { id: profile.userId } }).catch(() => null);
-  await audit("hrms.payroll_staff.delete", { userId: req.user!.id, entity: "User", entityId: profile.userId });
+  const { retirePortalLogin } = await import("../services/crmVendorCredentials.js");
+  await retirePortalLogin(prisma, profile.userId, { allowStaff: true });
+  await audit("hrms.payroll_staff.delete", { userId: req.user!.id, entity: "User", entityId: profile.userId, meta: { empCode: profile.empCode } });
   res.json({ ok: true });
 });
 
@@ -2835,12 +2850,13 @@ hrmRecruitmentRouter.get("/payslips/attendance-days", requireRoles("admin", "off
     where: {
       id: { in: profiles.map((p) => p.userId) },
       role: { notIn: ["vendor", "client"] },
+      vendorId: null,
       OR: [{ isActive: true }, { id: { in: payrollOnlyIds } }],
     },
-    select: { id: true, fullName: true },
+    select: { id: true, fullName: true, email: true },
   });
   const out = [];
-  for (const u of users) {
+  for (const u of users.filter(isPayrollPerson)) {
     const prof = profiles.find((p) => p.userId === u.id);
     out.push({ userId: u.id, employee: u.fullName, empCode: prof?.empCode || "", payrollOnly: !!prof?.payrollOnly, ...(await attendanceDaysForMonth(u.id, year, month)) });
   }
@@ -2899,7 +2915,13 @@ hrmRecruitmentRouter.post("/payslips/generate-month", requireRoles("admin", "off
   const skipped: { userId: string; reason: string }[] = [];
   for (const profile of profiles) {
     const user = await prisma.user.findUnique({ where: { id: profile.userId } });
-    if (!user || (!user.isActive && !profile.payrollOnly) || ["vendor", "client"].includes(user.role)) {
+    if (
+      !user ||
+      (!user.isActive && !profile.payrollOnly) ||
+      ["vendor", "client"].includes(user.role) ||
+      (user.role === "employee" && user.vendorId) ||
+      !isPayrollPerson(user)
+    ) {
       skipped.push({ userId: profile.userId, reason: "not active staff" });
       continue;
     }

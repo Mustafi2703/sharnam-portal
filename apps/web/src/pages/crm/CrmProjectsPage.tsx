@@ -8,6 +8,7 @@ import {
   type CrmProjectRow,
 } from "../../components/CrmProjectsRegister";
 import { Button, Card, Input } from "../../components/ui";
+import { StatusNote } from "../../components/StatusNote";
 
 type QuotationLinkRow = {
   id: string;
@@ -28,8 +29,12 @@ export default function CrmProjectsPage() {
 
   const load = useCallback(async () => {
     if (!token) return;
-    const rows = await api<CrmProjectRow[]>("/api/projects", { token });
-    setProjects(rows);
+    try {
+      const rows = await api<CrmProjectRow[]>("/api/projects", { token });
+      setProjects(rows);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not load the projects register");
+    }
   }, [token]);
 
   const [proposalByProjectId, setProposalByProjectId] = useState<Record<string, CrmProjectProposalLink>>({});
@@ -93,11 +98,7 @@ export default function CrmProjectsPage() {
         )}
       </div>
 
-      {msg && (
-        <p className={`text-sm leading-relaxed ${msg.startsWith("Deleted") ? "text-ok" : msg.includes("failed") ? "text-danger" : "text-ok"}`}>
-          {msg}
-        </p>
-      )}
+      <StatusNote msg={msg} />
 
       <CrmProjectsRegister
         projects={projects}

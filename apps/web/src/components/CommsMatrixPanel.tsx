@@ -3,6 +3,8 @@ import { api } from "../api";
 import { Badge, Button, Card } from "./ui";
 import { formatUiText } from "../lib/formatUiText";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { useClientLogo } from "../lib/useClientLogo";
+import { MatrixOnboardBar, MatrixOnboardResult, PortalStateBadge, matrixSubtitle, useMatrixOnboard } from "./MatrixOnboard";
 import {
   EMPTY_MATRIX_FORM,
   MatrixPartyFields,
@@ -72,7 +74,8 @@ export function CommsMatrixPanel({
   const [users, setUsers] = useState<MatrixUser[]>([]);
   const [vendors, setVendors] = useState<MatrixVendor[]>([]);
   const [assignedVendors, setAssignedVendors] = useState<AssignedVendor[]>([]);
-  const [portalResult, setPortalResult] = useState<{ opened: any[]; skipped: any[]; contacts: number } | null>(null);
+  const onboard = useMatrixOnboard({ projectId, token, enabled: canEdit, onMsg });
+  const clientLogoSrc = useClientLogo(projectId, project?.clientLogoUrl, token);
 
   const loadDirectory = useCallback(async () => {
     const [u, v, overview] = await Promise.all([
@@ -97,6 +100,11 @@ export function CommsMatrixPanel({
   useEffect(() => {
     void loadDirectory();
   }, [loadDirectory]);
+
+  const { reloadStatus } = onboard;
+  useEffect(() => {
+    void reloadStatus();
+  }, [contacts, reloadStatus]);
 
   async function addContact(e: FormEvent) {
     e.preventDefault();
@@ -231,20 +239,8 @@ export function CommsMatrixPanel({
         {canEdit && (
           <Button
             type="button"
-            disabled={busy}
-            onClick={async () => {
-              if (!window.confirm("Open the portal for everyone in this matrix? Each person with an e-mail gets a login (role by company type) and a seat on this project. No e-mail is sent.")) return;
-              setBusy(true);
-              try {
-                const r = await api<{ opened: any[]; skipped: any[]; contacts: number }>(`/api/comms/contacts/${projectId}/open-portal`, { method: "POST", token, timeoutMs: 120_000 });
-                setPortalResult(r);
-                onMsg(`Portal opened for ${r.opened.length} of ${r.contacts} contacts${r.skipped.length ? ` — ${r.skipped.length} skipped` : ""}.`);
-              } catch (err) {
-                onMsg(err instanceof Error ? err.message : "Could not open the portal");
-              } finally {
-                setBusy(false);
-              }
-            }}
+            disabled={busy || onboard.busy}
+            onClick={() => void onboard.onboard(true)}
           >
             Open portal for everyone
           </Button>
@@ -310,32 +306,7 @@ export function CommsMatrixPanel({
         </Button>
       </div>
 
-      {portalResult ? (
-        <Card className="!p-4 border border-brand/30 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="font-semibold text-sm">Portal access — {portalResult.opened.length} open · {portalResult.skipped.length} skipped</h4>
-            <button type="button" className="text-xs text-steel-muted" onClick={() => setPortalResult(null)}>Close</button>
-          </div>
-          <p className="text-xs text-steel-muted">New logins show their one-time password here once. Nothing was e-mailed. Everyone is now on the project team and can be assigned RFIs and design coordination issues.</p>
-          <div className="max-h-56 overflow-y-auto divide-y divide-line border border-line rounded-lg text-xs">
-            {portalResult.opened.map((o) => (
-              <div key={o.email} className="flex flex-wrap gap-x-3 px-3 py-1.5">
-                <strong>{o.name}</strong>
-                <span className="font-mono text-steel-muted">{o.email}</span>
-                <span>{o.role}</span>
-                <span className="text-steel-muted">{o.company}</span>
-                <span className="ml-auto">{o.created ? <>new · password <code>{o.password}</code></> : "already had a login"}</span>
-              </div>
-            ))}
-            {portalResult.skipped.map((o) => (
-              <div key={o.email} className="flex flex-wrap gap-x-3 px-3 py-1.5 text-amber-800">
-                <span className="font-mono">{o.email}</span>
-                <span>{o.reason}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ) : null}
+      <MatrixOnboardResult onboard={onboard} />
 
       <Card className="!p-4 border border-line">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -343,11 +314,11 @@ export function CommsMatrixPanel({
           <div className="text-center flex-1 min-w-[180px]">
             <div className="font-display text-lg text-ink">{matrixKind} Communication Matrix</div>
             <div className="text-xs text-steel-muted mt-1">
-              {project?.name || "—"} · {project?.clientName || "—"} · {project?.pmcName || "Sharnam Project Development Consultants & Co."}
+              <span data-preserve-case>{matrixSubtitle(project)}</span>
             </div>
           </div>
-          {project?.clientLogoUrl ? (
-            <img src={project.clientLogoUrl} alt="Client" className="h-12 w-auto max-w-[140px] object-contain" />
+          {clientLogoSrc ? (
+            <img src={clientLogoSrc} alt="Client" className="h-12 w-auto max-w-[140px] object-contain" />
           ) : (
             <span className="text-[11px] text-steel-muted w-[140px] text-right">Client logo on project card</span>
           )}
@@ -398,6 +369,8 @@ export function CommsMatrixPanel({
         </Card>
       )}
 
+      {canEdit ? <MatrixOnboardBar onboard={onboard} rows={contacts} /> : null}
+
       <Card padding={false} className="overflow-x-auto">
         <div className="px-4 py-3 border-b font-semibold bg-procore-navy text-white flex justify-between gap-2">
           <span>{formatUiText(`${matrixKind} contact register`)}</span>
@@ -406,6 +379,7 @@ export function CommsMatrixPanel({
         <table className="w-full text-sm min-w-[980px]">
           <thead className="bg-sand text-left text-[10px] uppercase tracking-wider text-steel-muted sticky top-0">
             <tr>
+              {canEdit && <th className="p-3 w-8" aria-label="Select" />}
               <th className="p-3">SR.NO</th>
               <th className="p-3">NAME</th>
               <th className="p-3">DESIGNATION</th>
@@ -415,6 +389,7 @@ export function CommsMatrixPanel({
               <th className="p-3">E-MAIL</th>
               <th className="p-3">GENERAL MAIL COMMUNICATION</th>
               <th className="p-3">OFFICE ADD.</th>
+              {canEdit && <th className="p-3">PORTAL</th>}
               {canEdit && <th className="p-3 w-28">Actions</th>}
             </tr>
           </thead>
@@ -428,6 +403,7 @@ export function CommsMatrixPanel({
                   personInSection = 0;
                   return (
                     <tr key={r.id} className="bg-brand-soft/80 border-t border-line">
+                      {canEdit && <td className="p-3" />}
                       <td className="p-3 font-mono font-semibold text-brand">{String.fromCharCode(65 + sectionIdx)}</td>
                       <td className="p-3 font-semibold text-ink" colSpan={canEdit ? 9 : 8}>
                         {r.orgName}
@@ -445,6 +421,17 @@ export function CommsMatrixPanel({
                 personInSection += 1;
                 return (
                   <tr key={r.id} className="border-t border-line hover:bg-sand/40">
+                    {canEdit && (
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${r.personName || r.email || "row"}`}
+                          disabled={!onboard.canSelect(r)}
+                          checked={onboard.selected.has(r.id)}
+                          onChange={() => onboard.toggle(r.id)}
+                        />
+                      </td>
+                    )}
                     <td className="p-3 font-mono text-xs text-steel-muted">{personInSection}</td>
                     <td className="p-3 font-medium whitespace-pre-line">{r.personName || "—"}</td>
                     <td className="p-3">{r.designation || "—"}</td>
@@ -456,6 +443,11 @@ export function CommsMatrixPanel({
                       <Badge tone={r.mailRole === "TO" ? "brand" : "neutral"}>{r.mailRole || "—"}</Badge>
                     </td>
                     <td className="p-3 text-xs text-steel-muted max-w-[180px] whitespace-pre-line">{r.officeAddress || "—"}</td>
+                    {canEdit && (
+                      <td className="p-3">
+                        <PortalStateBadge state={onboard.stateOf(r)} />
+                      </td>
+                    )}
                     {canEdit && (
                       <td className="p-3">
                         <div className="flex flex-col gap-1">
@@ -474,7 +466,7 @@ export function CommsMatrixPanel({
             })()}
             {!contacts.length && (
               <tr>
-                <td colSpan={canEdit ? 10 : 9} className="p-8 text-center text-steel-muted text-sm">
+                <td colSpan={canEdit ? 12 : 9} className="p-8 text-center text-steel-muted text-sm">
                   No rows — import the project directory or add a Client / Consultant / Contractor from the lists above.
                 </td>
               </tr>

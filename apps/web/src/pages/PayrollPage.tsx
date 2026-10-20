@@ -240,8 +240,13 @@ function PayslipTab({ employees, payslips, year, month, scopeUserId, setYear, se
     }
   }
   async function transition(id: string, status: string) {
-    await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify({ status }) });
-    await reload();
+    try {
+      await api(`/api/hrm/payslips/${id}`, { method: "PATCH", token, body: JSON.stringify({ status }) });
+      setMsg(`Payslip marked ${status}.`);
+      await reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update the payslip status");
+    }
   }
 
   const grossTotal = payslips.reduce((s: number, p: any) => s + p.grossEarnings, 0);

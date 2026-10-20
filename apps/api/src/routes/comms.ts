@@ -294,17 +294,26 @@ commsRouter.post("/contacts/:projectId/sync-from-directory", requireRoles("admin
   res.json({ ok: true, roleFlows, ...contacts });
 });
 
+commsRouter.get("/contacts/:projectId/portal-status", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { matrixPortalStatus } = await import("../services/matrixPortal.js");
+  res.json(await matrixPortalStatus(req.params.projectId));
+});
+
 /** Open the portal for everyone in this project's communication matrix (logins + project team seats; no e-mail). */
 commsRouter.post("/contacts/:projectId/open-portal", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true, code: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
+  const contactIds = Array.isArray(req.body?.contactIds)
+    ? (req.body.contactIds as unknown[]).map(String).filter(Boolean)
+    : undefined;
+  if (contactIds && !contactIds.length) return res.status(400).json({ error: "Select at least one person to onboard" });
   const { openPortalForMatrix } = await import("../services/matrixPortal.js");
-  const out = await openPortalForMatrix(project.id);
+  const out = await openPortalForMatrix(project.id, contactIds);
   await audit("comms.matrix.open_portal", {
     userId: req.user!.id,
     entity: "Project",
     entityId: project.id,
-    meta: { project: project.code, opened: out.opened.length, created: out.opened.filter((o) => o.created).length, skipped: out.skipped.length },
+    meta: { project: project.code, selected: contactIds?.length ?? "all", opened: out.opened.length, created: out.opened.filter((o) => o.created).length, skipped: out.skipped.length },
   });
   res.json({ ok: true, ...out });
 });

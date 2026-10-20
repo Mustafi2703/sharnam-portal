@@ -14,7 +14,9 @@ export function defaultEntitledForLeaveCode(code: string): number {
   return hit?.daysPerYear ?? 0;
 }
 
+/** First run only: HR edits and deletions in HRMS · Masters must stick across page loads. */
 export async function ensureSpdcLeaveTypes(): Promise<void> {
+  if ((await prisma.leaveType.count()) > 0) return;
   for (const t of SPDC_LEAVE_TYPES) {
     await prisma.leaveType.upsert({
       where: { code: t.code },
@@ -27,12 +29,12 @@ export async function ensureSpdcLeaveTypes(): Promise<void> {
         requiresApproval: true,
         colour: t.colour,
       },
-      update: { name: t.name, daysPerYear: t.daysPerYear, colour: t.colour },
+      update: {},
     });
   }
 }
 
-/** Create year balances from SPDC defaults (PL = 12 days). Skips types that already have a row. */
+/** Create year balances from the leave-type master (seeded with PL = 12 days). Skips types that already have a row. */
 export async function ensureDefaultLeaveBalancesForUser(
   userId: string,
   year = new Date().getFullYear(),
@@ -41,7 +43,7 @@ export async function ensureDefaultLeaveBalancesForUser(
   await ensureSpdcLeaveTypes();
   const types = await prisma.leaveType.findMany({ where: { code: { in: SPDC_LEAVE_TYPES.map((t) => t.code) } } });
   for (const t of types) {
-    const entitled = overrides?.[t.code] ?? defaultEntitledForLeaveCode(t.code) ?? t.daysPerYear;
+    const entitled = overrides?.[t.code] ?? t.daysPerYear;
     const existing = await prisma.leaveBalance.findUnique({
       where: { userId_leaveTypeId_year: { userId, leaveTypeId: t.id, year } },
     });

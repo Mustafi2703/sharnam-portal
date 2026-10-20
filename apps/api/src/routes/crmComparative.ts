@@ -227,7 +227,7 @@ crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), asyn
   if (vendorNames.length < 1) return res.status(400).json({ error: "Select at least one bidder" });
 
   const vendors = await prisma.vendor.findMany({
-    where: { name: { in: vendorNames } },
+    where: { name: { in: vendorNames }, isActive: true },
     select: { id: true, name: true, partyType: true, trade: true },
   });
   const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v.id]));
@@ -368,7 +368,9 @@ crmComparativeRouter.patch("/bid-packages/:id", requireRoles("admin", "office"),
   if (req.body.revisionLabel != null) data.revisionLabel = String(req.body.revisionLabel).trim() || existing.revisionLabel;
   if (req.body.notes !== undefined) data.notes = req.body.notes ? String(req.body.notes) : null;
   if (req.body.dueDate !== undefined) {
-    data.dueDate = req.body.dueDate ? new Date(String(req.body.dueDate)) : null;
+    const due = req.body.dueDate ? new Date(String(req.body.dueDate)) : null;
+    if (due && Number.isNaN(due.getTime())) return res.status(400).json({ error: "Due date must be a valid date" });
+    data.dueDate = due;
   }
   if (req.body.projectId !== undefined || req.body.leadId !== undefined) {
     const nextProjectId = req.body.projectId !== undefined ? (req.body.projectId ? String(req.body.projectId) : null) : existing.projectId;

@@ -319,7 +319,10 @@ export function MasterProjectSetupPanel({ projectId, token, allUsers, allVendors
                 await api(`/api/projects/${projectId}/assign-parties`, {
                   method: "POST",
                   token,
-                  body: JSON.stringify({ vendorIds: [...new Set([...consultantIds, ...contractorIds])] }),
+                  body: JSON.stringify({
+                    vendorIds: [...new Set([...consultantIds, ...contractorIds])],
+                    managedPartyTypes: ["Consultant", "Designer", "Contractor", "Vendor"],
+                  }),
                 });
                 onMsg("Consultants and contractors saved.");
                 await load();

@@ -345,6 +345,20 @@ export function projectMemberRoleForPartyType(partyType?: string | null): string
   return "vendor";
 }
 
+/** Undo `syncAllPortalUsersForCompanyOnProject` when a company is unlinked from a project. Staff logins have no vendorId, so they are never touched. */
+export async function revokeCompanyPortalUsersOnProject(projectId: string, vendorId: string): Promise<number> {
+  const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { partyType: true } });
+  if (!vendor) return 0;
+  const out = await prisma.projectMember.deleteMany({
+    where: {
+      projectId,
+      role: projectMemberRoleForPartyType(vendor.partyType),
+      user: { vendorId, role: portalRoleForPartyType(vendor.partyType) },
+    },
+  });
+  return out.count;
+}
+
 /** Ensure every portal login for this company is on the project member list (client / vendor / consultant reps). */
 export async function syncAllPortalUsersForCompanyOnProject(projectId: string, vendorId: string): Promise<number> {
   const vendor = await prisma.vendor.findUnique({

@@ -634,7 +634,9 @@ projectsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedRequ
     startDate,
     endDate,
   } = req.body;
-  if (!code || !name) return res.status(400).json({ error: "code and name required" });
+  if (!String(code || "").trim() || !String(name || "").trim()) {
+    return res.status(400).json({ error: "Project code and name are required" });
+  }
   let project;
   let created = true;
   try {
@@ -940,7 +942,18 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
   const vendorIds: string[] = Array.isArray(req.body?.vendorIds)
     ? [...new Set((req.body.vendorIds as unknown[]).map((id) => String(id).trim()).filter(Boolean))]
     : [];
+  // Only party types the caller's pickers show may be unlinked; omitted => add-only (legacy callers).
+  const managedPartyTypes: string[] = Array.isArray(req.body?.managedPartyTypes)
+    ? [
+        ...new Set(
+          (req.body.managedPartyTypes as unknown[])
+            .map((t) => String(t).trim())
+            .filter((t) => ["Client", "Consultant", "Designer", "PMC", "Contractor", "Vendor"].includes(t)),
+        ),
+      ]
+    : [];
 
+  let unlinked: { vendorId: string; partyType: string }[] = [];
   try {
     const existing = vendorIds.length
       ? await prisma.vendor.findMany({ where: { id: { in: vendorIds } }, select: { id: true } })
@@ -953,6 +966,20 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
         create: { projectId, vendorId, assignedVia: "Project setup" },
         update: {},
       });
+    }
+    if (managedPartyTypes.length) {
+      const stale = await prisma.projectVendor.findMany({
+        where: {
+          projectId,
+          vendorId: { notIn: vendorIds },
+          vendor: { partyType: { in: managedPartyTypes } },
+        },
+        select: { id: true, vendorId: true, vendor: { select: { partyType: true } } },
+      });
+      if (stale.length) {
+        await prisma.projectVendor.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
+        unlinked = stale.map((s) => ({ vendorId: s.vendorId, partyType: s.vendor.partyType }));
+      }
     }
   } catch (err) {
     return res.status(400).json({
@@ -968,27 +995,46 @@ projectsRouter.post("/:id/assign-parties", requireRoles("admin", "office"), asyn
     include: { vendor: { select: { name: true } } },
     orderBy: { createdAt: "asc" },
   });
+  const unlinkedConsultant = unlinked.some((u) => u.partyType === "Consultant" || u.partyType === "Designer");
+  const unlinkedContractor = unlinked.some((u) => u.partyType === "Contractor" || u.partyType === "Vendor");
+  const contractorsLeft = unlinkedContractor
+    ? await prisma.projectVendor.count({
+        where: { projectId, vendor: { partyType: { in: ["Contractor", "Vendor"] } } },
+      })
+    : 1;
   await prisma.project.update({
     where: { id: projectId },
     data: {
-      ...(firstConsultant ? { designConsultant: firstConsultant.vendor.name } : {}),
+      ...(firstConsultant
+        ? { designConsultant: firstConsultant.vendor.name }
+        : unlinkedConsultant
+          ? { designConsultant: null }
+          : {}),
+      ...(contractorsLeft === 0 ? { contractorName: null } : {}),
     },
   });
   await rememberSelectedContractors(projectId);
+
+  const {
+    syncAllPortalUsersForCompanyOnProject,
+    revokeCompanyPortalUsersOnProject,
+  } = await import("../services/crmVendorCredentials.js");
+  for (const u of unlinked) {
+    await revokeCompanyPortalUsersOnProject(projectId, u.vendorId).catch(() => 0);
+  }
 
   await audit("project.assign_parties", {
     userId: req.user!.id,
     entity: "Project",
     entityId: projectId,
-    meta: { vendorIds },
+    meta: { vendorIds, managedPartyTypes, unlinkedVendorIds: unlinked.map((u) => u.vendorId) },
   });
 
-  const { syncAllPortalUsersForCompanyOnProject } = await import("../services/crmVendorCredentials.js");
   for (const vendorId of vendorIds) {
     await syncAllPortalUsersForCompanyOnProject(projectId, vendorId).catch(() => 0);
   }
 
-  res.json({ ok: true, assigned: vendorIds.length });
+  res.json({ ok: true, assigned: vendorIds.length, unlinked: unlinked.length });
 });
 
 projectsRouter.post("/:id/complete-setup", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -1348,6 +1394,10 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
     const d = new Date(String(v));
     return Number.isNaN(d.getTime()) ? null : d;
   };
+  const textOrNull = (v: unknown) => (v === undefined ? undefined : v == null ? null : String(v).trim() || null);
+  if (name !== undefined && !String(name ?? "").trim()) {
+    return res.status(400).json({ error: "Project name is required" });
+  }
   let project;
   try {
     const existing = await prisma.project.findUnique({ where: { id: req.params.id }, select: { id: true } });
@@ -1392,18 +1442,18 @@ projectsRouter.patch("/:id/settings", requireRoles("admin", "office", "employee"
               ? new Date()
               : null
             : undefined,
-        clientName: clientName !== undefined ? clientName : undefined,
-        location: location !== undefined ? location : undefined,
+        clientName: textOrNull(clientName),
+        location: textOrNull(location),
         status: statusNote,
-        name: name !== undefined ? name : undefined,
-        clientContactName: clientContactName !== undefined ? clientContactName : undefined,
-        clientEmail: clientEmail !== undefined ? clientEmail : undefined,
-        clientPhone: clientPhone !== undefined ? clientPhone : undefined,
-        clientAddress: clientAddress !== undefined ? clientAddress : undefined,
-        clientGst: clientGst !== undefined ? clientGst : undefined,
-        designConsultant: designConsultant !== undefined ? designConsultant : undefined,
-        contractorName: contractorName !== undefined ? contractorName : undefined,
-        pmcName: pmcName !== undefined ? pmcName : undefined,
+        name: name !== undefined ? String(name).trim() : undefined,
+        clientContactName: textOrNull(clientContactName),
+        clientEmail: textOrNull(clientEmail)?.toLowerCase() ?? (clientEmail === undefined ? undefined : null),
+        clientPhone: textOrNull(clientPhone),
+        clientAddress: textOrNull(clientAddress),
+        clientGst: textOrNull(clientGst),
+        designConsultant: textOrNull(designConsultant),
+        contractorName: textOrNull(contractorName),
+        pmcName: textOrNull(pmcName),
         startDate: dateOrNull(startDate),
         endDate: dateOrNull(endDate),
         workPackages: workPackagesList !== null ? JSON.stringify(workPackagesList) : undefined,
@@ -1442,19 +1492,20 @@ projectsRouter.post(
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file?.buffer) return res.status(400).json({ error: "Image file required (PNG/JPG)" });
-    if (!req.file.mimetype?.startsWith("image/")) return res.status(400).json({ error: "Logo must be an image" });
+    const { invalidateClientLogo, sniffLogoExt } = await import("../services/clientLogo.js");
+    const kind = sniffLogoExt(req.file.buffer);
+    if (!kind) return res.status(400).json({ error: "Upload a PNG or JPG logo." });
     const project = await prisma.project.findUnique({ where: { id: req.params.id } });
     if (!project) return res.status(404).json({ error: "project not found" });
-    const ext = /\.png$/i.test(req.file.originalname) ? "png" : /\.jpe?g$/i.test(req.file.originalname) ? "jpg" : "png";
     const folder = "00_PROJECT_BRANDING";
-    const fileName = `client-logo.${ext}`;
-    const saved = await mockOneDrive.upload(project.code, folder, fileName, req.file.buffer, req.file.mimetype);
+    const fileName = kind === "png" ? "client-logo.png" : "client-logo.jpg";
+    const saved = await mockOneDrive.upload(project.code, folder, fileName, req.file.buffer, `image/${kind}`);
     const logoUrl = saved.sharePointUrl || saved.url;
     const updated = await prisma.project.update({
       where: { id: project.id },
       data: { clientLogoUrl: logoUrl },
     });
-    import("../services/clientLogo.js").then(({ invalidateClientLogo }) => invalidateClientLogo(project.id)).catch(() => undefined);
+    invalidateClientLogo(project.id);
     await audit("project.client_logo", {
       userId: req.user!.id,
       entity: "Project",
@@ -1464,6 +1515,16 @@ projectsRouter.post(
     res.json({ ok: true, clientLogoUrl: updated.clientLogoUrl, url: logoUrl, provider: saved.provider });
   }
 );
+
+/** Client logo bytes for anyone on the project — the stored SharePoint URL only opens for signed-in office users. */
+projectsRouter.get("/:id/client-logo/image", async (req, res) => {
+  const { clientLogoForProject } = await import("../services/clientLogo.js");
+  const logo = await clientLogoForProject(req.params.id);
+  if (!logo) return res.status(404).json({ error: "No client logo" });
+  res.setHeader("Content-Type", `image/${logo.ext}`);
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.send(logo.buffer);
+});
 
 projectsRouter.get("/:id/emails", requireRoles("admin", "office", "employee", "site_employee"), async (req, res) => {
   const rows = await prisma.emailOutbox.findMany({

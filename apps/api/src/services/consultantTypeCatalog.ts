@@ -124,7 +124,7 @@ export async function renameConsultantType(from: string, to: string): Promise<st
   }
   await save(current.map((t) => (t.toLowerCase() === src.toLowerCase() ? dest : t)));
   const companies = await prisma.vendor.findMany({
-    where: { trade: { not: null } },
+    where: { trade: { not: null }, partyType: { in: ["Consultant", "PMC", "Designer"] } },
     select: { id: true, trade: true },
   });
   const ids = companies.filter((row) => (row.trade || "").trim().toLowerCase() === src.toLowerCase()).map((row) => row.id);

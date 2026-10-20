@@ -268,7 +268,9 @@ export function ConsultantRoleSelect({
           >
             {option}
             <span className="block text-xs font-normal text-steel-muted mt-0.5">
-              {option === "PMC" ? "Shows on the project card under PMC." : "Shows on the project card under Consultants."}
+              {option === "PMC"
+                ? "Shows on the project card under PMC."
+                : "Shows on the project card under Consultants (under PMC when the type is project management)."}
             </span>
           </button>
         ))}

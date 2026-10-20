@@ -513,16 +513,35 @@ crmRouter.get("/leads/:id", async (req, res) => {
   });
 });
 
+function optionalText(v: unknown): string | null {
+  const s = v == null ? "" : String(v).trim();
+  return s || null;
+}
+
+function optionalNumber(v: unknown): number | null | "invalid" {
+  if (v == null || String(v).trim() === "") return null;
+  const n = Number(String(v).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : "invalid";
+}
+
 crmRouter.post("/leads", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const title = optionalText(req.body.title);
+  if (!title) return res.status(400).json({ error: "Opportunity title is required" });
+  const value = optionalNumber(req.body.value);
+  if (value === "invalid") return res.status(400).json({ error: "Value must be a number" });
+  const projectId = optionalText(req.body.projectId);
+  if (projectId && !(await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } }))) {
+    return res.status(404).json({ error: "Linked project not found" });
+  }
   const lead = await prisma.lead.create({
     data: {
-      title: req.body.title,
-      contactName: req.body.contactName,
-      email: req.body.email,
-      phone: req.body.phone,
-      stage: req.body.stage || "New",
-      value: req.body.value != null ? Number(req.body.value) : null,
-      projectId: req.body.projectId,
+      title,
+      contactName: optionalText(req.body.contactName),
+      email: optionalText(req.body.email)?.toLowerCase() ?? null,
+      phone: optionalText(req.body.phone),
+      stage: optionalText(req.body.stage) || "New",
+      value,
+      projectId,
       ownerId: req.user!.id,
       latestStatus: req.body.latestStatus || null,
       latestSubStatus: req.body.latestSubStatus || null,
@@ -692,11 +711,27 @@ crmRouter.patch("/leads/:id", requireRoles("admin", "office"), async (req, res) 
   setIfPresent("sector");
   setIfPresent("projectType");
   setIfPresent("description");
+  if ("title" in data && !optionalText(data.title)) {
+    return res.status(400).json({ error: "Opportunity title is required" });
+  }
+  if ("stage" in data && !optionalText(data.stage)) {
+    return res.status(400).json({ error: "Pipeline stage is required" });
+  }
+  if (typeof data.value === "number" && !Number.isFinite(data.value)) {
+    return res.status(400).json({ error: "Value must be a number" });
+  }
+  if (data.latestStatusUpdate instanceof Date && Number.isNaN(data.latestStatusUpdate.getTime())) {
+    return res.status(400).json({ error: "Latest status update must be a valid date" });
+  }
+  const existing = await prisma.lead.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!existing) return res.status(404).json({ error: "Lead not found" });
   const lead = await prisma.lead.update({ where: { id: req.params.id }, data });
   res.json(lead);
 });
 
 crmRouter.delete("/leads/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const existing = await prisma.lead.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!existing) return res.status(404).json({ error: "Lead not found" });
   await prisma.lead.delete({ where: { id: req.params.id } });
   await audit("crm.leads.delete", { userId: req.user!.id, entity: "Lead", entityId: req.params.id });
   res.json({ ok: true });
@@ -742,6 +777,12 @@ crmRouter.post("/leads/:id/to-proposal", requireRoles("admin", "office"), async 
 
   const clientName = String(req.body.clientName || lead.contactName || lead.title).trim();
   const quotationNo = String(req.body.quotationNo || "").trim() || (await nextSpdcQuotationNo());
+  const taken = await quotationNoTaken(quotationNo);
+  if (taken) {
+    return res.status(409).json({
+      error: `Quotation no ${quotationNo} is already used for ${taken.clientName}. Use the next number instead.`,
+    });
+  }
   const project = lead.projectId ? await prisma.project.findUnique({ where: { id: lead.projectId } }) : null;
   const row = await createVersionedProposal({
     projectId: project?.id || null,
@@ -901,6 +942,15 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
 
 const PROPOSAL_STATUSES = ["Draft", "Editing", "Sent to client", "Done", "Awarded", "Lost"] as const;
 
+/** Proposal files are named by quotation no, so a reused number would overwrite another proposal's R0 file. */
+async function quotationNoTaken(quotationNo: string, exceptId?: string) {
+  const row = await prisma.quotation.findFirst({
+    where: { quotationNo, ...(exceptId ? { NOT: { id: exceptId } } : {}) },
+    select: { id: true, clientName: true },
+  });
+  return row;
+}
+
 async function quotationStatusLog(entityId: string) {
   return prisma.auditEvent.findMany({
     where: { entity: "Quotation", entityId },
@@ -1007,6 +1057,12 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
   const project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
 
   const quotationNo = String(req.body.quotationNo || "").trim() || (await nextSpdcQuotationNo());
+  const taken = await quotationNoTaken(quotationNo);
+  if (taken) {
+    return res.status(409).json({
+      error: `Quotation no ${quotationNo} is already used for ${taken.clientName}. Use the next number instead.`,
+    });
+  }
   let row;
   try {
     row = await createVersionedProposal({
@@ -1018,10 +1074,13 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
       clientAddress: req.body.clientAddress || null,
       clientGst: req.body.clientGst || null,
       scopeSummary: req.body.scopeSummary || `PMC proposal for ${clientName}`,
-      totalValue: Number(req.body.totalValue || 0),
+      totalValue: Number(req.body.totalValue) || 0,
       currency: req.body.currency || "INR",
-      validityDays: Number(req.body.validityDays || 30),
-      quotationDate: req.body.quotationDate ? new Date(req.body.quotationDate) : new Date(),
+      validityDays: Math.round(Number(req.body.validityDays)) || 30,
+      quotationDate:
+        req.body.quotationDate && !Number.isNaN(new Date(req.body.quotationDate).getTime())
+          ? new Date(req.body.quotationDate)
+          : new Date(),
       leadId: leadId || null,
     });
   } catch (err) {
@@ -1117,18 +1176,32 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
       ? new Date(String(req.body.quotationDate))
       : before.quotationDate;
   const currency = req.body.currency != null ? String(req.body.currency).trim() || before.currency : before.currency;
+  const quotationNo = req.body.quotationNo != null ? String(req.body.quotationNo).trim() : before.quotationNo;
+  const clientName = req.body.clientName != null ? String(req.body.clientName).trim() : before.clientName;
+  if (!quotationNo) return res.status(400).json({ error: "Quotation number is required" });
+  if (!clientName) return res.status(400).json({ error: "Client name is required" });
+  if (quotationNo !== before.quotationNo) {
+    const taken = await quotationNoTaken(quotationNo, before.id);
+    if (taken) {
+      return res.status(409).json({ error: `Quotation no ${quotationNo} is already used for ${taken.clientName}.` });
+    }
+  }
+  const totalValue = req.body.totalValue != null ? optionalNumber(req.body.totalValue) : before.totalValue;
+  const validityDays = req.body.validityDays != null ? optionalNumber(req.body.validityDays) : before.validityDays;
+  if (totalValue === "invalid") return res.status(400).json({ error: "Total value must be a number" });
+  if (validityDays === "invalid") return res.status(400).json({ error: "Validity days must be a number" });
 
   const row = await prisma.quotation.update({
     where: { id: req.params.id },
     data: {
       status: nextStatus,
-      quotationNo: req.body.quotationNo ?? before.quotationNo,
-      clientName: req.body.clientName ?? before.clientName,
+      quotationNo,
+      clientName,
       clientAddress: req.body.clientAddress ?? before.clientAddress,
       clientGst: req.body.clientGst ?? before.clientGst,
       scopeSummary: req.body.scopeSummary ?? before.scopeSummary,
-      totalValue: req.body.totalValue != null ? Number(req.body.totalValue) : before.totalValue,
-      validityDays: req.body.validityDays != null ? Number(req.body.validityDays) : before.validityDays,
+      totalValue: totalValue ?? 0,
+      validityDays: validityDays == null ? before.validityDays : Math.round(validityDays),
       sectionsJson,
       quotationDate: Number.isNaN(quotationDate.getTime()) ? before.quotationDate : quotationDate,
       currency,
@@ -1197,12 +1270,18 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
 
   const lead = qtn.lead;
   const autoCode = `SPDC-${String(lead?.srNo || qtn.quotationNo.replace(/\D/g, "") || Date.now()).slice(-5)}`;
-  const code = String(req.body.code || "").trim() || autoCode;
+  let code = String(req.body.code || "").trim() || autoCode;
   const name = String(req.body.name || lead?.title || qtn.clientName).trim();
   if (!code || !name) return res.status(400).json({ error: "code and name required" });
 
   let projectId = (req.body.projectId as string | undefined) || qtn.projectId || lead?.projectId || undefined;
   let project = projectId ? await prisma.project.findUnique({ where: { id: projectId } }) : null;
+  if (!project && !String(req.body.code || "").trim()) {
+    // createOrReuseProject reuses an existing code; a generated code must never attach this award to another job.
+    for (let n = 2; n < 100 && (await prisma.project.findFirst({ where: { code }, select: { id: true } })); n++) {
+      code = `${autoCode}-${n}`;
+    }
+  }
   if (!project) {
     try {
       const { createOrReuseProject } = await import("../services/projectCreate.js");
@@ -1482,6 +1561,15 @@ const hrmStaff = requireRoles("admin", "office", "hr", "site_employee", "employe
 const HRMS_STAFF_ROLES = ["admin", "office", "hr", "employee", "site_employee"] as const;
 const HRMS_ALL_LOGIN_ROLES = [...HRMS_STAFF_ROLES, "vendor", "client"] as const;
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Empty is allowed (clears the value); anything else must be a non-negative number. */
+function moneyFieldError(value: unknown, label: string): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? null : `${label} must be a number of rupees`;
+}
+
 async function safeCount(label: string, fn: () => Promise<number>): Promise<number> {
   try {
     return await fn();
@@ -1536,7 +1624,7 @@ hrmRouter.get("/dashboard", hrmDesk, async (_req, res) => {
       })
     ),
     safeCount("openReqs", () =>
-      prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "PendingHR", "Approved"] } } })
+      prisma.manpowerRequisition.count({ where: { status: { in: ["Draft", "Submitted", "PendingHR", "Approved"] } } })
     ),
     safeCount("activeCandidates", () =>
       prisma.candidate.count({ where: { status: { in: [...ACTIVE_CANDIDATE_STAGES] } } })
@@ -1891,7 +1979,18 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const bcrypt = await import("bcryptjs");
   const { portalForRole } = await import("@sharnam/shared");
   const { email, fullName, role, phone, empCode, department, designation, password, vendorId: vendorIdRaw, desk } = req.body;
-  if (!email || !fullName || !role) return res.status(400).json({ error: "email, fullName, role required" });
+  if (!String(fullName || "").trim()) return res.status(400).json({ error: "Full name is required" });
+  if (!String(email || "").trim()) return res.status(400).json({ error: "Login email is required" });
+  if (!EMAIL_RE.test(String(email).trim())) return res.status(400).json({ error: `${String(email).trim()} is not a valid email address` });
+  if (!role || !(HRMS_ALL_LOGIN_ROLES as readonly string[]).includes(String(role))) {
+    return res.status(400).json({ error: "Pick the login type (site, office or HR)" });
+  }
+  if (role === "admin" && req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Only an admin can create another admin login" });
+  }
+  if (password && String(password).length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  const ctcCheck = moneyFieldError(req.body.ctcAnnual, "CTC");
+  if (ctcCheck) return res.status(400).json({ error: ctcCheck });
   const roleKey = role as import("@sharnam/shared").RoleKey;
   const officeOrAdmin = req.user?.role === "admin" || req.user?.role === "office";
   const hrOnly = isHrDeskOnly(req.user?.email, req.user?.role) || req.user?.role === "hr";
@@ -1936,7 +2035,7 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
   const user = await prisma.user.create({
     data: {
       email: String(email).trim().toLowerCase(),
-      fullName,
+      fullName: String(fullName).trim(),
       role: roleKey,
       portal: portalForRole(roleKey),
       phone,
@@ -1988,7 +2087,16 @@ hrmRouter.post("/employees", hrmDesk, async (req: AuthedRequest, res) => {
 
 hrmRouter.post("/assign", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const { projectId, userId, role } = req.body;
-  if (!projectId || !userId) return res.status(400).json({ error: "projectId and userId required" });
+  if (!projectId || !userId) return res.status(400).json({ error: "Pick both the employee and the project" });
+  const [assignee, project] = await Promise.all([
+    prisma.user.findUnique({ where: { id: String(userId) }, select: { isActive: true, email: true } }),
+    prisma.project.findUnique({ where: { id: String(projectId) }, select: { id: true } }),
+  ]);
+  if (!assignee || assignee.email.startsWith("deleted.")) return res.status(404).json({ error: "That employee no longer has a login" });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  if (assignee.isActive === false) {
+    return res.status(400).json({ error: "This login is switched off. Turn it back on from Setup before assigning a project." });
+  }
   const member = await prisma.projectMember.upsert({
     where: { projectId_userId: { projectId, userId } },
     create: { projectId, userId, role: role || "member" },
@@ -2054,6 +2162,24 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (existing.role === "admin" && req.user?.role !== "admin") {
     return res.status(403).json({ error: "Only admin can edit admin accounts" });
   }
+  if (fullName !== undefined && !String(fullName).trim()) return res.status(400).json({ error: "Full name cannot be empty" });
+  if (email && !EMAIL_RE.test(String(email).trim())) return res.status(400).json({ error: `${String(email).trim()} is not a valid email address` });
+  if (role && !(HRMS_ALL_LOGIN_ROLES as readonly string[]).includes(String(role))) {
+    return res.status(400).json({ error: "Pick the login type (site, office or HR)" });
+  }
+  if (password && String(password).length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  for (const [value, label] of [[ctcAnnual, "CTC"], [basicMonthly, "Basic"], [hraMonthly, "HRA"]] as const) {
+    const moneyErr = moneyFieldError(value, label);
+    if (moneyErr) return res.status(400).json({ error: moneyErr });
+  }
+  const typedEmpCode = empCode !== undefined ? String(empCode || "").trim() : "";
+  if (typedEmpCode) {
+    const taken = await prisma.employeeProfile.findUnique({ where: { empCode: typedEmpCode }, select: { userId: true } });
+    if (taken && taken.userId !== userId) {
+      const holder = await prisma.user.findUnique({ where: { id: taken.userId }, select: { fullName: true } });
+      return res.status(409).json({ error: `Employee code ${typedEmpCode} is already used by ${holder?.fullName || "another login"}.` });
+    }
+  }
 
   const data: Record<string, unknown> = {};
   if (fullName) data.fullName = String(fullName).trim();
@@ -2110,7 +2236,7 @@ hrmRouter.patch("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const externalRole = effectiveRole === "client" || effectiveRole === "vendor";
   const profilePatch: Record<string, unknown> = {};
   if (!externalRole && empCode !== undefined) {
-    profilePatch.empCode = empCode || `EMP-${Date.now().toString().slice(-6)}`;
+    profilePatch.empCode = typedEmpCode || `EMP-${Date.now().toString().slice(-6)}`;
   }
   if (department !== undefined) profilePatch.department = department || null;
   if (designation !== undefined) profilePatch.designation = designation || null;
@@ -2168,13 +2294,25 @@ hrmRouter.delete("/employees/:id", hrmDesk, async (req: AuthedRequest, res) => {
   if (existing.role === "admin" && req.user?.role !== "admin" && !demoSeed) {
     return res.status(403).json({ error: "Only admin can remove admin accounts" });
   }
+  const hrOnly = isHrDeskOnly(req.user?.email, req.user?.role) || req.user?.role === "hr";
+  const externalLogin = existing.role === "client" || existing.role === "vendor" || (existing.role === "employee" && !!existing.vendorId);
+  if (hrOnly && externalLogin) {
+    return res.status(403).json({
+      error: "HR desk manages SPDC staff only. Remove client, vendor, and consultant logins under Office → Access · Users.",
+    });
+  }
 
   const { retirePortalLogin } = await import("../services/crmVendorCredentials.js");
   const removed = await retirePortalLogin(prisma, userId, { allowStaff: true });
   if (!removed) {
     return res.status(403).json({ error: "Nirav Parekh and Saurabh Prajapati stay on the portal. Every other login can be deleted." });
   }
-  await audit("hrm.employee.removed", { userId: req.user?.id, entity: "User", entityId: userId });
+  await audit("hrm.employee.removed", {
+    userId: req.user?.id,
+    entity: "User",
+    entityId: userId,
+    meta: { email: existing.email, fullName: existing.fullName, role: existing.role },
+  });
   res.json({ ok: true, softDeleted: true });
 });
 
@@ -3057,27 +3195,23 @@ hrmRouter.delete("/leave-types/:id", hrmDesk, async (req, res) => {
 });
 
 hrmRouter.post("/leave-types", hrmDesk, async (req, res) => {
-  const row = await prisma.leaveType.upsert({
-    where: { code: String(req.body.code || req.body.name || "").toUpperCase() },
-    create: {
-      code: String(req.body.code || req.body.name).toUpperCase(),
-      name: req.body.name,
-      daysPerYear: Number(req.body.daysPerYear || 0),
-      isPaid: req.body.isPaid !== false,
-      carryForward: !!req.body.carryForward,
-      requiresApproval: req.body.requiresApproval !== false,
-      colour: req.body.colour || null,
-    },
-    update: {
-      name: req.body.name,
-      daysPerYear: Number(req.body.daysPerYear || 0),
+  const name = String(req.body.name || "").trim();
+  if (!name) return res.status(400).json({ error: "Leave type name is required" });
+  const code = String(req.body.code || name).trim().toUpperCase();
+  const clash = await prisma.leaveType.findUnique({ where: { code }, select: { name: true } });
+  if (clash) return res.status(409).json({ error: `Code ${code} is already used by ${clash.name}. Edit that leave type instead.` });
+  const row = await prisma.leaveType.create({
+    data: {
+      code,
+      name,
+      daysPerYear: Number(req.body.daysPerYear || 0) || 0,
       isPaid: req.body.isPaid !== false,
       carryForward: !!req.body.carryForward,
       requiresApproval: req.body.requiresApproval !== false,
       colour: req.body.colour || null,
     },
   });
-  res.json(row);
+  res.status(201).json(row);
 });
 
 hrmRouter.get("/holidays", async (req, res) => {
@@ -3403,10 +3537,10 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
 hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, res) => {
   const kindRaw = String(req.body.kind || "");
   if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
-    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+    return res.status(400).json({ error: "Pick which letter to prepare" });
   }
   const employeeName = String(req.body.employeeName || "").trim();
-  if (!employeeName) return res.status(400).json({ error: "employeeName required" });
+  if (!employeeName) return res.status(400).json({ error: "Employee name is required" });
   const data =
     req.body.data && typeof req.body.data === "object" ? (req.body.data as Record<string, unknown>) : {};
   const { previewHrmsLetterDraft } = await import("../services/hrmsLetter.js");
@@ -3432,10 +3566,10 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
 hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedRequest, res) => {
   const kindRaw = String(req.body.kind || "");
   if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
-    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+    return res.status(400).json({ error: "Pick which letter to prepare" });
   }
   const employeeName = String(req.body.employeeName || "").trim();
-  if (!employeeName) return res.status(400).json({ error: "employeeName required" });
+  if (!employeeName) return res.status(400).json({ error: "Employee name is required" });
   const data =
     req.body.data && typeof req.body.data === "object" ? (req.body.data as Record<string, unknown>) : {};
   const { buildHrmsLetterDraftDocx } = await import("../services/hrmsLetter.js");
@@ -3493,11 +3627,14 @@ hrmRouter.get("/hrms-documents", hrmDesk, async (req, res) => {
 hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
   const kindRaw = String(req.body.kind || "");
   if (!(HRMS_DOC_KINDS as readonly string[]).includes(kindRaw)) {
-    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+    return res.status(400).json({ error: "Pick which letter to prepare" });
   }
   const kind = kindRaw as HrmsDocKind;
   const employeeName = String(req.body.employeeName || "").trim();
-  if (!employeeName) return res.status(400).json({ error: "employeeName required" });
+  if (!employeeName) return res.status(400).json({ error: "Employee name is required" });
+  if (req.body.effectiveDate && Number.isNaN(new Date(req.body.effectiveDate).getTime())) {
+    return res.status(400).json({ error: "Effective date is not a valid date" });
+  }
 
   const refNo = String(req.body.refNo || hrmsDocRefNo(kind));
   const dataJson = req.body.data && typeof req.body.data === "object" ? JSON.stringify(req.body.data) : String(req.body.data || "{}");
@@ -3744,17 +3881,31 @@ hrmRouter.patch("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) 
     if (req.body[k] != null) data[k] = req.body[k];
   }
   if (data.kind && !(HRMS_DOC_KINDS as readonly string[]).includes(String(data.kind))) {
-    return res.status(400).json({ error: `kind must be one of ${HRMS_DOC_KINDS.join(" | ")}` });
+    return res.status(400).json({ error: "Pick which letter to prepare" });
   }
-  if (req.body.effectiveDate !== undefined) data.effectiveDate = req.body.effectiveDate ? new Date(req.body.effectiveDate) : null;
+  if (data.employeeName !== undefined && !String(data.employeeName).trim()) {
+    return res.status(400).json({ error: "Employee name is required" });
+  }
+  if (req.body.effectiveDate !== undefined) {
+    const effective = req.body.effectiveDate ? new Date(req.body.effectiveDate) : null;
+    if (effective && Number.isNaN(effective.getTime())) return res.status(400).json({ error: "Effective date is not a valid date" });
+    data.effectiveDate = effective;
+  }
   if (req.body.data && typeof req.body.data === "object") data.dataJson = JSON.stringify(req.body.data);
   const row = await prisma.hrmsDocument.update({ where: { id: req.params.id }, data });
   res.json(row);
 });
 
 hrmRouter.delete("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) => {
-  await prisma.hrmsDocument.delete({ where: { id: req.params.id } });
-  await audit("hrm.docs.delete", { userId: req.user!.id, entity: "HrmsDocument", entityId: req.params.id });
+  const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id }, select: { id: true, kind: true, refNo: true, employeeName: true } });
+  if (!row) return res.status(404).json({ error: "This letter was already removed" });
+  await prisma.hrmsDocument.delete({ where: { id: row.id } });
+  await audit("hrm.docs.delete", {
+    userId: req.user!.id,
+    entity: "HrmsDocument",
+    entityId: row.id,
+    meta: { kind: row.kind, refNo: row.refNo, employeeName: row.employeeName },
+  });
   res.json({ ok: true });
 });
 
@@ -3887,7 +4038,10 @@ hrmRouter.post("/leave", requireRoles("admin", "office", "hr", "site_employee", 
 
 hrmRouter.patch("/leave/:id", hrmDesk, async (req: AuthedRequest, res) => {
   const before = await prisma.leaveRequest.findUnique({ where: { id: req.params.id } });
-  if (!before) return res.status(404).json({ error: "not found" });
+  if (!before) return res.status(404).json({ error: "This leave request no longer exists" });
+  if (req.body.status && !["Pending", "Approved", "Rejected", "Cancelled"].includes(String(req.body.status))) {
+    return res.status(400).json({ error: "Status must be Pending, Approved, Rejected or Cancelled" });
+  }
   const year = new Date(before.fromDate).getFullYear();
 
   const convertTo = req.body.convertToLeaveTypeId || req.body.leaveTypeId;

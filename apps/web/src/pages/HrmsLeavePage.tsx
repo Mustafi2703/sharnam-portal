@@ -34,6 +34,7 @@ export default function HrmsLeavePage() {
   const [balanceDraft, setBalanceDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ fromDate: "", toDate: "", reason: "", leaveTypeId: "", halfDay: false });
   const [msg, setMsg] = useState("");
+  const [decidingId, setDecidingId] = useState<string | null>(null);
 
   const balanceUserId = canManage && hrUserId ? hrUserId : user?.id || "";
 
@@ -119,11 +120,22 @@ export default function HrmsLeavePage() {
   }
 
   async function patchLeave(id: string, body: Record<string, unknown>) {
-    await api(`/api/hrm/leave/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
-    await load();
+    if (decidingId) return;
+    setDecidingId(id);
+    setMsg("");
+    try {
+      await api(`/api/hrm/leave/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
+      setMsg(body.status === "Approved" ? "Leave approved — balance updated." : `Leave ${String(body.status || "updated").toLowerCase()}.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not update the leave request");
+    } finally {
+      setDecidingId(null);
+    }
   }
 
-  const shownLeave = canManage ? leave : leave;
+  const shownLeave = leave;
+  const forStaff = canManage && hrUserId ? staff.find((s) => s.id === hrUserId) : null;
 
   return (
     <div className="space-y-5">
@@ -211,7 +223,7 @@ export default function HrmsLeavePage() {
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="space-y-3">
-          <h3 className="font-semibold">Request leave</h3>
+          <h3 className="font-semibold">{forStaff ? `Request leave for ${forStaff.fullName}` : "Request leave"}</h3>
           <form className="space-y-2" onSubmit={submit}>
             <Select value={form.leaveTypeId} onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })} required>
               <option value="">Leave type</option>
@@ -234,7 +246,7 @@ export default function HrmsLeavePage() {
           </form>
           {balances.length > 0 && (
             <div className="text-xs border-t border-line pt-2">
-              <div className="font-semibold mb-1">Your balances · {year}</div>
+              <div className="font-semibold mb-1">{forStaff ? `${forStaff.fullName} · balances` : "Your balances"} · {year}</div>
               <ul className="space-y-0.5">
                 {balances.map((b) => (
                   <li key={b.id} className="flex justify-between gap-2">
@@ -311,10 +323,10 @@ export default function HrmsLeavePage() {
                   {l.leaveType?.name || "Leave"} · {l.days}d · {String(l.fromDate).slice(0, 10)} → {String(l.toDate).slice(0, 10)}
                 </span>
                 <span className="flex gap-2">
-                  <button type="button" className="text-brand text-xs font-semibold" onClick={() => void patchLeave(l.id, { status: "Approved" })}>
+                  <button type="button" disabled={!!decidingId} className="text-brand text-xs font-semibold disabled:opacity-50" onClick={() => void patchLeave(l.id, { status: "Approved" })}>
                     Approve
                   </button>
-                  <button type="button" className="text-danger text-xs font-semibold" onClick={() => void patchLeave(l.id, { status: "Rejected" })}>
+                  <button type="button" disabled={!!decidingId} className="text-danger text-xs font-semibold disabled:opacity-50" onClick={() => void patchLeave(l.id, { status: "Rejected" })}>
                     Reject
                   </button>
                 </span>

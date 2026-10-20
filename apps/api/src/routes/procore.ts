@@ -154,6 +154,14 @@ vendorsRouter.post("/", requireRoles("admin", "office"), async (req: AuthedReque
       error: `${existing.name} is already on CRM → ${vendorDeskLabel(existing.partyType)}. Open that list to edit — this desk is only for ${vendorDeskLabel(partyType)}.`,
     });
   }
+  if (existing && existing.isActive && req.body.createOnly === true) {
+    return res.status(409).json({
+      error: email
+        ? `${email} is already the email for ${existing.name}. Open that company in the list to edit it.`
+        : `${existing.name} is already in the directory. Open it in the list to edit it.`,
+      existingId: existing.id,
+    });
+  }
   const v = existing
     ? await prisma.vendor.update({ where: { id: existing.id }, data })
     : await prisma.vendor.create({ data: { ...data, createdVia: "Manual" } });
@@ -227,6 +235,15 @@ vendorsRouter.patch("/:id", requireRoles("admin", "office"), async (req: AuthedR
     return res.status(409).json({
       error: `${current.name} is on CRM → ${vendorDeskLabel(current.partyType)}. Open that list to edit — party type cannot jump desks.`,
     });
+  }
+  if (typeof data.email === "string" && data.email !== (current.email || "").toLowerCase()) {
+    const clash = await prisma.vendor.findFirst({
+      where: { email: data.email, isActive: true, NOT: { id: current.id } },
+      select: { name: true },
+    });
+    if (clash) {
+      return res.status(409).json({ error: `${data.email} is already the email for ${clash.name}. Each company needs its own email.` });
+    }
   }
   const v = await prisma.vendor.update({ where: { id: req.params.id }, data });
   let login = null;
@@ -529,6 +546,8 @@ vendorsRouter.delete("/project/:projectId/assign", requireRoles("admin", "office
   await prisma.projectVendor.deleteMany({
     where: { projectId: req.params.projectId, vendorId },
   });
+  const { revokeCompanyPortalUsersOnProject } = await import("../services/crmVendorCredentials.js");
+  await revokeCompanyPortalUsersOnProject(req.params.projectId, vendorId).catch(() => 0);
   await audit("vendor.unassign", {
     userId: req.user!.id,
     entity: "ProjectVendor",
@@ -577,7 +596,13 @@ vendorsRouter.get("/project/:projectId", async (req, res) => {
 });
 
 vendorsRouter.post("/project/:projectId/assign", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const { vendorId, tradeRole } = req.body;
+  const vendorId = String(req.body?.vendorId || "").trim();
+  const tradeRole = req.body?.tradeRole === undefined ? undefined : String(req.body.tradeRole || "").trim() || null;
+  if (!vendorId) return res.status(400).json({ error: "Pick a company from the directory first." });
+  const vendorExists = await prisma.vendor.findFirst({ where: { id: vendorId, isActive: true }, select: { id: true } });
+  if (!vendorExists) return res.status(404).json({ error: "Company not found in the CRM directory." });
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
   const packages = Array.isArray(req.body.packages) ? req.body.packages.map((x: unknown) => String(x).trim()).filter(Boolean) : undefined;
   const packagesJson = packages ? JSON.stringify([...new Set(packages)]) : undefined;
   const row = await prisma.projectVendor.upsert({

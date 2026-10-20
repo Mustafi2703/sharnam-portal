@@ -15,6 +15,7 @@ export default function HrmsMastersPage() {
   const [editingTypeId, setEditingTypeId] = useState("");
   const [typeMsg, setTypeMsg] = useState("");
   const [holForm, setHolForm] = useState({ date: "", name: "", region: "India" });
+  const [holMsg, setHolMsg] = useState("");
 
   const load = useCallback(async () => {
     const y = new Date().getFullYear();
@@ -65,9 +66,42 @@ export default function HrmsMastersPage() {
   }
   async function addHol(e: FormEvent) {
     e.preventDefault();
-    await api("/api/hrm/holidays", { method: "POST", token, body: JSON.stringify(holForm) });
-    setHolForm({ date: "", name: "", region: "India" });
-    await load();
+    setHolMsg("");
+    try {
+      await api("/api/hrm/holidays", { method: "POST", token, body: JSON.stringify(holForm) });
+      setHolForm({ date: "", name: "", region: "India" });
+      await load();
+    } catch (err) {
+      setHolMsg(err instanceof Error ? err.message : "Could not add the holiday");
+    }
+  }
+
+  async function removeHol(id: string, name: string) {
+    if (!window.confirm(`Remove ${name} from the holiday calendar?`)) return;
+    setHolMsg("");
+    try {
+      await api(`/api/hrm/holidays/${id}`, { method: "DELETE", token });
+      await load();
+    } catch (err) {
+      setHolMsg(err instanceof Error ? err.message : "Could not remove the holiday");
+    }
+  }
+
+  async function importHolidays(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+    setHolMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const out = await api<{ imported: number }>("/api/hrm/holidays/import-csv", { method: "POST", token, body: fd });
+      setHolMsg(out.imported ? `Imported ${out.imported} holiday${out.imported === 1 ? "" : "s"}.` : "No rows imported — use YYYY-MM-DD dates in the first column and a name in the second.");
+      await load();
+    } catch (err) {
+      setHolMsg(err instanceof Error ? err.message : "Could not import the holiday calendar");
+    } finally {
+      input.value = "";
+    }
   }
 
   return (
@@ -157,19 +191,12 @@ export default function HrmsMastersPage() {
                 type="file"
                 accept=".csv,text/csv"
                 className="block mt-1 text-sm"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const fd = new FormData();
-                  fd.append("file", file);
-                  await api("/api/hrm/holidays/import-csv", { method: "POST", token, body: fd });
-                  e.target.value = "";
-                  await load();
-                }}
+                onChange={(e) => void importHolidays(e.target)}
               />
             </label>
             </>
           )}
+          {holMsg ? <p className="text-xs text-steel-muted mb-2">{holMsg}</p> : null}
           <ul className="text-sm divide-y max-h-64 overflow-y-auto">
             {holSorted.map((h) => (
               <li key={h.id} className="py-1.5 flex justify-between items-center">
@@ -178,13 +205,7 @@ export default function HrmsMastersPage() {
                   {h.region && <span className="text-xs text-steel-muted"> ({h.region})</span>}
                 </span>
                 {canManage && (
-                  <button
-                    className="text-danger text-xs"
-                    onClick={async () => {
-                      await api(`/api/hrm/holidays/${h.id}`, { method: "DELETE", token });
-                      await load();
-                    }}
-                  >
+                  <button type="button" className="text-danger text-xs" onClick={() => void removeHol(h.id, h.name)}>
                     Remove
                   </button>
                 )}

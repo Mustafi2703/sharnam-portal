@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
+import { useClientLogo } from "../lib/useClientLogo";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { Button } from "./ui";
 
@@ -89,7 +90,7 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
     }
   }
 
-  const logoSrc = project?.clientLogoUrl || null;
+  const logoSrc = useClientLogo(project?.id, project?.clientLogoUrl, token);
   const fields: Array<{ key: keyof typeof meta; label: string; highlight?: boolean; placeholder: string }> = [
     { key: "name", label: "Project", placeholder: "Project name" },
     { key: "clientName", label: "Client", highlight: true, placeholder: "Client / employer" },
@@ -113,7 +114,7 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
+                accept="image/png,image/jpeg,image/jpg"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -128,7 +129,7 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
                 disabled={busy}
                 onClick={() => fileRef.current?.click()}
               >
-                {logoSrc ? "Change logo" : "Upload logo"}
+                {project?.clientLogoUrl ? "Change logo" : "Upload logo"}
               </Button>
             </>
           )}

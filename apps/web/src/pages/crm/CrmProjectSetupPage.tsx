@@ -5,13 +5,14 @@ import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../../components/ui";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ProjectSetupMatrixDesk } from "../../components/ProjectSetupMatrixDesk";
-import { SetupPartyMultiPick } from "../../components/SetupPartyMultiPick";
+import { SetupPartyMultiPick, setupPartyKind } from "../../components/SetupPartyMultiPick";
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectClientRepresentativesPanel, type ProjectClientRep } from "../../components/ProjectClientRepresentativesPanel";
 import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
+import { useClientLogo } from "../../lib/useClientLogo";
 import { uiCopy } from "../../lib/formatUiText";
 import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
 import { suggestedProjectMemberRole } from "@sharnam/shared";
@@ -170,6 +171,7 @@ export default function CrmProjectSetupPage() {
   const [clientId, setClientId] = useState("");
   const [projectPackages, setProjectPackages] = useState<string[]>([]);
   const [staffIds, setStaffIds] = useState<string[]>([]);
+  const linkedClientIdsRef = useRef<string[]>([]);
 
   const setStep = (next: Step, id = projectId) => {
     const q = new URLSearchParams();
@@ -228,17 +230,14 @@ export default function CrmProjectSetupPage() {
       endDate: dayField(s.project.endDate),
       status: s.project.status || "Planning",
     });
-    setConsultantIds(
-      s.vendors.filter((v) => ["Consultant", "Designer"].includes(v.partyType)).map((v) => v.vendorId)
-    );
-    setPmcIds(s.vendors.filter((v) => v.partyType === "PMC").map((v) => v.vendorId));
-    setContractorIds(
-      s.vendors.filter((v) => ["Contractor", "Vendor"].includes(v.partyType)).map((v) => v.vendorId)
-    );
+    setConsultantIds(s.vendors.filter((v) => setupPartyKind(v) === "Consultant").map((v) => v.vendorId));
+    setPmcIds(s.vendors.filter((v) => setupPartyKind(v) === "PMC").map((v) => v.vendorId));
+    setContractorIds(s.vendors.filter((v) => setupPartyKind(v) === "Contractor").map((v) => v.vendorId));
     const clientRow =
       s.vendors.find((v) => v.partyType === "Client") ||
       s.vendors.find((v) => v.email && v.email === s.project.clientEmail) ||
       s.vendors.find((v) => v.name && v.name === s.project.clientName);
+    linkedClientIdsRef.current = s.vendors.filter((v) => v.partyType === "Client").map((v) => v.vendorId);
     setClientId((prev) => {
       if (prev && s.vendors.some((v) => v.vendorId === prev)) return prev;
       return clientRow?.vendorId || "";
@@ -354,11 +353,21 @@ export default function CrmProjectSetupPage() {
           workPackages: sanitizeProjectWorkPackages(projectPackages),
         }),
       });
+      const clientSwitched =
+        Boolean(clientId) && linkedClientIdsRef.current.length > 0 && !linkedClientIdsRef.current.includes(clientId);
       await api(`/api/projects/${projectId}/assign-parties`, {
         method: "POST",
         token,
         body: JSON.stringify({
           vendorIds: [...consultantIds, ...pmcIds, ...contractorIds, ...(clientId ? [clientId] : [])].filter(Boolean),
+          managedPartyTypes: [
+            "Consultant",
+            "Designer",
+            "PMC",
+            "Contractor",
+            "Vendor",
+            ...(clientSwitched ? ["Client"] : []),
+          ],
         }),
       });
       if (staffIds.length) {
@@ -598,7 +607,7 @@ export default function CrmProjectSetupPage() {
             <h3 className="font-semibold text-sm">{projectId ? "Project card & parties" : "New delivery project"}</h3>
             {projectId && isLaunched ? (
               <p className="text-xs text-steel-muted leading-relaxed">
-                Tick more consultants, contractors, or SPDC team members below and save — existing assignments stay; new picks are added to this job.
+                Tick consultants, PMC, contractors, or SPDC team members below and save. Unticking a company and saving removes it from this job.
               </p>
             ) : null}
             <form
@@ -1044,6 +1053,7 @@ function ClientLogoUpload({
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const logoSrc = useClientLogo(projectId, logoUrl, token);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -1064,11 +1074,11 @@ function ClientLogoUpload({
 
   return (
     <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-      {logoUrl ? <img src={logoUrl} alt="Client logo" className="h-10 max-w-[7rem] object-contain" /> : null}
+      {logoSrc ? <img src={logoSrc} alt="Client logo" className="h-10 max-w-[7rem] object-contain" /> : null}
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/jpg,image/webp"
+        accept="image/png,image/jpeg,image/jpg"
         className="hidden"
         onChange={(e) => void onFile(e.target.files?.[0])}
       />
