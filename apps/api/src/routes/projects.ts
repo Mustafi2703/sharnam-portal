@@ -3015,12 +3015,20 @@ drawingsRouter.get("/revision/:revId/sharepoint-link", async (req, res) => {
 
 async function markupTarget(projectId: string, targetType: string, targetId: string) {
   if (targetType === "rfi") {
-    const r = await prisma.rfi.findFirst({ where: { id: targetId, projectId }, select: { number: true, subject: true, linkedDrawingId: true } });
-    return r ? { label: `RFI ${r.number} — ${r.subject}`, drawingId: r.linkedDrawingId } : null;
+    const r = await prisma.rfi.findFirst({
+      where: { id: targetId, projectId },
+      select: { number: true, subject: true, status: true, linkedDrawingId: true },
+    });
+    return r
+      ? { label: `RFI ${r.number} — ${r.subject}`, drawingId: r.linkedDrawingId, number: r.number, status: r.status }
+      : null;
   }
   if (targetType === "coordination") {
-    const c = await prisma.designCoordinationIssue.findFirst({ where: { id: targetId, projectId }, select: { title: true, linkedDrawingId: true } });
-    return c ? { label: `Design coordination — ${c.title}`, drawingId: c.linkedDrawingId } : null;
+    const c = await prisma.designCoordinationIssue.findFirst({
+      where: { id: targetId, projectId },
+      select: { title: true, linkedDrawingId: true },
+    });
+    return c ? { label: `Design coordination — ${c.title}`, drawingId: c.linkedDrawingId, number: null as string | null, status: null as string | null } : null;
   }
   return null;
 }
@@ -3074,7 +3082,7 @@ drawingsRouter.post("/project/:projectId/markups", upload.array("files", 40), as
   const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { fullName: true, email: true } });
   const byName = me?.fullName || me?.email || "Portal user";
 
-  const { buildMarkupPdf, fileMarkupPdf } = await import("../services/drawingMarkup.js");
+  const { buildMarkupPdf, fileMarkupPdf, markupFolderFor } = await import("../services/drawingMarkup.js");
   const pdf = await buildMarkupPdf({
     projectCode: project.code,
     projectName: project.name,
@@ -3087,9 +3095,16 @@ drawingsRouter.post("/project/:projectId/markups", upload.array("files", 40), as
     pages: files.map((f, i) => ({ pageNumber: Number(pageNumbers[i]) || i + 1, buffer: f.buffer })).sort((a, b) => a.pageNumber - b.pageNumber),
   });
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-  const ref = targetType === "rfi" && target ? target.label.split(" — ")[0].replace(/^RFI\s*/, "RFI-") : targetType === "coordination" ? `DC-${(targetId || "").slice(-6)}` : "REVIEW";
+  const ref = targetType === "rfi" && target?.number ? target.number : targetType === "coordination" && targetId ? `DC-${targetId.slice(-6).toUpperCase()}` : "REVIEW";
   const fileName = `${drawing.drawingNumber}_${revNo}_${ref}_Markup_${stamp}.pdf`.replace(/[^\w.-]+/g, "_");
-  const saved = await fileMarkupPdf(project.code, targetType, drawing.drawingNumber, fileName, pdf);
+  const folder = markupFolderFor({
+    targetType,
+    targetId,
+    drawingNumber: drawing.drawingNumber,
+    rfiNumber: target?.number,
+    rfiStatus: target?.status,
+  });
+  const saved = await fileMarkupPdf(project.code, folder, fileName, pdf);
 
   const row = await prisma.drawingMarkup.create({
     data: {
@@ -3121,6 +3136,86 @@ drawingsRouter.post("/project/:projectId/markups", upload.array("files", 40), as
   });
   res.status(201).json({ markup: row, sharePointError: saved.sharePointError || null });
 });
+
+const markupFileUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
+
+/** Upload a marked-up drawing (PDF, image, or DWG) already marked outside the portal. Filed under the issue or RFI folder. */
+drawingsRouter.post(
+  "/project/:projectId/markups/upload",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  markupFileUpload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "Choose the marked-up drawing" });
+    const nameOk = /\.(pdf|png|jpe?g|webp|dwg)$/i.test(file.originalname || "");
+    if (!nameOk) return res.status(400).json({ error: "Upload a PDF, image, or DWG" });
+    const targetType = String(req.body.targetType || "");
+    const targetId = String(req.body.targetId || "");
+    if (targetType !== "rfi" && targetType !== "coordination") {
+      return res.status(400).json({ error: "Say whether this markup is for an RFI or a design coordination issue" });
+    }
+    if (!targetId) return res.status(400).json({ error: "Choose the issue or RFI" });
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true, name: true } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const target = await markupTarget(req.params.projectId, targetType, targetId);
+    if (!target) return res.status(404).json({ error: "RFI / coordination issue not found on this project" });
+    const drawingId = String(req.body.drawingId || target.drawingId || "");
+    const drawing = drawingId
+      ? await prisma.drawing.findFirst({ where: { id: drawingId, projectId: req.params.projectId }, select: { id: true, drawingNumber: true } })
+      : null;
+    const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { fullName: true, email: true } });
+    const byName = me?.fullName || me?.email || "Portal user";
+    const note = String(req.body.note || "").trim().slice(0, 4000);
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const safeOriginal = (file.originalname || "markup").replace(/[^\w.-]+/g, "_").slice(0, 80);
+    const ref = targetType === "rfi" && target.number ? target.number.replace(/[^\w.-]+/g, "_") : `DC-${targetId.slice(-6).toUpperCase()}`;
+    const fileName = `${ref}_Markup_${stamp}_${safeOriginal}`;
+    const { fileMarkupPdf, markupFolderFor } = await import("../services/drawingMarkup.js");
+    const folder = markupFolderFor({
+      targetType,
+      targetId,
+      drawingNumber: drawing?.drawingNumber,
+      rfiNumber: target.number,
+      rfiStatus: target.status,
+    });
+    const saved = await fileMarkupPdf(project.code, folder, fileName, file.buffer, file.mimetype || "application/octet-stream");
+    const row = await prisma.drawingMarkup.create({
+      data: {
+        projectId: req.params.projectId,
+        drawingId: drawing?.id || null,
+        targetType,
+        targetId,
+        note: note || null,
+        fileUrl: saved.url,
+        fileName,
+        sharePointPath: saved.sharePointPath || null,
+        sharePointUrl: saved.sharePointUrl || null,
+        createdById: req.user!.id,
+        createdByName: byName,
+      },
+    });
+    if (targetType === "coordination") {
+      await prisma.coordinationIssueDocument.create({
+        data: { issueId: targetId, fileUrl: saved.sharePointUrl || saved.url, fileName, uploadedById: req.user!.id },
+      });
+      void import("../services/drawingRegisterDrive.js")
+        .then(({ publishCoordinationIssueToDrive }) => publishCoordinationIssueToDrive(targetId))
+        .catch(() => undefined);
+    }
+    if (targetType === "rfi") {
+      void import("../services/syncRfiToDrive.js")
+        .then(({ syncRfiToDrive }) => syncRfiToDrive(targetId))
+        .catch(() => undefined);
+    }
+    await audit("drawing.markup.upload", {
+      userId: req.user!.id,
+      entity: "DrawingMarkup",
+      entityId: row.id,
+      meta: { targetType, targetId, sharePointPath: saved.sharePointPath || null },
+    });
+    res.status(201).json({ markup: row, sharePointError: saved.sharePointError || null });
+  },
+);
 
 /** Save annotated PDF pages — each page stored with full history */
 drawingsRouter.post(

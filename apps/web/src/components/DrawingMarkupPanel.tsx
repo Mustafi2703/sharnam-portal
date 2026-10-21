@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { api, apiBase, mediaUrl } from "../api";
 import PdfMarkup from "./PdfMarkup";
+import { UploadModal } from "./UploadModal";
 import { Badge, Button } from "./ui";
 
 type Markup = {
@@ -43,6 +44,9 @@ export function DrawingMarkupPanel({
   const [state, setState] = useState<State | null>(null);
   const [msg, setMsg] = useState("");
   const [open, setOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
@@ -136,6 +140,45 @@ export function DrawingMarkupPanel({
     }
   }
 
+  async function uploadMarkedFile(e: FormEvent) {
+    e.preventDefault();
+    if (!uploadFile) {
+      setUploadError("Choose the marked-up drawing.");
+      return;
+    }
+    setBusy("upload");
+    setUploadError("");
+    setMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("targetType", targetType);
+      fd.append("targetId", targetId);
+      if (drawingId || state?.drawing?.id) fd.append("drawingId", drawingId || state?.drawing?.id || "");
+      fd.append("note", note);
+      const out = await api<{ sharePointError?: string | null }>(`/api/drawings/project/${projectId}/markups/upload`, {
+        method: "POST",
+        token: token ?? null,
+        body: fd,
+        timeoutMs: 180_000,
+      });
+      setUploadOpen(false);
+      setUploadFile(null);
+      setNote("");
+      setMsg(
+        out.sharePointError
+          ? `Markup saved on the portal, but SharePoint did not accept it: ${out.sharePointError}`
+          : "Marked-up drawing filed to the project folder on SharePoint.",
+      );
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not upload the markup");
+      setUploadError(err instanceof Error ? err.message : "Could not upload the markup");
+    } finally {
+      setBusy("");
+    }
+  }
+
   if (!state) return <div className="text-xs text-steel-muted">Loading drawing markup…</div>;
 
   return (
@@ -148,6 +191,11 @@ export function DrawingMarkupPanel({
           </Badge>
         ) : null}
         <div className="ml-auto flex flex-wrap gap-2">
+          {canMarkup ? (
+            <Button type="button" variant="secondary" className="!text-xs" disabled={Boolean(busy)} onClick={() => { setMsg(""); setUploadOpen(true); }}>
+              Upload marked-up drawing
+            </Button>
+          ) : null}
           {state.revision ? (
             <>
               {canMarkup ? (
@@ -163,9 +211,11 @@ export function DrawingMarkupPanel({
         </div>
       </div>
       {!state.drawing ? (
-        <p className="text-xs text-steel-muted">Link a GFC drawing to mark it up.</p>
+        <p className="text-xs text-steel-muted">
+          Link a GFC drawing to mark it up in the browser, or upload a marked-up PDF, image, or DWG. It is filed in this {targetType === "rfi" ? "RFI" : "design coordination"} folder on SharePoint.
+        </p>
       ) : !state.revision ? (
-        <p className="text-xs text-steel-muted">The linked drawing has no PDF yet — upload it on the GFC log to mark it up.</p>
+        <p className="text-xs text-steel-muted">The linked drawing has no PDF yet. Upload a marked-up file, or add the PDF on the GFC log to mark it up here.</p>
       ) : null}
       {msg ? <p className="text-xs">{msg}</p> : null}
       {state.markups.length ? (
@@ -187,7 +237,7 @@ export function DrawingMarkupPanel({
                   </a>
                 ) : null}
                 <a href={mediaUrl(m.fileUrl)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">
-                  PDF
+                  Open
                 </a>
               </div>
             </li>
@@ -196,6 +246,35 @@ export function DrawingMarkupPanel({
       ) : state.revision ? (
         <p className="text-xs text-steel-muted">No markups yet.</p>
       ) : null}
+
+      <UploadModal
+        open={uploadOpen}
+        title="Upload marked-up drawing"
+        context={targetType === "rfi" ? "Filed under the RFI folder in Correspondence Control." : "Filed under this issue in Design Coordination."}
+        file={uploadFile}
+        onFile={setUploadFile}
+        accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,application/pdf,image/*"
+        fields={[
+          {
+            kind: "text",
+            name: "note",
+            label: "Note",
+            placeholder: "What was marked, and where",
+            value: note,
+            onChange: setNote,
+          },
+        ]}
+        primaryLabel={busy === "upload" ? "Filing…" : "Upload and file"}
+        busy={busy === "upload"}
+        error={uploadError}
+        onClose={() => {
+          if (busy === "upload") return;
+          setUploadOpen(false);
+          setUploadFile(null);
+          setUploadError("");
+        }}
+        onSubmit={(e) => void uploadMarkedFile(e)}
+      />
 
       {open && pdf
         ? createPortal(

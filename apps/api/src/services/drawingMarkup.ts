@@ -226,7 +226,35 @@ export const MARKUP_FOLDER: Record<string, string> = {
   drawing: `${MODULE_TO_ISO_FOLDER.drawings}/Markups`,
 };
 
-export async function fileMarkupPdf(projectCode: string, targetType: string, drawingNumber: string, fileName: string, buffer: Buffer) {
-  const folder = `${MARKUP_FOLDER[targetType] || MARKUP_FOLDER.drawing}/${drawingNumber.replace(/[^\w.-]+/g, "_")}`;
-  return mockOneDrive.upload(projectCode, folder, fileName, buffer, "application/pdf");
+/** Stable folder name for one design coordination issue under 04.04. */
+export function coordinationIssueRef(issueId: string) {
+  return `DC-${issueId.slice(-6).toUpperCase()}`;
+}
+
+export function coordinationIssueFolder(issueId: string) {
+  return `${MODULE_TO_ISO_FOLDER.designCoordination}/Issues/${coordinationIssueRef(issueId)}`;
+}
+
+/** One RFI lives under Correspondence Control, Open or Closed, named by its number. */
+export function rfiRecordFolder(number: string, status: string) {
+  const closed = /closed|answered/i.test(status || "");
+  const safe = String(number || "RFI").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "RFI";
+  return `${MODULE_TO_ISO_FOLDER.rfiInformation}/${closed ? "Closed" : "Open"}/${safe}`;
+}
+
+export function markupFolderFor(opts: {
+  targetType: string;
+  targetId?: string | null;
+  drawingNumber?: string | null;
+  rfiNumber?: string | null;
+  rfiStatus?: string | null;
+}) {
+  if (opts.targetType === "coordination" && opts.targetId) return `${coordinationIssueFolder(opts.targetId)}/Markups`;
+  if (opts.targetType === "rfi" && opts.rfiNumber) return `${rfiRecordFolder(opts.rfiNumber, opts.rfiStatus || "")}/Markups`;
+  const drawingBit = (opts.drawingNumber || "Unlinked").replace(/[^\w.-]+/g, "_").slice(0, 80);
+  return `${MARKUP_FOLDER.drawing}/${drawingBit}`;
+}
+
+export async function fileMarkupPdf(projectCode: string, folder: string, fileName: string, buffer: Buffer, mime = "application/pdf") {
+  return mockOneDrive.upload(projectCode, folder, fileName, buffer, mime);
 }

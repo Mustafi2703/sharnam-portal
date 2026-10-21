@@ -2076,7 +2076,7 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
       ccOverride: cc.join(", "),
     }).catch(() => undefined);
   }
-  publishCoordinationRegisterInBackground(req.params.projectId);
+  publishCoordinationRegisterInBackground(req.params.projectId, row.id);
   res.status(201).json(row);
 });
 
@@ -2122,9 +2122,12 @@ directoryRouter.post(
   },
 );
 
-function publishCoordinationRegisterInBackground(projectId: string) {
+function publishCoordinationRegisterInBackground(projectId: string, issueId?: string) {
   void import("../services/drawingRegisterDrive.js")
-    .then(({ publishCoordinationRegisterToDrive }) => publishCoordinationRegisterToDrive(projectId))
+    .then(async ({ publishCoordinationRegisterToDrive, publishCoordinationIssueToDrive }) => {
+      await publishCoordinationRegisterToDrive(projectId);
+      if (issueId) await publishCoordinationIssueToDrive(issueId);
+    })
     .catch((err) => console.warn("[coordination] SharePoint register:", err instanceof Error ? err.message : err));
 }
 
@@ -2173,7 +2176,7 @@ directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "empl
       ccOverride: oldEmail || undefined,
     }).catch(() => undefined);
   }
-  publishCoordinationRegisterInBackground(row.projectId);
+  publishCoordinationRegisterInBackground(row.projectId, row.id);
   res.json(row);
 });
 
@@ -2196,7 +2199,7 @@ directoryRouter.post(
         entityId: issue.id,
         meta: { followUpCount: result.issue.followUpCount, autoEscalated: result.autoEscalated },
       });
-      publishCoordinationRegisterInBackground(issue.projectId);
+      publishCoordinationRegisterInBackground(issue.projectId, issue.id);
       res.json({ ...result, maxFollowUps: MAX_FOLLOW_UPS });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Follow-up failed" });
@@ -2229,7 +2232,7 @@ directoryRouter.post(
         entityId: issue.id,
         meta: { rfiId: rfi.id, number: rfi.number },
       });
-      publishCoordinationRegisterInBackground(issue.projectId);
+      publishCoordinationRegisterInBackground(issue.projectId, issue.id);
       res.status(201).json({ rfi, issue: await prisma.designCoordinationIssue.findUnique({ where: { id: issue.id } }) });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Escalation failed" });
@@ -2252,9 +2255,8 @@ directoryRouter.post(
     const file = req.file;
     if (!file) return res.status(400).json({ error: "file required" });
     const { mockOneDrive } = await import("../services/mockOneDrive.js");
-    const { MODULE_TO_ISO_FOLDER } = await import("../services/graph.js");
-    const folder = MODULE_TO_ISO_FOLDER.designCoordination || "04.04_Clash_Detection_Design_Coordination";
-    const rel = `${folder}/${issue.id}`;
+    const { coordinationIssueFolder } = await import("../services/drawingMarkup.js");
+    const rel = `${coordinationIssueFolder(issue.id)}/Attachments`;
     const saved = await mockOneDrive.upload(issue.project.code, rel, file.originalname, file.buffer, file.mimetype);
     const fileUrl = saved.sharePointUrl || saved.url;
     const doc = await prisma.coordinationIssueDocument.create({

@@ -150,15 +150,50 @@ export function drawingRegisterWeekStamp(d = new Date()) {
 }
 
 
-/** Design Coordination Register (Excel + PDF) — live copy in the drawings folder. */
+/** Design Coordination Register (Excel + PDF) — live copy in the design coordination ISO folder. */
 export async function publishCoordinationRegisterToDrive(projectId: string) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
   if (!project) return;
-  const folder = MODULE_TO_ISO_FOLDER.drawings;
+  const folder = `${MODULE_TO_ISO_FOLDER.designCoordination}/_Registers`;
   const [xlsx, pdf] = await Promise.all([
     buildDesignCoordinationRegisterXlsx(projectId),
     buildDesignCoordinationRegisterPdf(projectId),
   ]);
   await mockOneDrive.upload(project.code, folder, "Design-Coordination-Register.xlsx", xlsx, XLSX_MIME, { replace: true });
   await mockOneDrive.upload(project.code, folder, "Design-Coordination-Register.pdf", pdf, PDF_MIME, { replace: true });
+}
+
+function htmlEscape(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** One HTML sheet per issue, so the issue itself has a folder under 04.04. */
+export async function publishCoordinationIssueToDrive(issueId: string) {
+  const issue = await prisma.designCoordinationIssue.findUnique({
+    where: { id: issueId },
+    include: { project: { select: { code: true, name: true } } },
+  });
+  if (!issue) return;
+  const { coordinationIssueFolder, coordinationIssueRef } = await import("./drawingMarkup.js");
+  const ref = coordinationIssueRef(issue.id);
+  const drawing = issue.linkedDrawingId
+    ? await prisma.drawing.findUnique({ where: { id: issue.linkedDrawingId }, select: { drawingNumber: true, title: true } })
+    : null;
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${htmlEscape(ref)}</title></head><body>
+<h1>${htmlEscape(ref)} — ${htmlEscape(issue.title)}</h1>
+<p>${htmlEscape(issue.project.code)} — ${htmlEscape(issue.project.name)}</p>
+<p>Status: ${htmlEscape(issue.status)} · Priority: ${htmlEscape(issue.priority)} · Discipline: ${htmlEscape(issue.discipline || "—")}</p>
+<p>Location: ${htmlEscape(issue.location || "—")}</p>
+<p>Assignee: ${htmlEscape(issue.assignedToName || issue.assignedToEmail || "—")}</p>
+<p>Drawing: ${htmlEscape(drawing ? `${drawing.drawingNumber} — ${drawing.title}` : "—")}</p>
+<p>${htmlEscape(issue.description || "")}</p>
+</body></html>`;
+  await mockOneDrive.upload(
+    issue.project.code,
+    coordinationIssueFolder(issue.id),
+    `${ref}.html`,
+    Buffer.from(html, "utf8"),
+    "text/html",
+    { replace: true },
+  );
 }
