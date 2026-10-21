@@ -34,7 +34,7 @@ export type RfiModuleScope = "drawings" | "quality" | "safety" | "comms" | "insp
 export function rfiModuleScope(pathname: string, search: string): RfiModuleScope {
   const ws = resolveProjectWorkspace(pathname, search);
   if (ws === "home") return "home";
-  if (ws === "drawings" || ws === "quality" || ws === "safety" || ws === "comms" || ws === "inspection") return ws;
+  if (ws === "drawings" || ws === "quality" || ws === "safety" || ws === "comms") return ws;
   return "home";
 }
 

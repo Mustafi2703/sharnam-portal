@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DrawingMarkupPanel } from "../../components/DrawingMarkupPanel";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../../api";
+import { api, mediaUrl } from "../../api";
+import { UploadModal } from "../../components/UploadModal";
 import { useAuth } from "../../auth";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
 import {
@@ -960,120 +961,211 @@ export function SubmittalsPage() {
   );
 }
 
-/** Procore-like photo albums with file upload */
+type SitePhoto = {
+  id: string;
+  fileUrl: string;
+  sharePointUrl?: string | null;
+  album: string;
+  description?: string | null;
+  location?: string | null;
+  shotDate?: string | null;
+  createdAt: string;
+};
+
+function siteDay(value?: string | null): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+function todayOnSite(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** Day-wise site photos. Take a picture or upload from the phone; each day is filed on the project drive. */
 export function PhotosPage() {
   const { id } = useParams();
   const { token, user } = useAuth();
-  const [photos, setPhotos] = useState<any[]>([]);
-  const [albums, setAlbums] = useState<any[]>([]);
-  const [album, setAlbum] = useState("Site Progress");
+  const [photos, setPhotos] = useState<SitePhoto[]>([]);
+  const [days, setDays] = useState<string[]>([]);
+  const [day, setDay] = useState(todayOnSite);
+  const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
-  const [trade, setTrade] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [filterAlbum, setFilterAlbum] = useState("All");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const canUpload = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
 
   const load = async () => {
-    const res = await api<{ photos: any[]; albums: any[] }>(`/api/directory/project/${id}/photos`, { token });
+    const res = await api<{ photos: SitePhoto[]; days: string[] }>(`/api/directory/project/${id}/photos`, { token });
     setPhotos(res.photos || []);
-    setAlbums(res.albums || []);
+    setDays(res.days || []);
   };
 
   useEffect(() => {
     void load();
   }, [id, token]);
 
-  const filtered = useMemo(
-    () => (filterAlbum === "All" ? photos : photos.filter((p) => p.album === filterAlbum)),
-    [photos, filterAlbum]
+  const dayPhotos = useMemo(
+    () => photos.filter((p) => (siteDay(p.shotDate) || (/^\d{4}-\d{2}-\d{2}$/.test(p.album) ? p.album : "") || siteDay(p.createdAt)) === day),
+    [photos, day]
   );
+
+  function addFiles(list: FileList | null) {
+    const next = [...(list || [])].filter((f) => f.type.startsWith("image/"));
+    if (next.length) setFiles((cur) => [...cur, ...next]);
+  }
+
+  async function uploadDay() {
+    if (!files.length) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("shotDate", day);
+        fd.append("description", description);
+        fd.append("location", location);
+        fd.append("file", file);
+        await api(`/api/directory/project/${id}/photos`, { method: "POST", token, body: fd });
+      }
+      setFiles([]);
+      setDescription("");
+      setLocation("");
+      setOpen(false);
+      setMsg(`${files.length} photo${files.length === 1 ? "" : "s"} filed for ${day}.`);
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePhoto(photoId: string) {
+    if (!window.confirm("Remove this photo from the project?")) return;
+    await api(`/api/directory/photos/${photoId}`, { method: "DELETE", token });
+    await load();
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Media · field capture"
+        eyebrow="Site photos"
         title="Photos"
-        subtitle="Album-based site photos (Procore-style). Upload images into albums — used with diary, RFIs, and checklists."
-      />
-
-      {canUpload && (
-        <Card>
-          <h3 className="font-semibold mb-3">Upload photo</h3>
-          <form
-            className="grid sm:grid-cols-2 gap-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const fd = new FormData();
-              fd.append("album", album);
-              fd.append("description", description);
-              fd.append("location", location);
-              fd.append("trade", trade);
-              if (file) fd.append("file", file);
-              await api(`/api/directory/project/${id}/photos`, { method: "POST", token, body: fd });
-              setDescription("");
-              setFile(null);
-              await load();
-            }}
-          >
-            <Input placeholder="Album (e.g. Site Progress, Safety, Structure)" value={album} onChange={(e) => setAlbum(e.target.value)} />
-            <Input placeholder="Location / grid" value={location} onChange={(e) => setLocation(e.target.value)} />
-            <Input placeholder="Trade" value={trade} onChange={(e) => setTrade(e.target.value)} />
-            <Input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-            <input className="sm:col-span-2 text-sm" type="file" accept="image/*,.pdf" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            <Button type="submit" className="sm:col-span-2" disabled={!file && !description}>
-              Upload to album
+        subtitle="One day at a time. Take a photo on the phone or choose pictures already on it. Each day is kept here and filed on the project drive under Daily Site Records."
+        actions={
+          canUpload ? (
+            <Button type="button" onClick={() => setOpen(true)}>
+              Add photos
             </Button>
-          </form>
-        </Card>
-      )}
+          ) : null
+        }
+      />
+      {msg ? <StatusNote msg={msg} /> : null}
 
-      <div className="flex flex-wrap gap-1">
-        <button
-          type="button"
-          onClick={() => setFilterAlbum("All")}
-          className={`rounded px-3 py-1 text-xs border ${filterAlbum === "All" ? "bg-procore-navy text-white" : "bg-white border-line"}`}
-        >
-          All ({photos.length})
-        </button>
-        {albums.map((a) => (
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">
+          Day
+          <Input className="mt-1" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+        </label>
+        {days.map((d) => (
           <button
-            key={a.album}
+            key={d}
             type="button"
-            onClick={() => setFilterAlbum(a.album)}
-            className={`rounded px-3 py-1 text-xs border ${filterAlbum === a.album ? "bg-procore-navy text-white" : "bg-white border-line"}`}
+            onClick={() => setDay(d)}
+            className={`rounded px-3 py-1 text-xs border ${day === d ? "bg-procore-navy text-white" : "bg-white border-line"}`}
           >
-            {a.album} ({a._count})
+            {d}
           </button>
         ))}
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((p) => (
+        {dayPhotos.map((p) => (
           <Card key={p.id} padding={false} className="overflow-hidden">
             <div className="aspect-[4/3] bg-sand flex items-center justify-center border-b border-line">
-              {p.fileUrl && /\.(png|jpe?g|gif|webp)$/i.test(p.fileUrl) ? (
-                <img src={p.fileUrl} alt={p.description || "Photo"} className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center p-4">
-                  <div className="text-3xl text-steel-muted/40">▣</div>
-                  <a href={p.fileUrl} className="text-xs text-brand font-semibold" target="_blank" rel="noreferrer">
-                    Open file
-                  </a>
-                </div>
-              )}
+              <img src={mediaUrl(p.fileUrl)} alt={p.description || "Site photo"} className="w-full h-full object-cover" />
             </div>
             <div className="p-3 space-y-1">
-              <Badge tone="brand">{p.album}</Badge>
-              <div className="text-sm font-medium">{p.description || "Photo"}</div>
-              <div className="text-[11px] text-steel-muted">
-                {[p.location, p.trade].filter(Boolean).join(" · ") || "—"} · {new Date(p.createdAt).toLocaleString()}
+              <div className="text-sm font-medium" data-preserve-case>
+                {p.description || "Site photo"}
+              </div>
+              <div className="text-[11px] text-steel-muted" data-preserve-case>
+                {[p.location, day].filter(Boolean).join(" · ")}
+              </div>
+              <div className="flex flex-wrap gap-3 pt-1">
+                {p.sharePointUrl ? (
+                  <a href={p.sharePointUrl} className="text-xs text-brand font-semibold" target="_blank" rel="noreferrer">
+                    Open in drive
+                  </a>
+                ) : (
+                  <span className="text-[11px] text-steel-muted">Filed to the project drive folder for this day</span>
+                )}
+                {canUpload ? (
+                  <button type="button" className="text-xs text-red-700" onClick={() => void removePhoto(p.id)}>
+                    Remove
+                  </button>
+                ) : null}
               </div>
             </div>
           </Card>
         ))}
-        {!filtered.length && <p className="text-sm text-steel-muted col-span-full">No photos yet — upload into an album.</p>}
+        {!dayPhotos.length && (
+          <p className="text-sm text-steel-muted col-span-full">No photos for {day}. Add photos for this day.</p>
+        )}
       </div>
+
+      <UploadModal
+        open={open}
+        title="Add site photos"
+        context={`Filed under Daily Site Records / photos / ${day}`}
+        file={files[0] || null}
+        onFile={() => undefined}
+        canSubmit={files.length > 0}
+        accept="image/*"
+        filePicker={
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => cameraRef.current?.click()}>
+                Take photo
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => galleryRef.current?.click()}>
+                Upload from phone
+              </Button>
+            </div>
+            <input ref={cameraRef} className="hidden" type="file" accept="image/*" capture="environment" onChange={(e) => addFiles(e.target.files)} />
+            <input ref={galleryRef} className="hidden" type="file" accept="image/*" multiple onChange={(e) => addFiles(e.target.files)} />
+            {files.length ? (
+              <p className="text-[12px] text-steel-muted" data-preserve-case>
+                {files.map((f) => f.name).join(", ")}
+              </p>
+            ) : (
+              <p className="text-[12px] text-steel-muted">Take a photo with the camera, or choose pictures already on the phone.</p>
+            )}
+          </div>
+        }
+        fields={[
+          { kind: "text", name: "day", label: "Day", inputType: "date", value: day, onChange: setDay },
+          { kind: "text", name: "description", label: "Caption", value: description, onChange: setDescription, placeholder: "What is in the photo" },
+          { kind: "text", name: "location", label: "Location", value: location, onChange: setLocation, placeholder: "Block, floor, grid" },
+        ]}
+        primaryLabel={busy ? "Uploading…" : `Upload ${files.length || ""}`.trim()}
+        busy={busy}
+        error={msg && open ? msg : ""}
+        onClose={() => {
+          if (!busy) setOpen(false);
+        }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void uploadDay();
+        }}
+      />
     </div>
   );
 }

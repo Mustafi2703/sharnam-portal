@@ -29,7 +29,7 @@ const TOP_MODULES = (
     { key: "dms", label: "Documents", path: "hub/dms" },
     { key: "quality", label: "Quality", path: "hub/quality" },
     { key: "safety", label: "Safety", path: "hub/safety" },
-    { key: "inspection", label: "Inspection", path: "hub/inspection" },
+    { key: "photos", label: "Photos", path: "hub/photos" },
     { key: "progress", label: "Progress", path: "hub/progress" },
     { key: "comms", label: "Comms", path: "hub/comms" },
     { key: "auditKpi", label: "Audit & KPI", path: "hub/auditKpi" },

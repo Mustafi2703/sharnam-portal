@@ -40,7 +40,8 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     if (mod === "finance") return "finance";
     if (mod === "comms") return "comms";
     if (mod === "audit-kpi") return "auditKpi";
-    if (mod === "inspection") return "inspection";
+    if (mod === "inspection") return "quality";
+    if (mod === "photos") return "photos";
   }
 
   if (tail === "drawings" || tail.startsWith("drawings/")) return "drawings";
@@ -62,20 +63,21 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
     const tab = params.get("tab");
     if (tab === "quality-ir" || tab === "activity-checklist") return "quality";
     if (tab === "safety-ir" || tab === "hse-register") return "safety";
-    return "inspection"; // overview=1 or bare URL
+    return "quality";
   }
-  if (tail.startsWith("inspection/")) return "inspection";
+  if (tail.startsWith("inspection/")) return "quality";
+  if (tail === "photos" || tail.startsWith("photos/")) return "photos";
 
   if (tail === "checklist-master") return checklistFamilyModule(search, "master");
   if (tail === "checklist-logs") return checklistFamilyModule(search, "logs");
 
   if (tail === "progress" || tail.startsWith("progress/")) return "progress";
   if (tail === "audit-kpi" || tail.startsWith("audit-kpi")) return "auditKpi";
-  if (["diary", "photos"].includes(tail)) return "comms";
+  if (tail === "diary") return "progress";
   if (tail === "site-pilot") return "comms";
   if (tail.startsWith("progress/")) return "progress";
   if (["dpr-maker", "wpr-maker"].includes(tail)) return "reports";
-  if (["comms", "email", "submittals"].includes(tail)) return "comms";
+  if (["comms", "submittals"].includes(tail)) return "comms";
   if (tail === "cost" || tail.startsWith("cost/")) return "cost";
   if (tail === "finance" || tail.startsWith("finance/")) return "finance";
   if (tail === "reports" || tail.startsWith("reports/")) return "reports";

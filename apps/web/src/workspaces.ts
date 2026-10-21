@@ -10,7 +10,7 @@ export type WorkspaceKey =
   | "dms"
   | "quality"
   | "safety"
-  | "inspection"
+  | "photos"
   | "progress"
   | "comms"
   | "auditKpi"
@@ -373,63 +373,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       sheet: "HSE Register",
     },
   ],
-  inspection: [
+  photos: [
     {
-      to: "inspection-register",
-      label: "Overview — IR & fill counts",
+      to: "photos",
+      label: "Site photos",
       end: true,
-      query: "overview=1",
-      blurb: "Open Quality / Safety IR counts and checklist fill totals. Raise and edit only on those registers.",
-    },
-    {
-      to: "inspection-register",
-      label: "→ Raise Quality IR (F-01)",
-      query: "tab=quality-ir&lock=quality",
-      blurb: "Opens Quality’s Request for Inspection register — raise, answer, close F-01 with checklist attach.",
-      sheet: "SPDC_Request_for_Inspection_Form.xlsx",
-    },
-    {
-      to: "inspection-register",
-      label: "→ Raise Activity checklist (F-02)",
-      query: "tab=activity-checklist&lock=quality",
-      blurb: "Opens Quality’s F-02 log (enclosure to an IR).",
-      sheet: "SPDC_Activity_Inspection_Checklist_Format.xlsx",
-    },
-    {
-      to: "inspection-register",
-      label: "→ Raise Safety IR (F-01)",
-      query: "tab=safety-ir&lock=safety",
-      blurb: "Opens Safety’s clearance register — raise / clear Safety IRs.",
-      sheet: "SPDC_Safety_Inspection_Request_and_Checklists.xlsx",
-    },
-    {
-      to: "inspection-register",
-      label: "→ HSE register",
-      query: "tab=hse-register&lock=safety",
-      blurb: "Opens Safety’s HSE log.",
-    },
-    {
-      to: "inspections",
-      label: "→ Checklist summary (fill counts)",
-      query: "sheet=checklist-summary",
-      blurb: "Quality Dashboard Sheet1 catalog with live fill counts per type — request fills via Quality IR.",
-      sheet: "Quality Dashboard.xlsx · Sheet1",
-    },
-    {
-      to: "quality/checklist-master",
-      label: "→ Quality checklist master",
-      blurb: "Templates for Quality IR fills — owned by Quality.",
-    },
-    {
-      to: "safety/checklist-master",
-      label: "→ Safety checklist master",
-      blurb: "Templates for Safety IR / walkthrough fills — owned by Safety.",
-    },
-    {
-      to: "inspections",
-      label: "Quality dashboard (KPIs)",
-      blurb: "Quality Dashboard sheet view — same as Quality module.",
-      sheet: "Quality Dashboard.xlsx",
+      roles: ["admin", "office", "site_employee", "employee", "vendor", "client"],
+      blurb: "Day-wise site photos. Take a photo or upload from the phone. Each day is filed on the project drive.",
     },
   ],
   progress: [
@@ -444,6 +394,13 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       to: "progress/files",
       label: "Progress files",
       blurb: "DPR/WPR SharePoint folders, daily site records, published exports.",
+    },
+    {
+      to: "diary",
+      label: "Day log · manpower",
+      roles: ["admin", "office", "site_employee", "employee", "client"],
+      blurb: "Daily manpower and site notes. This feeds the DPR. It is not part of Communications.",
+      sheet: "Day log",
     },
     {
       to: "progress",
@@ -543,27 +500,6 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "comms", label: "MoM", query: "tab=mom", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Minutes + action items." },
     { to: "comms", label: "Follow-up", query: "tab=followup", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Open actions from MoM." },
     { to: "comms", label: "Comm log", query: "tab=log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Communication log entries." },
-    {
-      to: "email",
-      label: "Email / Outlook",
-      roles: ["admin", "office", "employee", "site_employee"],
-      blurb: "Connect mailbox and outbox.",
-    },
-    { to: "diary", label: "Day log", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Manpower and site notes — feeds DPR.", sheet: "Day log" },
-    {
-      to: "expense-vouchers",
-      label: "Daily expense voucher",
-      roles: ["admin", "office", "site_employee", "employee"],
-      blurb: "Daily site expense with line items — HR Head approves.",
-    },
-    { to: "photos", label: "Photos", roles: ["admin", "office", "site_employee", "employee", "client"], blurb: "Site photo albums.", sheet: "Photos" },
-    {
-      to: "checklist",
-      label: "Fill site checklist",
-      fillFamily: "SiteExecution",
-      roles: ["admin", "office", "site_employee", "employee", "vendor"],
-      blurb: "Open the site execution fill window — same popup as drawing check.",
-    },
   ],
   auditKpi: [
     {
@@ -760,15 +696,15 @@ export const MODULE_META: Record<
     ink: "#7F1D1D",
     icon: "HSE",
   },
-  inspection: {
-    title: "Inspection",
-    desc: "Overview only — open Quality or Safety registers to raise and close IRs. This hub does not own a separate request type.",
-    path: "hub/inspection",
+  photos: {
+    title: "Photos",
+    desc: "Day-wise site photos for this project. Take a picture or upload from the phone. Each day is kept and filed on the project drive.",
+    path: "hub/photos",
     accent: "#0369A1",
     soft: "#E0F2FE",
     glow: "rgba(3,105,161,0.32)",
     ink: "#0C4A6E",
-    icon: "IR",
+    icon: "PIC",
   },
   progress: {
     title: "Progress",
@@ -792,7 +728,7 @@ export const MODULE_META: Record<
   },
   comms: {
     title: "Comms",
-    desc: "Matrix, Agenda, MoM, Follow-up, Ask (PMC RFI), Email — separate tools.",
+    desc: "Communication matrix, meeting agenda, minutes, follow-up, and the communication log.",
     path: "hub/comms",
     accent: "#0891B2",
     soft: "#CFFAFE",
@@ -876,7 +812,7 @@ export const WORKSPACES: {
   let roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   if (key === "drawings") roles = ["admin", "office", "site_employee", "employee", "client"];
   if (key === "dms") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
-  if (key === "inspection") roles = ["admin", "office", "site_employee", "employee"];
+  if (key === "photos") roles = ["admin", "office", "site_employee", "employee", "vendor", "client"];
   // Site employees enter measurements (BOQ achieved qty, MB, BBS); budget / cashflow / bills stay office-only.
   if (key === "cost") roles = ["admin", "office", "employee", "site_employee"];
   if (key === "finance") roles = ["admin", "office", "employee"];
@@ -951,7 +887,7 @@ export const DEFAULT_ENABLED_MODULES: WorkspaceKey[] = [
   "dms",
   "quality",
   "safety",
-  "inspection",
+  "photos",
   "progress",
   "comms",
   "auditKpi",

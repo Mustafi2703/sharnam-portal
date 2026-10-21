@@ -1953,19 +1953,24 @@ directoryRouter.get("/project/:projectId/submittals", async (req, res) => {
 });
 
 directoryRouter.get("/project/:projectId/photos", async (req, res) => {
-  const album = req.query.album ? String(req.query.album) : undefined;
+  const day = req.query.day ? String(req.query.day).slice(0, 10) : "";
   const rows = await prisma.projectPhoto.findMany({
-    where: { projectId: req.params.projectId, ...(album ? { album } : {}) },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
-  const albums = await prisma.projectPhoto.groupBy({
-    by: ["album"],
     where: { projectId: req.params.projectId },
-    _count: true,
+    orderBy: { createdAt: "desc" },
+    take: 500,
   });
-  res.json({ photos: rows, albums });
+  const photos = day ? rows.filter((p) => photoDay(p) === day) : rows;
+  const days = [...new Set(rows.map(photoDay))].sort().reverse();
+  res.json({ photos, days });
 });
+
+function photoDay(row: { shotDate: Date | null; album: string; createdAt: Date }): string {
+  if (row.shotDate && !Number.isNaN(row.shotDate.getTime())) {
+    return row.shotDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(row.album)) return row.album;
+  return row.createdAt.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
 
 directoryRouter.post(
   "/project/:projectId/photos",
@@ -1974,23 +1979,29 @@ directoryRouter.post(
   async (req: AuthedRequest, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Not found" });
-    let fileUrl = req.body.fileUrl || "";
-    if (req.file) {
-      const { mockOneDrive } = await import("../services/mockOneDrive.js");
-      const saved = await mockOneDrive.upload(
-        project.code,
-        `${MODULE_TO_ISO_FOLDER.photos}/Site Progress`,
-        req.file.originalname,
-        req.file.buffer
-      );
-      fileUrl = saved.url;
+    if (!req.file) return res.status(400).json({ error: "Choose a photo" });
+    if (!String(req.file.mimetype || "").startsWith("image/")) {
+      return res.status(400).json({ error: "Upload a photo (JPG, PNG, or WEBP)" });
     }
-    if (!fileUrl) fileUrl = `/uploads/photos/placeholder-${Date.now()}.txt`;
+    const day = String(req.body.shotDate || req.body.album || "").slice(0, 10);
+    const shotDay = /^\d{4}-\d{2}-\d{2}$/.test(day)
+      ? day
+      : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const { mockOneDrive } = await import("../services/mockOneDrive.js");
+    const saved = await mockOneDrive.upload(
+      project.code,
+      `${MODULE_TO_ISO_FOLDER.photos}/photos/${shotDay}`,
+      req.file.originalname,
+      req.file.buffer,
+      req.file.mimetype
+    );
     const row = await prisma.projectPhoto.create({
       data: {
         projectId: req.params.projectId,
-        fileUrl,
-        album: req.body.album || "Site Progress",
+        fileUrl: saved.url,
+        sharePointUrl: saved.sharePointUrl || null,
+        album: shotDay,
+        shotDate: new Date(`${shotDay}T12:00:00+05:30`),
         description: req.body.description,
         trade: req.body.trade,
         location: req.body.location,

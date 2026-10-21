@@ -235,7 +235,8 @@ export default function App() {
                   <Route path="hub/dms" element={<ModuleHubPage key="hub-dms" moduleKey="dms" />} />
                   <Route path="hub/quality" element={<ModuleHubPage key="hub-quality" moduleKey="quality" />} />
                   <Route path="hub/safety" element={<ModuleHubPage key="hub-safety" moduleKey="safety" />} />
-                  <Route path="hub/inspection" element={<ModuleHubPage key="hub-inspection" moduleKey="inspection" />} />
+                  <Route path="hub/photos" element={<ModuleHubPage key="hub-photos" moduleKey="photos" />} />
+                  <Route path="hub/inspection" element={<Navigate to="../quality" relative="path" replace />} />
                   <Route path="hub/progress" element={<ModuleHubPage key="hub-progress" moduleKey="progress" />} />
                   <Route path="hub/auditKpi" element={<ModuleHubPage key="hub-auditKpi" moduleKey="auditKpi" />} />
                   <Route path="hub/comms" element={<ModuleHubPage key="hub-comms" moduleKey="comms" />} />
@@ -263,7 +264,7 @@ export default function App() {
                   <Route path="finance/files" element={<ModuleFilesPage moduleKey="finance" />} />
                   <Route path="comms/files" element={<ModuleFilesPage moduleKey="comms" />} />
                   <Route path="audit-kpi/files" element={<ModuleFilesPage moduleKey="auditKpi" />} />
-                  <Route path="inspection/files" element={<ModuleFilesPage moduleKey="inspection" />} />
+                  <Route path="inspection/files" element={<Navigate to="../quality/files" relative="path" replace />} />
                   <Route path="drawings/precheck" element={<DrawingPreCheckPage />} />
                   <Route path="drawings/coordination" element={<CoordinationPage />} />
                   <Route path="drawings/checklist-master" element={<ChecklistMasterPage lockedFamily="DrawingCheck" />} />

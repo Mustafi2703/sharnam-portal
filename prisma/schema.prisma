@@ -1773,12 +1773,15 @@ model ProjectPhoto {
   id          String   @id @default(cuid())
   projectId   String
   fileUrl     String
-  album       String   @default("Unclassified")
-  description String?  @db.Text
-  trade       String?
-  location    String?
-  isPrivate   Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  album         String    @default("Unclassified")
+  description   String?   @db.Text
+  trade         String?
+  location      String?
+  isPrivate     Boolean   @default(false)
+  /// Calendar day the photo belongs to (site day), independent of upload time.
+  shotDate      DateTime?
+  sharePointUrl String?   @db.Text
+  createdAt     DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
