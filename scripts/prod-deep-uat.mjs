@@ -528,11 +528,19 @@ const DRAWINGS = [
   { no: "VT-ME-101", title: "Underground services & cable trench", discipline: "MEP", area: "Site", pkg: "Electrical", type: "GFC Layout", upload: 1 },
   { no: "VT-PEB-001", title: "PEB anchor bolt setting plan", discipline: "PEB", area: "Main plant", pkg: "PEB", type: "GFC Plan", upload: 1 },
 ];
-async function drawingCheckUnlock(who, drawingId, remark) {
-  const tpl = ok(await call(who, "GET", `/api/checklist/project/${pid()}/drawing-check-template`), "drawing check template");
+async function drawingCheckUnlock(who, drawingId, remark, discipline = "Architecture") {
+  const tpl = ok(await call(who, "GET", `/api/checklist/project/${pid()}/drawing-check-template?discipline=${encodeURIComponent(discipline)}`), "drawing check template");
   const responses = Object.fromEntries((tpl.items || []).map((i) => [i.id, { answer: "Yes", remarks: remark }]));
+  responses._meta = { refDrawing: `${remark} Rev R0` };
   const r = await call(who, "POST", `/api/checklist/project/${pid()}/drawing-precheck`, undefined, {
-    form: form({ responsesJson: responses, drawingId, remarks: remark, signerNameInspector: tokens.get(who)?.user?.fullName }, [{ field: "signature", buffer: signaturePng(3), type: "image/png", name: "signature.png" }]),
+    form: form({
+      responsesJson: responses,
+      drawingId,
+      discipline,
+      templateId: tpl.templateId || tpl.id,
+      revisionNumber: "R0",
+      remarks: remark,
+    }, [{ field: "signature", buffer: signaturePng(3), type: "image/png", name: "signature.png" }]),
   });
   const body = ok(r, "drawing check");
   assert(body.unlockToken, `drawing check returned no unlockToken (${r.status}): ${noteOf(body)}`);

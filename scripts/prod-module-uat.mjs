@@ -262,12 +262,16 @@ async function sectionDrawings() {
     assert(line.status < 300 && line.body?.id, `register-line ${line.status} ${noteOf(line.body)}`);
     state.drawingId = line.body.id;
     // Gate: the Drawing Check Master must be filled (every line answered + signature) to get a one-time unlock.
-    const tpl = await call("office", "GET", `/api/checklist/project/${id()}/drawing-check-template`);
+    const tpl = await call("office", "GET", `/api/checklist/project/${id()}/drawing-check-template?discipline=Architecture`);
     assert(tpl.status === 200 && tpl.body?.items?.length, `drawing check template ${tpl.status}`);
     const responses = Object.fromEntries(tpl.body.items.map((i) => [i.id, { answer: "Yes", remarks: TAG }]));
+    responses._meta = { refDrawing: "UAT-A-101 Rev R0" };
     const pre = new FormData();
     pre.append("responsesJson", JSON.stringify(responses));
     pre.append("drawingId", state.drawingId);
+    pre.append("discipline", "Architecture");
+    pre.append("templateId", tpl.body.templateId || tpl.body.id);
+    pre.append("revisionNumber", "R0");
     pre.append("remarks", `${TAG} pre-upload drawing check`);
     pre.append("signature", new Blob([readFile(FILES.selfie)], { type: "image/png" }), "signature.png");
     const unlock = await call("office", "POST", `/api/checklist/project/${id()}/drawing-precheck`, undefined, { form: pre, timeoutMs: 180000 });
@@ -326,7 +330,7 @@ async function sectionDrawings() {
   });
 
   await step("DWG-7", "Site opens the Drawing Check gate", "site", async () => {
-    const r = await call("site", "GET", `/api/checklist/project/${id()}/drawing-check-template`);
+    const r = await call("site", "GET", `/api/checklist/project/${id()}/drawing-check-template?discipline=Architecture`);
     assert(r.status === 200 && (r.body?.items?.length || r.body?.name), `template ${r.status} ${noteOf(r.body)}`);
     return `${r.body.name || "Drawing Check"} · ${r.body.items?.length || 0} checks`;
   });
