@@ -10,6 +10,8 @@ import {
   buildDrawingRegisterWorkbookXlsx,
   buildMasterRegisterPdf,
 } from "./drawingRegisterExport.js";
+import { delayDays, drawingsWeekNumber, mondayDayKey } from "@sharnam/shared";
+import { loadDrawingsWeekStart } from "./drawingPicklists.js";
 
 function csvCell(value: unknown) {
   const text = value == null ? "" : String(value);
@@ -92,7 +94,7 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
       line.revisionNumber ?? "",
       day(line.plannedSubmissionDate),
       day(line.actualSubmissionDate),
-      line.submissionDelayDays ?? "",
+      delayDays(line.plannedSubmissionDate, line.actualSubmissionDate) ?? "",
       line.criticalDrawing ?? "",
     ]),
   ]);
@@ -126,7 +128,7 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
     { replace: true },
   );
 
-  const weekFolder = `${folder}/Weekly/${drawingRegisterWeekStamp()}`;
+  const weekFolder = `${folder}/Weekly/${await drawingsWeekFolderStamp(projectId)}`;
   await mockOneDrive.upload(project.code, weekFolder, "DRAWING-REGISTER-01.xlsx", registerXlsx, XLSX_MIME, {
     replace: true,
   });
@@ -147,6 +149,18 @@ export function drawingRegisterWeekStamp(d = new Date()) {
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+/**
+ * Drawings week folder name, numbered like the drawing register dashboard (Week 1 = the week of the
+ * Drawing Settings start date, else the project start), e.g. "Week-14_2026-10-19".
+ * Falls back to the ISO stamp when no start is set or today is before Week 1.
+ */
+export async function drawingsWeekFolderStamp(projectId: string, d = new Date()) {
+  const { effectiveStart } = await loadDrawingsWeekStart(projectId);
+  const n = drawingsWeekNumber(d, effectiveStart);
+  if (n == null) return drawingRegisterWeekStamp(d);
+  return `Week-${String(n).padStart(2, "0")}_${mondayDayKey(d)}`;
 }
 
 

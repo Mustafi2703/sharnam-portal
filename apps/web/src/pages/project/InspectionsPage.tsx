@@ -89,6 +89,17 @@ export default function InspectionsPage() {
   });
   const [itemText, setItemText] = useState("");
   const [msg, setMsg] = useState("");
+  const [irKpis, setIrKpis] = useState<{
+    due: number;
+    raised: number;
+    overdue: number;
+    irsRaised: number;
+    firstTimeApprovalRate: number | null;
+    rejected: number;
+    deferred: number;
+    avgResponseHours: number | null;
+    qpi: { weekLabel: string; qpi: number | null; observationRate: number | null; instructionRate: number | null; ncrRate: number | null }[];
+  } | null>(null);
 
   const canManage =
     user?.role === "admin" || user?.role === "office" || user?.role === "site_employee" || user?.role === "employee";
@@ -120,6 +131,22 @@ export default function InspectionsPage() {
       setMsg(err instanceof Error ? err.message : "Could not save the start date");
     }
   }
+  useEffect(() => {
+    if (!id || sheetKey !== "") return;
+    const q = typeof weekNo === "number" ? `?week=${encodeURIComponent(`Week ${weekNo}`)}` : "";
+    let cancelled = false;
+    void api<NonNullable<typeof irKpis>>(`/api/checklist/project/${id}/qap/ir-kpis${q}`, { token })
+      .then((out) => {
+        if (!cancelled) setIrKpis(out);
+      })
+      .catch(() => {
+        if (!cancelled) setIrKpis(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, token, weekNo, sheetKey]);
+
   function shiftWeek(n: number) {
     const d = new Date(`${weekStart}T00:00:00`);
     d.setDate(d.getDate() + 7 * n);
@@ -365,6 +392,44 @@ export default function InspectionsPage() {
               onProjectUpdated={() => void load()}
             />
           )}
+
+          {irKpis ? (
+            <div className="space-y-3">
+              <div className="grid sm:grid-cols-3 gap-3">
+                {(irKpis.qpi || []).slice(0, 3).map((week) => (
+                  <Card key={week.weekLabel} className="!p-4">
+                    <div className="text-[10px] uppercase text-steel-muted font-mono">QPI {week.weekLabel}</div>
+                    <div className="text-2xl font-display mt-1">{week.qpi == null ? "n/a" : week.qpi}</div>
+                    <div className="text-[10px] text-steel-muted mt-1">
+                      Observations {week.observationRate == null ? "n/a" : `${week.observationRate}%`}
+                      {" · "}Instructions {week.instructionRate == null ? "n/a" : `${week.instructionRate}%`}
+                      {" · "}NCR {week.ncrRate == null ? "n/a" : `${week.ncrRate}%`}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                <Link to={`/projects/${id}/qap?status=Overdue`} className="block">
+                  <Card className="!p-4 hover:border-brand/40 transition-colors h-full">
+                    <div className="text-[10px] uppercase text-steel-muted font-mono">IRs due / raised / overdue</div>
+                    <div className="text-2xl font-display mt-1">{irKpis.due} / {irKpis.raised} / {irKpis.overdue}</div>
+                  </Card>
+                </Link>
+                {[
+                  ["IRs raised", irKpis.irsRaised],
+                  ["First-time approval rate", irKpis.firstTimeApprovalRate == null ? "n/a" : `${irKpis.firstTimeApprovalRate}%`],
+                  ["Rejected", irKpis.rejected],
+                  ["Deferred", irKpis.deferred],
+                  ["Average response hours", irKpis.avgResponseHours == null ? "n/a" : irKpis.avgResponseHours],
+                ].map(([label, value]) => (
+                  <Card key={String(label)} className="!p-4">
+                    <div className="text-[10px] uppercase text-steel-muted font-mono">{label}</div>
+                    <div className="text-2xl font-display mt-1">{value as string | number}</div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
@@ -1119,6 +1184,8 @@ export default function InspectionsPage() {
         <SpdcInspectionFormPanel
           key={`qi-ir-${project?.id || "loading"}-${project?.clientName || ""}-${project?.contractorName || ""}`}
           formKind="QualityIR"
+          projectId={id}
+          token={token}
           users={users}
           checklistAssignments={qiAssignments}
           masterHref={`/projects/${id}/quality/checklist-master`}
@@ -1141,9 +1208,13 @@ export default function InspectionsPage() {
                   linkedAssignmentId: payload.linkedAssignmentId || null,
                   linkedChecklistItemId: qiAssignments.find((a) => a.id === payload.linkedAssignmentId)?.template?.id || null,
                   linkedDrawingId: null,
+                  qapLineId: payload.qapLineId || null,
+                  onBehalf: payload.onBehalf === true,
+                  unlinkedReason: payload.unlinkedReason || undefined,
+                  status: "Draft",
                 }),
               });
-              setMsg("Request for Inspection (SPDC/QA/F-01) raised — it is in the Inspection register.");
+              setMsg("Request for Inspection (SPDC/QA/F-01) saved as a draft. It is in the Inspection register.");
               await load();
             } finally {
               setIrBusy(false);

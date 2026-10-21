@@ -396,6 +396,9 @@ async function seedChecklistsFromExcel() {
       data: { checklistType: "DrawingCheck", requirePhotosMin: 0 },
     });
   }
+  // Route Drawing Check templates by discipline (fills only where discipline is still empty).
+  const { backfillDrawingCheckDisciplines } = await import("../apps/api/src/services/drawingCheckRouting.ts");
+  await backfillDrawingCheckDisciplines(prisma);
 
   const qiFallback: { category: string; name: string; lines: string[] }[] = [
     {

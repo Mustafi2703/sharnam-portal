@@ -36,6 +36,7 @@ export function buildBrandedChecklistHtml(
   submission: {
     id?: string;
     status?: string | null;
+    purpose?: string | null;
     remarks?: string | null;
     createdAt?: Date | string | null;
     responsesJson?: string;
@@ -261,7 +262,7 @@ export function buildBrandedChecklistHtml(
     </table>
     ${photoHtml}
     <div class="sign-band">8. SIGNATURES</div>
-    <div class="signs">${signHtml}</div>
+    <div class="signs"${signs.length === 1 ? ` style="grid-template-columns:minmax(0,320px)"` : ""}>${signHtml}</div>
     <div class="legend">
       <span><i class="sw" style="background:#c6efce"></i>OK / Yes / Pass</span>
       <span><i class="sw" style="background:#ffc7ce"></i>Not OK / No / Fail</span>

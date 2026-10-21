@@ -1,5 +1,6 @@
-import { FormEvent, type ReactNode } from "react";
+import { FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth";
 import { Button, Input, Select, TextArea } from "./ui";
 import { DEFAULT_PICKLISTS, withCurrent, type DrawingPicklists } from "../lib/drawingPicklists";
 import {
@@ -8,24 +9,41 @@ import {
   MASTER_REGISTER_DRAWING_TYPES,
   MASTER_REGISTER_ISSUED_TO,
   MASTER_REGISTER_LATEST,
+  digitsOnly,
+  masterRegisterDelay,
+  masterRegisterErrors,
   type MasterRegisterForm,
 } from "../lib/masterDrawingRegister";
+import { formatUiText } from "../lib/formatUiText";
+import { istTodayKey } from "@sharnam/shared";
 
 function Field({
   label,
   children,
   className = "",
+  error,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  error?: string;
 }) {
   return (
     <label className={`block ${className}`}>
-      <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{label}</span>
+      <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText(label)}</span>
       {children}
+      {error ? (
+        <span role="alert" className="mt-1 block text-[11px] text-danger">
+          {error}
+        </span>
+      ) : null}
     </label>
   );
+}
+
+/** Number inputs still accept "-", "+", "e" and "." from the keyboard; whole-number fields refuse them. */
+function blockNonDigitKeys(e: KeyboardEvent<HTMLInputElement>) {
+  if (["-", "+", "e", "E", ".", ","].includes(e.key)) e.preventDefault();
 }
 
 function Section({
@@ -71,32 +89,29 @@ export function MasterDrawingRegisterForm({
   editingId?: string | null;
   onCancelEdit?: () => void;
 }) {
+  const { user } = useAuth();
   const set = (patch: Partial<MasterRegisterForm>) => onChange({ ...form, ...patch });
-
-  const onPlannedOrActual = (patch: Partial<MasterRegisterForm>) => {
-    const next = { ...form, ...patch };
-    if (
-      !next.submissionDelayDays.trim() &&
-      next.plannedSubmissionDate &&
-      next.actualSubmissionDate
-    ) {
-      const delay = Math.ceil(
-        (new Date(next.actualSubmissionDate).getTime() - new Date(next.plannedSubmissionDate).getTime()) / 86400000
-      );
-      next.submissionDelayDays = Number.isFinite(delay) ? String(delay) : "";
+  const packageChoices = withCurrent(packageOptions, form.projectPackage);
+  const today = istTodayKey();
+  const delay = masterRegisterDelay(form, today);
+  const errors = masterRegisterErrors(form, today);
+  const hasErrors = Object.keys(errors).length > 0;
+  const submit = (e: FormEvent) => {
+    if (hasErrors) {
+      e.preventDefault();
+      return;
     }
-    onChange(next);
+    onSubmit(e);
   };
 
   const req = inModal;
   return (
     <div className={inModal ? "" : "sheet-register overflow-hidden"}>
-      <datalist id="master-pick-package">{packageOptions.map((v) => <option key={v} value={v} />)}</datalist>
       <datalist id="master-pick-building">{buildingOptions.map((v) => <option key={v} value={v} />)}</datalist>
       {inModal ? (
         <p className="text-xs text-steel-muted">
           Fields marked * are required. After saving, upload the PDF/DWG on the{" "}
-          <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">Approval & GFC log</Link> with the same drawing number.
+          <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">Approval & GFC Log</Link> with the same drawing number.
         </p>
       ) : (
       <div className="sheet-register__head flex-col sm:flex-row sm:items-start gap-2">
@@ -108,7 +123,7 @@ export function MasterDrawingRegisterForm({
             Full DCI row from <strong>Master Drawing Register</strong> sheet — separate from GFC file upload. After
             saving, upload PDF/DWG on{" "}
             <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">
-              Approval & GFC log
+              Approval & GFC Log
             </Link>{" "}
             with the same drawing number to link files.
           </p>
@@ -116,19 +131,41 @@ export function MasterDrawingRegisterForm({
       </div>
       )}
 
-      <form id={formId} className={inModal ? "space-y-4" : "p-4 space-y-4 bg-paper"} onSubmit={onSubmit}>
+      <form id={formId} className={inModal ? "space-y-4" : "p-4 space-y-4 bg-paper"} onSubmit={submit}>
         <Section title="Drawing identity" tint="border-line bg-gradient-to-br from-sky-50/80 to-white">
-          <Field label="Sr #">
-            <Input value={form.srNo} onChange={(e) => set({ srNo: e.target.value })} placeholder="1" />
-          </Field>
-          <Field label={req ? "Project package *" : "Project package"}>
+          <Field label="Sr #" error={errors.srNo}>
             <Input
-              required={req}
-              list="master-pick-package"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={99999}
+              step={1}
+              onKeyDown={blockNonDigitKeys}
+              value={form.srNo}
+              onChange={(e) => set({ srNo: digitsOnly(e.target.value) })}
+              placeholder="Auto"
+              aria-invalid={errors.srNo ? true : undefined}
+              className="font-mono"
+            />
+          </Field>
+          <Field label={packageOptions.length ? "Project package" : "Project package"}>
+            <Select
               value={form.projectPackage}
               onChange={(e) => set({ projectPackage: e.target.value })}
-              placeholder="Package on this project"
-            />
+            >
+              <option value="">{formatUiText(packageOptions.length ? "Select package" : "No packages yet")}</option>
+              {packageChoices.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </Select>
+            {!packageOptions.length ? (
+              <p className="text-[11px] text-steel-muted mt-1">
+                {formatUiText("No packages on this project. Add them in Project set-up.")}{" "}
+                {user?.role === "admin" || user?.role === "office" ? (
+                  <Link to={`/projects/${projectId}/setup`} className="text-brand font-semibold">{formatUiText("Project set-up")}</Link>
+                ) : null}
+              </p>
+            ) : null}
           </Field>
           <Field label={req ? "Building *" : "Building"}>
             <Input
@@ -190,8 +227,15 @@ export function MasterDrawingRegisterForm({
               className="font-mono"
             />
           </Field>
-          <Field label={req ? "Revision date *" : "Revision date"}>
-            <Input type="date" required={req} value={form.revisionDate} onChange={(e) => set({ revisionDate: e.target.value })} />
+          <Field label={req ? "Revision date *" : "Revision date"} error={errors.revisionDate}>
+            <Input
+              type="date"
+              required={req}
+              max={today}
+              value={form.revisionDate}
+              onChange={(e) => set({ revisionDate: e.target.value })}
+              aria-invalid={errors.revisionDate ? true : undefined}
+            />
           </Field>
           <Field label="Latest revision">
             <Select value={form.latestRevision} onChange={(e) => set({ latestRevision: e.target.value })}>
@@ -215,24 +259,37 @@ export function MasterDrawingRegisterForm({
               type="date"
               required={req}
               value={form.plannedSubmissionDate}
-              onChange={(e) => onPlannedOrActual({ plannedSubmissionDate: e.target.value })}
+              onChange={(e) => set({ plannedSubmissionDate: e.target.value })}
             />
           </Field>
           <Field label="Actual submission date">
             <Input
               type="date"
               value={form.actualSubmissionDate}
-              onChange={(e) => onPlannedOrActual({ actualSubmissionDate: e.target.value })}
+              onChange={(e) => set({ actualSubmissionDate: e.target.value })}
             />
           </Field>
-          <Field label="Submission delay (days)">
-            <Input
-              value={form.submissionDelayDays}
-              onChange={(e) => set({ submissionDelayDays: e.target.value })}
-              placeholder="Auto from dates"
-              className="font-mono"
-            />
-          </Field>
+          <div className="block">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
+              {formatUiText("Submission delay (days)")}
+            </span>
+            <output
+              aria-live="polite"
+              className={`flex min-h-[38px] items-center gap-2 rounded border border-line bg-sand px-3 py-2 font-mono text-sm ${
+                (delay.days ?? 0) > 0 ? "text-danger font-semibold" : "text-ink"
+              }`}
+            >
+              {delay.days == null ? <span className="text-steel-muted">-</span> : delay.days}
+              {delay.running ? (
+                <span className="rounded border border-line bg-paper px-1.5 py-0.5 text-[10px] font-sans uppercase tracking-wider text-steel-muted">
+                  {formatUiText("Running")}
+                </span>
+              ) : null}
+            </output>
+            <span className="mt-1 block text-[11px] text-steel-muted">
+              {formatUiText(delay.days == null ? "Set the planned date to calculate" : "Calculated from the dates")}
+            </span>
+          </div>
           <Field label="Delay responsibility">
             <Select value={form.delayResponsibility} onChange={(e) => set({ delayResponsibility: e.target.value })}>
               <option value="">Select…</option>
@@ -252,16 +309,27 @@ export function MasterDrawingRegisterForm({
               ))}
             </Select>
           </Field>
-          <Field label="Issue date">
-            <Input type="date" value={form.issueDate} onChange={(e) => set({ issueDate: e.target.value })} />
+          <Field label="Issue date" error={errors.issueDate}>
+            <Input
+              type="date"
+              max={today}
+              value={form.issueDate}
+              onChange={(e) => set({ issueDate: e.target.value })}
+              aria-invalid={errors.issueDate ? true : undefined}
+            />
           </Field>
-          <Field label="No. of copies">
+          <Field label="No. of copies" error={errors.copiesCount}>
             <Input
               type="number"
+              inputMode="numeric"
               min={0}
+              max={99}
+              step={1}
+              onKeyDown={blockNonDigitKeys}
               value={form.copiesCount}
-              onChange={(e) => set({ copiesCount: e.target.value })}
+              onChange={(e) => set({ copiesCount: digitsOnly(e.target.value) })}
               placeholder="2"
+              aria-invalid={errors.copiesCount ? true : undefined}
               className="font-mono"
             />
           </Field>
@@ -294,7 +362,6 @@ export function MasterDrawingRegisterForm({
                 drawingTitle: "",
                 revisionDescription: "",
                 remarks: "",
-                submissionDelayDays: "",
               })
             }
           >

@@ -231,7 +231,7 @@ export function DrawingMarkupPanel({
           Link a GFC drawing to mark it up in the browser, or upload a marked-up PDF, image, or DWG. It is filed in this {targetType === "rfi" ? "RFI" : "design coordination"} folder on SharePoint.
         </p>
       ) : !state.revision ? (
-        <p className="text-xs text-steel-muted">The linked drawing has no PDF yet. Upload a marked-up file, or add the PDF on the GFC log to mark it up here.</p>
+        <p className="text-xs text-steel-muted">The linked drawing has no PDF yet. Upload a marked-up file, or add the PDF on the Approval & GFC Log to mark it up here.</p>
       ) : null}
       {msg ? <p className="text-xs">{msg}</p> : null}
       {state.markups.length ? (

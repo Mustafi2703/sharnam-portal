@@ -18,7 +18,7 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
 export const CHECKLIST_CSV_HEADERS = ["description", "instruction", "section", "requirePhoto"] as const;
 
 export const CHECKLIST_CSV_DETAILED_SAMPLE: string[][] = [
-  ["Verify drawing number matches GFC register", "Cross-check against latest published revision", "Identity", "true"],
+  ["Verify drawing number matches the Approval & GFC Log", "Cross-check against latest published revision", "Identity", "true"],
   ["Check north orientation / key plan", "Confirm site north matches sheet", "Layout", "false"],
   ["Confirm levels and grid references", "Highlight mismatches vs survey", "Levels", "true"],
   ["Review notes and legends for conflicts", "Log conflicts as RFI if needed", "Notes", "false"],

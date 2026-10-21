@@ -10,8 +10,9 @@ import {
   type RegisterDashLine,
 } from "../../components/DrawingRegisterCharts";
 import { MasterDrawingRegisterForm } from "../../components/MasterDrawingRegisterForm";
-import { ProjectWeekPicker, addDaysKey, mondayKey, useProjectStart } from "../../components/ProjectWeekPicker";
-import { projectWeekNumber } from "@sharnam/shared";
+import { ProjectWeekPicker, addDaysKey, mondayKey, useDrawingsStart } from "../../components/ProjectWeekPicker";
+import { drawingsWeekNumber, formatDayMon, formatDayMonYear, istTodayKey, mondayDayKey } from "@sharnam/shared";
+import { formatUiText } from "../../lib/formatUiText";
 import { useDrawingPicklists } from "../../lib/drawingPicklists";
 import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { MasterDrawingRegisterTable } from "../../components/MasterDrawingRegisterTable";
@@ -27,25 +28,113 @@ import {
 import { StatusNote } from "../../components/StatusNote";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 
+type DashMode = "all" | "week" | "range";
+const DASH_MODES: { key: DashMode; label: string }[] = [
+  { key: "all", label: "All dates" },
+  { key: "week", label: "Week" },
+  { key: "range", label: "Date range" },
+];
+const dashModeKey = (projectId?: string) => `sharnam.drawingRegister.dashMode:${projectId || ""}`;
+
+function readDashMode(projectId?: string): DashMode {
+  try {
+    const v = window.localStorage.getItem(dashModeKey(projectId));
+    return v === "week" || v === "range" ? v : "all";
+  } catch {
+    return "all";
+  }
+}
+
+function writeDashMode(projectId: string | undefined, mode: DashMode) {
+  try {
+    window.localStorage.setItem(dashModeKey(projectId), mode);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** From / To rules: both set, From on or before To, not before the drawings start, not after today. */
+function rangeError(from: string, to: string, minDate: string | null, today: string): string | null {
+  if (!from || !to) return "Pick both a From and a To date";
+  if (from > to) return "From must be on or before To";
+  if (minDate && from < minDate) return `From cannot be before the drawings start date (${formatDayMonYear(minDate)})`;
+  if (to > today || from > today) return "Dates cannot be after today";
+  return null;
+}
+
 function DrawingRegisterDashboard({ data, projectId, token }: { data: any; projectId?: string; token?: string | null }) {
-  const { start: projectStart } = useProjectStart(projectId, token);
-  // null = all dates; otherwise the Monday of the picked project week.
-  const [weekStart, setWeekStart] = useState<string | null>(null);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const drawingsStart = useDrawingsStart(projectId, token);
+  const effectiveStart = drawingsStart.effectiveStart;
+  const minWeek = effectiveStart ? mondayDayKey(effectiveStart) : null;
+  const today = istTodayKey();
+  const clampWeek = (key: string) => (minWeek && key < minWeek ? minWeek : key);
+
+  const [mode, setModeState] = useState<DashMode>(() => readDashMode(projectId));
+  const [weekStart, setWeekStart] = useState<string>(() => mondayKey());
+  const [fromDraft, setFromDraft] = useState("");
+  const [toDraft, setToDraft] = useState("");
+  const [applied, setApplied] = useState<{ from: string; to: string } | null>(null);
   const lines = (data.lines || []) as RegisterDashLine[];
+
+  useEffect(() => {
+    setModeState(readDashMode(projectId));
+  }, [projectId]);
+
+  useEffect(() => {
+    if (minWeek && weekStart < minWeek) setWeekStart(minWeek);
+  }, [minWeek, weekStart]);
+
+  const setMode = (next: DashMode) => {
+    setModeState(next);
+    writeDashMode(projectId, next);
+  };
+
+  // A start date in the future cannot bound a range that must also end by today.
+  const rangeFloor = effectiveStart && effectiveStart <= today ? effectiveStart : null;
+
+  useEffect(() => {
+    if (mode !== "range" || applied) return;
+    // First time in range mode: this week up to today, inside the allowed window.
+    const thisMonday = mondayKey();
+    const lo = rangeFloor && rangeFloor > thisMonday ? rangeFloor : thisMonday;
+    const from = lo > today ? today : lo;
+    setFromDraft(from);
+    setToDraft(today);
+    setApplied({ from, to: today });
+  }, [mode, applied, rangeFloor, today]);
+
+  useEffect(() => {
+    // The start date can arrive after the first range was set; drop a range that no longer fits.
+    if (applied && rangeError(applied.from, applied.to, rangeFloor, today)) setApplied(null);
+  }, [applied, rangeFloor, today]);
+
+  const draftError = mode === "range" ? rangeError(fromDraft, toDraft, rangeFloor, today) : null;
+
+  const onRangeChange = (nextFrom: string, nextTo: string) => {
+    setFromDraft(nextFrom);
+    setToDraft(nextTo);
+    if (!rangeError(nextFrom, nextTo, rangeFloor, today)) setApplied({ from: nextFrom, to: nextTo });
+  };
+
   const range = useMemo(() => {
-    if (from || to) {
-      const start = from ? new Date(`${from}T00:00:00`) : new Date("2000-01-01");
-      const end = to ? new Date(`${to}T23:59:59`) : new Date("2100-01-01");
-      return { start, end, label: `${from || "…"} to ${to || "…"}` };
+    if (mode === "range" && applied) {
+      return {
+        start: new Date(`${applied.from}T00:00:00`),
+        end: new Date(`${applied.to}T23:59:59`),
+        label: `${formatDayMonYear(applied.from)} to ${formatDayMonYear(applied.to)}`,
+      };
     }
-    if (weekStart) {
-      const n = projectWeekNumber(weekStart, projectStart);
-      return { start: new Date(`${weekStart}T00:00:00`), end: new Date(`${addDaysKey(weekStart, 6)}T23:59:59`), label: `Week ${n ?? "—"}` };
+    if (mode === "week") {
+      const n = drawingsWeekNumber(weekStart, effectiveStart);
+      const end = addDaysKey(weekStart, 6);
+      return {
+        start: new Date(`${weekStart}T00:00:00`),
+        end: new Date(`${end}T23:59:59`),
+        label: `Week ${n ?? "-"} (${formatDayMon(weekStart)} - ${formatDayMonYear(end)})`,
+      };
     }
     return { start: null as Date | null, end: null as Date | null, label: "All dates" };
-  }, [from, to, weekStart, projectStart]);
+  }, [mode, applied, weekStart, effectiveStart]);
   const shown = useMemo(
     () => filterRegisterLines(lines, range.start, range.end),
     [lines, range.start, range.end],
@@ -53,42 +142,77 @@ function DrawingRegisterDashboard({ data, projectId, token }: { data: any; proje
   const submitted = shown.filter((l) => l.actualSubmissionDate).length;
   const critical = shown.filter((l) => /yes/i.test(l.criticalDrawing || "")).length;
   const delayed = shown.filter((l) => (l.submissionDelayDays ?? 0) > 0).length;
+  const dateInputClass =
+    "mt-1 block rounded-lg border bg-paper px-2 py-1.5 text-sm text-ink " +
+    (draftError ? "border-[var(--color-danger)]" : "border-line");
 
   return (
     <div className="space-y-4">
+      {drawingsStart.loaded && !effectiveStart ? (
+        <Card className="!p-4 text-sm text-steel-muted">
+          No drawings start date or project start date is set, so week numbers show as Week -.{" "}
+          <Link to={`/projects/${projectId}/drawings/settings`} className="text-brand font-semibold">
+            {formatUiText("Set the drawings start date in Drawing Settings")}
+          </Link>
+        </Card>
+      ) : null}
       <Card className="!p-4 flex flex-wrap gap-3 items-end">
-        <ProjectWeekPicker
-          weekStart={weekStart || mondayKey()}
-          onChange={(k) => {
-            setWeekStart(k);
-            setFrom("");
-            setTo("");
-          }}
-          projectStart={projectStart}
-          extra={
-            <Button type="button" variant={weekStart ? "secondary" : "primary"} className="!text-xs !py-1.5" onClick={() => setWeekStart(null)}>
-              All dates
-            </Button>
-          }
-        />
-        <label className="text-xs text-steel-muted">
-          From
-          <input
-            type="date"
-            className="mt-1 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
+        <div role="group" aria-label={formatUiText("Dashboard date filter")} className="inline-flex rounded-lg border border-line bg-paper p-0.5">
+          {DASH_MODES.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              aria-pressed={mode === m.key}
+              onClick={() => setMode(m.key)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                mode === m.key ? "bg-[var(--color-brand)] text-white shadow-sm" : "text-steel-muted hover:bg-sand"
+              }`}
+            >
+              {formatUiText(m.label)}
+            </button>
+          ))}
+        </div>
+        {mode === "week" ? (
+          <ProjectWeekPicker
+            weekStart={clampWeek(weekStart)}
+            onChange={(k) => setWeekStart(clampWeek(k))}
+            projectStart={effectiveStart}
+            minWeekStart={minWeek}
           />
-        </label>
-        <label className="text-xs text-steel-muted">
-          To
-          <input
-            type="date"
-            className="mt-1 block rounded-lg border border-line bg-white px-2 py-1.5 text-sm text-ink"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
+        ) : null}
+        {mode === "range" ? (
+          <>
+            <label className="text-xs text-steel-muted">
+              {formatUiText("From")}
+              <input
+                type="date"
+                className={dateInputClass}
+                value={fromDraft}
+                min={rangeFloor ?? undefined}
+                max={toDraft && toDraft < today ? toDraft : today}
+                aria-invalid={draftError ? true : undefined}
+                onChange={(e) => onRangeChange(e.target.value, toDraft)}
+              />
+            </label>
+            <label className="text-xs text-steel-muted">
+              {formatUiText("To")}
+              <input
+                type="date"
+                className={dateInputClass}
+                value={toDraft}
+                min={fromDraft || rangeFloor || undefined}
+                max={today}
+                aria-invalid={draftError ? true : undefined}
+                onChange={(e) => onRangeChange(fromDraft, e.target.value)}
+              />
+            </label>
+            {draftError ? (
+              <p role="alert" className="text-xs text-danger self-center">
+                {draftError}. Showing the last valid range.
+              </p>
+            ) : null}
+          </>
+        ) : null}
         <p className="text-xs text-steel-muted max-w-xl">
           {range.label}. Counts come from GFC uploads and the master register. A new week folder is filed on SharePoint for the WPR and DPR.
         </p>
@@ -199,13 +323,19 @@ export default function DrawingRegisterPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const out = await api<{ lines: number; source: string }>(`/api/drawings/project/${id}/register/import`, {
+      const out = await api<{ lines: number; source: string; warnings?: string[] }>(`/api/drawings/project/${id}/register/import`, {
         method: "POST",
         token,
         body: fd,
         timeoutMs: 180_000,
       });
-      setMsg(`Imported ${out.lines} master lines from ${out.source}. Charts refresh below.`);
+      const warnings = out.warnings || [];
+      setMsg(
+        `Imported ${out.lines} master lines from ${out.source}. Charts refresh below.` +
+          (warnings.length
+            ? ` ${warnings.length} warning${warnings.length === 1 ? "" : "s"}: ${warnings.slice(0, 5).join("; ")}${warnings.length > 5 ? "; and more" : ""}.`
+            : ""),
+      );
       await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Import failed");
@@ -356,7 +486,7 @@ export default function DrawingRegisterPage() {
               </Link>
             )}
             <Link to={`/projects/${id}/drawings`} className="text-sm font-semibold text-brand">
-              Approval & GFC log →
+              Approval & GFC Log →
             </Link>
             <Link to={`/projects/${id}/hub/drawings`} className="text-sm font-semibold text-brand">
               Drawings hub →
@@ -410,7 +540,7 @@ export default function DrawingRegisterPage() {
           editingId={editingId}
           formId="master-line-form"
           inModal
-          packageOptions={[...new Set<string>(lines.map((l: any) => l.projectPackage).filter(Boolean))]}
+          packageOptions={picklists.packages}
           buildingOptions={[...new Set<string>(lines.map((l: any) => l.building).filter(Boolean))]}
         />
       </RegisterEntryModal>
@@ -452,7 +582,7 @@ export default function DrawingRegisterPage() {
           <p>
             Counts and charts above come from master register lines on this project. Use <strong>Master register</strong> for DCI columns, then upload on{" "}
             <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
-              Approval & GFC log
+              Approval & GFC Log
             </Link>{" "}
             after Drawing Check Master unlocks. Publish writes the formatted Excel and PDF to the project drawings folder on SharePoint.
           </p>

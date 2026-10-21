@@ -641,7 +641,7 @@ export function ToolRightPanel({
                   ]
               : (tool === "rfis" && rfiScope === "drawings") || tool === "coordination"
               ? [
-                  ["drawings", "Approval & GFC log"],
+                  ["drawings", "Approval & GFC Log"],
                   ["drawings/register/master", "Master register"],
                   [tool === "rfis" ? "drawings/coordination" : "comms?tab=matrix", tool === "rfis" ? "Design coordination" : "Communication matrix"],
                 ]

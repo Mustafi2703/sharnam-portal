@@ -16,6 +16,95 @@ import { StatusNote } from "../../components/StatusNote";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
+import { formatUiText } from "../../lib/formatUiText";
+
+const COORDINATION_ASSIGNEE_GROUPS = ["SPDC / PMC", "Clients", "Consultants", "Vendors / contractors"] as const;
+type CoordinationAssigneeGroup = (typeof COORDINATION_ASSIGNEE_GROUPS)[number];
+
+type CoordinationAssignee = {
+  key: string;
+  personName: string;
+  orgName: string;
+  email: string;
+  group: CoordinationAssigneeGroup;
+  source: "matrix" | "directory";
+};
+
+const ASSIGNEE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normName(s: unknown) {
+  return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function groupForSection(section: unknown): CoordinationAssigneeGroup {
+  const s = String(section || "").trim();
+  if (s === "PMC") return "SPDC / PMC";
+  if (s === "Client") return "Clients";
+  if (s === "Consultant" || s === "Designer") return "Consultants";
+  return "Vendors / contractors";
+}
+
+/**
+ * Everyone who can be assigned a coordination issue: communication-matrix contacts plus the primary contact
+ * of each company in the project directory. De-duplicated by email; rows without a usable email are kept
+ * (shown disabled) unless they are only a company placeholder for an org that already has an emailed person.
+ */
+function buildCoordinationAssignees(contacts: any[], vendors: any[]): CoordinationAssignee[] {
+  const candidates: CoordinationAssignee[] = [];
+  for (const c of contacts) {
+    if (!c || c.isSectionHeader) continue;
+    const personName = String(c.personName || "").trim();
+    const email = String(c.email || "").trim();
+    if (!personName && !email) continue;
+    candidates.push({
+      key: `matrix:${c.id}`,
+      personName,
+      orgName: String(c.orgName || c.company || "").trim(),
+      email: ASSIGNEE_EMAIL_RE.test(email) ? email : "",
+      group: groupForSection(c.orgSection),
+      source: "matrix",
+    });
+  }
+  for (const v of vendors) {
+    if (!v?.id) continue;
+    const email = String(v.email || "").trim();
+    candidates.push({
+      key: `vendor:${v.id}`,
+      personName: String(v.primaryContactName || v.name || "").trim(),
+      orgName: String(v.name || "").trim(),
+      email: ASSIGNEE_EMAIL_RE.test(email) ? email : "",
+      group: groupForSection(v.partyType),
+      source: "directory",
+    });
+  }
+  const emailedOrgs = new Set(candidates.filter((c) => c.email).map((c) => normName(c.orgName)));
+  const seenEmails = new Set<string>();
+  const seenNoEmail = new Set<string>();
+  const out: CoordinationAssignee[] = [];
+  for (const c of candidates) {
+    if (c.email) {
+      const k = c.email.toLowerCase();
+      if (seenEmails.has(k)) continue;
+      seenEmails.add(k);
+      out.push(c);
+      continue;
+    }
+    const org = normName(c.orgName);
+    const placeholder = !c.personName || normName(c.personName) === org;
+    if (placeholder && emailedOrgs.has(org)) continue;
+    const k = `${normName(c.personName)}|${org}`;
+    if (seenNoEmail.has(k)) continue;
+    seenNoEmail.add(k);
+    out.push(c);
+  }
+  return out;
+}
+
+function assigneeOptionLabel(c: CoordinationAssignee) {
+  const name = c.personName || c.orgName || c.email;
+  const org = c.orgName && normName(c.orgName) !== normName(name) ? ` · ${c.orgName}` : "";
+  return `${name}${org}${c.email ? "" : " (no email)"}`;
+}
 
 export function CoordinationPage() {
   const { id } = useParams();
@@ -26,7 +115,9 @@ export function CoordinationPage() {
   const picklists = useDrawingPicklists(id, token);
   const [rows, setRows] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
-  const [matrixPeople, setMatrixPeople] = useState<any[]>([]);
+  const [drawingsLoaded, setDrawingsLoaded] = useState(false);
+  const [matrixPeople, setMatrixPeople] = useState<CoordinationAssignee[]>([]);
+  const logView = searchParams.get("view") === "log";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [form, setForm] = useState({
@@ -61,26 +152,30 @@ export function CoordinationPage() {
     user?.role === "office" ||
     user?.role === "employee" ||
     user?.role === "site_employee";
+  const missingFields = [
+    !form.title.trim() ? "Issue" : "",
+    !form.discipline ? "Drawing type" : "",
+    !form.assignedToEmail ? "Assignee" : "",
+    !form.linkedDrawingId ? "GFC drawing" : "",
+  ].filter(Boolean);
 
   const load = async () => {
-    const [o, d, tech, commercial] = await Promise.all([
+    const [o, d, tech, commercial, projectVendors] = await Promise.all([
       api<any>(`/api/directory/project/${id}/overview`, { token }),
       api<any[]>(`/api/drawings/project/${id}`, { token }).catch(() => []),
       api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() => []),
       api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }).catch(() => []),
+      api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
     ]);
     setRows(o.coordination || []);
     setDrawings(d);
-    const people = [...tech, ...commercial].filter((c) => !c.isSectionHeader && (c.personName || c.email));
-    const seen = new Set<string>();
-    setMatrixPeople(
-      people.filter((c) => {
-        const key = `${c.email || ""}|${c.personName || ""}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-    );
+    setDrawingsLoaded(true);
+    const vendorsById = new Map<string, any>();
+    for (const row of [...(o.vendors || []), ...(projectVendors || [])]) {
+      const v = row?.vendor || row;
+      if (v?.id) vendorsById.set(v.id, v);
+    }
+    setMatrixPeople(buildCoordinationAssignees([...tech, ...commercial], [...vendorsById.values()]));
   };
 
   useEffect(() => {
@@ -203,16 +298,35 @@ export function CoordinationPage() {
     await load();
   }
 
+  function viewSearch(log: boolean) {
+    const q = new URLSearchParams();
+    if (log) q.set("view", "log");
+    if (focusDrawingId) q.set("drawingId", focusDrawingId);
+    const s = q.toString();
+    return s ? `?${s}` : "";
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Drawings module"
-        title="Design coordination"
-        subtitle="Log the issue against a drawing and assign someone from the communication matrix — they are emailed. Send up to five follow-ups; escalate to an RFI at any point (or after the fifth follow-up). The register is kept on SharePoint."
+        title={logView ? "Coordination log" : "Design coordination"}
+        subtitle={
+          logView
+            ? "Every coordination issue on this project. Select an issue to follow up, reassign, escalate to an RFI or close it."
+            : "Log the issue against a GFC drawing and assign someone from the communication matrix or project directory. They are emailed. Send up to five follow-ups; escalate to an RFI at any point (or after the fifth follow-up). The register is kept on SharePoint."
+        }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{openCount} open</Badge>
             <Badge tone="ok">{rows.length - openCount} closed</Badge>
+            {canEdit ? (
+              <Link to={{ search: viewSearch(!logView) }}>
+                <Button type="button" variant="secondary" className="!text-xs">
+                  {logView ? "Raise coordination issue" : "Coordination log"}
+                </Button>
+              </Link>
+            ) : null}
             {user?.role === "admin" || user?.role === "office" ? (
               <label className="inline-flex items-center rounded-xl border border-line bg-paper px-3 py-2 text-xs font-semibold text-ink shadow-sm hover:border-[var(--wd-accent,var(--color-brand))] cursor-pointer">
                 Import Excel
@@ -273,13 +387,24 @@ export function CoordinationPage() {
 
       <StatusNote msg={msg} />
 
+      {logView && focusDrawing ? (
+        <Card className="!p-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium">
+            Showing issues on {focusDrawing.drawingNumber} · {focusDrawing.title}
+          </p>
+          <Button type="button" variant="secondary" className="!text-xs" onClick={() => setSearchParams({ view: "log" })}>
+            All drawings
+          </Button>
+        </Card>
+      ) : null}
+
+      {!logView && (
+      <>
       <Card className="!p-4 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h3 className="font-semibold text-sm">Coordination by drawing</h3>
-            <p className="text-xs text-steel-muted mt-0.5">
-              Open a sheet to log issues against that GFC. Unlinked issues stay under All drawings.
-            </p>
+            <p className="text-xs text-steel-muted mt-0.5">Open a sheet to log issues against that GFC.</p>
           </div>
           {focusDrawingId && (
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => setSearchParams({})}>
@@ -291,7 +416,7 @@ export function CoordinationPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium">
               Working on {focusDrawing.drawingNumber} · {focusDrawing.title}
-              {sheetRows.length ? ` — ${sheetRows.length} issue(s)` : " — no issues yet, log the first below"}
+              {sheetRows.length ? ` - ${sheetRows.length} issue(s)` : " - no issues yet, log the first below"}
             </p>
           </div>
         )}
@@ -323,7 +448,7 @@ export function CoordinationPage() {
             <p className="text-xs text-steel-muted sm:col-span-3">
               Add GFC rows first on the{" "}
               <Link to={`/projects/${id}/drawings`} className="font-semibold text-brand">
-                GFC register
+                Approval & GFC Log
               </Link>
               .
             </p>
@@ -337,14 +462,14 @@ export function CoordinationPage() {
           <li>
             Upload the GFC sheet first on{" "}
             <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
-              GFC register
+              Approval & GFC Log
             </Link>{" "}
             ({drawingsWithFiles.length} of {drawings.length} drawings have a PDF/DWG).
           </li>
-          <li>Pick the sheet from the GFC register. That link is what the issue is raised against.</li>
+          <li>Pick the sheet from the Approval & GFC Log. That link is what the issue is raised against.</li>
           <li>Upload a marked-up drawing if you already have one. It is filed in that issue’s folder, separate from the GFC sheet.</li>
           <li>After the issue is logged, use Mark up filed PDF to mark that uploaded PDF, or Mark up GFC PDF when the register sheet has a PDF.</li>
-          <li>Assign a vendor, consultant, or SPDC person from the communication matrix. Logging the issue emails them.</li>
+          <li>Assign a vendor, consultant, or SPDC person from the communication matrix or project directory. Logging the issue emails them.</li>
           <li>Use <strong>Send follow-up</strong> on the logged issue. It goes to the assignee.</li>
           <li>
             <strong>Close</strong> when resolved. Use <strong>Escalate to RFI</strong> at any time — or after the fifth follow-up with no action.
@@ -352,7 +477,19 @@ export function CoordinationPage() {
         </ol>
       </Card>
 
-      {canEdit && (
+      {canEdit && drawingsLoaded && !drawings.length && (
+        <Card className="border-amber-300 bg-amber-50">
+          <h3 className="font-semibold text-amber-900">{formatUiText("Add a GFC drawing first")}</h3>
+          <p className="text-sm text-amber-900 mt-1">
+            A coordination issue is always raised against a GFC drawing. This project has none on the Approval & GFC Log yet.
+          </p>
+          <Link to={`/projects/${id}/drawings`} className="inline-block mt-3">
+            <Button type="button">Open Approval & GFC Log</Button>
+          </Link>
+        </Card>
+      )}
+
+      {canEdit && drawings.length > 0 && (
         <Card>
           <h3 className="font-semibold mb-3">Raise coordination issue</h3>
           <form
@@ -360,12 +497,8 @@ export function CoordinationPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               if (logBusy) return;
-              if (!form.linkedDrawingId) {
-                setMsg("Pick the drawing from the GFC register.");
-                return;
-              }
-              if (!form.assignedToEmail) {
-                setMsg("Select an assignee from the communication matrix.");
+              if (missingFields.length) {
+                setMsg(`Fill in: ${missingFields.join(", ")}.`);
                 return;
               }
               setLogBusy(true);
@@ -412,22 +545,31 @@ export function CoordinationPage() {
             }}
           >
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Issue</span>
-              <Input required placeholder="What needs coordinating" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Issue *")}</span>
+              <Input
+                required
+                aria-required
+                placeholder="e.g. Duct clashes with beam at grid C4"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
             </label>
             <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Drawing type</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Drawing type *")}</span>
               <Select
+                required
+                aria-required
                 value={form.discipline}
                 onChange={(e) => setForm({ ...form, discipline: e.target.value })}
               >
+                {!form.discipline ? <option value="">{formatUiText("Select drawing type")}</option> : null}
                 {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
                   <option key={d}>{d}</option>
                 ))}
               </Select>
             </label>
             <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Priority</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Priority")}</span>
               <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
                 {withCurrent(picklists.lists.coordinationPriorities, form.priority).map((p) => (
                   <option key={p}>{p}</option>
@@ -435,16 +577,16 @@ export function CoordinationPage() {
               </Select>
             </label>
             <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Location / grid</span>
-              <Input placeholder="Grid or area" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Location / grid")}</span>
+              <Input placeholder="e.g. Grid C4, Level +3.00" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             </label>
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">GFC drawing</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("GFC drawing *")}</span>
               <SearchableSelect
                 required
                 options={gfcOptions}
                 value={form.linkedDrawingId}
-                placeholder="Search the GFC register"
+                placeholder={form.discipline ? `Select a drawing (${form.discipline})` : "Select a drawing"}
                 searchPlaceholder="Drawing number or title"
                 onChange={(value) => {
                   const sheet = drawings.find((d) => d.id === value);
@@ -455,56 +597,52 @@ export function CoordinationPage() {
                   });
                 }}
               />
-              {!drawings.length ? (
-                <p className="text-xs text-amber-800 mt-1">
-                  The GFC register is empty. Add sheets on the GFC register first.
-                </p>
-              ) : (
-                <p className="text-xs text-steel-muted mt-1">Every sheet on the GFC register. The issue stays linked to the one you pick.</p>
-              )}
+              <p className="text-xs text-steel-muted mt-1">Every sheet on the Approval & GFC Log. The issue stays linked to the one you pick.</p>
             </label>
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
-                Assign from communication matrix
-              </span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Assignee *")}</span>
               <Select
+                required
+                aria-required
                 value={form.assignedToEmail}
                 onChange={(e) => {
-                  const person = matrixPeople.find((c) => (c.email || "") === e.target.value);
+                  const person = matrixPeople.find((c) => c.email === e.target.value);
                   setForm({
                     ...form,
                     assignedToEmail: e.target.value,
-                    assignedToName: person?.personName || form.assignedToName,
+                    assignedToName: person ? person.personName || person.orgName || person.email : "",
                   });
                 }}
               >
-                <option value="">— Vendor, consultant, or SPDC staff —</option>
-                {["PMC", "Consultant", "Contractor", "Client", "Other"].map((section) => {
-                  const group = matrixPeople.filter((c) => (c.orgSection || "Other") === section && c.email);
-                  if (!group.length) return null;
-                  const label =
-                    section === "PMC" ? "SPDC / PMC" : section === "Contractor" ? "Vendors / contractors" : `${section}s`;
+                <option value="">{formatUiText("Select vendor, consultant, or SPDC staff")}</option>
+                {COORDINATION_ASSIGNEE_GROUPS.map((group) => {
+                  const people = matrixPeople.filter((c) => c.group === group);
+                  if (!people.length) return null;
                   return (
-                    <optgroup key={section} label={label}>
-                      {group.map((c) => (
-                        <option key={c.id} value={c.email}>
-                          {c.personName || c.email} · {c.orgName || c.company || section}
+                    <optgroup key={group} label={formatUiText(group)}>
+                      {people.map((c) => (
+                        <option key={c.key} value={c.email || c.key} disabled={!c.email}>
+                          {assigneeOptionLabel(c)}
                         </option>
                       ))}
                     </optgroup>
                   );
                 })}
               </Select>
-              {!matrixPeople.length && (
-                <p className="text-xs text-amber-800 mt-1">Upload the communication matrix so vendors, consultants, and SPDC staff can be selected.</p>
-              )}
+              <p className="text-xs text-steel-muted mt-1">
+                From the communication matrix and the project directory. Entries marked (no email) cannot be emailed until an email is added on the{" "}
+                <Link to={`/projects/${id}/comms?tab=matrix`} className="font-semibold text-brand underline">
+                  {formatUiText("communication matrix")}
+                </Link>
+                .
+              </p>
             </label>
             <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Due date</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Due date")}</span>
               <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
             </label>
             <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Ball in court</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Ball in court")}</span>
               <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
                 {["Assignee", "Creator", "Consultant", "Contractor", "PMC"].map((b) => (
                   <option key={b}>{b}</option>
@@ -512,16 +650,16 @@ export function CoordinationPage() {
               </Select>
             </label>
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Description</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Description")}</span>
               <TextArea
                 rows={2}
-                placeholder="What is clashing, and what should change"
+                placeholder="e.g. What is clashing, and what should change"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
             </label>
             <div className="sm:col-span-2 rounded-lg border border-line p-3 space-y-2">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Marked-up drawing</div>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">{formatUiText("Marked-up drawing")}</div>
               <p className="text-xs text-steel-muted">
                 Separate from the GFC sheet. A PDF, image, or DWG already marked up is filed in this issue’s folder when you log it. You can then mark that PDF from the issue.
               </p>
@@ -541,9 +679,14 @@ export function CoordinationPage() {
               <p className="text-xs text-steel-muted">
                 Logging sends email to the assignee and copies the communication-matrix To and Cc.
               </p>
-              <Button type="submit" disabled={logBusy} className="!bg-sky-600 !font-medium">
+              <Button type="submit" disabled={logBusy || missingFields.length > 0} className="!bg-sky-600 !font-medium">
                 {logBusy ? "Logging…" : "Log issue"}
               </Button>
+              {missingFields.length ? (
+                <p className="text-xs text-amber-800" role="status">
+                  Still needed: {missingFields.join(", ")}
+                </p>
+              ) : null}
             </div>
           </form>
           <UploadModal
@@ -562,6 +705,8 @@ export function CoordinationPage() {
             }}
           />
         </Card>
+      )}
+      </>
       )}
 
       <div className="flex gap-1 flex-wrap">
@@ -680,8 +825,8 @@ export function CoordinationPage() {
                         onChange={(e) => {
                           const email = e.target.value;
                           if (!email) return;
-                          const person = matrixPeople.find((c) => (c.email || "") === email);
-                          const name = person?.personName || email;
+                          const person = matrixPeople.find((c) => c.email === email);
+                          const name = person?.personName || person?.orgName || email;
                           if (!window.confirm(`Reassign "${selected.title}" to ${name}? They will be emailed.`)) return;
                           setFollowBusy(true);
                           return patchIssue(selected.id, { assignedToEmail: email, assignedToName: name })
@@ -691,13 +836,21 @@ export function CoordinationPage() {
                         }}
                       >
                         <option value="">Reassign to…</option>
-                        {matrixPeople
-                          .filter((c) => c.email && c.email !== selected.assignedToEmail)
-                          .map((c) => (
-                            <option key={c.id || c.email} value={c.email}>
-                              {c.personName || c.email} · {c.orgName || c.company || c.orgSection || ""}
-                            </option>
-                          ))}
+                        {COORDINATION_ASSIGNEE_GROUPS.map((group) => {
+                          const people = matrixPeople.filter(
+                            (c) => c.group === group && c.email && c.email !== selected.assignedToEmail,
+                          );
+                          if (!people.length) return null;
+                          return (
+                            <optgroup key={group} label={formatUiText(group)}>
+                              {people.map((c) => (
+                                <option key={c.key} value={c.email}>
+                                  {assigneeOptionLabel(c)}
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
                       </Select>
                       <Button type="button" variant="secondary" className="!text-xs" onClick={() => docRef.current?.click()}>
                         Attach DMS file
@@ -770,7 +923,7 @@ export function CoordinationPage() {
                     <SearchableSelect
                       options={gfcOptions}
                       value={linkDrawingId}
-                      placeholder="Search the GFC register"
+                      placeholder="Search the Approval & GFC Log"
                       searchPlaceholder="Drawing number or title"
                       onChange={setLinkDrawingId}
                     />
@@ -779,8 +932,12 @@ export function CoordinationPage() {
                     type="button"
                     variant="secondary"
                     className="!text-xs"
-                    disabled={linkDrawingId === (selected.linkedDrawingId || "")}
-                    onClick={() => void patchIssue(selected.id, { linkedDrawingId: linkDrawingId || null })}
+                    disabled={!linkDrawingId || linkDrawingId === (selected.linkedDrawingId || "")}
+                    onClick={() =>
+                      void patchIssue(selected.id, { linkedDrawingId: linkDrawingId }).catch((err) =>
+                        setMsg(err instanceof Error ? err.message : "Could not save the drawing link"),
+                      )
+                    }
                   >
                     Save link
                   </Button>
@@ -818,7 +975,7 @@ export function CoordinationPage() {
                   <>
                     <p>Linked drawing has no PDF/DWG file yet.</p>
                     <Link to={`/projects/${id}/drawings`} className="inline-block text-brand font-semibold text-sm">
-                      Upload on GFC register →
+                      Upload on Approval & GFC Log →
                     </Link>
                   </>
                 )}

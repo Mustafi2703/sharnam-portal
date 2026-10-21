@@ -29,6 +29,8 @@ export function isToolActive(
     return false;
   }
 
+  if (t.to === "drawings/coordination" && !t.query && params.get("view") === "log") return false;
+
   if (t.query) {
     if (t.to === "directory" && t.query.startsWith("party=")) {
       const expectedParty = new URLSearchParams(t.query).get("party");

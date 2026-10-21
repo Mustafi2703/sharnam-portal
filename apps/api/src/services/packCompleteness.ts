@@ -169,7 +169,7 @@ export async function verifyPackCompleteness(projectId: string, opts?: { logDate
     check("sor", "quality", "SOR / site records", sor, 0, "Quality Dashboard · SOR Log", "DPR SOR lines"),
     check("safety", "safety", "Safety records", safety, 0, "Safety Dashboard / Safety NCR", "DPR HSE · WPR"),
     check("diary", "diary", "Day logs this week", diary, 1, "Site day log (portal)", "WPR manpower fallback · dump-logs"),
-    check("drawings", "comms", "Published drawings", drawingsPublished, 1, "DRAWING REGISTER / GFC log", "Checklist gate · WPR drawing"),
+    check("drawings", "comms", "Published drawings", drawingsPublished, 1, "DRAWING REGISTER / Approval & GFC Log", "Checklist gate · WPR drawing"),
     check(
       "dpr-today",
       "reports",

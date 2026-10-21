@@ -448,6 +448,41 @@ export {
 export { QAP_PICKERS, QAP_LEGENDS, type QapPickerKey } from "./qapPickers.js";
 export { HR_LETTER_TABLES, parseHrLetterTable, hrLetterTableHasData, type HrLetterTable } from "./hrLetterTables.js";
 export { hrLetterIssues } from "./hrLetterIssues.js";
+export * from "./drawingDelay.js";
+export * from "./drawingPicklists.js";
+export {
+  parseQapFrequency,
+  frequencyLabel,
+  expectedIrCount,
+  type QapFrequency,
+} from "./qapFrequency.js";
+export {
+  QUALITY_DECLARATIONS,
+  QUALITY_ENCLOSURE_OPTIONS,
+  QUALITY_RESULTS,
+  SAFETY_FORM_PATCH_KEYS,
+  QUALITY_CONTRACTOR_PATCH_KEYS,
+  QUALITY_SPDC_PATCH_KEYS,
+  QUALITY_CLIENT_PATCH_KEYS,
+  irTypeForPmcRole,
+  clientSignoffRequired,
+  isHoldOrThirdParty,
+  noticeHours,
+  truthyFlag,
+  declarationsComplete,
+  statusForQualityResult,
+  resultCode,
+  type QualityResultCode,
+  type QualityResultDecision,
+} from "./qualityIr.js";
+export { requiredEnclosures, enclosureFileName, type QapRequiredEnclosure, type QapEnclosureKind } from "./qapRecords.js";
+export {
+  irChains,
+  qapLineStatus,
+  signoffFlags,
+  type QapIrSnap,
+  type QapStatusName,
+} from "./qapLineStatus.js";
 export {
   MATRIX_SECTION_ORDER,
   buildMatrixBlocks,

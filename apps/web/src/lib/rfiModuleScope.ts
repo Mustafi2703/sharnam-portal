@@ -135,7 +135,7 @@ export function rfiPageCopy(scope: RfiModuleScope, kind: RfiKindFilter): { eyebr
     return {
       eyebrow: "Drawings module · register",
       title: "Request for Information",
-      subtitle: `Design query trail — drawing no + rev required. Register: ${SPDC_CHECKLIST_TEMPLATES.drawingRfi}`,
+      subtitle: `Design query - link the drawing and revision. Register: ${SPDC_CHECKLIST_TEMPLATES.drawingRfi}`,
     };
   }
   if (scope === "drawings" && (kind === "All" || kind === "Manual")) {

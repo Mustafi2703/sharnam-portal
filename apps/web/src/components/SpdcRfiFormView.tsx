@@ -185,7 +185,14 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
           <Field label="Originator" value={row.ORIGINATOR} />
           <Field label="Discipline" value={row.DISCIPLINE} />
           <Field label="Category" value={row.CATEGORY} />
-          <Field label="Responsible party" value={row["RESPONSIBLE PARTY"]} />
+          <div>
+            <Field label="Responsible party" value={row["RESPONSIBLE PARTY"]} />
+            {rfi.matrixAssignee || rfi.assigneeContactId ? (
+              <div className="px-2 pb-1.5">
+                <Badge tone="neutral">Matrix</Badge>
+              </div>
+            ) : null}
+          </div>
           <div className="sm:col-span-2">
             <Field label="Subject" value={row.SUBJECT} />
           </div>

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Badge, Button, Input, Select } from "./ui";
+import { Link, useNavigate } from "react-router-dom";
+import { QUALITY_DECLARATIONS, QUALITY_ENCLOSURE_OPTIONS, QUALITY_RESULTS, requiredEnclosures, truthyFlag } from "@sharnam/shared";
+import { Badge, Button, Input, Select, TextArea } from "./ui";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
 import { downloadAuthFile } from "../lib/downloadReport";
+import { openNcrFormWindow } from "../lib/ncrFormFields";
 import {
   SAFETY_CLEARANCE_CODES,
   clearanceExpired,
@@ -29,6 +31,8 @@ type IrAttachment = {
   name: string;
   kind?: string;
   uploadedAt?: string;
+  recordKey?: string | null;
+  recordLabel?: string | null;
 };
 
 type ChecklistAssignmentOpt = {
@@ -49,6 +53,7 @@ type Props = {
     formDataJson?: string | null;
     attachmentsJson?: string | null;
     linkedAssignmentId?: string | null;
+    qapLineId?: string | null;
     linkedAssignment?: { template?: { name?: string } | null } | null;
   };
   project?: ProjectLite | null;
@@ -118,6 +123,28 @@ export function SpdcInspectionIrPanel({
   const [linkId, setLinkId] = useState(rfi.linkedAssignmentId || "");
   const [linkBusy, setLinkBusy] = useState(false);
   const [fillStatus, setFillStatus] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [qualityMsg, setQualityMsg] = useState("");
+  const [secBusy, setSecBusy] = useState(false);
+  const [resultBusy, setResultBusy] = useState(false);
+  const [ncrBusy, setNcrBusy] = useState(false);
+  const [qapLine, setQapLine] = useState<{ id: string; records?: string | null } | null>(null);
+  const [siteInstructions, setSiteInstructions] = useState<
+    { id: string; title?: string; status?: string; closedAt?: string | null }[] | null
+  >(null);
+  const [sec3, setSec3] = useState({
+    decls: {} as Record<string, boolean>,
+    enclosures: [] as string[],
+    enclosuresOther: "",
+    raisedBy: "",
+    verifiedBy: "",
+    elementOrLot: "",
+    source: "",
+    actionTaken: "",
+    shortNoticeReason: "",
+  });
+  const [sec4, setSec4] = useState({ inspectedOn: "", observations: "", reinspectionBy: "", thirdPartyBy: "" });
+  const [closedBy, setClosedBy] = useState("");
   const ref = inspectionFormForKind(rfi.rfiKind);
   const form = useMemo(() => resolveInspectionFormData(rfi, project || undefined), [rfi, project]);
   const sections = useMemo(() => (ref ? sectionsFromRef(ref) : []), [ref]);
@@ -126,6 +153,13 @@ export function SpdcInspectionIrPanel({
     rfi.linkedAssignment?.template?.name ||
     checklistAssignments.find((a) => a.id === (rfi.linkedAssignmentId || linkId))?.template?.name;
   const home = canonicalRfiKind(rfi.rfiKind);
+  const isQuality = home === "QualityIR";
+  const onBehalf = truthyFlag(form.onBehalf);
+  const spdc = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
+  const canSection3 = user?.role === "admin" || user?.role === "vendor" || (spdc && onBehalf);
+  const canSection4 = spdc;
+  const canWitness = user?.role === "client";
+  const savedResult = String(form.result || "").trim().charAt(0).toUpperCase();
   const isSafety = home === "SafetyIR";
   const failLike =
     /reject|fail|not.?cleared|s3|s4|closed.?reject/i.test(String(rfi.status || "")) ||
@@ -174,6 +208,90 @@ export function SpdcInspectionIrPanel({
     };
   }, [activeAssignmentId, projectId, token, rfi.id]);
 
+  useEffect(() => {
+    let raw: Record<string, unknown> = {};
+    try {
+      raw = rfi.formDataJson ? JSON.parse(rfi.formDataJson) : {};
+    } catch {
+      raw = {};
+    }
+    const enc = raw.enclosures;
+    const enclosures = Array.isArray(enc)
+      ? enc.map(String)
+      : typeof enc === "string"
+        ? enc.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+    const decls: Record<string, boolean> = {};
+    for (const d of QUALITY_DECLARATIONS) decls[d.key] = truthyFlag(raw[d.key]);
+    setSec3({
+      decls,
+      enclosures,
+      enclosuresOther: String(raw.enclosuresOther || ""),
+      raisedBy: String(raw.raisedBy || ""),
+      verifiedBy: String(raw.verifiedBy || ""),
+      elementOrLot: String(raw.elementOrLot || form.elementOrLot || ""),
+      source: String(raw.source || form.source || ""),
+      actionTaken: String(raw.actionTaken || ""),
+      shortNoticeReason: String(raw.shortNoticeReason || ""),
+    });
+    setSec4({
+      inspectedOn: String(raw.inspectedOn || "").slice(0, 10),
+      observations: String(raw.observations || ""),
+      reinspectionBy: String(raw.reinspectionBy || "").slice(0, 10),
+      thirdPartyBy: String(raw.thirdPartyBy || ""),
+    });
+    setClosedBy(String(raw.closedBy || ""));
+  }, [rfi.id, rfi.formDataJson, form.elementOrLot, form.source]);
+
+  useEffect(() => {
+    if (!isQuality || !rfi.qapLineId) {
+      setQapLine(null);
+      return;
+    }
+    let cancelled = false;
+    void api<{ line?: { id: string; records?: string | null } }>(
+      `/api/checklist/project/${projectId}/qap/line/${rfi.qapLineId}/irs`,
+      { token },
+    )
+      .then((out) => {
+        if (!cancelled) setQapLine(out.line || null);
+      })
+      .catch(() => {
+        if (!cancelled) setQapLine(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuality, rfi.qapLineId, projectId, token]);
+
+  useEffect(() => {
+    if (!isQuality) return;
+    let cancelled = false;
+    void api<{ id: string; title?: string; description?: string | null; status?: string; source?: string | null; closedAt?: string | null }[]>(
+      `/api/checklist/project/${projectId}/quality-site-records?type=${encodeURIComponent("Site Instruction")}`,
+      { token },
+    )
+      .then((rows) => {
+        if (cancelled) return;
+        const act = String(form.activityDescription || "").trim().toLowerCase();
+        const num = String(rfi.irNumber || rfi.number || "").toLowerCase();
+        const list = Array.isArray(rows) ? rows : [];
+        setSiteInstructions(
+          list.filter((row) => {
+            const blob = `${row.title || ""} ${row.description || ""} ${row.source || ""}`.toLowerCase();
+            if (num && blob.includes(num)) return true;
+            return act.length > 12 && blob.includes(act.slice(0, 48));
+          }),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setSiteInstructions(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuality, projectId, token, rfi.id, rfi.number, rfi.irNumber, form.activityDescription]);
+
   if (!ref) return null;
 
   const fileBase = String(rfi.irNumber || rfi.number).replace(/[^\w.-]+/g, "_");
@@ -200,7 +318,27 @@ export function SpdcInspectionIrPanel({
     }
   }
 
-  async function uploadFiles(files: FileList | File[], kind: "photo" | "doc" | "site_instruction") {
+  function contractorPatch() {
+    const decls: Record<string, string> = {};
+    for (const d of QUALITY_DECLARATIONS) decls[d.key] = sec3.decls[d.key] ? "true" : "";
+    return {
+      ...decls,
+      enclosures: sec3.enclosures,
+      enclosuresOther: sec3.enclosuresOther,
+      raisedBy: sec3.raisedBy,
+      verifiedBy: sec3.verifiedBy,
+      elementOrLot: sec3.elementOrLot,
+      source: sec3.source,
+      actionTaken: sec3.actionTaken,
+      shortNoticeReason: sec3.shortNoticeReason,
+    };
+  }
+
+  async function uploadFiles(
+    files: FileList | File[],
+    kind: "photo" | "doc" | "site_instruction",
+    record?: { recordKey: string; recordLabel: string },
+  ) {
     const list = Array.from(files).slice(0, 8);
     if (!list.length) return;
     setAttachBusy(true);
@@ -208,6 +346,8 @@ export function SpdcInspectionIrPanel({
     try {
       const fd = new FormData();
       fd.append("kind", kind);
+      if (record?.recordKey) fd.append("recordKey", record.recordKey);
+      if (record?.recordLabel) fd.append("recordLabel", record.recordLabel);
       for (const f of list) {
         fd.append(kind === "photo" ? "photos" : kind === "site_instruction" ? "site_instruction" : "docs", f);
       }
@@ -450,7 +590,402 @@ export function SpdcInspectionIrPanel({
         </Button>
       </div>
 
-      {sections.map((sec) => (
+      {isQuality && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-line bg-white p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-ink">3. Contractor declaration</h4>
+              {!canSection3 ? <Badge tone="neutral">Read only</Badge> : null}
+            </div>
+            <div className="space-y-1.5">
+              {QUALITY_DECLARATIONS.map((d) => (
+                <label key={d.key} className="flex items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    disabled={!canSection3}
+                    checked={!!sec3.decls[d.key]}
+                    onChange={(e) => setSec3({ ...sec3, decls: { ...sec3.decls, [d.key]: e.target.checked } })}
+                  />
+                  <span>{d.text}</span>
+                </label>
+              ))}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Input label="Element or lot" value={sec3.elementOrLot} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, elementOrLot: e.target.value })} />
+              <Input label="Source" value={sec3.source} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, source: e.target.value })} />
+              <Input label="Raised by" value={sec3.raisedBy} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, raisedBy: e.target.value })} />
+              <Input label="Verified by" value={sec3.verifiedBy} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, verifiedBy: e.target.value })} />
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted font-semibold mb-1">Enclosures</div>
+              <div className="flex flex-wrap gap-2">
+                {QUALITY_ENCLOSURE_OPTIONS.map((opt) => (
+                  <label key={opt} className="flex items-center gap-1 text-xs">
+                    <input
+                      type="checkbox"
+                      disabled={!canSection3}
+                      checked={sec3.enclosures.includes(opt)}
+                      onChange={(e) => {
+                        const next = e.target.checked ? [...sec3.enclosures, opt] : sec3.enclosures.filter((x) => x !== opt);
+                        setSec3({ ...sec3, enclosures: next });
+                      }}
+                    />
+                    {opt}
+                  </label>
+                ))}
+              </div>
+              {sec3.enclosures.includes("Other") ? (
+                <Input className="mt-2" label="Other enclosure" value={sec3.enclosuresOther} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, enclosuresOther: e.target.value })} />
+              ) : null}
+            </div>
+            <Input label="Short notice reason" value={sec3.shortNoticeReason} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, shortNoticeReason: e.target.value })} />
+            <div>
+              <div className="text-[10px] uppercase text-steel-muted font-semibold mb-1">Records named on the QAP line</div>
+              <ul className="space-y-2">
+                {requiredEnclosures(qapLine?.records).map((item) => {
+                  const files = attachments.filter((a) => a.recordKey === item.key);
+                  const checklistOk = item.kind === "checklist" && !!activeAssignmentId;
+                  return (
+                    <li key={item.key} className="rounded-md border border-line px-2 py-2 text-xs flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{item.label}</span>
+                      {item.kind === "checklist" ? (
+                        <Badge tone={checklistOk ? "ok" : "warn"}>{checklistOk ? "Checklist linked" : "Link the work check list below"}</Badge>
+                      ) : (
+                        <Badge tone={files.length ? "ok" : "neutral"}>{files.length ? `${files.length} file(s)` : "No file"}</Badge>
+                      )}
+                      {files.map((f) => (
+                        <span key={f.url} className="text-steel-muted truncate max-w-[12rem]">{f.name}</span>
+                      ))}
+                      {item.kind === "file" && canAttach ? (
+                        <FilePickButton
+                          accept={item.key === "photographs" ? "image/*" : ".pdf,.doc,.docx,.xlsx,.xls,image/*"}
+                          multiple
+                          disabled={attachBusy}
+                          onPick={(files) => void uploadFiles(files, item.key === "photographs" ? "photo" : "doc", { recordKey: item.key, recordLabel: item.label })}
+                        >
+                          {attachBusy ? "Uploading..." : item.key === "photographs" ? "Upload photographs" : "Upload"}
+                        </FilePickButton>
+                      ) : null}
+                    </li>
+                  );
+                })}
+                {!requiredEnclosures(qapLine?.records).length ? (
+                  <li className="text-steel-muted">This line does not name extra records.</li>
+                ) : null}
+              </ul>
+              <p className="text-[11px] text-steel-muted mt-1">Photographs uploaded here are added to the day photo schedule. Work Check List is satisfied when a checklist is linked.</p>
+            </div>
+            {canSection3 ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  className="!text-xs"
+                  disabled={secBusy}
+                  onClick={async () => {
+                    setSecBusy(true);
+                    setQualityMsg("");
+                    try {
+                      await api(`/api/rfis/${rfi.id}`, { method: "PATCH", token, body: JSON.stringify({ formPatch: contractorPatch() }) });
+                      setQualityMsg("Declaration saved.");
+                      await onUpdated?.();
+                    } catch (err) {
+                      setQualityMsg(err instanceof Error ? err.message : "Could not save the declaration");
+                    } finally {
+                      setSecBusy(false);
+                    }
+                  }}
+                >
+                  {secBusy ? "Saving..." : "Save declaration"}
+                </Button>
+                {String(rfi.status || "") === "Draft" ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="!text-xs"
+                    disabled={secBusy}
+                    onClick={async () => {
+                      setSecBusy(true);
+                      setQualityMsg("");
+                      try {
+                        await api(`/api/rfis/${rfi.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({ submit: true, formPatch: contractorPatch() }),
+                        });
+                        setQualityMsg("IR submitted.");
+                        await onUpdated?.();
+                      } catch (err) {
+                        setQualityMsg(err instanceof Error ? err.message : "Could not submit");
+                      } finally {
+                        setSecBusy(false);
+                      }
+                    }}
+                  >
+                    Submit
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-line bg-white p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-ink">4. SPDC inspection</h4>
+              {!canSection4 ? <Badge tone="neutral">Read only</Badge> : null}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Input label="Inspected on" type="date" value={sec4.inspectedOn} disabled={!canSection4} onChange={(e) => setSec4({ ...sec4, inspectedOn: e.target.value })} />
+              <Input label="Reinspection by" type="date" value={sec4.reinspectionBy} disabled={!canSection4} onChange={(e) => setSec4({ ...sec4, reinspectionBy: e.target.value })} />
+              <Input label="Third party" value={sec4.thirdPartyBy} disabled={!canSection4} onChange={(e) => setSec4({ ...sec4, thirdPartyBy: e.target.value })} />
+            </div>
+            <TextArea label="Observations" rows={3} value={sec4.observations} disabled={!canSection4} onChange={(e) => setSec4({ ...sec4, observations: e.target.value })} />
+            <div className="text-xs text-steel-muted">
+              Inspected: {form.inspectedBy || "-"} {form.inspectedAt ? `· ${String(form.inspectedAt).slice(0, 16).replace("T", " ")}` : ""}
+              {" · "}Witnessed: {form.witnessedBy || "-"} {form.witnessedAt ? `· ${String(form.witnessedAt).slice(0, 16).replace("T", " ")}` : ""}
+            </div>
+            {canSection4 ? (
+              <div className="flex flex-wrap gap-2">
+                {QUALITY_RESULTS.map((r) => (
+                  <Button
+                    key={r.code}
+                    type="button"
+                    variant={savedResult === r.code ? "primary" : "secondary"}
+                    className="!text-xs"
+                    disabled={resultBusy}
+                    title={r.label}
+                    onClick={async () => {
+                      if (r.code === "D" && !sec4.observations.trim()) {
+                        setQualityMsg("Result D needs the reason in observations.");
+                        return;
+                      }
+                      setResultBusy(true);
+                      setQualityMsg("");
+                      try {
+                        await api(`/api/rfis/${rfi.id}`, {
+                          method: "PATCH",
+                          token,
+                          body: JSON.stringify({
+                            formPatch: {
+                              result: r.code,
+                              observations: sec4.observations,
+                              inspectedOn: sec4.inspectedOn,
+                              reinspectionBy: sec4.reinspectionBy,
+                              thirdPartyBy: sec4.thirdPartyBy,
+                            },
+                          }),
+                        });
+                        setQualityMsg(`Result ${r.code} saved.`);
+                        await onUpdated?.();
+                      } catch (err) {
+                        setQualityMsg(err instanceof Error ? err.message : "Could not save the result");
+                      } finally {
+                        setResultBusy(false);
+                      }
+                    }}
+                  >
+                    {r.code}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <Badge tone={savedResult === "A" ? "ok" : savedResult === "C" ? "danger" : "neutral"}>{form.result || "Pending"}</Badge>
+            )}
+            {savedResult === "C" && (canSection3 || canSection4) ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={resultBusy}
+                onClick={async () => {
+                  setResultBusy(true);
+                  setQualityMsg("");
+                  try {
+                    const created = await api<{ id: string }>(`/api/checklist/project/${projectId}/qap/reoffer`, {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({ rfiId: rfi.id }),
+                    });
+                    await onUpdated?.();
+                    if (created?.id) {
+                      navigate(`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality&rfi=${created.id}`);
+                    }
+                  } catch (err) {
+                    setQualityMsg(err instanceof Error ? err.message : "Could not re-offer");
+                  } finally {
+                    setResultBusy(false);
+                  }
+                }}
+              >
+                Re-offer
+              </Button>
+            ) : null}
+            {(savedResult === "B" || savedResult === "C") && (form.ncrId || form.ncrNo) ? (
+              <div className="text-xs">
+                Linked NCR: <span className="font-mono font-semibold">{form.ncrNo || form.ncrId}</span>
+                {form.ncrId ? (
+                  <button type="button" className="ml-2 text-brand font-semibold underline" onClick={() => openNcrFormWindow(projectId, "quality", String(form.ncrId))}>
+                    Open NCR form
+                  </button>
+                ) : (
+                  <Link className="ml-2 text-brand font-semibold underline" to={`/projects/${projectId}/inspections?sheet=car-register`}>
+                    Open NCR register
+                  </Link>
+                )}
+              </div>
+            ) : null}
+            {(savedResult === "B" || savedResult === "C") && !form.ncrNo && !form.ncrId && canSection4 ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="!text-xs"
+                disabled={ncrBusy}
+                onClick={async () => {
+                  setNcrBusy(true);
+                  setQualityMsg("");
+                  try {
+                    const created = await api<{ id: string; number?: string | null }>(`/api/checklist/project/${projectId}/ncr`, {
+                      method: "POST",
+                      token,
+                      body: JSON.stringify({
+                        kind: "NCR",
+                        description: sec4.observations || form.observations || "Non-conformance from quality inspection",
+                        location: form.location || undefined,
+                        contractor: project?.contractorName || undefined,
+                        rfiId: rfi.id,
+                        qapLineId: rfi.qapLineId || qapLine?.id || undefined,
+                      }),
+                    });
+                    setQualityMsg(created.number ? `NCR ${created.number} linked.` : "NCR raised.");
+                    if (created.id) openNcrFormWindow(projectId, "quality", created.id);
+                    await onUpdated?.();
+                  } catch (err) {
+                    setQualityMsg(err instanceof Error ? err.message : "Could not raise NCR");
+                  } finally {
+                    setNcrBusy(false);
+                  }
+                }}
+              >
+                {ncrBusy ? "Raising..." : "Raise NCR"}
+              </Button>
+            ) : null}
+            {canWitness ? (
+              <Button
+                type="button"
+                className="!text-xs"
+                disabled={secBusy}
+                onClick={async () => {
+                  setSecBusy(true);
+                  setQualityMsg("");
+                  try {
+                    await api(`/api/rfis/${rfi.id}`, {
+                      method: "PATCH",
+                      token,
+                      body: JSON.stringify({ formPatch: { witnessedBy: user?.fullName || "Client", witnessedAt: new Date().toISOString() } }),
+                    });
+                    setQualityMsg("Witness recorded.");
+                    await onUpdated?.();
+                  } catch (err) {
+                    setQualityMsg(err instanceof Error ? err.message : "Could not record the witness");
+                  } finally {
+                    setSecBusy(false);
+                  }
+                }}
+              >
+                Witness
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-line bg-white p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-ink">5. Close-out</h4>
+            <TextArea label="Action taken" rows={3} value={sec3.actionTaken} disabled={!canSection3} onChange={(e) => setSec3({ ...sec3, actionTaken: e.target.value })} />
+            <Input label="Closed by" value={closedBy} disabled={!canSection4} onChange={(e) => setClosedBy(e.target.value)} />
+            <div className="flex flex-wrap gap-2">
+              {canSection3 ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!text-xs"
+                  disabled={secBusy}
+                  onClick={async () => {
+                    setSecBusy(true);
+                    setQualityMsg("");
+                    try {
+                      await api(`/api/rfis/${rfi.id}`, { method: "PATCH", token, body: JSON.stringify({ formPatch: { actionTaken: sec3.actionTaken } }) });
+                      setQualityMsg("Action taken saved.");
+                      await onUpdated?.();
+                    } catch (err) {
+                      setQualityMsg(err instanceof Error ? err.message : "Could not save action taken");
+                    } finally {
+                      setSecBusy(false);
+                    }
+                  }}
+                >
+                  Save action taken
+                </Button>
+              ) : null}
+              {canSection4 ? (
+                <Button
+                  type="button"
+                  className="!text-xs"
+                  disabled={secBusy || !closedBy.trim()}
+                  onClick={async () => {
+                    setSecBusy(true);
+                    setQualityMsg("");
+                    try {
+                      await api(`/api/rfis/${rfi.id}`, {
+                        method: "PATCH",
+                        token,
+                        body: JSON.stringify({ formPatch: { closedBy: closedBy.trim(), closedAt: new Date().toISOString() } }),
+                      });
+                      setQualityMsg("Close-out saved.");
+                      await onUpdated?.();
+                    } catch (err) {
+                      setQualityMsg(err instanceof Error ? err.message : "Could not save close-out");
+                    } finally {
+                      setSecBusy(false);
+                    }
+                  }}
+                >
+                  Save close-out
+                </Button>
+              ) : null}
+            </div>
+            <div className="text-xs text-steel">
+              <div className="font-semibold mb-1">Site instructions for this activity</div>
+              {siteInstructions && siteInstructions.length ? (
+                <ul className="space-y-1">
+                  {siteInstructions.map((row) => {
+                    const closed = !!(row.closedAt || /clos/i.test(row.status || ""));
+                    return (
+                      <li key={row.id}>
+                        {closed ? "Closed" : "Open"}: {row.title || "Site instruction"} ({row.status || (closed ? "Closed" : "Open")})
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p>
+                  No site instruction log is linked to this activity.
+                  {activeAssignmentId ? (
+                    <>
+                      {" "}
+                      <button type="button" className="text-brand font-semibold underline" onClick={() => openChecklistFillWindow(projectId, activeAssignmentId, checklistFamily)}>
+                        Open the activity checklist fill
+                      </button>
+                    </>
+                  ) : null}
+                </p>
+              )}
+              <Link to={siHref} className="text-brand font-semibold underline">Site instruction register</Link>
+            </div>
+          </div>
+          {qualityMsg ? <p className="text-xs text-steel-muted">{qualityMsg}</p> : null}
+        </div>
+      )}
+
+      {sections.filter((sec) => !(isQuality && /^[345]\./.test(sec.title))).map((sec) => (
         <div key={sec.title} className="overflow-hidden rounded-lg border border-line">
           <h4 className="bg-sand/60 text-[11px] font-semibold uppercase tracking-wide text-brand px-3 py-2">{sec.title}</h4>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3">

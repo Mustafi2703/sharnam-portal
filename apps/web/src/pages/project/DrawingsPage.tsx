@@ -9,6 +9,9 @@ import { UploadModal } from "../../components/UploadModal";
 import { DrawingUploadFilePicker } from "../../components/DrawingUploadFilePicker";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
 import { drawingUnlockStorageKey, isDrawingUnlockMessage, openDrawingCheckWindow } from "../../lib/drawingCheckWindow";
+import { IN_PAGE_OVERLAY_DISMISSED, type InPageOverlayDismissed } from "../../lib/inPageOverlay";
+import { formatUiText } from "../../lib/formatUiText";
+import { GFC_REF, GFC_SCREEN, GFC_TABLE } from "../../lib/drawingsLabels";
 import { DrawingIssueFields } from "../../components/DrawingIssueFields";
 import { RevisionIssueLogSummary } from "../../components/RevisionIssueLogSummary";
 import {
@@ -38,7 +41,6 @@ import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { StatusNote } from "../../components/StatusNote";
 
-const GFC_DISCIPLINE_TABS = ["Architecture", "Structural", "MEPF"] as const;
 const GFC_REVISION_CHOICES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"] as const;
 
 function RevisionShareLinks({
@@ -112,6 +114,7 @@ export default function DrawingsPage() {
   const [drawingsLoaded, setDrawingsLoaded] = useState(false);
   const [filter, setFilter] = useState("All");
   const picklists = useDrawingPicklists(id, token);
+  const firstDiscipline = picklists.lists.disciplines[0] || "";
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<DrawingRevisionPreview | null>(null);
@@ -121,6 +124,9 @@ export default function DrawingsPage() {
   const [precheckMode, setPrecheckMode] = useState<"register" | "revision">("register");
   const [unlockToken, setUnlockToken] = useState<string | null>(null);
   const [revUnlockToken, setRevUnlockToken] = useState<string | null>(null);
+  const [precheckDiscipline, setPrecheckDiscipline] = useState("");
+  const [disciplinePickerOpen, setDisciplinePickerOpen] = useState(false);
+  const [pickedDiscipline, setPickedDiscipline] = useState("");
   const [plannedDate, setPlannedDate] = useState("");
   const [actualDate, setActualDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
@@ -129,7 +135,7 @@ export default function DrawingsPage() {
   const [form, setForm] = useState({
     drawingNumber: "",
     title: "",
-    discipline: "Architecture",
+    discipline: "",
     buildingArea: "",
     tlNo: "",
     revisionNumber: "R0",
@@ -162,7 +168,7 @@ export default function DrawingsPage() {
   const [addRowForm, setAddRowForm] = useState({
     drawingNumber: "",
     title: "",
-    discipline: "Architecture",
+    discipline: "",
     buildingArea: "",
     tlNo: "",
   });
@@ -182,6 +188,8 @@ export default function DrawingsPage() {
 
   const precheckModeRef = useRef(precheckMode);
   precheckModeRef.current = precheckMode;
+  const precheckDisciplineRef = useRef(precheckDiscipline);
+  precheckDisciplineRef.current = precheckDiscipline;
 
   function applyDrawingUnlock(tok: string) {
     setPrecheckOpen(false);
@@ -192,40 +200,84 @@ export default function DrawingsPage() {
       setMsg("Checklist complete. Add stakeholder signatures, then upload the PDF and DWG.");
     } else {
       setUnlockToken(tok);
+      const gateDiscipline = precheckDisciplineRef.current;
+      if (gateDiscipline) setForm((f) => ({ ...f, discipline: gateDiscipline }));
       setShowRegister(true);
-      setMsg("Checklist unlocked — finish the upload form.");
+      setMsg("Checklist unlocked. Finish the upload form.");
     }
   }
 
   function launchDrawingCheck(
     mode: "register" | "revision",
-    drawing?: { id: string; revisions?: { id: string; published?: boolean }[] },
+    drawing?: { id: string; revisions?: { id: string; published?: boolean }[]; discipline?: string | null },
     revisionNumber?: string,
+    discipline?: string,
   ) {
     if (!id) return false;
+    const gateDiscipline = (discipline || drawing?.discipline || "").trim();
+    if (!gateDiscipline) {
+      setFormError("This drawing has no discipline. Set the discipline on its row, then upload the revision.");
+      return false;
+    }
     setPrecheckMode(mode);
     precheckModeRef.current = mode;
+    setPrecheckDiscipline(gateDiscipline);
+    precheckDisciplineRef.current = gateDiscipline;
     const latest = drawing?.revisions?.find((r) => r.published) || drawing?.revisions?.[0];
     openDrawingCheckWindow(
       id,
       mode,
       mode === "revision" && drawing
-        ? { drawingId: drawing.id, revisionId: latest?.id, revisionNumber }
-        : undefined,
+        ? { drawingId: drawing.id, revisionId: latest?.id, revisionNumber, discipline: gateDiscipline }
+        : { discipline: gateDiscipline },
     );
     setPrecheckOpen(true);
     return true;
   }
 
-  function startUploadFlow() {
+  /** Upload Drawing: a specific discipline filter routes straight to its checklist; "All" asks first. */
+  function startUploadFlow(discipline?: string) {
     if (!id) return;
     setFormError("");
     setUnlockToken(null);
     setShowRegister(false);
     setUploadForId(null);
-    if (!launchDrawingCheck("register")) return;
-    setMsg("Complete Drawing Check Master in the popup — upload opens when it unlocks.");
+    const chosen = (discipline || (filter !== "All" ? filter : "")).trim();
+    if (!chosen) {
+      setPickedDiscipline((cur) => cur || picklists.lists.disciplines[0] || "");
+      setDisciplinePickerOpen(true);
+      return;
+    }
+    setDisciplinePickerOpen(false);
+    if (!launchDrawingCheck("register", undefined, undefined, chosen)) return;
+    setMsg(`Complete the ${chosen} Drawing Check in the popup. The upload opens when it unlocks.`);
   }
+
+  function cancelUpload() {
+    setPrecheckOpen(false);
+    setUnlockToken(null);
+    setShowRegister(false);
+    if (id) {
+      try {
+        localStorage.removeItem(drawingUnlockStorageKey(id));
+      } catch {
+        /* ignore */
+      }
+    }
+    setMsg("");
+  }
+
+  useEffect(() => {
+    const onDismissed = (e: Event) => {
+      const d = (e as CustomEvent<InPageOverlayDismissed>).detail;
+      if (!d || d.submitted || d.overlay.kind !== "drawing-check" || d.overlay.projectId !== id) return;
+      if (d.overlay.mode === "revision") return;
+      // Closed without submitting and nothing saved: same as Cancel upload.
+      if (!d.hasDraft) cancelUpload();
+    };
+    window.addEventListener(IN_PAGE_OVERLAY_DISMISSED, onDismissed);
+    return () => window.removeEventListener(IN_PAGE_OVERLAY_DISMISSED, onDismissed);
+  }, [id]);
 
   useEffect(() => {
     if (!id || !canUpload) return;
@@ -249,7 +301,8 @@ export default function DrawingsPage() {
     if (drawingNumber && !drawingsLoaded) return;
 
     const title = searchParams.get("title") || "";
-    const discipline = searchParams.get("discipline") || "Architecture";
+    const discipline = searchParams.get("discipline") || firstDiscipline;
+    const gateDisciplineParam = searchParams.get("discipline")?.trim() || "";
     setSearchParams({}, { replace: true });
 
     if (drawingNumber) {
@@ -272,12 +325,12 @@ export default function DrawingsPage() {
         tlNo: "",
       });
       setAddRowOpen(true);
-      setMsg(`Master register → add GFC row for ${drawingNumber} (syncs back to master register).`);
+      setMsg(`Master register: add a row on ${GFC_REF} for ${drawingNumber}. It syncs back to the master register.`);
       return;
     }
 
-    startUploadFlow();
-  }, [id, canUpload, searchParams, setSearchParams, drawings, drawingsLoaded]);
+    startUploadFlow(gateDisciplineParam || undefined);
+  }, [id, canUpload, searchParams, setSearchParams, drawings, drawingsLoaded, firstDiscipline]);
 
   useEffect(() => {
     const projectId = id;
@@ -299,17 +352,23 @@ export default function DrawingsPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!picklists.loaded || !firstDiscipline) return;
+    setForm((f) => (f.discipline && picklists.lists.disciplines.includes(f.discipline) ? f : { ...f, discipline: firstDiscipline }));
+    setAddRowForm((f) => (f.discipline && picklists.lists.disciplines.includes(f.discipline) ? f : { ...f, discipline: firstDiscipline }));
+  }, [picklists.loaded, picklists.lists.disciplines, firstDiscipline]);
+
   const disciplines = useMemo(
     () => [
       "All",
       ...Array.from(
         new Set([
-          ...GFC_DISCIPLINE_TABS,
+          ...picklists.lists.disciplines,
           ...drawings.map((d) => d.discipline).filter(Boolean),
         ])
       ),
     ],
-    [drawings]
+    [drawings, picklists.lists.disciplines]
   );
 
   async function addGfcRow(e: FormEvent) {
@@ -335,7 +394,7 @@ export default function DrawingsPage() {
       setAddRowForm({
         drawingNumber: "",
         title: "",
-        discipline: filter !== "All" ? filter : "Architecture",
+        discipline: filter !== "All" ? filter : firstDiscipline,
         buildingArea: "",
         tlNo: "",
       });
@@ -349,7 +408,7 @@ export default function DrawingsPage() {
   function importGfcLog(f: File) {
     if (!id) return;
     setDumpBusy(true);
-    setMsg("Importing Approval & GFC log…");
+    setMsg(`Importing ${GFC_SCREEN}...`);
     const fd = new FormData();
     fd.append("file", f);
     void api<{ drawings: number; revisions: number }>(`/api/drawings/project/${id}/gfc-log/import`, {
@@ -401,7 +460,7 @@ export default function DrawingsPage() {
     setMsg("");
     try {
       await downloadAuthFile(`/api/drawings/project/${id}/gfc-log/export.xlsx`, token, "Approval-GFC-Drawing-Log.xlsx");
-      setMsg("Approval & GFC log Excel downloaded.");
+      setMsg(`${GFC_SCREEN} Excel downloaded.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Export failed");
     }
@@ -417,7 +476,7 @@ export default function DrawingsPage() {
         token,
         timeoutMs: 180_000,
       });
-      setMsg("SharePoint synced — GFC log, drawing register, dashboard, drawing issues, and this week’s RFI register.");
+      setMsg(`SharePoint synced: ${GFC_SCREEN}, drawing register, dashboard, drawing issues, and this week's RFI register.`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "SharePoint publish failed");
     } finally {
@@ -506,7 +565,7 @@ export default function DrawingsPage() {
       setRegisterIssue(emptyDrawingIssueDraft());
       setUnlockToken(null);
       setShowRegister(false);
-      setMsg("Drawing saved to GFC register (PDF + DWG).");
+      setMsg(`Drawing saved to ${GFC_REF} (PDF + DWG).`);
       await load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Upload failed");
@@ -556,6 +615,7 @@ export default function DrawingsPage() {
         {
           id: uploadForId,
           revisions: match ? [{ id: match.id, published: match.published }] : uploadTarget?.revisions,
+          discipline: uploadTarget?.discipline,
         },
         revForm.revisionNumber,
       );
@@ -635,7 +695,7 @@ export default function DrawingsPage() {
         setMsg(
           hadRev
             ? `${revForm.revisionNumber} updated on the same revision row — register and current rev refreshed.`
-            : "Revision uploaded — PDF and DWG logged on the GFC register."
+            : `Revision uploaded. PDF and DWG logged on ${GFC_REF}.`
         );
       }
       resetRevUpload();
@@ -727,7 +787,7 @@ export default function DrawingsPage() {
       <PageHeader
         dense
         eyebrow="Drawings module · Approval & GFC"
-        title="Approval & GFC drawing log"
+        title={GFC_SCREEN}
         subtitle={
           clientOnly
             ? "View published sheets and revision dates (Approval & GFC Drawing Log.xlsx layout)."
@@ -753,7 +813,7 @@ export default function DrawingsPage() {
               </Button>
               {user?.role === "admin" || user?.role === "office" ? (
                 <label className="inline-flex cursor-pointer items-center rounded-lg border border-brand/40 bg-paper px-3 py-2 text-sm font-semibold text-brand hover:bg-sand/60" title="Import the Approval & GFC Drawing Log Excel — the register rows now, drawing files later">
-                  {dumpBusy ? "Importing…" : "Upload GFC log (Excel)"}
+                  {dumpBusy ? "Importing…" : `Upload ${GFC_SCREEN} (Excel)`}
                   <input
                     type="file"
                     accept=".xlsx,.xls"
@@ -891,36 +951,95 @@ export default function DrawingsPage() {
 
       {canUpload && precheckOpen && !unlockToken && precheckMode === "register" && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">
-          <div className="font-semibold text-ink">Waiting for Drawing Check Master</div>
-          <p className="text-sm text-steel-muted mt-1">
-            Finish the checklist in the popup window, or open it again if you closed it.
-          </p>
-          <Button type="button" className="mt-3" onClick={() => startUploadFlow()}>
-            Re-open checklist window
-          </Button>
+          <div className="font-semibold text-ink">{formatUiText("Drawing Check not finished")}</div>
+          <p className="text-sm text-steel-muted mt-1">Finish the Drawing Check to unlock the upload, or cancel.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => startUploadFlow(precheckDiscipline || undefined)}>
+              Re-open checklist window
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => cancelUpload()}>
+              Cancel upload
+            </Button>
+          </div>
         </Card>
+      )}
+
+      {canUpload && disciplinePickerOpen && (
+        <div
+          className="register-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gate-discipline-title"
+          onClick={() => setDisciplinePickerOpen(false)}
+        >
+          <div className="register-modal__panel register-modal__panel--md" onClick={(e) => e.stopPropagation()}>
+            <div className="register-modal__head">
+              <h3 id="gate-discipline-title" className="font-semibold text-ink text-base">
+                {formatUiText("Pick a discipline")}
+              </h3>
+              <button
+                type="button"
+                className="text-steel-muted hover:text-ink text-2xl leading-none px-2"
+                onClick={() => setDisciplinePickerOpen(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="register-modal__body space-y-3">
+              <p className="text-sm text-steel-muted">The Drawing Check for this discipline opens next.</p>
+              <Select
+                label="Discipline"
+                value={pickedDiscipline}
+                onChange={(e) => setPickedDiscipline(e.target.value)}
+                autoFocus
+              >
+                {picklists.lists.disciplines.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="register-modal__foot flex flex-wrap gap-2">
+              <Button type="button" disabled={!pickedDiscipline} onClick={() => startUploadFlow(pickedDiscipline)}>
+                Open Drawing Check
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setDisciplinePickerOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {canUpload && addRowOpen && (
         <Card className="border-brand/30">
-          <h3 className="font-semibold mb-1">Add GFC register row (no file yet)</h3>
+          <h3 className="font-semibold mb-1">{formatUiText(`Add ${GFC_SCREEN} row (no file yet)`)}</h3>
           <p className="text-xs text-steel-muted mb-3">
-            Creates a discipline line on GFC register and mirrors it on the master drawing register. Upload PDF/DWG later via Drawing Check.
+            Creates a discipline line on {GFC_REF} and mirrors it on the master drawing register. Upload PDF/DWG later via Drawing Check.
           </p>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addGfcRow}>
             <Input
               required
-              placeholder="DWG / drawing number"
+              aria-required
+              label="Drawing number *"
+              placeholder="e.g. A-101"
               value={addRowForm.drawingNumber}
               onChange={(e) => setAddRowForm({ ...addRowForm, drawingNumber: e.target.value })}
             />
             <Input
               required
-              placeholder="Drawing title"
+              aria-required
+              label="Drawing title *"
+              placeholder="e.g. Ground floor plan"
               value={addRowForm.title}
               onChange={(e) => setAddRowForm({ ...addRowForm, title: e.target.value })}
             />
             <Select
+              required
+              aria-required
+              label="Discipline *"
               value={addRowForm.discipline}
               onChange={(e) => setAddRowForm({ ...addRowForm, discipline: e.target.value })}
             >
@@ -929,12 +1048,14 @@ export default function DrawingsPage() {
               ))}
             </Select>
             <Input
-              placeholder="Building / area"
+              label="Building / area"
+              placeholder="e.g. Main plant"
               value={addRowForm.buildingArea}
               onChange={(e) => setAddRowForm({ ...addRowForm, buildingArea: e.target.value })}
             />
             <Input
-              placeholder="TL No"
+              label="TL No"
+              placeholder="e.g. TL-04"
               value={addRowForm.tlNo}
               onChange={(e) => setAddRowForm({ ...addRowForm, tlNo: e.target.value })}
             />
@@ -951,7 +1072,7 @@ export default function DrawingsPage() {
         <UploadModal
           open={showRegister && !!unlockToken}
           title="Upload drawing"
-          context={`Project · Approval & GFC log · checklist complete · ${form.discipline}`}
+          context={`Project · ${GFC_SCREEN} · checklist complete · ${form.discipline}`}
           file={registerPdf || registerDwg}
           onFile={() => undefined}
           canSubmit={!!registerPdf || !!registerDwg || extraPdfs.length > 0}
@@ -1056,7 +1177,7 @@ export default function DrawingsPage() {
       <Card padding={false} className="overflow-hidden drawings-register">
         <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between gap-2">
           <div>
-            <div className="text-sm font-semibold">GFC drawing log</div>
+            <div className="text-sm font-semibold">{GFC_TABLE}</div>
             <div className="text-[11px] text-white/70">Discipline · Area · TL · DWG · R0–Rn · upload log &amp; signatures</div>
           </div>
           <Badge tone="neutral">{drawings.filter((d) => d.isPublished).length} published</Badge>
@@ -1195,7 +1316,7 @@ export default function DrawingsPage() {
                                   id: d.id,
                                   drawingNumber: d.drawingNumber || "",
                                   title: d.title || "",
-                                  discipline: d.discipline || "Architecture",
+                                  discipline: d.discipline || firstDiscipline,
                                   buildingArea: d.buildingArea || "",
                                   tlNo: d.tlNo || "",
                                 })

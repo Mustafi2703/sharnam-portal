@@ -4,6 +4,7 @@
  */
 import XLSX from "../lib/xlsx.js";
 import { prisma } from "../prisma.js";
+import { packageNotAllowed, projectPackageNames } from "./workPackageCatalog.js";
 
 function s(v: unknown) {
   return String(v ?? "").trim();
@@ -21,12 +22,13 @@ function d(v: unknown): Date | null {
 }
 const key = (h: string) => h.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-export type RfiImportResult = { created: number; updated: number; responses: number; skipped: number; source: string };
+export type RfiImportResult = { created: number; updated: number; responses: number; skipped: number; source: string; warnings: string[] };
 
 export async function importSpdcRfiRegister(projectId: string, buffer: Buffer, userId: string, source = "upload.xlsx"): Promise<RfiImportResult> {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const name = wb.SheetNames.find((n) => /04.*rfi.*register|rfi register/i.test(n)) || wb.SheetNames.find((n) => /register/i.test(n)) || wb.SheetNames[0];
-  const out: RfiImportResult = { created: 0, updated: 0, responses: 0, skipped: 0, source };
+  const out: RfiImportResult = { created: 0, updated: 0, responses: 0, skipped: 0, source, warnings: [] };
+  const allowedPackages = await projectPackageNames(projectId);
   if (!name) return out;
   const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, defval: "", raw: true }) as unknown[][];
   const hi = rows.findIndex((r) => r.some((c) => key(s(c)) === "rfi no"));
@@ -80,6 +82,9 @@ export async function importSpdcRfiRegister(projectId: string, buffer: Buffer, u
       attachments: s(get(r, "ATTACHMENTS")),
       pmcRemarks: s(get(r, "PMC REMARKS")),
     };
+    if (form.package && packageNotAllowed(form.package, allowedPackages)) {
+      out.warnings.push(`${number}: package "${form.package}" is not on the project set-up. The value was kept.`);
+    }
     const data = {
       subject,
       question: form.queryRaised || subject,

@@ -37,8 +37,44 @@ import {
 } from "../../lib/rfiModuleScope";
 import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { getActiveWorkspace } from "../../workspaces";
+import { formatUiText } from "../../lib/formatUiText";
 
 type RfiKind = RfiKindFilter;
+
+type PersonOption = {
+  value: string;
+  label: string;
+  sublabel?: string;
+  keywords?: string;
+  group: string;
+  noEmail?: boolean;
+  disabled?: boolean;
+};
+
+const MATRIX_GROUP_ORDER = ["Matrix - Client", "Matrix - Consultant", "Matrix - Contractor", "Matrix - PMC", "Matrix - Other"];
+
+function matrixGroupLabel(orgSection?: string | null): string {
+  const s = String(orgSection || "").trim();
+  if (s === "Client" || s === "Consultant" || s === "Contractor" || s === "PMC") return `Matrix - ${s}`;
+  return "Matrix - Other";
+}
+
+function splitAssigneeKey(key: string): ["user" | "contact" | "", string] {
+  if (key.startsWith("user:")) return ["user", key.slice(5)];
+  if (key.startsWith("contact:")) return ["contact", key.slice(8)];
+  return ["", ""];
+}
+
+/** Published revisions of a drawing, oldest first (the API returns them in upload order). */
+function publishedRevisions(drawing: any): any[] {
+  return (drawing?.revisions || []).filter((r: any) => r?.published);
+}
+
+/** Matrix contact assignee shown in the existing "responsible party" spots, tagged so it is not mistaken for a portal user. */
+function withMatrixAssignee(r: any) {
+  if (!r || r.assignedTo || !r.assigneeName) return r;
+  return { ...r, matrixAssignee: true, assignedTo: { fullName: r.assigneeName } };
+}
 
 export default function RfisPage() {
   const { id } = useParams();
@@ -49,8 +85,11 @@ export default function RfisPage() {
   const picklists = useDrawingPicklists(id, token);
   const [rfis, setRfis] = useState<any[]>([]);
   const [drawings, setDrawings] = useState<any[]>([]);
+  const [drawingsLoaded, setDrawingsLoaded] = useState(false);
   const [vendors, setVendors] = useState<any[]>([]);
   const [directoryMembers, setDirectoryMembers] = useState<any[]>([]);
+  const [matrixContacts, setMatrixContacts] = useState<any[]>([]);
+  const [composeBusy, setComposeBusy] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [kindFilter, setKindFilter] = useState<RfiKind>(() => {
@@ -68,16 +107,18 @@ export default function RfisPage() {
     subject: "",
     question: "",
     rfiKind: "RequestForInformation",
-    assignedToId: "",
+    /** "user:<id>" for a portal user, "contact:<id>" for a communication-matrix contact */
+    assigneeKey: "",
     linkedDrawingId: "",
+    linkedRevisionId: "",
     linkedAssignmentId: "",
     linkedChecklistItemId: "",
     responsibleVendorId: "",
     attachmentNote: "",
     scheduleImpact: "None",
     costImpact: "None",
-    package: "P1-CIVIL",
-    discipline: "Structural",
+    package: "",
+    discipline: "",
     category: "",
     location: "",
     priority: "NORMAL",
@@ -116,7 +157,7 @@ export default function RfisPage() {
   const kindPills = rfiKindPillsForScope(moduleScope);
 
   const load = async () => {
-    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, v, overview, project] = await Promise.all([
+    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, v, overview, project, techContacts, commercialContacts] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
@@ -137,12 +178,15 @@ export default function RfisPage() {
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
       api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${id}/overview`, { token }).catch(() => null),
       api<{ name?: string; code?: string; clientName?: string | null }>(`/api/projects/${id}`, { token }).catch(() => null),
+      api<any[]>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token }).catch(() => []),
+      api<any[]>(`/api/comms/contacts/${id}?kind=COMMERCIAL`, { token }).catch(() => []),
     ]);
     const list = Array.isArray(rPayload) ? rPayload : rPayload.rfis || [];
     setRfis(list);
     setMatrixCanRespond(Array.isArray(rPayload) ? true : !!rPayload.canRespond);
     setProjectMeta(project);
     setDrawings(d);
+    setDrawingsLoaded(true);
     setSiteAssignments(aSite.assignments || []);
     setDrawingAssignments(aDraw.assignments || []);
     setQiAssignments(aQi.assignments || []);
@@ -156,6 +200,7 @@ export default function RfisPage() {
     }
     setVendors([...byId.values()]);
     setDirectoryMembers(overview?.members || []);
+    setMatrixContacts([...(techContacts || []), ...(commercialContacts || [])].filter((c: any) => c && !c.isSectionHeader));
     if (!search.get("rfi") && !active && list[0]) setActive(list[0].id);
   };
 
@@ -303,22 +348,118 @@ export default function RfisPage() {
 
   const selected = rfis.find((r) => r.id === active);
   const selectedProgress = selected ? rfiProgress(selected) : null;
-  const composeProgress = rfiComposeProgress(form);
+  /** Drawings RFI (SPDC RFI form): drawing + published revision required. */
+  const drawingsRfi = !isClient && form.rfiKind === "RequestForInformation";
+  const [assigneeType, assigneeRefId] = splitAssigneeKey(form.assigneeKey);
+  const composeProgressState = rfiComposeProgress(
+    {
+      ...form,
+      assignedToId: assigneeType === "user" ? assigneeRefId : "",
+      assigneeContactId: assigneeType === "contact" ? assigneeRefId : "",
+      drawingRev: publishedRevisions(drawings.find((d) => d.id === form.linkedDrawingId)).find(
+        (r: any) => r.id === form.linkedRevisionId
+      )?.revisionNumber,
+    },
+    { requireDrawing: drawingsRfi }
+  );
   const registerDashboard = useMemo(() => spdcRegisterDashboard(filtered), [filtered]);
+  /** Register / detail views show a matrix contact assignee where there is no portal user. */
+  const registerRows = useMemo(() => filtered.map(withMatrixAssignee), [filtered]);
+  const selectedView = selected ? withMatrixAssignee(selected) : selected;
+
+  const publishedDrawings = useMemo(() => drawings.filter((d) => publishedRevisions(d).length > 0), [drawings]);
+  const composeDrawing = drawings.find((d) => d.id === form.linkedDrawingId) || null;
+  const composeRevisions = publishedRevisions(composeDrawing);
+  const composeRevision = composeRevisions.find((r: any) => r.id === form.linkedRevisionId) || null;
+  const disciplineLocked = drawingsRfi && !!composeDrawing?.discipline;
+  const noPublishedDrawings = drawingsRfi && drawingsLoaded && publishedDrawings.length === 0;
+
+  // Discipline starts on the first value of the project's pick-list.
+  useEffect(() => {
+    const first = picklists.lists.disciplines[0];
+    if (!picklists.loaded || !first) return;
+    setForm((f) => (f.discipline ? f : { ...f, discipline: first }));
+  }, [picklists.loaded, picklists.lists.disciplines]);
+
+  useEffect(() => {
+    if (!picklists.loaded || picklists.packages.length !== 1) return;
+    setForm((f) => (f.package ? f : { ...f, package: picklists.packages[0] }));
+  }, [picklists.loaded, picklists.packages]);
+
+  // A chosen drawing pre-selects its latest published revision and sets the discipline.
+  useEffect(() => {
+    if (!form.linkedDrawingId) return;
+    const d = drawings.find((x) => x.id === form.linkedDrawingId);
+    if (!d) return;
+    const revs = publishedRevisions(d);
+    setForm((f) => {
+      if (f.linkedDrawingId !== d.id) return f;
+      const revOk = revs.some((r: any) => r.id === f.linkedRevisionId);
+      const nextRev = revOk ? f.linkedRevisionId : revs[revs.length - 1]?.id || "";
+      const nextDiscipline = d.discipline || f.discipline;
+      if (nextRev === f.linkedRevisionId && nextDiscipline === f.discipline) return f;
+      return { ...f, linkedRevisionId: nextRev, discipline: nextDiscipline };
+    });
+  }, [form.linkedDrawingId, drawings]);
 
   const personOptions = useMemo(() => {
-    const fromDir = directoryMembers
+    const users = directoryMembers
       .map((m: any) => m.user || m)
-      .filter((u: any) => u?.id)
-      .map((u: any) => ({
-        value: u.id,
+      .filter((u: any) => u?.id);
+    const seenEmails = new Set<string>();
+    const userOptions: PersonOption[] = [];
+    for (const u of users) {
+      const email = String(u.email || "").trim().toLowerCase();
+      if (email) {
+        if (seenEmails.has(email)) continue;
+        seenEmails.add(email);
+      }
+      userOptions.push({
+        value: `user:${u.id}`,
         label: u.fullName || u.email || u.id,
-        sublabel: [u.role, u.email].filter(Boolean).join(" · "),
+        sublabel: ["Portal users", u.role, u.email].filter(Boolean).join(" · "),
         keywords: `${u.email || ""} ${u.phone || ""} ${u.role || ""}`,
-      }));
-    if (fromDir.length) return fromDir;
-    return [];
-  }, [directoryMembers]);
+        group: "Portal users",
+      });
+    }
+    const emailedNames = new Set(
+      matrixContacts
+        .filter((c: any) => String(c.email || "").trim())
+        .map((c: any) => `${String(c.personName || "").trim().toLowerCase()}|${String(c.orgName || "").trim().toLowerCase()}`)
+    );
+    const seenNoEmail = new Set<string>();
+    const contactOptions: PersonOption[] = [];
+    for (const c of matrixContacts) {
+      const name = String(c.personName || "").trim();
+      const email = String(c.email || "").trim();
+      if (!name && !email) continue;
+      const group = matrixGroupLabel(c.orgSection);
+      if (email) {
+        const key = email.toLowerCase();
+        if (seenEmails.has(key)) continue;
+        seenEmails.add(key);
+      } else {
+        const key = `${name.toLowerCase()}|${String(c.orgName || "").trim().toLowerCase()}`;
+        if (emailedNames.has(key) || seenNoEmail.has(key)) continue;
+        seenNoEmail.add(key);
+      }
+      contactOptions.push({
+        value: `contact:${c.id}`,
+        label: email ? name || email : `${name} (no email)`,
+        sublabel: [group, email || "No email", c.orgName || c.company].filter(Boolean).join(" · "),
+        keywords: `${email} ${c.orgName || ""} ${c.company || ""} ${c.designation || ""} ${c.orgSection || ""}`,
+        group,
+        noEmail: !email,
+        disabled: !email,
+      });
+    }
+    const order = ["Portal users", ...MATRIX_GROUP_ORDER];
+    return [...userOptions, ...contactOptions].sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+  }, [directoryMembers, matrixContacts]);
+
+  function pickAssignee(next: string) {
+    setForm((f) => ({ ...f, assigneeKey: next }));
+  }
 
   const vendorOptions = useMemo(
     () =>
@@ -439,12 +580,23 @@ export default function RfisPage() {
                     : "Create request"}
             </h3>
             {!isClient && form.rfiKind === "RequestForInformation" && (
-              <span className="text-[11px] text-steel-muted">{composeProgress}% complete</span>
+              <span className="text-[11px] text-steel-muted">{composeProgressState.pct}% complete</span>
             )}
           </div>
           {!isClient && form.rfiKind === "RequestForInformation" && (
             <div className="mb-3">
-              <RfiProgressBar progress={rfiProgress({ ...form, responses: [] })} compact />
+              <RfiProgressBar progress={composeProgressState} compact />
+            </div>
+          )}
+          {noPublishedDrawings && (
+            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+              <p className="font-semibold">{formatUiText("Upload a GFC drawing first")}</p>
+              <p className="text-xs mt-1">
+                An RFI is raised against a published drawing revision. This project has none yet.{" "}
+                <Link to={`/projects/${id}/drawings`} className="font-semibold text-brand underline">
+                  {formatUiText("Open the Approval & GFC Log")}
+                </Link>
+              </p>
             </div>
           )}
           {(form.rfiKind === "QualityInspection" || form.rfiKind === "SafetyChecklist") && (
@@ -460,6 +612,15 @@ export default function RfisPage() {
             className="space-y-3"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (composeBusy) return;
+              if (drawingsRfi && (!composeDrawing || !composeRevision)) {
+                setSyncNote(
+                  noPublishedDrawings
+                    ? "Upload a GFC drawing first. An RFI needs a published drawing revision."
+                    : "Pick the linked drawing and its revision."
+                );
+                return;
+              }
               if (needsChecklist && !form.linkedAssignmentId) {
                 alert(
                   form.rfiKind === "RequestForInformation"
@@ -468,7 +629,7 @@ export default function RfisPage() {
                 );
                 return;
               }
-              if (needsChecklist && !form.assignedToId && !form.responsibleVendorId) {
+              if (needsChecklist && !form.assigneeKey && !form.responsibleVendorId) {
                 alert("Search the project directory and pick a named person or a vendor company to fill this.");
                 return;
               }
@@ -482,23 +643,29 @@ export default function RfisPage() {
                       category: form.category,
                       location: form.location,
                       drawingRef: linkedDrawing?.drawingNumber,
-                      drawingRev: linkedDrawing?.currentRev,
+                      drawingRev: drawingsRfi ? composeRevision?.revisionNumber : linkedDrawing?.currentRev,
                       specClause: form.specClause,
                       priority: form.priority,
                       contractorSolution: form.contractorSolution,
                       queryRaised: form.question,
                     })
                   : undefined;
+              setComposeBusy(true);
               try {
+                const formBody: Record<string, unknown> = { ...form };
+                delete formBody.assigneeKey;
                 const created = await api<{ sharePointExports?: { kind: string; path: string }[] }>(`/api/rfis/project/${id}`, {
                   method: "POST",
                   token,
                   body: JSON.stringify({
-                    ...form,
+                    ...formBody,
                     formDataJson,
+                    assignedToId: assigneeType === "user" ? assigneeRefId : null,
+                    assigneeContactId: assigneeType === "contact" ? assigneeRefId : null,
                     linkedChecklistItemId: assignment?.template?.id || form.linkedChecklistItemId || null,
                     linkedAssignmentId: form.linkedAssignmentId || null,
                     linkedDrawingId: rfiUsesDrawingLink(form.rfiKind) ? form.linkedDrawingId || null : null,
+                    linkedRevisionId: drawingsRfi ? form.linkedRevisionId || null : null,
                     rfiKind: isClient ? "ClientConcern" : form.rfiKind,
                   }),
                 });
@@ -517,19 +684,25 @@ export default function RfisPage() {
                   question: "",
                   linkedAssignmentId: "",
                   linkedChecklistItemId: "",
-                  assignedToId: "",
+                  assigneeKey: "",
                   responsibleVendorId: "",
                   attachmentNote: "",
                 });
                 await load();
               } catch (err) {
                 setSyncNote(err instanceof Error ? err.message : "Could not raise the fill request.");
+              } finally {
+                setComposeBusy(false);
               }
             }}
           >
             {!isClient && !moduleScoped && (
-              <Select value={form.rfiKind} onChange={(e) => setForm({ ...form, rfiKind: e.target.value, linkedAssignmentId: "" })}>
-                <option value="RequestForInformation">Ask — Request for Information (PMC)</option>
+              <Select
+                label="Request type"
+                value={form.rfiKind}
+                onChange={(e) => setForm({ ...form, rfiKind: e.target.value, linkedAssignmentId: "" })}
+              >
+                <option value="RequestForInformation">Ask - Request for Information (PMC)</option>
                 <option value="DrawingChecklist">Request drawing checklist fill</option>
                 <option value="QualityInspection">Request QI fill (Quality module)</option>
                 <option value="SafetyChecklist">Safety checklist fill (Safety module)</option>
@@ -537,10 +710,19 @@ export default function RfisPage() {
                 <option value="SiteExecution">Field / site checklist fill</option>
               </Select>
             )}
-            <Input required placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+            <Input
+              required
+              aria-required
+              label="Subject *"
+              placeholder={isClient ? "e.g. Water seepage near the store room" : "e.g. Beam depth clash at grid C4"}
+              value={form.subject}
+              onChange={(e) => setForm({ ...form, subject: e.target.value })}
+            />
             <TextArea
               required
+              aria-required
               rows={3}
+              label={isClient ? "Concern *" : "Query raised *"}
               placeholder={
                 isClient
                   ? "Describe your concern"
@@ -560,46 +742,67 @@ export default function RfisPage() {
             {!isClient && moduleScope === "drawings" && (form.rfiKind === "RequestForInformation" || form.rfiKind === "DrawingChecklist") && (
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 rounded-lg border border-line bg-sand/30 p-3">
                 <p className="sm:col-span-2 lg:col-span-4 text-[10px] font-mono uppercase tracking-wider text-steel-muted">
-                  SPDC/QMS/F-RFI-01 — same fields as SPDC_RFI_Form_and_Register.xlsx
+                  SPDC/QMS/F-RFI-01 - same fields as SPDC_RFI_Form_and_Register.xlsx
                 </p>
-                <Select value={form.package} onChange={(e) => setForm({ ...form, package: e.target.value })}>
-                  {withCurrent(picklists.used.packages.length ? picklists.used.packages : ["P1-CIVIL", "P2-PEB", "Package A", "Package B"], form.package).map((p) => (
+                <Select label="Package" value={form.package} onChange={(e) => setForm({ ...form, package: e.target.value })}>
+                  <option value="">{formatUiText(picklists.packages.length ? "Select package" : "No packages yet")}</option>
+                  {withCurrent(picklists.packages, form.package).map((p) => (
                     <option key={p}>{p}</option>
                   ))}
                 </Select>
-                <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
+                {!picklists.packages.length && picklists.loaded ? (
+                  <p className="sm:col-span-2 lg:col-span-4 text-xs text-steel-muted">
+                    {formatUiText("No packages on this project. Add them in Project set-up.")}{" "}
+                    {user?.role === "admin" || user?.role === "office" ? (
+                      <Link to={`/projects/${id}/setup`} className="font-semibold text-brand underline">
+                        {formatUiText("Project set-up")}
+                      </Link>
+                    ) : null}
+                  </p>
+                ) : null}
+                <Select
+                  label="Discipline"
+                  value={form.discipline}
+                  disabled={disciplineLocked}
+                  hint={disciplineLocked ? formatUiText("Set from the linked drawing") : undefined}
+                  onChange={(e) => setForm({ ...form, discipline: e.target.value })}
+                >
+                  {!form.discipline ? <option value="">{formatUiText("Select discipline")}</option> : null}
                   {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
                     <option key={d}>{d}</option>
                   ))}
                 </Select>
-                <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                  <option value="">Category</option>
+                <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  <option value="">{formatUiText("Select category")}</option>
                   {withCurrent(picklists.lists.rfiCategories, form.category).map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>
                 <Input
-                  placeholder="Location / grid"
+                  label="Location / grid"
+                  placeholder="e.g. Grid C4, Level +3.00"
                   value={form.location}
                   onChange={(e) => setForm({ ...form, location: e.target.value })}
                 />
-                <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+                <Select label="Priority" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
                   {withCurrent(picklists.lists.rfiPriorities, form.priority).map((p) => (
                     <option key={p}>{p}</option>
                   ))}
                 </Select>
                 <Input
-                  placeholder="Spec clause"
+                  label="Spec clause"
+                  placeholder="e.g. IS 456 cl. 26.4"
                   value={form.specClause}
                   onChange={(e) => setForm({ ...form, specClause: e.target.value })}
                 />
                 <TextArea
                   rows={2}
                   required={form.rfiKind === "RequestForInformation"}
+                  aria-required={form.rfiKind === "RequestForInformation"}
                   label={form.rfiKind === "RequestForInformation" ? "Contractor proposed solution *" : "Contractor proposed solution (optional)"}
                   hint={
                     form.rfiKind === "RequestForInformation"
-                      ? "Required on the SPDC RFI form — an RFI without a proposed solution is returned unanswered."
+                      ? "Required on the SPDC RFI form. An RFI without a proposed solution is returned unanswered."
                       : undefined
                   }
                   placeholder="What the contractor proposes"
@@ -614,14 +817,12 @@ export default function RfisPage() {
                 {showChecklistPicker && (
                   <Select
                     required={needsChecklist}
+                    aria-required={needsChecklist}
+                    label={form.rfiKind === "RequestForInformation" ? "Drawing Check checklist (optional)" : "Checklist to fill *"}
                     value={form.linkedAssignmentId}
                     onChange={(e) => setForm({ ...form, linkedAssignmentId: e.target.value })}
                   >
-                    <option value="">
-                      {form.rfiKind === "RequestForInformation"
-                        ? "Drawing Check checklist to attach (optional)"
-                        : "Checklist to fill *"}
-                    </option>
+                    <option value="">{formatUiText("Select checklist")}</option>
                     {checklistOptions.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.template?.name || a.id}
@@ -630,47 +831,77 @@ export default function RfisPage() {
                   </Select>
                 )}
                 {showChecklistPicker && (
-                  <div>
-                    <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-1">
-                      Vendor from project directory
-                    </p>
+                  <label className="ui-field">
+                    <span className="ui-field__label">{formatUiText("Vendor from project directory")}</span>
                     <SearchableSelect
                       options={vendorOptions}
                       value={form.responsibleVendorId}
                       onChange={(responsibleVendorId) => setForm({ ...form, responsibleVendorId })}
                       searchPlaceholder="Search vendor / contractor by name…"
                     />
-                  </div>
+                  </label>
                 )}
-                <div>
-                  <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted mb-1">
-                    Named person from project directory
-                  </p>
+                <label className="ui-field">
+                  <span className="ui-field__label">
+                    {formatUiText(needsChecklist && !form.responsibleVendorId ? "Named person *" : "Named person")}
+                  </span>
                   <SearchableSelect
                     options={personOptions}
-                    value={form.assignedToId}
-                    onChange={(assignedToId) => setForm({ ...form, assignedToId })}
-                    searchPlaceholder="Search person by name…"
+                    value={form.assigneeKey}
+                    onChange={pickAssignee}
+                    searchPlaceholder="Search by name, email or company…"
                     required={needsChecklist && !form.responsibleVendorId}
                   />
-                </div>
+                  <span className="ui-field__hint">
+                    Portal users and communication matrix contacts. People with no email stay greyed out.{" "}
+                    <Link to={`/projects/${id}/comms?tab=matrix`} className="font-semibold text-brand underline">
+                      {formatUiText("Open the communication matrix")}
+                    </Link>
+                  </span>
+                </label>
                 {!isClient && rfiUsesDrawingLink(form.rfiKind) ? (
-                  <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-                    <option value="">Linked drawing (optional)</option>
-                    {drawings.map((d) => (
+                  <Select
+                    label={drawingsRfi ? "Linked drawing and revision *" : "Linked drawing (optional)"}
+                    required={drawingsRfi}
+                    aria-required={drawingsRfi}
+                    disabled={noPublishedDrawings}
+                    value={form.linkedDrawingId}
+                    onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value, linkedRevisionId: "" })}
+                  >
+                    <option value="">{formatUiText("Select drawing")}</option>
+                    {(drawingsRfi ? publishedDrawings : drawings).map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.drawingNumber} — {d.title}
+                        {d.drawingNumber} - {d.title}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+                {drawingsRfi && composeDrawing ? (
+                  <Select
+                    label="Revision *"
+                    required
+                    aria-required
+                    value={form.linkedRevisionId}
+                    hint={formatUiText("Latest published revision is selected")}
+                    onChange={(e) => setForm({ ...form, linkedRevisionId: e.target.value })}
+                  >
+                    <option value="">{formatUiText("Select revision")}</option>
+                    {composeRevisions.map((r: any) => (
+                      <option key={r.id} value={r.id}>
+                        {r.revisionNumber}
+                        {r.revisionLabel ? ` - ${r.revisionLabel}` : ""}
                       </option>
                     ))}
                   </Select>
                 ) : null}
                 <Input
-                  placeholder="Attachment / note"
+                  label="Attachment / note"
+                  placeholder="e.g. Site photo ref or sketch no."
                   value={form.attachmentNote}
                   onChange={(e) => setForm({ ...form, attachmentNote: e.target.value })}
                 />
                 {!moduleScoped && (
-                <Select value={form.scheduleImpact} onChange={(e) => setForm({ ...form, scheduleImpact: e.target.value })}>
+                <Select label="Schedule impact" value={form.scheduleImpact} onChange={(e) => setForm({ ...form, scheduleImpact: e.target.value })}>
                   {picklists.lists.impactLevels.map((x) => (
                     <option key={x}>{x}</option>
                   ))}
@@ -686,10 +917,10 @@ export default function RfisPage() {
                   : form.rfiKind === "SafetyChecklist"
                     ? "Safety fill — send to a named person or a vendor from this project's directory. No drawing file attachment."
                     : form.rfiKind === "RequestForInformation"
-                      ? "PMC / drawing clarification — link the drawing revision. Attaching a Drawing Check checklist is optional."
+                      ? "PMC / drawing clarification - link the drawing and revision. Attaching a Drawing Check checklist is optional."
                       : "Pick a named directory person or an assigned vendor. The request is emailed and lands on their fill inbox."}
             </p>
-            <Button type="submit">
+            <Button type="submit" disabled={composeBusy || noPublishedDrawings}>
               {isClient ? "Submit concern" : moduleScope === "quality" ? "Request QI fill" : moduleScope === "drawings" && form.rfiKind === "DrawingChecklist" ? "Request checklist fill" : "Open RFI"}
             </Button>
             <StatusNote msg={syncNote} compact />
@@ -732,7 +963,7 @@ export default function RfisPage() {
         <div className="register-tab-body flex-1 min-h-0 flex flex-col min-w-0 register-tab-body--sheet">
           <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden min-w-0">
             <DrawingRfiRegisterTable
-              rows={filtered}
+              rows={registerRows}
               activeId={active}
               onSelect={(rid) => {
                 setActive(rid);
@@ -768,6 +999,10 @@ export default function RfisPage() {
                 <div className="text-[11px] text-steel-muted mt-1.5">
                   {r.rfiKind || "RequestForInformation"} · {prog.stage} · BIC: {r.ballInCourt}
                   {r.vendor ? ` · ${r.vendor.name}` : ""}
+                  {r.assignedTo?.fullName ? ` · ${r.assignedTo.fullName}` : r.assigneeName ? ` · ${r.assigneeName}` : ""}
+                  {r.matrixAssignee || (!r.assignedTo && r.assigneeName) ? (
+                    <Badge tone="neutral" className="ml-1">Matrix</Badge>
+                  ) : null}
                 </div>
               </button>
             );
@@ -792,7 +1027,7 @@ export default function RfisPage() {
                 />
               </div>
               <SpdcRfiFormView
-                rfi={selected}
+                rfi={selectedView}
                 project={projectMeta}
                 token={token}
                 canRespond={canRespond}
@@ -830,6 +1065,10 @@ export default function RfisPage() {
                   <Badge>{selected.status}</Badge>
                   {selected.drawing && <Badge tone="neutral">{selected.drawing.drawingNumber}</Badge>}
                   {selected.vendor && <Badge tone="ok">Vendor: {selected.vendor.name}</Badge>}
+                  {selected.assignedTo?.fullName && <Badge tone="neutral">Assignee: {selected.assignedTo.fullName}</Badge>}
+                  {(selected.matrixAssignee || selected.assigneeContactId) && (
+                    <Badge tone="neutral">Matrix</Badge>
+                  )}
                 </div>
               </div>
               {selectedProgress && (
@@ -881,7 +1120,15 @@ export default function RfisPage() {
                     await load();
                   }}
                 >
-                  <TextArea rows={3} placeholder="Official response (matrix party)" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
+                  <TextArea
+                    rows={3}
+                    label="Official response *"
+                    aria-required
+                    placeholder="Response from the matrix party"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    required
+                  />
                   <div className="flex gap-2">
                     <Button type="submit">Submit response</Button>
                     {canClose && (
@@ -949,7 +1196,7 @@ export default function RfisPage() {
                 </div>
                 {useSpdcForm ? (
                   <SpdcRfiFormView
-                    rfi={selected}
+                    rfi={selectedView}
                     project={projectMeta}
                     token={token}
                     canRespond={canRespond}

@@ -28,6 +28,7 @@ type Item = {
 export type BrandedChecklistSubmission = {
   id?: string;
   status?: string | null;
+  purpose?: string | null;
   remarks?: string | null;
   createdAt?: Date | string | null;
   responsesJson?: string;
@@ -1029,7 +1030,7 @@ async function fillDrawingCheckSheet(
   r += 1;
   band(r, "8. SIGNATURES");
   const slots = collectChecklistSignSlots(submission, dirSigns);
-  const spans: [number, number][] = [[1, 2], [3, 3], [4, 5], [6, 6]];
+  const spans: [number, number][] = slots.length === 1 ? [[1, 3]] : [[1, 2], [3, 3], [4, 5], [6, 6]];
   const roleRow = r + 1;
   const imgRow = r + 2;
   const nameRow = r + 3;

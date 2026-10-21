@@ -35,7 +35,7 @@ export default function StakeholderDeskPage() {
   const tools = [
     { to: "drawings/coordination", label: "Design coordination", blurb: "Review sheets · red-lines · PMC comments", icon: "drawings" as const },
     { to: "comms", label: "Meetings & MoM", blurb: "Matrix · agenda · minutes · follow-up", icon: "comms" as const },
-    { to: "drawings", label: "GFC register", blurb: "Published drawings and revision history", icon: "drawings" as const },
+    { to: "drawings", label: "Approval & GFC Log", blurb: "Published drawings and revision history", icon: "drawings" as const },
     { to: "rfis", label: "Ask / RFI", blurb: "Raise and respond to project queries", icon: "comms" as const },
     { to: "reports", label: "Progress reports", blurb: "DPR / WPR packs shared with stakeholders", icon: "reports" as const },
   ];

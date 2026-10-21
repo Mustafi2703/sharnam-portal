@@ -17,7 +17,7 @@ import {
   type ChecklistFillMeta,
 } from "../components/ChecklistFillForm";
 import { downloadBrandedChecklistPrint, downloadBrandedChecklistXlsx } from "../lib/brandedChecklistPrint";
-import { closeEmbedOrWindow, notifyChecklistFilled } from "../lib/inPageOverlay";
+import { closeEmbedOrWindow, isEmbedView, notifyChecklistFilled } from "../lib/inPageOverlay";
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 import { StatusNote } from "../components/StatusNote";
 
@@ -25,6 +25,7 @@ import { StatusNote } from "../components/StatusNote";
 export default function ChecklistFillPage() {
   const { id: projectId, assignmentId } = useParams();
   const [search] = useSearchParams();
+  const embed = search.get("embed") === "1" || isEmbedView();
   const family = search.get("family") || "SiteExecution";
   const resumeSubmissionId = search.get("submission") || "";
   const queryDrawingId = search.get("drawing") || "";
@@ -315,7 +316,7 @@ export default function ChecklistFillPage() {
   if (done) {
     return (
       <div className="standalone-form-page standalone-form-page--paper">
-        <StandaloneFormHeader variant="navy" eyebrow={familyLabel} title="Checklist submitted" />
+        <StandaloneFormHeader hideSession={embed} variant="navy" eyebrow={familyLabel} title="Checklist submitted" />
         <main className="standalone-form-page__main standalone-form-page__main--narrow">
           <Card className="!p-8 text-center space-y-4">
             <Badge tone="ok">Submitted</Badge>
@@ -336,7 +337,7 @@ export default function ChecklistFillPage() {
   if (!assignment) {
     return (
       <div className="standalone-form-page standalone-form-page--paper">
-        <StandaloneFormHeader variant="navy" eyebrow={familyLabel} title="Checklist fill" />
+        <StandaloneFormHeader hideSession={embed} variant="navy" eyebrow={familyLabel} title="Checklist fill" />
         <main className="standalone-form-page__main">
           <p className="text-sm text-steel-muted">Loading…</p>
         </main>
@@ -347,7 +348,7 @@ export default function ChecklistFillPage() {
   if (user?.role === "client" && !clientSignOnly) {
     return (
       <div className="standalone-form-page standalone-form-page--paper">
-        <StandaloneFormHeader variant="navy" eyebrow={familyLabel} title="Client sign-off" />
+        <StandaloneFormHeader hideSession={embed} variant="navy" eyebrow={familyLabel} title="Client sign-off" />
         <main className="standalone-form-page__main standalone-form-page__main--narrow">
           <Card className="!p-6 text-sm text-steel-muted space-y-2">
             <p>Nothing to sign yet. SPDC or the site team will submit this checklist first — then you can add your signature from the link they share.</p>
@@ -360,6 +361,7 @@ export default function ChecklistFillPage() {
 
   return (
     <ChecklistFillForm
+      hideSession={embed}
       family={family}
       eyebrow={assignment.project?.code || "Project"}
       title={assignment.template.name}

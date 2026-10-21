@@ -44,6 +44,7 @@ model User {
   expenseVouchersApproved ExpenseVoucher[]            @relation("VoucherApprover")
   driveAccessRequested    DriveAccessRequest[]        @relation("DriveAccessRequester")
   driveAccessApproved     DriveAccessRequest[]        @relation("DriveAccessApprover")
+  qapRoleAssignments      QapRoleAssignment[]
 }
 
 model RoleDefinition {
@@ -149,6 +150,9 @@ model Project {
   purchaseRequisitions    ProgressPurchaseRequisition[]
   invoiceTrackers         ProgressInvoiceTracker[]
   qapActivities           QapActivity[]
+  qapLines                QapLine[]
+  qapRoleAssignments      QapRoleAssignment[]
+  qualityQpiWeeks         QualityQpiWeek[]
   cubeTests               CubeTest[]
   qualityNcrs             QualityNcr[]
   qualitySiteRecords      QualitySiteRecord[]
@@ -361,6 +365,10 @@ model ChecklistTemplate {
   /// Minimum photos required on submit (Quality/Safety typically 3)
   requirePhotosMin Int      @default(0)
   isActive         Boolean  @default(true)
+  /// Drawing Check routing: matches a value in the project's discipline pick-list
+  discipline          String?
+  /// When true every line must carry an instruction before it is saved or assigned
+  requireInstructions Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @default(now()) @updatedAt
 
@@ -542,7 +550,8 @@ model CommunicationContact {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  qapRoleAssignments QapRoleAssignment[]
 
   @@index([projectId, matrixKind])
 }
@@ -1578,8 +1587,9 @@ model Vendor {
   purchaseOrders PurchaseOrder[]
   raBills        RaBill[]
   crmVendorBoqs  CrmVendorBoq[]
-  portalUsers    User[]
-  contacts       VendorContact[]
+  portalUsers        User[]
+  contacts           VendorContact[]
+  qapRoleAssignments QapRoleAssignment[]
 }
 
 /**
@@ -1684,6 +1694,10 @@ model Rfi {
   status                String    @default("Open")
   ballInCourt           String    @default("Assignee")
   assignedToId          String?
+  /// CommunicationContact.id when the assignee is a matrix contact without a portal user
+  assigneeContactId     String?
+  assigneeEmail         String?
+  assigneeName          String?
   createdById           String
   dueDate               DateTime?
   closedAt              DateTime?
@@ -1693,6 +1707,10 @@ model Rfi {
   linkedChecklistItemId String?
   /// Checklist assignment to be filled by matrix parties / vendor
   linkedAssignmentId    String?
+  /// Stable QAP plan line (Quality IR). Weekly QapActivity rows point at the same line.
+  qapLineId             String?
+  /// Set when this IR is a re-offer of a rejected (result C) request.
+  previousIrId          String?
   specSectionLink       String?
   responsibleVendorId   String?
   questionReceivedFrom  String?
@@ -1704,14 +1722,20 @@ model Rfi {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignedTo User?         @relation("RfiAssignee", fields: [assignedToId], references: [id])
-  createdBy  User          @relation("RfiCreator", fields: [createdById], references: [id])
-  drawing    Drawing?      @relation(fields: [linkedDrawingId], references: [id])
-  vendor     Vendor?       @relation(fields: [responsibleVendorId], references: [id])
-  responses  RfiResponse[]
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedTo  User?          @relation("RfiAssignee", fields: [assignedToId], references: [id])
+  createdBy   User           @relation("RfiCreator", fields: [createdById], references: [id])
+  drawing     Drawing?       @relation(fields: [linkedDrawingId], references: [id])
+  vendor      Vendor?        @relation(fields: [responsibleVendorId], references: [id])
+  qapLine     QapLine?       @relation(fields: [qapLineId], references: [id], onDelete: SetNull)
+  previousIr  Rfi?           @relation("IrReoffer", fields: [previousIrId], references: [id], onDelete: SetNull)
+  reoffers    Rfi[]          @relation("IrReoffer")
+  responses   RfiResponse[]
+  qualityNcrs QualityNcr[]
+  photos      ProjectPhoto[]
 
   @@unique([projectId, number])
+  @@index([projectId, qapLineId])
 }
 
 model RfiResponse {
@@ -1782,9 +1806,16 @@ model ProjectPhoto {
   /// Calendar day the photo belongs to (site day), independent of upload time.
   shotDate      DateTime?
   sharePointUrl String?   @db.Text
+  /// Set when the photo was taken for a quality IR, so the day photo schedule shows it.
+  rfiId         String?
+  /// QAP record label, e.g. MTC or Photographs.
+  recordLabel   String?
   createdAt     DateTime  @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rfi     Rfi?    @relation(fields: [rfiId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, rfiId])
 }
 
 model Submittal {
@@ -1915,9 +1946,97 @@ model QapActivity {
   status              String    @default("Open")
   dueDate             DateTime?
   completedAt         DateTime?
+  /// Stable plan line. The same line is shared by every weekly copy.
+  qapLineId           String?
+  /// Group row (no frequency and no roles). Cannot raise an IR.
+  isHeader            Boolean   @default(false)
+  /// Work package this weekly row belongs to. Empty means the project master.
+  workPackage         String?
   createdAt           DateTime  @default(now())
 
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  qapLine QapLine? @relation(fields: [qapLineId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, qapLineId])
+}
+
+/**
+ * Stable QAP plan line. Weekly QapActivity rows are the log; this row is the plan.
+ */
+model QapLine {
+  id                  String   @id @default(cuid())
+  projectId           String
+  workPackage         String?
+  srNo                String?
+  section             String?
+  activity            String?  @db.Text
+  description         String?  @db.Text
+  frequency           String?
+  codeOfConformance   String?
+  testAgency          String?
+  contractorPerformer String?
+  contractorChecker   String?
+  pmcRole             String?
+  clientRole          String?
+  records             String?  @db.Text
+  discipline          String?
+  isHeader            Boolean  @default(false)
+  sortOrder           Int
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  activities QapActivity[]
+  rfis       Rfi[]
+  ncrs       QualityNcr[]
+
+  @@unique([projectId, sortOrder])
+  @@index([projectId])
+}
+
+/**
+ * Maps a QAP role label (Site Engr, QC Engr, Witness, Review) to a person or contractor.
+ * People can be picked from the communication matrix upload.
+ */
+model QapRoleAssignment {
+  id        String   @id @default(cuid())
+  projectId String
+  roleLabel String
+  /// Contractor | PMC | Client
+  party     String
+  userId    String?
+  vendorId  String?
+  contactId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  vendor  Vendor?               @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  contact CommunicationContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, roleLabel, party])
+  @@index([projectId])
+}
+
+/**
+ * Weekly quality performance index snapshot (SOR average).
+ */
+model QualityQpiWeek {
+  id               String   @id @default(cuid())
+  projectId        String
+  weekLabel        String
+  weekEnding       String
+  observationRate  Float?
+  instructionRate  Float?
+  ncrRate          Float?
+  qpi              Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, weekEnding])
 }
 
 /**
@@ -1993,9 +2112,16 @@ model QualityNcr {
   source         String?
   /// NCR 01 extended fields (to/from, action required, follow-up sign-offs)
   formDataJson   String?   @db.LongText
+  /// Quality IR that raised this NCR, when it came from an F-01 result.
+  rfiId          String?
+  qapLineId      String?
   createdAt      DateTime  @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rfi     Rfi?     @relation(fields: [rfiId], references: [id], onDelete: SetNull)
+  qapLine QapLine? @relation(fields: [qapLineId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, rfiId])
 }
 
 model ProgressMilestone {

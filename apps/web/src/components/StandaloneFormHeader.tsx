@@ -8,6 +8,8 @@ type Props = {
   subtitle?: string;
   metaRight?: ReactNode;
   actions?: ReactNode;
+  /** Embedded in an in-page overlay: no account / Log out controls inside the popup. */
+  hideSession?: boolean;
 };
 
 /** Branded chrome for standalone fill windows — logo + SPDC wordmark. */
@@ -18,6 +20,7 @@ export function StandaloneFormHeader({
   subtitle,
   metaRight,
   actions,
+  hideSession = false,
 }: Props) {
   const navy = variant === "navy";
 
@@ -43,7 +46,7 @@ export function StandaloneFormHeader({
         <div className="standalone-form-header__actions shrink-0">
           {metaRight}
           {actions}
-          <SessionControls />
+          {hideSession ? null : <SessionControls />}
         </div>
       </div>
     </header>

@@ -157,7 +157,28 @@ commsRouter.get("/contacts/:projectId/export.html", requireRoles("admin", "offic
   }
 });
 
+const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Blank is allowed (no email yet); anything else must look like an address. */
+function invalidContactEmail(raw: unknown): string | null {
+  if (raw == null) return null;
+  const email = String(raw).trim();
+  if (!email) return null;
+  return CONTACT_EMAIL_RE.test(email) ? null : email;
+}
+
+/** Matrix rows on this project whose stored email is not a valid address. */
+async function invalidMatrixEmails(projectId: string) {
+  const rows = await prisma.communicationContact.findMany({
+    where: { projectId, isSectionHeader: false, email: { not: null } },
+    select: { id: true, matrixKind: true, personName: true, orgName: true, email: true },
+  });
+  return rows.filter((r) => invalidContactEmail(r.email));
+}
+
 commsRouter.post("/contacts/:projectId", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const badEmail = invalidContactEmail(req.body.email);
+  if (badEmail) return res.status(400).json({ error: `${badEmail} is not a valid email address` });
   const count = await prisma.communicationContact.count({
     where: { projectId: req.params.projectId, matrixKind: req.body.matrixKind || "TECHNICAL" },
   });
@@ -186,6 +207,8 @@ commsRouter.post("/contacts/:projectId", requireRoles("admin", "office"), async 
 });
 
 commsRouter.patch("/contacts/:id", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const badEmail = invalidContactEmail(req.body.email);
+  if (badEmail) return res.status(400).json({ error: `${badEmail} is not a valid email address` });
   const row = await prisma.communicationContact.update({
     where: { id: req.params.id },
     data: {
@@ -320,6 +343,8 @@ commsRouter.post("/contacts/:projectId/from-setup", requireRoles("admin", "offic
   const projectId = req.params.projectId;
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   if (!project) return res.status(404).json({ error: "Not found" });
+  const badEmail = invalidContactEmail(req.body?.email);
+  if (badEmail) return res.status(400).json({ error: `${badEmail} is not a valid email address` });
   try {
     const { addSetupMatrixContact } = await import("../services/syncCommsFromDirectory.js");
     const out = await addSetupMatrixContact(projectId, req.body || {});
@@ -350,7 +375,8 @@ commsRouter.post("/contacts/:projectId/sync-from-directory", requireRoles("admin
     entityId: projectId,
     meta: { roleFlows, ...contacts },
   });
-  res.json({ ok: true, roleFlows, ...contacts });
+  const invalidEmails = await invalidMatrixEmails(projectId);
+  res.json({ ok: true, roleFlows, ...contacts, invalidEmails });
 });
 
 commsRouter.get("/contacts/:projectId/portal-status", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { guardProjectParam, guardRecord } from "../modules/_shared/projectAccess.js";
 import multer from "multer";
 import { prisma } from "../prisma.js";
@@ -8,6 +8,7 @@ import { MODULE_TO_ISO_FOLDER, PROJECT_LIBRARY_FOLDERS } from "../services/graph
 import { consumeDrawingUnlockToken } from "../services/drawingUnlock.js";
 import { audit } from "../services/audit.js";
 import { purgeProjectChildren, purgeProjectModuleData, purgeQualitySafetyModuleData } from "../services/purgeProject.js";
+import { delayDays, istDayKey, istTodayKey } from "@sharnam/shared";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const drawingUpload = upload.fields([
@@ -214,15 +215,11 @@ async function syncMasterRegisterFromRevision(opts: {
       where: { projectId: opts.projectId },
       _max: { srNo: true },
     });
-    const createDelay =
-      opts.plannedDate && opts.actualDate
-        ? Math.round((opts.actualDate.getTime() - opts.plannedDate.getTime()) / 86400000)
-        : null;
     line = await prisma.drawingRegisterLine.create({
       data: {
         projectId: opts.projectId,
         srNo: (maxSr._max.srNo ?? 0) + 1,
-        submissionDelayDays: createDelay,
+        submissionDelayDays: delayDays(opts.plannedDate, opts.actualDate),
         revisionDescription: opts.revisionLabel || null,
         drawingNumber: opts.drawingNumber,
         drawingTitle: opts.title || opts.drawingNumber,
@@ -246,10 +243,7 @@ async function syncMasterRegisterFromRevision(opts: {
   }
   const planned = line.plannedSubmissionDate ?? opts.plannedDate ?? null;
   const actual = opts.actualDate ?? line.actualSubmissionDate;
-  let submissionDelayDays = line.submissionDelayDays;
-  if (planned && actual) {
-    submissionDelayDays = Math.round((actual.getTime() - planned.getTime()) / 86400000);
-  }
+  const submissionDelayDays = delayDays(planned, actual);
   await prisma.drawingRegisterLine.update({
     where: { id: line.id },
     data: {
@@ -296,6 +290,74 @@ const REGISTER_LINE_TEXT_FIELDS = [
   "remarks",
 ] as const;
 const REGISTER_LINE_DATE_FIELDS = ["revisionDate", "plannedSubmissionDate", "actualSubmissionDate", "issueDate"] as const;
+/** Dates that record something already done, so they cannot be after today (IST). */
+const REGISTER_LINE_PAST_DATE_FIELDS = new Set<string>(["revisionDate", "issueDate"]);
+const REGISTER_LINE_INT_FIELDS = {
+  srNo: { min: 1, max: 99999, label: "Sr #" },
+  copiesCount: { min: 0, max: 99, label: "No. of copies" },
+} as const;
+
+type RegisterLineParsed = {
+  ints: Partial<Record<keyof typeof REGISTER_LINE_INT_FIELDS, number | null>>;
+  dates: Partial<Record<(typeof REGISTER_LINE_DATE_FIELDS)[number], Date | null>>;
+  errors: Record<string, string>;
+};
+
+/**
+ * Validates the numeric and date columns of a register line body. Missing keys stay out of the result
+ * (no change); "" or null clears the value. submissionDelayDays is never read from the client.
+ */
+function parseRegisterLineBody(body: Record<string, unknown>): RegisterLineParsed {
+  const out: RegisterLineParsed = { ints: {}, dates: {}, errors: {} };
+  for (const [key, rule] of Object.entries(REGISTER_LINE_INT_FIELDS) as [keyof typeof REGISTER_LINE_INT_FIELDS, (typeof REGISTER_LINE_INT_FIELDS)[keyof typeof REGISTER_LINE_INT_FIELDS]][]) {
+    const raw = body[key];
+    if (raw === undefined) continue;
+    if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+      out.ints[key] = null;
+      continue;
+    }
+    const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim() : "";
+    if (!/^\d+$/.test(text)) {
+      out.errors[key] = `${rule.label} must be a whole number`;
+      continue;
+    }
+    const n = Number(text);
+    if (n < rule.min || n > rule.max) {
+      out.errors[key] = `${rule.label} must be between ${rule.min} and ${rule.max}`;
+      continue;
+    }
+    out.ints[key] = n;
+  }
+  const today = istTodayKey();
+  for (const key of REGISTER_LINE_DATE_FIELDS) {
+    const raw = body[key];
+    if (raw === undefined) continue;
+    if (raw === null || raw === "") {
+      out.dates[key] = null;
+      continue;
+    }
+    const dt = new Date(String(raw));
+    if (Number.isNaN(dt.getTime())) {
+      out.errors[key] = `Invalid date for ${key}`;
+      continue;
+    }
+    if (REGISTER_LINE_PAST_DATE_FIELDS.has(key) && (istDayKey(dt) || "") > today) {
+      out.errors[key] = `${key === "revisionDate" ? "Revision date" : "Issue date"} cannot be after today`;
+      continue;
+    }
+    out.dates[key] = dt;
+  }
+  return out;
+}
+
+function registerLineErrorResponse(errors: Record<string, string>) {
+  return { error: Object.values(errors).join("; "), fields: errors };
+}
+
+async function nextRegisterSrNo(projectId: string) {
+  const maxSr = await prisma.drawingRegisterLine.aggregate({ where: { projectId }, _max: { srNo: true } });
+  return (maxSr._max.srNo ?? 0) + 1;
+}
 
 function primaryRevisionFile(rev: {
   pdfFileUrl?: string | null;
@@ -1995,38 +2057,121 @@ drawingsRouter.get("/project/:projectId", async (req, res) => {
 
 /** Pick-lists for this project's drawing register, GFC upload, RFIs and design coordination. */
 drawingsRouter.get("/project/:projectId/picklists", async (req, res) => {
-  const { loadPicklists, defaultPicklists } = await import("../services/drawingPicklists.js");
+  const { loadPicklists, defaultPicklists, loadDrawingsWeekStart } = await import("../services/drawingPicklists.js");
+  const { projectPackageNames } = await import("../services/workPackageCatalog.js");
   const { lists, custom } = await loadPicklists(req.params.projectId);
+  const weekStart = await loadDrawingsWeekStart(req.params.projectId);
+  const packages = await projectPackageNames(req.params.projectId);
   // Values already on this project's drawings stay selectable even if they are not in the list.
-  const used = await prisma.drawingRegisterLine.findMany({
-    where: { projectId: req.params.projectId },
-    select: { discipline: true, drawingType: true, delayResponsibility: true, projectPackage: true },
-  });
+  const [used, drawingDisciplines] = await Promise.all([
+    prisma.drawingRegisterLine.findMany({
+      where: { projectId: req.params.projectId },
+      select: { discipline: true, drawingType: true, delayResponsibility: true, projectPackage: true },
+    }),
+    prisma.drawing.findMany({
+      where: { projectId: req.params.projectId },
+      select: { discipline: true },
+      distinct: ["discipline"],
+    }),
+  ]);
   const usedBy = (pick: (l: (typeof used)[number]) => string | null) => [...new Set(used.map(pick).map((v) => (v || "").trim()).filter(Boolean))];
+  const disciplines = [...new Set([...usedBy((l) => l.discipline), ...drawingDisciplines.map((d) => (d.discipline || "").trim()).filter(Boolean)])];
   res.json({
-    lists,
+    lists: { ...lists, packages },
     defaults: defaultPicklists(),
     custom,
     used: {
-      disciplines: usedBy((l) => l.discipline),
+      disciplines,
       drawingTypes: usedBy((l) => l.drawingType),
       delayResponsibility: usedBy((l) => l.delayResponsibility),
       packages: usedBy((l) => l.projectPackage),
     },
+    ...weekStart,
   });
 });
 
 drawingsRouter.put("/project/:projectId/picklists", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  const { savePicklists } = await import("../services/drawingPicklists.js");
+  const { savePicklists, loadPicklists, loadDrawingsWeekStart } = await import("../services/drawingPicklists.js");
+  const incomingDisc = req.body?.lists?.disciplines;
+  if (Array.isArray(incomingDisc)) {
+    const current = await loadPicklists(req.params.projectId);
+    const next = incomingDisc.map((v: unknown) => String(v ?? "").trim()).filter(Boolean);
+    const removed = current.lists.disciplines.filter((d) => !next.some((n: string) => n.toLowerCase() === d.toLowerCase()));
+    if (removed.length) {
+      const [onDrawings, onLines] = await Promise.all([
+        prisma.drawing.findMany({
+          where: { projectId: req.params.projectId, discipline: { in: removed } },
+          select: { discipline: true },
+          distinct: ["discipline"],
+        }),
+        prisma.drawingRegisterLine.findMany({
+          where: { projectId: req.params.projectId, discipline: { in: removed } },
+          select: { discipline: true },
+          distinct: ["discipline"],
+        }),
+      ]);
+      const used = [...new Set([...onDrawings, ...onLines].map((r) => (r.discipline || "").trim()).filter(Boolean))];
+      if (used.length) {
+        return res.status(400).json({
+          error: `Cannot remove ${used.join(", ")}. Drawings already use it. It can be renamed only via a migration.`,
+        });
+      }
+    }
+  }
+  if (req.body?.drawingsStartDate !== undefined) {
+    const saved = await saveDrawingsStartDateFromBody(req, res);
+    if (!saved) return;
+  }
   const out = await savePicklists(req.params.projectId, req.body?.lists || {}, req.user!.id);
   await audit("drawing.picklists.save", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { custom: out.custom } });
-  res.json({ ...out });
+  res.json({ ...out, ...(await loadDrawingsWeekStart(req.params.projectId)) });
 });
 
 drawingsRouter.delete("/project/:projectId/picklists", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
-  await prisma.appSetting.deleteMany({ where: { key: `drawingPicklists:${req.params.projectId}` } });
+  const { resetPicklists } = await import("../services/drawingPicklists.js");
+  await resetPicklists(req.params.projectId, req.user!.id);
   await audit("drawing.picklists.reset", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId });
   res.json({ ok: true });
+});
+
+/** Validates and saves body.drawingsStartDate (yyyy-mm-dd or empty to clear). Sends the 400 itself and returns false on bad input. */
+async function saveDrawingsStartDateFromBody(req: AuthedRequest, res: Response): Promise<boolean> {
+  const raw = req.body?.drawingsStartDate;
+  const value = raw == null || String(raw).trim() === "" ? null : String(raw).trim();
+  const realDay = (v: string) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  };
+  if (value != null && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !realDay(value))) {
+    res.status(400).json({ error: "Drawings start date must be a valid date (yyyy-mm-dd)", fields: { drawingsStartDate: "Invalid date" } });
+    return false;
+  }
+  const { loadDrawingsStartDate, saveDrawingsStartDate } = await import("../services/drawingPicklists.js");
+  const before = await loadDrawingsStartDate(req.params.projectId);
+  if (before === value) return true;
+  await saveDrawingsStartDate(req.params.projectId, value, req.user!.id);
+  await audit("drawing.settings.start_date", {
+    userId: req.user!.id,
+    entity: "Project",
+    entityId: req.params.projectId,
+    meta: { from: before, to: value },
+  });
+  return true;
+}
+
+/** Drawings module settings: the drawings start date (Week 1 anchor) and the project start it falls back to. */
+drawingsRouter.get("/project/:projectId/settings", async (req, res) => {
+  const { loadDrawingsWeekStart } = await import("../services/drawingPicklists.js");
+  res.json(await loadDrawingsWeekStart(req.params.projectId));
+});
+
+drawingsRouter.put("/project/:projectId/settings", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  if (req.body?.drawingsStartDate === undefined) return res.status(400).json({ error: "drawingsStartDate is required (empty string clears it)" });
+  const saved = await saveDrawingsStartDateFromBody(req, res);
+  if (!saved) return;
+  const { loadDrawingsWeekStart } = await import("../services/drawingPicklists.js");
+  publishDrawingRegistersInBackground(req.params.projectId);
+  res.json(await loadDrawingsWeekStart(req.params.projectId));
 });
 
 drawingsRouter.get("/project/:projectId/gate", async (req, res) => {
@@ -2589,7 +2734,7 @@ drawingsRouter.post(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[drawings] clear-gfc-register failed project=${projectId}`, message);
-      res.status(500).json({ error: message || "Could not clear the GFC register" });
+      res.status(500).json({ error: message || "Could not clear the Approval & GFC Log" });
     }
   },
 );
@@ -2661,16 +2806,34 @@ drawingsRouter.post(
     if (!body.drawingNumber || !body.drawingTitle) {
       return res.status(400).json({ error: "drawingNumber and drawingTitle required" });
     }
+    const parsed = parseRegisterLineBody(body);
+    if (Object.keys(parsed.errors).length) return res.status(400).json(registerLineErrorResponse(parsed.errors));
+    const projectId = req.params.projectId;
+    const existing = await prisma.drawingRegisterLine.findUnique({
+      where: { projectId_drawingNumber: { projectId, drawingNumber: body.drawingNumber } },
+    });
+    // On re-save of an existing number an empty date means "no change", as before.
+    const keep = <T,>(next: T | null | undefined) => (next == null ? undefined : next);
+    const pkg = String(body.projectPackage || "").trim();
+    if (pkg) {
+      const { projectPackageNames, packageNotAllowed } = await import("../services/workPackageCatalog.js");
+      const allowed = await projectPackageNames(projectId);
+      const packageError = packageNotAllowed(pkg, allowed, existing?.projectPackage ? [existing.projectPackage] : []);
+      if (packageError) return res.status(400).json({ error: packageError, fields: { projectPackage: packageError } });
+    }
+    const planned = existing ? (parsed.dates.plannedSubmissionDate ?? existing.plannedSubmissionDate) : parsed.dates.plannedSubmissionDate ?? null;
+    const actual = existing ? (parsed.dates.actualSubmissionDate ?? existing.actualSubmissionDate) : parsed.dates.actualSubmissionDate ?? null;
+    const submissionDelayDays = delayDays(planned, actual);
     const row = await prisma.drawingRegisterLine.upsert({
       where: {
         projectId_drawingNumber: {
-          projectId: req.params.projectId,
+          projectId,
           drawingNumber: body.drawingNumber,
         },
       },
       create: {
-        projectId: req.params.projectId,
-        srNo: body.srNo ? Number(body.srNo) : null,
+        projectId,
+        srNo: parsed.ints.srNo ?? (await nextRegisterSrNo(projectId)),
         projectPackage: body.projectPackage || null,
         building: body.building || null,
         discipline: body.discipline || null,
@@ -2679,21 +2842,22 @@ drawingsRouter.post(
         drawingType: body.drawingType || null,
         consultantName: body.consultantName || null,
         revisionNumber: body.revisionNumber || null,
-        revisionDate: body.revisionDate ? new Date(body.revisionDate) : null,
+        revisionDate: parsed.dates.revisionDate ?? null,
         revisionDescription: body.revisionDescription || null,
         latestRevision: body.latestRevision || null,
-        plannedSubmissionDate: body.plannedSubmissionDate ? new Date(body.plannedSubmissionDate) : null,
-        actualSubmissionDate: body.actualSubmissionDate ? new Date(body.actualSubmissionDate) : null,
-        submissionDelayDays: body.submissionDelayDays != null ? Number(body.submissionDelayDays) : null,
+        plannedSubmissionDate: planned,
+        actualSubmissionDate: actual,
+        submissionDelayDays,
         delayResponsibility: body.delayResponsibility || null,
         issuedTo: body.issuedTo || null,
-        issueDate: body.issueDate ? new Date(body.issueDate) : null,
-        copiesCount: body.copiesCount != null ? Number(body.copiesCount) : null,
+        issueDate: parsed.dates.issueDate ?? null,
+        copiesCount: parsed.ints.copiesCount ?? null,
         criticalDrawing: body.criticalDrawing || null,
         remarks: body.remarks || null,
         source: "Portal",
       },
       update: {
+        srNo: keep(parsed.ints.srNo),
         drawingTitle: body.drawingTitle,
         projectPackage: body.projectPackage,
         building: body.building,
@@ -2701,16 +2865,16 @@ drawingsRouter.post(
         drawingType: body.drawingType,
         consultantName: body.consultantName,
         revisionNumber: body.revisionNumber,
-        revisionDate: body.revisionDate ? new Date(body.revisionDate) : undefined,
+        revisionDate: keep(parsed.dates.revisionDate),
         revisionDescription: body.revisionDescription,
         latestRevision: body.latestRevision,
-        plannedSubmissionDate: body.plannedSubmissionDate ? new Date(body.plannedSubmissionDate) : undefined,
-        actualSubmissionDate: body.actualSubmissionDate ? new Date(body.actualSubmissionDate) : undefined,
-        submissionDelayDays: body.submissionDelayDays != null ? Number(body.submissionDelayDays) : undefined,
+        plannedSubmissionDate: keep(parsed.dates.plannedSubmissionDate),
+        actualSubmissionDate: keep(parsed.dates.actualSubmissionDate),
+        submissionDelayDays,
         delayResponsibility: body.delayResponsibility,
         issuedTo: body.issuedTo,
-        issueDate: body.issueDate ? new Date(body.issueDate) : undefined,
-        copiesCount: body.copiesCount != null ? Number(body.copiesCount) : undefined,
+        issueDate: keep(parsed.dates.issueDate),
+        copiesCount: keep(parsed.ints.copiesCount),
         criticalDrawing: body.criticalDrawing,
         remarks: body.remarks,
       },
@@ -2732,33 +2896,18 @@ drawingsRouter.patch(
     if (data.drawingNumber === null || data.drawingTitle === null) {
       return res.status(400).json({ error: "Drawing number and title cannot be empty" });
     }
-    for (const d of REGISTER_LINE_DATE_FIELDS) {
-      if (body[d] === undefined) continue;
-      if (!body[d]) {
-        data[d] = null;
-        continue;
-      }
-      const dt = new Date(body[d]);
-      if (Number.isNaN(dt.getTime())) return res.status(400).json({ error: `Invalid date for ${d}` });
-      data[d] = dt;
+    const parsed = parseRegisterLineBody(body);
+    if (Object.keys(parsed.errors).length) return res.status(400).json(registerLineErrorResponse(parsed.errors));
+    Object.assign(data, parsed.dates);
+    if (parsed.ints.copiesCount !== undefined) data.copiesCount = parsed.ints.copiesCount;
+    const current = await prisma.drawingRegisterLine.findUnique({ where: { id: req.params.id } });
+    if (!current) return res.status(404).json({ error: "Register line not found" });
+    if (parsed.ints.srNo !== undefined) {
+      data.srNo = parsed.ints.srNo ?? (current.srNo != null ? current.srNo : await nextRegisterSrNo(current.projectId));
     }
-    if (body.srNo !== undefined) data.srNo = body.srNo === "" || body.srNo == null ? null : Number(body.srNo);
-    if (body.copiesCount !== undefined) data.copiesCount = body.copiesCount === "" || body.copiesCount == null ? null : Number(body.copiesCount);
-    if (body.submissionDelayDays !== undefined) {
-      data.submissionDelayDays = body.submissionDelayDays === "" || body.submissionDelayDays == null ? null : Number(body.submissionDelayDays);
-    }
-    if (data.plannedSubmissionDate !== undefined || data.actualSubmissionDate !== undefined) {
-      const current = await prisma.drawingRegisterLine.findUnique({ where: { id: req.params.id } });
-      if (!current) return res.status(404).json({ error: "Register line not found" });
-      const planned = data.plannedSubmissionDate !== undefined ? data.plannedSubmissionDate : current.plannedSubmissionDate;
-      const actual = data.actualSubmissionDate !== undefined ? data.actualSubmissionDate : current.actualSubmissionDate;
-      if (planned instanceof Date && actual instanceof Date) {
-        data.submissionDelayDays = Math.round((actual.getTime() - planned.getTime()) / 86400000);
-      } else if (!actual) {
-        // Not submitted yet: the running delay is computed on read from the planned date.
-        data.submissionDelayDays = null;
-      }
-    }
+    const planned = parsed.dates.plannedSubmissionDate !== undefined ? parsed.dates.plannedSubmissionDate : current.plannedSubmissionDate;
+    const actual = parsed.dates.actualSubmissionDate !== undefined ? parsed.dates.actualSubmissionDate : current.actualSubmissionDate;
+    data.submissionDelayDays = delayDays(planned, actual);
     const row = await prisma.drawingRegisterLine.update({
       where: { id: req.params.id },
       data,

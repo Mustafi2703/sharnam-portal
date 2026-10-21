@@ -3,6 +3,21 @@
 export const IN_PAGE_OVERLAY_EVENT = "sharnam-in-page-overlay";
 export const IN_PAGE_OVERLAY_CLOSE = "sharnam-in-page-overlay-close";
 export const CHECKLIST_FILLED_MESSAGE = "sharnam-checklist-filled";
+/** Embedded page -> host: unsaved-answers state, so the host can ask before closing. */
+export const IN_PAGE_OVERLAY_GUARD = "sharnam-in-page-overlay-guard";
+/** Host -> embedded page: save a draft, then close. */
+export const IN_PAGE_OVERLAY_SAVE_AND_CLOSE = "sharnam-in-page-overlay-save-close";
+/** Host window event fired whenever an overlay is removed from the stack. */
+export const IN_PAGE_OVERLAY_DISMISSED = "sharnam-in-page-overlay-dismissed";
+
+export type InPageOverlayGuard = { dirty: boolean; hasDraft: boolean; canSaveDraft: boolean };
+
+export type InPageOverlayDismissed = {
+  overlay: InPageOverlay;
+  /** True when the overlay closed because the fill was submitted / unlocked. */
+  submitted: boolean;
+  hasDraft: boolean;
+};
 
 export type InPageOverlay =
   | {
@@ -28,6 +43,7 @@ export type InPageOverlay =
       drawingId?: string;
       revisionId?: string;
       revisionNumber?: string;
+      discipline?: string;
     };
 
 function postToParent(payload: Record<string, unknown>) {
@@ -49,6 +65,21 @@ export function openInPageOverlay(detail: InPageOverlay) {
 export function closeInPageOverlay() {
   if (postToParent({ type: IN_PAGE_OVERLAY_CLOSE })) return;
   window.dispatchEvent(new CustomEvent(IN_PAGE_OVERLAY_CLOSE));
+}
+
+/** Tell the host overlay whether this embedded page has unsaved answers. No-op outside an overlay. */
+export function reportOverlayGuard(guard: InPageOverlayGuard) {
+  postToParent({ type: IN_PAGE_OVERLAY_GUARD, guard });
+}
+
+/** Run `handler` when the host asks this embedded page to save a draft and close. Returns an unsubscribe. */
+export function onOverlaySaveAndClose(handler: () => void) {
+  const listener = (e: MessageEvent) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data && typeof e.data === "object" && e.data.type === IN_PAGE_OVERLAY_SAVE_AND_CLOSE) handler();
+  };
+  window.addEventListener("message", listener);
+  return () => window.removeEventListener("message", listener);
 }
 
 export function notifyChecklistFilled(detail: {

@@ -235,6 +235,31 @@ export async function buildInspectionIrXlsx(
   paintInput(ws, 16, 10, form.previousIrNo);
   paintInput(ws, 17, 6, form.requiredDate || form.requestedDate);
   paintInput(ws, 17, 10, form.requiredTime);
+  const tick = (on: unknown) => (on === true || on === "true" || on === "X" || on === "x" ? "X" : "");
+  paintInput(ws, 21, 2, tick(form.declA));
+  paintInput(ws, 22, 2, tick(form.declB));
+  paintInput(ws, 23, 2, tick(form.declC));
+  paintInput(ws, 24, 2, tick(form.declD));
+  paintInput(ws, 25, 2, tick(form.declE));
+  paintInput(ws, 26, 2, tick(form.declF));
+  paintInput(ws, 27, 2, tick(form.declG));
+  const enc = Array.isArray(form.enclosures) ? form.enclosures.map(String) : String(form.enclosures || "").split(",").map((s) => s.trim()).filter(Boolean);
+  paintInput(ws, 28, 4, enc.join(", ") + (form.enclosuresOther ? ` Other: ${form.enclosuresOther}` : ""));
+  paintInput(ws, 29, 4, [form.raisedBy, form.raisedAt].filter(Boolean).join(" "));
+  paintInput(ws, 29, 10, [form.verifiedBy, form.verifiedAt].filter(Boolean).join(" "));
+  const inspected = String(form.inspectedOn || "");
+  paintInput(ws, 32, 6, inspected.slice(0, 10));
+  paintInput(ws, 32, 10, inspected.length > 10 ? inspected.slice(11, 16) : "");
+  paintInput(ws, 33, 2, form.result ? String(form.result).charAt(0) : "");
+  paintInput(ws, 34, 6, form.ncrNo || "");
+  paintInput(ws, 34, 10, form.reinspectionBy || "");
+  paintInput(ws, 36, 4, form.observations || "");
+  paintInput(ws, 42, 4, [form.inspectedBy, form.inspectedAt].filter(Boolean).join(" "));
+  paintInput(ws, 42, 8, [form.witnessedBy, form.witnessedAt].filter(Boolean).join(" "));
+  paintInput(ws, 42, 10, [form.thirdPartyBy, form.thirdPartyAt].filter(Boolean).join(" "));
+  paintInput(ws, 45, 4, form.actionTaken || "");
+  paintInput(ws, 46, 4, form.closedBy || "");
+  paintInput(ws, 46, 10, form.closedAt || "");
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf as ArrayBuffer);
 }
@@ -310,6 +335,21 @@ export function renderInspectionIrHtml(rfi: InspectionRfiRecord, project: Inspec
             ["Previous IR no. (if re-offer)", form.previousIrNo],
             ["Inspection required on", [form.requiredDate || form.requestedDate, form.requiredTime].filter(Boolean).join(" ")],
             ["Linked activity checklist", rfi.linkedAssignment?.template?.name || form.checklistRef],
+            ["IR type", form.irType],
+            ["QAP line", form.qapLineLabel || form.itpRef],
+            ["Declarations", ["declA", "declB", "declC", "declD", "declE", "declF", "declG"].filter((k) => form[k] === "true" || form[k] === "X").join(", ")],
+            ["Enclosures", form.enclosures],
+            ["Raised by", form.raisedBy],
+            ["Verified by", form.verifiedBy],
+            ["Result", form.result],
+            ["Observations", form.observations],
+            ["NCR no.", form.ncrNo],
+            ["Inspected by", form.inspectedBy],
+            ["Witnessed by", form.witnessedBy],
+            ["Third party", form.thirdPartyBy],
+            ["Action taken", form.actionTaken],
+            ["Closed by", form.closedBy],
+            ["Date of closure", form.closedAt],
           ] as [string, string | undefined][])),
     ["Status", rfi.status || ""],
   ].filter((row): row is [string, string] => Boolean(row[1]));

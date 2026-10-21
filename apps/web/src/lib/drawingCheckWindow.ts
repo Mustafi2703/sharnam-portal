@@ -8,25 +8,26 @@ export function drawingUnlockStorageKey(projectId: string) {
   return `sharnam_drawing_unlock_${projectId}`;
 }
 
-export function drawingCheckUrl(
-  projectId: string,
-  mode?: "register" | "revision",
-  opts?: { drawingId?: string; revisionId?: string; revisionNumber?: string }
-) {
+export type DrawingCheckOpts = {
+  drawingId?: string;
+  revisionId?: string;
+  revisionNumber?: string;
+  /** Routes the gate to the Drawing Check template for this discipline. */
+  discipline?: string;
+};
+
+export function drawingCheckUrl(projectId: string, mode?: "register" | "revision", opts?: DrawingCheckOpts) {
   const q = new URLSearchParams();
   if (mode === "revision") q.set("mode", "revision");
   if (opts?.drawingId) q.set("drawing", opts.drawingId);
   if (opts?.revisionId) q.set("revision", opts.revisionId);
   if (opts?.revisionNumber) q.set("rev", opts.revisionNumber);
+  if (opts?.discipline) q.set("discipline", opts.discipline);
   const qs = q.toString();
   return `/projects/${projectId}/drawings/precheck${qs ? `?${qs}` : ""}`;
 }
 
-export function openDrawingCheckWindow(
-  projectId: string,
-  mode?: "register" | "revision",
-  opts?: { drawingId?: string; revisionId?: string; revisionNumber?: string }
-) {
+export function openDrawingCheckWindow(projectId: string, mode?: "register" | "revision", opts?: DrawingCheckOpts) {
   openInPageOverlay({
     kind: "drawing-check",
     projectId,
@@ -34,6 +35,7 @@ export function openDrawingCheckWindow(
     drawingId: opts?.drawingId,
     revisionId: opts?.revisionId,
     revisionNumber: opts?.revisionNumber,
+    discipline: opts?.discipline,
   });
   return window;
 }

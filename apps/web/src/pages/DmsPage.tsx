@@ -435,7 +435,7 @@ export default function DmsPage({
           </button>
           . For revision register workflow use{" "}
           <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
-            GFC register →
+            Approval & GFC Log →
           </Link>
         </p>
       )}

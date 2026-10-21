@@ -7,6 +7,8 @@ export type SearchableOption = {
   sublabel?: string;
   /** Extra tokens (phone, trade, city) included in name search. */
   keywords?: string;
+  /** Shown in search, but not selectable. */
+  disabled?: boolean;
 };
 
 type Props = {
@@ -69,6 +71,7 @@ export function SearchableSelect({
   }, []);
 
   function pick(next: string) {
+    if (options.find((o) => o.value === next)?.disabled) return;
     onChange(next);
     const row = options.find((o) => o.value === next);
     setQ(row?.label || "");
@@ -116,7 +119,9 @@ export function SearchableSelect({
                 type="button"
                 role="option"
                 aria-selected={o.value === value}
-                className={`w-full text-left px-3 py-2 hover:bg-sand ${o.value === value ? "bg-brand-soft" : ""}`}
+                aria-disabled={o.disabled || undefined}
+                disabled={o.disabled}
+                className={`w-full text-left px-3 py-2 hover:bg-sand ${o.value === value ? "bg-brand-soft" : ""} ${o.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent" : ""}`}
                 onClick={() => pick(o.value)}
               >
                 <span className="font-medium block truncate" data-preserve-case>

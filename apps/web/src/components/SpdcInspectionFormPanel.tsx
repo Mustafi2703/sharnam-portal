@@ -1,4 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { irTypeForPmcRole } from "@sharnam/shared";
+import { api } from "../api";
+import { useAuth } from "../auth";
 import { Button, Card, Input, Select, TextArea } from "./ui";
 import {
   buildSpdcBody,
@@ -9,8 +12,23 @@ import {
   type InspectionRfiKind,
 } from "../lib/inspectionRequestForms";
 
+type QapPlanLine = {
+  id: string;
+  srNo?: string | null;
+  section?: string | null;
+  description?: string | null;
+  codeOfConformance?: string | null;
+  pmcRole?: string | null;
+  isHeader?: boolean;
+  canRaise?: boolean;
+};
+
 type Props = {
   formKind: InspectionRfiKind;
+  projectId?: string;
+  token?: string | null;
+  initialQapLineId?: string | null;
+  lockQapLine?: boolean;
   users: { id: string; fullName: string; role?: string }[];
   qualityIrOptions?: { number: string; label: string }[];
   checklistAssignments?: { id: string; template?: { name?: string } }[];
@@ -24,6 +42,10 @@ type Props = {
     formDataJson: Record<string, string>;
     assignedToId: string;
     linkedAssignmentId: string;
+    qapLineId?: string;
+    onBehalf?: boolean;
+    unlinkedReason?: string;
+    status?: string;
   }) => Promise<void>;
   busy?: boolean;
 };
@@ -45,6 +67,10 @@ function fieldsBySection(ref: InspectionFormRef) {
 /** SPDC-branded raise panel — quality IR, safety IR, activity checklist. */
 export function SpdcInspectionFormPanel({
   formKind,
+  projectId,
+  token,
+  initialQapLineId,
+  lockQapLine = false,
   users,
   qualityIrOptions = [],
   checklistAssignments = [],
@@ -53,6 +79,10 @@ export function SpdcInspectionFormPanel({
   onSubmit,
   busy,
 }: Props) {
+  const { user } = useAuth();
+  const isQuality = formKind === "QualityIR";
+  const isAdmin = user?.role === "admin";
+  const isSpdc = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
   const ref = inspectionFormForKind(formKind);
   const projectDefaults = useMemo(
     () => ({
@@ -69,6 +99,68 @@ export function SpdcInspectionFormPanel({
   const [linkedAssignmentId, setLinkedAssignmentId] = useState("");
   const [subject, setSubject] = useState("");
   const [question, setQuestion] = useState("");
+  const [planLines, setPlanLines] = useState<QapPlanLine[]>([]);
+  const [linesMsg, setLinesMsg] = useState("");
+  const [qapQuery, setQapQuery] = useState("");
+  const [picked, setPicked] = useState<QapPlanLine | null>(null);
+  const [noLine, setNoLine] = useState(false);
+  const [unlinkedReason, setUnlinkedReason] = useState("");
+  const [onBehalf, setOnBehalf] = useState(false);
+
+  useEffect(() => {
+    if (!isQuality || !projectId) return;
+    let cancelled = false;
+    setLinesMsg("");
+    void api<{ lines?: QapPlanLine[] }>(`/api/checklist/project/${projectId}/qap/plan-lines`, { token })
+      .then((out) => {
+        if (!cancelled) setPlanLines(out.lines || []);
+      })
+      .catch((err) => {
+        if (!cancelled) setLinesMsg(err instanceof Error ? err.message : "Could not load QAP lines");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuality, projectId, token]);
+
+  function applyLine(line: QapPlanLine) {
+    setPicked(line);
+    setNoLine(false);
+    setQapQuery("");
+    setDraft((d) => ({
+      ...d,
+      activityDescription: [line.section, line.description].filter(Boolean).join(" - "),
+      itpRef: line.srNo ? `QAP ${line.srNo}` : "",
+      discipline: line.section || "",
+      specClause: line.codeOfConformance || "",
+      irType: irTypeForPmcRole(line.pmcRole),
+    }));
+  }
+
+  useEffect(() => {
+    if (!initialQapLineId || picked || !planLines.length) return;
+    const hit = planLines.find((l) => l.id === initialQapLineId);
+    if (!hit) return;
+    if (hit.isHeader || hit.canRaise === false) {
+      setLinesMsg("That QAP line is a group header and cannot have an IR.");
+      return;
+    }
+    applyLine(hit);
+    // applyLine sets picked; initial id is applied once lines arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQapLineId, planLines]);
+
+  const matches = useMemo(() => {
+    const q = qapQuery.trim().toLowerCase();
+    if (!q) return [];
+    return planLines
+      .filter((l) => !l.isHeader && l.canRaise !== false)
+      .filter((l) => `${l.srNo || ""} ${l.section || ""} ${l.description || ""}`.toLowerCase().includes(q))
+      .slice(0, 20);
+  }, [planLines, qapQuery]);
+
+  const readyToCompose = !isQuality || !!picked || (isAdmin && noLine && unlinkedReason.trim().length > 0);
+  const laterKeys = new Set(["inspectedOn", "result", "observations", "closedBy", ...(picked ? ["irType"] : [])]);
 
   const sections = useMemo(() => (ref ? fieldsBySection(ref) : []), [ref]);
 
@@ -93,7 +185,80 @@ export function SpdcInspectionFormPanel({
         </Button>
       </div>
 
-      {sections.map((sec) => (
+      {isQuality && (
+        <div className="mb-4 rounded-lg border border-line bg-sand/30 p-3 space-y-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-brand">QAP line</div>
+          {picked ? (
+            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-brand/40 bg-white px-3 py-1 text-xs">
+              <span className="truncate font-semibold text-ink">
+                {(picked.section || "Activity") + " - " + (picked.description || "Line")}
+                {picked.srNo ? ` · QAP ${picked.srNo}` : ""}
+              </span>
+              {lockQapLine ? <span className="text-[10px] uppercase text-steel-muted">Locked</span> : (
+                <button type="button" className="text-brand font-semibold" onClick={() => setPicked(null)}>
+                  Change
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <Input
+                placeholder="Search section or description"
+                value={qapQuery}
+                onChange={(e) => setQapQuery(e.target.value)}
+              />
+              {linesMsg ? <p className="text-xs text-amber-800">{linesMsg}</p> : null}
+              {qapQuery.trim() ? (
+                <ul className="max-h-48 overflow-y-auto rounded-lg border border-line bg-white divide-y divide-line">
+                  {matches.map((l) => (
+                    <li key={l.id}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-sand/60"
+                        onClick={() => applyLine(l)}
+                      >
+                        <span className="font-semibold">{l.section || "Activity"}</span>
+                        <span className="text-steel-muted"> - {l.description || "No description"}</span>
+                        {l.srNo ? <span className="font-mono text-steel-muted"> · {l.srNo}</span> : null}
+                      </button>
+                    </li>
+                  ))}
+                  {!matches.length ? <li className="px-3 py-2 text-xs text-steel-muted">No matching QAP line.</li> : null}
+                </ul>
+              ) : (
+                <p className="text-xs text-steel-muted">Search the QAP plan, then pick a line before composing this IR.</p>
+              )}
+            </>
+          )}
+          {isAdmin && !lockQapLine ? (
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={noLine}
+                onChange={(e) => {
+                  setNoLine(e.target.checked);
+                  if (e.target.checked) setPicked(null);
+                }}
+              />
+              No QAP line
+            </label>
+          ) : null}
+          {noLine ? (
+            <Input
+              placeholder="Reason this IR has no QAP line"
+              value={unlinkedReason}
+              onChange={(e) => setUnlinkedReason(e.target.value)}
+            />
+          ) : null}
+          {!readyToCompose ? (
+            <p className="text-xs text-steel-muted">
+              {isAdmin && noLine ? "Type a reason to compose an IR with no QAP line." : "Choose a QAP line to compose this IR."}
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {readyToCompose && sections.map((sec) => (
         <div key={sec.title} className="mb-4">
           <h4 className="text-[11px] font-semibold uppercase tracking-wide text-brand mb-2">{sec.title}</h4>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -114,7 +279,12 @@ export function SpdcInspectionFormPanel({
                     ))}
                   </Select>
                 ) : f.options ? (
-                  <Select className="mt-0.5 !py-1 !text-xs" value={draft[f.key] || ""} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}>
+                  <Select
+                    className="mt-0.5 !py-1 !text-xs"
+                    value={draft[f.key] || ""}
+                    disabled={laterKeys.has(f.key)}
+                    onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                  >
                     <option value="">{f.placeholder}</option>
                     {f.options.map((o) => (
                       <option key={o} value={o}>
@@ -128,6 +298,7 @@ export function SpdcInspectionFormPanel({
                     type={f.inputType || "text"}
                     placeholder={f.placeholder}
                     value={draft[f.key] || ""}
+                    disabled={laterKeys.has(f.key)}
                     onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                   />
                 )}
@@ -137,6 +308,14 @@ export function SpdcInspectionFormPanel({
         </div>
       ))}
 
+      {readyToCompose && (
+      <>
+      {isQuality && isSpdc ? (
+        <label className="mb-3 flex items-center gap-2 text-xs">
+          <input type="checkbox" checked={onBehalf} onChange={(e) => setOnBehalf(e.target.checked)} />
+          On behalf of contractor
+        </label>
+      ) : null}
       <div className="grid sm:grid-cols-2 gap-2 mb-3">
         <div>
           <label className="text-[10px] uppercase text-steel-muted font-semibold">Assignee *</label>
@@ -215,6 +394,19 @@ export function SpdcInspectionFormPanel({
             window.alert("Fill the SPDC form fields (or subject/body) before raising.");
             return;
           }
+          if (isQuality && !picked && !(isAdmin && noLine && unlinkedReason.trim())) {
+            window.alert(isAdmin ? "Choose a QAP line, or tick No QAP line and type a reason." : "Choose a QAP line before saving this IR.");
+            return;
+          }
+          if (isQuality && noLine && !unlinkedReason.trim()) {
+            window.alert("Type a reason for an IR with no QAP line.");
+            return;
+          }
+          if (isQuality && isSpdc && user?.role !== "admin" && user?.role !== "vendor" && !onBehalf) {
+            window.alert("Tick On behalf of contractor to save this IR.");
+            return;
+          }
+          try {
           await onSubmit({
             subject: subj,
             question: body,
@@ -223,8 +415,24 @@ export function SpdcInspectionFormPanel({
             formDataJson: draft,
             assignedToId,
             linkedAssignmentId,
+            qapLineId: picked?.id,
+            onBehalf: isQuality && isSpdc ? onBehalf : undefined,
+            unlinkedReason: isQuality && noLine ? unlinkedReason.trim() : undefined,
+            status: isQuality ? "Draft" : undefined,
           });
-          setDraft({ ...projectDefaults });
+          } catch (err) {
+            window.alert(err instanceof Error ? err.message : "Could not save this IR");
+            return;
+          }
+          const nextDraft: Record<string, string> = { ...projectDefaults };
+          if (picked) {
+            nextDraft.activityDescription = [picked.section, picked.description].filter(Boolean).join(" - ");
+            nextDraft.itpRef = picked.srNo ? `QAP ${picked.srNo}` : "";
+            nextDraft.discipline = picked.section || "";
+            nextDraft.specClause = picked.codeOfConformance || "";
+            nextDraft.irType = irTypeForPmcRole(picked.pmcRole);
+          }
+          setDraft(nextDraft);
           setSubject("");
           setQuestion("");
           setAssignedToId("");
@@ -232,9 +440,11 @@ export function SpdcInspectionFormPanel({
         }}
       >
         <Button type="submit" disabled={busy}>
-          {busy ? "Raising…" : `Raise ${ref.title}`}
+          {busy ? "Saving…" : isQuality ? "Save draft" : `Raise ${ref.title}`}
         </Button>
       </form>
+      </>
+      )}
     </Card>
   );
 }

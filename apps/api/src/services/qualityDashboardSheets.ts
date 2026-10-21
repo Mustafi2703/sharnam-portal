@@ -196,18 +196,12 @@ export function qapStatusFromRow(row: QapDetailRow & { dailyChecks?: Record<stri
   pmcOk: boolean;
   clientOk: boolean;
 } {
-  const doneRemark = /complete|done/i.test(row.remarks || "");
-  const contractorOk = !!(row.contractorPerformer || row.contractorChecker);
-  const pmcOk = /review|witness|yes|approve|^r$|^w$|^a$/i.test(row.pmcRole || "");
-  const clientOk = /witness|random|yes|approve|^w$|^ra$/i.test(row.clientRole || "");
-  const days = row.dailyChecks ? Object.values(row.dailyChecks) : [];
-  const weekComplete = days.length > 0 && days.every(Boolean);
   return {
-    contractorOk,
-    pmcOk,
-    clientOk,
-    // Done only when the remarks say so or every day of the week is marked Yes — having checkers named is not completion.
-    status: doneRemark || weekComplete ? "Done" : "Open",
+    contractorOk: false,
+    pmcOk: false,
+    clientOk: false,
+    // Role names and daily ticks are not completion. Status is refreshed from approved IRs.
+    status: "Not started",
   };
 }
 

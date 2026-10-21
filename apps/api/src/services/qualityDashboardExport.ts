@@ -246,7 +246,7 @@ export async function exportQualityDashboardWorkbook(projectId: string) {
         qapSheet.getCell(r, 9).value = q.pmcRole || "";
         qapSheet.getCell(r, 10).value = q.clientRole || "";
         qapSheet.getCell(r, 11).value = q.records || "";
-        qapSheet.getCell(r, 12).value = q.remarks || "";
+        qapSheet.getCell(r, 12).value = q.isHeader ? "" : q.status === "Completed" ? "Completed" : "Pending";
       });
   }
 

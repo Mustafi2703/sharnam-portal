@@ -5,6 +5,7 @@ import {
   slaStatusCellClass,
   type DrawingRfiRow,
 } from "../lib/rfiRegisterColumns";
+import { Badge } from "./ui";
 
 type Props = {
   rows: DrawingRfiRow[];
@@ -67,7 +68,14 @@ export function DrawingRfiRegisterTable({ rows, activeId, onSelect }: Props) {
                         className={`px-2 py-2 align-top max-w-[220px] ${cls}`}
                         title={val.length > 48 ? val : undefined}
                       >
-                        <span className="line-clamp-3">{val}</span>
+                        {col === "RESPONSIBLE PARTY" && (row.matrixAssignee || row.assigneeContactId) ? (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="line-clamp-3">{val}</span>
+                            <Badge tone="neutral">Matrix</Badge>
+                          </span>
+                        ) : (
+                          <span className="line-clamp-3">{val}</span>
+                        )}
                       </td>
                     );
                   })}

@@ -1,11 +1,14 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { formatDayMonYear, mondayDayKey } from "@sharnam/shared";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { DrawingPicklistSetup } from "../../components/DrawingPicklistSetup";
 import { DrawingPackMenu } from "../../components/DrawingPackMenu";
+import { useDrawingsStart, type DrawingsWeekStart } from "../../components/ProjectWeekPicker";
 import { StatusNote } from "../../components/StatusNote";
 import { Button, Card, PageHeader } from "../../components/ui";
+import { formatUiText } from "../../lib/formatUiText";
 import { useDrawingPicklists } from "../../lib/drawingPicklists";
 
 type Loader = {
@@ -28,7 +31,7 @@ const LOADERS: Loader[] = [
   },
   {
     key: "gfc",
-    title: "Approval & GFC drawing log",
+    title: "Approval & GFC Log",
     file: "Approval & GFC Drawing Log.xlsx",
     path: (id) => `/api/drawings/project/${id}/gfc-log/import`,
     what: "Creates every drawing row and its R0–Rn dates. The PDF/DWG files are added later, each behind its Drawing Check.",
@@ -43,6 +46,97 @@ const LOADERS: Loader[] = [
     summary: (o) => `${o.created} RFIs created, ${o.updated} updated, ${o.responses} responses added.`,
   },
 ];
+
+/** Week 1 anchor for the drawing register dashboard and the weekly SharePoint folders. */
+function DrawingsStartDateCard({
+  projectId,
+  token,
+  canManage,
+  onMsg,
+}: {
+  projectId: string;
+  token?: string | null;
+  canManage: boolean;
+  onMsg: (msg: string) => void;
+}) {
+  const start = useDrawingsStart(projectId, token);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (start.loaded) setValue(start.drawingsStartDate || "");
+  }, [start.loaded, start.drawingsStartDate]);
+
+  const anchor = value || start.projectStartDate;
+  const weekOne = anchor ? mondayDayKey(anchor) : null;
+  const dirty = value !== (start.drawingsStartDate || "");
+
+  async function saveStart() {
+    setSaving(true);
+    try {
+      const out = await api<DrawingsWeekStart>(`/api/drawings/project/${projectId}/settings`, {
+        method: "PUT",
+        token,
+        body: JSON.stringify({ drawingsStartDate: value || "" }),
+      });
+      start.setValue(out);
+      onMsg(
+        out.drawingsStartDate
+          ? `Drawings start date saved. Week 1 starts on ${formatDayMonYear(mondayDayKey(out.drawingsStartDate))}.`
+          : "Drawings start date cleared. Weeks count from the project start date.",
+      );
+    } catch (err) {
+      onMsg(err instanceof Error ? err.message : "Could not save the drawings start date");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <h3 className="font-semibold">{formatUiText("0. Drawings start date")}</h3>
+      <Card className="space-y-3">
+        <p className="text-sm text-steel-muted">
+          Week 1 of the drawing register starts on the Monday of this week. Leave empty to use the project start date.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs text-steel-muted">
+            {formatUiText("Drawings start date")}
+            <input
+              type="date"
+              className="mt-1 block rounded-lg border border-line bg-paper px-2 py-1.5 text-sm text-ink disabled:opacity-60"
+              value={value}
+              disabled={!canManage || saving}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </label>
+          {canManage ? (
+            <>
+              <Button type="button" disabled={saving || !dirty} onClick={() => void saveStart()}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              {value ? (
+                <Button type="button" variant="ghost" disabled={saving} onClick={() => setValue("")}>
+                  Clear
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+        <p className="text-sm text-ink">
+          {weekOne ? (
+            <>
+              {formatUiText("Week 1")} = <strong>{formatDayMonYear(weekOne)}</strong>
+              {!value ? <span className="text-steel-muted"> ({formatUiText("from the project start date")})</span> : null}
+            </>
+          ) : (
+            <span className="text-steel-muted">No drawings start date or project start date set yet, so week numbers show as Week -.</span>
+          )}
+        </p>
+        {!canManage ? <p className="text-xs text-steel-muted">Only admin and office can change the drawings start date.</p> : null}
+      </Card>
+    </section>
+  );
+}
 
 /** Drawing settings — pick-lists, reference workbooks and SharePoint, all in the Drawings module. */
 export default function DrawingSettingsPage() {
@@ -77,7 +171,7 @@ export default function DrawingSettingsPage() {
     setMsg("Generating the registers and saving them to SharePoint…");
     try {
       await api(`/api/drawings/project/${id}/publish-registers`, { method: "POST", token, timeoutMs: 180_000 });
-      setMsg("Master register, GFC log, drawing dashboard and RFI register generated and saved to the project's SharePoint folders.");
+      setMsg("Master register, Approval & GFC Log, drawing dashboard and RFI register generated and saved to the project's SharePoint folders.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not save to SharePoint");
     } finally {
@@ -94,6 +188,8 @@ export default function DrawingSettingsPage() {
         subtitle="Pick-lists for the register, RFIs and design coordination; load the client's reference workbooks; save the generated sheets to SharePoint."
       />
       <StatusNote msg={msg} />
+
+      <DrawingsStartDateCard projectId={id} token={token} canManage={canManage} onMsg={setMsg} />
 
       <section className="space-y-2">
         <h3 className="font-semibold">1. Pick-lists</h3>
@@ -150,7 +246,7 @@ export default function DrawingSettingsPage() {
       <section className="space-y-2">
         <h3 className="font-semibold">4. Generate the sheets</h3>
         <Card className="space-y-3">
-          <p className="text-sm text-steel-muted">Generated fresh from the database in the client's formats. The same menu sits in the GFC log, the master register, the dashboard and the RFI register — take one sheet, or the whole pack.</p>
+          <p className="text-sm text-steel-muted">Generated fresh from the database in the client's formats. The same menu sits in the Approval & GFC Log, the master register, the dashboard and the RFI register. Take one sheet, or the whole pack.</p>
           <DrawingPackMenu projectId={id} token={token} onMsg={setMsg} canPublish={canManage} panel />
         </Card>
       </section>

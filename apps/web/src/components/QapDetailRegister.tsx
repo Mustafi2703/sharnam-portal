@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, Fragment } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import {
   QAP_LEGENDS,
@@ -48,6 +49,44 @@ type QapRow = {
   pmcOk?: boolean;
   clientOk?: boolean;
   status?: string;
+  qapLineId?: string | null;
+  isHeader?: boolean;
+  ir?: {
+    due?: number | null;
+    dueLabel?: string;
+    raised?: number;
+    approved?: number;
+    latestResult?: string;
+    irCount?: number;
+    qapLineId?: string | null;
+  } | null;
+};
+
+type QapRoleName = {
+  roleLabel: string;
+  party: string;
+  userName?: string | null;
+  vendorName?: string | null;
+  contactName?: string | null;
+  mapped?: boolean;
+};
+
+const QAP_STATUS_FILTERS = [
+  "Not started",
+  "In progress",
+  "Completed",
+  "Rejected - re-offer",
+  "Overdue",
+  "Awaiting client",
+] as const;
+
+type LineIr = {
+  id: string;
+  number?: string;
+  date?: string;
+  location?: string;
+  result?: string;
+  status?: string;
 };
 
 export type QapProjectMeta = {
@@ -73,7 +112,44 @@ type Props = {
   project?: QapProjectMeta | null;
   loading?: boolean;
   onProjectUpdated?: () => void | Promise<void>;
+  initialStatus?: string;
 };
+
+function qapBadgeTone(status?: string | null): "ok" | "warn" | "danger" | "neutral" {
+  const s = status || "";
+  if (s === "Completed" || s === "Done") return "ok";
+  if (s === "Overdue" || /reject/i.test(s)) return "danger";
+  if (s === "In progress" || s === "Awaiting client") return "warn";
+  return "neutral";
+}
+
+function resultBadge(raw?: string | null): string {
+  const c = String(raw || "").trim().charAt(0).toUpperCase();
+  if (c === "A" || c === "B" || c === "C" || c === "D") return c;
+  return "Pending";
+}
+
+function isGroupHeader(row: QapRow): boolean {
+  if (row.isHeader || row.status === "Header") return true;
+  const noFreq = !String(row.frequency || "").trim();
+  const noRoles = ![row.contractorPerformer, row.contractorChecker, row.pmcRole, row.clientRole].some((v) =>
+    String(v || "").trim()
+  );
+  return !row.ir && noFreq && noRoles;
+}
+
+function RolePerson({ party, label, roles }: { party: string; label?: string | null; roles: QapRoleName[] }) {
+  const lab = String(label || "").trim();
+  if (!lab) return null;
+  const hit = roles.find((r) => r.party === party && r.roleLabel.trim().toLowerCase() === lab.toLowerCase());
+  const name = hit?.userName || hit?.vendorName || hit?.contactName;
+  if (!name) return null;
+  return (
+    <div className="px-1 pt-0.5 text-[10px] leading-tight text-brand-dark truncate" title={lab}>
+      {name}
+    </div>
+  );
+}
 
 /** Quality Assurance Plan — full client Excel layout; inline edit only. */
 export function QapDetailRegister({
@@ -86,12 +162,37 @@ export function QapDetailRegister({
   project,
   loading,
   onProjectUpdated,
+  initialStatus = "",
 }: Props) {
   const { localRows, mergeRow } = useLocalRegisterRows(rows);
   const [weekFilter, setWeekFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [patchErr, setPatchErr] = useState("");
   const [editRow, setEditRow] = useState<QapRow | null>(null);
   const [editBusy, setEditBusy] = useState(false);
+  const [roles, setRoles] = useState<QapRoleName[]>([]);
+  const [irDrawer, setIrDrawer] = useState<{ lineId: string; title: string } | null>(null);
+  const [irList, setIrList] = useState<LineIr[]>([]);
+  const [irBusy, setIrBusy] = useState(false);
+
+  useEffect(() => {
+    if (initialStatus) setStatusFilter(initialStatus);
+  }, [initialStatus]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    void api<{ roles?: QapRoleName[] }>(`/api/checklist/project/${projectId}/qap/roles`, { token })
+      .then((out) => {
+        if (!cancelled) setRoles(out.roles || []);
+      })
+      .catch(() => {
+        if (!cancelled) setRoles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, token]);
 
   const weeks = useMemo(() => {
     const set = new Set<string>();
@@ -108,6 +209,11 @@ export function QapDetailRegister({
     if (!showWeekFilter) return localRows;
     return localRows.filter((r) => weekMatchesFilter(r.weekLabel, weekFilter));
   }, [localRows, weekFilter, showWeekFilter]);
+
+  const visible = useMemo(() => {
+    if (!statusFilter) return filtered;
+    return filtered.filter((r) => (r.status || "Not started") === statusFilter);
+  }, [filtered, statusFilter]);
 
   /** Week 50 Excel always has 7 QC-log day columns — show them even when rows have no ticks yet. */
   const dayLabels = useMemo(() => {
@@ -203,7 +309,27 @@ export function QapDetailRegister({
     }
   }
 
-  const colSpan = 13 + dayLabels.length + (canEdit ? 1 : 0);
+  const colSpan = 15 + dayLabels.length + (canEdit ? 1 : 0);
+
+  async function openIrs(row: QapRow) {
+    const lineId = row.qapLineId || row.ir?.qapLineId;
+    if (!lineId) return;
+    setIrDrawer({
+      lineId,
+      title: [row.section || row.activity, row.description].filter(Boolean).join(" - ") || "QAP line",
+    });
+    setIrBusy(true);
+    setIrList([]);
+    try {
+      const out = await api<{ irs?: LineIr[] }>(`/api/checklist/project/${projectId}/qap/line/${lineId}/irs`, { token });
+      setIrList(out.irs || []);
+    } catch (err) {
+      setPatchErr(err instanceof Error ? err.message : "Could not load IRs");
+      setIrDrawer(null);
+    } finally {
+      setIrBusy(false);
+    }
+  }
 
   const legend = (
     <>
@@ -244,17 +370,25 @@ export function QapDetailRegister({
           <p className="text-xs text-danger bg-red-50 px-4 py-2 border-b border-line shrink-0">{patchErr}</p>
         )}
 
-        {showWeekFilter && weeks.length > 1 && (
-          <div className="px-4 py-2 border-b border-line bg-sand/40 shrink-0">
-            <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]">
+        <div className="px-4 py-2 border-b border-line bg-sand/40 shrink-0 flex flex-wrap gap-2 items-center">
+          {showWeekFilter && weeks.length > 1 ? (
+            <Select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} className="!w-auto min-w-[8rem]" aria-label="Week">
               {weeks.map((w) => (
                 <option key={w} value={w}>
                   {w}
                 </option>
               ))}
             </Select>
-          </div>
-        )}
+          ) : null}
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="!w-auto min-w-[11rem]" aria-label="Status">
+            <option value="">All</option>
+            {QAP_STATUS_FILTERS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </Select>
+        </div>
 
         <div className="register-scroll-hint shrink-0 px-4 py-1.5 border-b border-line">
           Scroll ↔ for Records, Remarks and daily QC logs · ↕ for all activity lines · saves on blur
@@ -301,6 +435,12 @@ export function QapDetailRegister({
                   <th colSpan={dayLabels.length} className="text-center qap-th-daily">
                     Quality Control Logs
                   </th>
+                  <th rowSpan={2} className="text-left min-w-[8rem]">
+                    Due / Raised / Approved
+                  </th>
+                  <th rowSpan={2} className="text-left min-w-[7rem]">
+                    IRs
+                  </th>
                   <th rowSpan={2} className="text-left min-w-[5rem]">
                     Status
                   </th>
@@ -319,9 +459,13 @@ export function QapDetailRegister({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((q, rowIdx) => {
+                {visible.map((q, rowIdx) => {
                   const section = sectionLabel(q);
-                  const prevSection = rowIdx > 0 ? sectionLabel(filtered[rowIdx - 1]) : "";
+                  const prevSection = rowIdx > 0 ? sectionLabel(visible[rowIdx - 1]) : "";
+                  const header = isGroupHeader(q);
+                  const lineId = q.qapLineId || q.ir?.qapLineId || "";
+                  const dueText = q.ir?.dueLabel || (q.ir?.due != null ? String(q.ir.due) : "");
+                  const latest = resultBadge(q.ir?.latestResult);
                   const showSectionBand = section !== prevSection;
                   const isFirstInSection = showSectionBand;
                   const showActivity = isFirstInSection || !!q.srNo;
@@ -336,7 +480,7 @@ export function QapDetailRegister({
                           </td>
                         </tr>
                       )}
-                      <tr className={qapStatusRowClass(q.status)}>
+                      <tr className={`${qapStatusRowClass(q.status)} ${header ? "qap-line-header" : ""}`.trim()}>
                         <td className="text-left font-mono tabular-nums qap-sticky-sr align-top">
                           <RegisterSheetCell
                             value={srDisplay}
@@ -405,6 +549,7 @@ export function QapDetailRegister({
                               })
                             }
                           />
+                          <RolePerson party="Contractor" label={q.contractorPerformer} roles={roles} />
                         </td>
                         <td className="text-left align-top qap-col-contractor">
                           <RegisterSheetCell
@@ -420,6 +565,7 @@ export function QapDetailRegister({
                               })
                             }
                           />
+                          <RolePerson party="Contractor" label={q.contractorChecker} roles={roles} />
                         </td>
                         <td className="text-left align-top qap-col-pmc">
                           <RegisterSheetCell
@@ -435,6 +581,7 @@ export function QapDetailRegister({
                               })
                             }
                           />
+                          <RolePerson party="PMC" label={q.pmcRole} roles={roles} />
                         </td>
                         <td className="text-left align-top qap-col-client">
                           <RegisterSheetCell
@@ -450,6 +597,7 @@ export function QapDetailRegister({
                               })
                             }
                           />
+                          <RolePerson party="Client" label={q.clientRole} roles={roles} />
                         </td>
                         <td className="text-left align-top border border-line px-1 py-0.5 min-w-[10rem]">
                           <RegisterSheetCell
@@ -491,18 +639,43 @@ export function QapDetailRegister({
                             </td>
                           );
                         })}
-                        <td className="text-left align-top border border-line px-1 py-0.5 whitespace-nowrap">
-                          <Badge tone={q.status === "Done" ? "ok" : "warn"}>{q.status || "Open"}</Badge>
-                          {canEdit && q.status !== "Done" && (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              className="!py-0.5 !px-1 !text-[9px] ml-0.5"
-                              onClick={() => void patchRow(q.id, { status: "Done", remarks: q.remarks || "Completed" }, true)}
-                            >
-                              Done
-                            </Button>
+                        <td className="text-left align-top border border-line px-1 py-1 text-[11px] whitespace-nowrap">
+                          {header ? (
+                            <span className="text-steel-muted">Group</span>
+                          ) : (
+                            <span>
+                              {dueText || "-"} / {q.ir?.raised ?? 0} / {q.ir?.approved ?? 0}
+                            </span>
                           )}
+                        </td>
+                        <td className="text-left align-top border border-line px-1 py-1 whitespace-nowrap">
+                          {header ? (
+                            <span className="text-[10px] uppercase tracking-wide text-steel-muted">Group label</span>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-brand underline"
+                                disabled={!lineId}
+                                onClick={() => void openIrs(q)}
+                              >
+                                {q.ir?.irCount ?? 0}
+                              </button>
+                              <Badge tone={latest === "A" ? "ok" : latest === "C" ? "danger" : latest === "B" ? "warn" : "neutral"}>
+                                {latest}
+                              </Badge>
+                              {lineId ? (
+                                <Link to={`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality&qapLineId=${lineId}`}>
+                                  <Button type="button" variant="secondary" className="!py-0.5 !px-1 !text-[9px]">
+                                    Raise IR
+                                  </Button>
+                                </Link>
+                              ) : null}
+                            </div>
+                          )}
+                        </td>
+                        <td className="text-left align-top border border-line px-1 py-0.5 whitespace-nowrap">
+                          <Badge tone={qapBadgeTone(q.status)}>{q.status || "Not started"}</Badge>
                         </td>
                         {canEdit && (
                           <td className="align-top whitespace-nowrap">
@@ -526,7 +699,7 @@ export function QapDetailRegister({
                     </Fragment>
                   );
                 })}
-                {!filtered.length && (
+                {!visible.length && (
                   <tr>
                     <td colSpan={colSpan} className="empty text-left border border-line p-4">
                       No QAP detail rows — upload the client QAP Excel, or load the demo template from Admin → UAT Data.
@@ -563,7 +736,7 @@ export function QapDetailRegister({
                 ["pmcRole", "PMC checker (R / W / A)"],
                 ["clientRole", "Client checker (W / RA)"],
                 ["records", "Records"],
-                ["remarks", "Remarks (Done / Complete marks status)"],
+                ["remarks", "Remarks"],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="register-form-field">
@@ -578,6 +751,48 @@ export function QapDetailRegister({
           </div>
         )}
       </RegisterEntryModal>
+
+      {irDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Inspection requests">
+          <button type="button" className="absolute inset-0 bg-black/30" aria-label="Close" onClick={() => setIrDrawer(null)} />
+          <aside className="relative h-full w-full max-w-md bg-white border-l border-line shadow-xl flex flex-col">
+            <div className="px-4 py-3 border-b border-line flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wide text-steel-muted font-semibold">Inspection requests</div>
+                <div className="text-sm font-semibold text-ink truncate">{irDrawer.title}</div>
+              </div>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setIrDrawer(null)}>
+                Close
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {irBusy ? <p className="text-sm text-steel-muted">Loading IRs...</p> : null}
+              {!irBusy && !irList.length ? <p className="text-sm text-steel-muted">No inspection requests on this line yet.</p> : null}
+              {irList.map((ir) => (
+                <div key={ir.id} className="rounded-lg border border-line p-3 text-sm space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Link
+                      className="font-mono text-xs font-semibold text-brand underline"
+                      to={`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality&rfi=${ir.id}`}
+                      onClick={() => setIrDrawer(null)}
+                    >
+                      {ir.number || ir.id}
+                    </Link>
+                    <Badge tone={resultBadge(ir.result) === "A" ? "ok" : resultBadge(ir.result) === "C" ? "danger" : "neutral"}>
+                      {ir.result || "Pending"}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-steel-muted">
+                    {ir.date ? String(ir.date).slice(0, 10) : "-"}
+                    {ir.location ? ` · ${ir.location}` : ""}
+                    {ir.status ? ` · ${ir.status}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      )}
     </>
   );
 }

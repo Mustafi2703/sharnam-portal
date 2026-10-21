@@ -1,4 +1,5 @@
-/** Master Drawing Register — DCI columns from DRAWING REGISTER - 01.xlsx */
+/** Master Drawing Register - DCI columns from DRAWING REGISTER - 01.xlsx */
+import { delayDays, delayIsRunning, istDayKey, istTodayKey } from "@sharnam/shared";
 
 export type MasterRegisterForm = {
   srNo: string;
@@ -15,7 +16,6 @@ export type MasterRegisterForm = {
   latestRevision: string;
   plannedSubmissionDate: string;
   actualSubmissionDate: string;
-  submissionDelayDays: string;
   delayResponsibility: string;
   issuedTo: string;
   issueDate: string;
@@ -78,6 +78,7 @@ export const MASTER_REGISTER_DELAY_RESP = [
   "BIM Consultant",
   "Contractor",
   "PMC",
+  "Client",
 ] as const;
 
 /** Package chip colours for table + filters */
@@ -109,7 +110,6 @@ export function emptyMasterRegisterForm(): MasterRegisterForm {
     latestRevision: "Yes",
     plannedSubmissionDate: "",
     actualSubmissionDate: "",
-    submissionDelayDays: "",
     delayResponsibility: "",
     issuedTo: "",
     issueDate: "",
@@ -119,19 +119,39 @@ export function emptyMasterRegisterForm(): MasterRegisterForm {
   };
 }
 
-export function masterRegisterPayload(form: MasterRegisterForm) {
-  const delay =
-    form.submissionDelayDays.trim() !== ""
-      ? Number(form.submissionDelayDays)
-      : form.plannedSubmissionDate && form.actualSubmissionDate
-        ? Math.ceil(
-            (new Date(form.actualSubmissionDate).getTime() - new Date(form.plannedSubmissionDate).getTime()) /
-              86400000
-          )
-        : null;
+/** Keeps only digits, for whole-number fields (Sr #, No. of copies). */
+export function digitsOnly(value: string) {
+  return value.replace(/\D+/g, "");
+}
 
+export type MasterRegisterErrors = Partial<Record<keyof MasterRegisterForm, string>>;
+
+/** Same rules the API enforces: whole numbers in range, and revision / issue dates not after today (IST). */
+export function masterRegisterErrors(form: MasterRegisterForm, today: string = istTodayKey()): MasterRegisterErrors {
+  const errors: MasterRegisterErrors = {};
+  const sr = form.srNo.trim();
+  if (sr && (!/^\d+$/.test(sr) || Number(sr) < 1 || Number(sr) > 99999)) errors.srNo = "Sr # must be a whole number from 1 to 99999";
+  const copies = form.copiesCount.trim();
+  if (copies && (!/^\d+$/.test(copies) || Number(copies) > 99)) errors.copiesCount = "No. of copies must be a whole number from 0 to 99";
+  if (form.revisionDate && form.revisionDate > today) errors.revisionDate = "Revision date cannot be after today";
+  if (form.issueDate && form.issueDate > today) errors.issueDate = "Issue date cannot be after today";
+  return errors;
+}
+
+/** Submission delay shown in the form, from the shared rule (never typed). */
+export function masterRegisterDelay(form: MasterRegisterForm, today: string = istTodayKey()) {
   return {
-    srNo: form.srNo.trim() ? Number(form.srNo) : undefined,
+    days: delayDays(form.plannedSubmissionDate || null, form.actualSubmissionDate || null, today),
+    running: delayIsRunning(form.plannedSubmissionDate || null, form.actualSubmissionDate || null, today),
+  };
+}
+
+/** Request body for create / update. submissionDelayDays is left out: the API computes it from the dates. */
+export function masterRegisterPayload(form: MasterRegisterForm) {
+  const sr = form.srNo.trim();
+  const copies = form.copiesCount.trim();
+  return {
+    srNo: /^\d+$/.test(sr) ? Number(sr) : undefined,
     projectPackage: form.projectPackage || null,
     building: form.building || null,
     discipline: form.discipline || null,
@@ -145,11 +165,10 @@ export function masterRegisterPayload(form: MasterRegisterForm) {
     latestRevision: form.latestRevision || null,
     plannedSubmissionDate: form.plannedSubmissionDate || null,
     actualSubmissionDate: form.actualSubmissionDate || null,
-    submissionDelayDays: Number.isFinite(delay) ? delay : null,
     delayResponsibility: form.delayResponsibility || null,
     issuedTo: form.issuedTo || null,
     issueDate: form.issueDate || null,
-    copiesCount: form.copiesCount.trim() ? Number(form.copiesCount) : null,
+    copiesCount: /^\d+$/.test(copies) ? Number(copies) : null,
     criticalDrawing: form.criticalDrawing || null,
     remarks: form.remarks || null,
   };
@@ -178,14 +197,7 @@ export function lineToMasterRegisterForm(row: {
   criticalDrawing?: string | null;
   remarks?: string | null;
 }): MasterRegisterForm {
-  const day = (v?: string | Date | null) => {
-    if (!v) return "";
-    try {
-      return new Date(v).toISOString().slice(0, 10);
-    } catch {
-      return "";
-    }
-  };
+  const day = (v?: string | Date | null) => istDayKey(v) || "";
   return {
     srNo: row.srNo != null ? String(row.srNo) : "",
     projectPackage: row.projectPackage || "",
@@ -201,7 +213,6 @@ export function lineToMasterRegisterForm(row: {
     latestRevision: row.latestRevision || "Yes",
     plannedSubmissionDate: day(row.plannedSubmissionDate),
     actualSubmissionDate: day(row.actualSubmissionDate),
-    submissionDelayDays: row.submissionDelayDays != null ? String(row.submissionDelayDays) : "",
     delayResponsibility: row.delayResponsibility || "",
     issuedTo: row.issuedTo || "",
     issueDate: day(row.issueDate),

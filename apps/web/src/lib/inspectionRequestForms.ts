@@ -64,7 +64,7 @@ export const QUALITY_IR_FORM: InspectionFormRef = {
   docNo: "SPDC/QA/F-01",
   workbook: "SPDC_Request_for_Inspection_Form.xlsx",
   title: "Request for Inspection (RIA)",
-  subtitle: "Site activity — all disciplines. Drawing reference is text only; attach signed checklist separately.",
+  subtitle: "Site activity - all disciplines. Drawing reference is text only; attach signed checklist separately.",
   rfiKind: "QualityIR",
   prefix: "IR",
   registerColumns: [
@@ -87,23 +87,31 @@ export const QUALITY_IR_FORM: InspectionFormRef = {
     { key: "dateRaised", label: "Date of raising", placeholder: "YYYY-MM-DD", section: "1. Project particulars" },
     { key: "packageWoNo", label: "Package / WO no.", placeholder: "Optional", section: "1. Project particulars" },
     { key: "discipline", label: "Discipline", placeholder: "Civil / Structural", section: "1. Project particulars" },
-    { key: "activityDescription", label: "Description of activity", placeholder: "RCC column casting — C104", section: "2. Activity offered", wide: true },
+    { key: "activityDescription", label: "Description of activity", placeholder: "RCC column casting - C104", section: "2. Activity offered", wide: true },
     { key: "location", label: "Location / grid / level", placeholder: "Grid C4 / Lvl +0.00", section: "2. Activity offered", wide: true },
     { key: "quantityUnit", label: "Quantity offered / unit", placeholder: "3.2 cum", section: "2. Activity offered" },
     { key: "stageOfWork", label: "Stage of work", placeholder: "Pre-pour hold point", section: "2. Activity offered" },
     { key: "itpRef", label: "ITP ref. / activity code", placeholder: "ITP-STR-05", section: "2. Activity offered" },
-    { key: "controlPoint", label: "Control point", placeholder: "H — Hold point", section: "2. Activity offered" },
+    { key: "controlPoint", label: "Control point", placeholder: "H - Hold point", section: "2. Activity offered" },
+    { key: "irType", label: "IR type", placeholder: "Site inspection", section: "2. Activity offered", options: ["Document review", "Site inspection"] },
+    { key: "elementOrLot", label: "Element or lot", placeholder: "Element, pour or lot", section: "3. Contractor declaration" },
+    { key: "source", label: "Source", placeholder: "Approved source or pour id", section: "3. Contractor declaration" },
+    { key: "inspectedOn", label: "Inspected on", placeholder: "YYYY-MM-DD", section: "4. SPDC inspection", inputType: "date" },
+    { key: "result", label: "Result", placeholder: "A / B / C / D", section: "4. SPDC inspection", options: ["A", "B", "C", "D"] },
+    { key: "observations", label: "Observations", placeholder: "SPDC observations", section: "4. SPDC inspection", wide: true },
+    { key: "actionTaken", label: "Action taken", placeholder: "Contractor action on observations", section: "5. Close-out", wide: true },
+    { key: "closedBy", label: "Closed by", placeholder: "SPDC close-out", section: "5. Close-out" },
     { key: "drawingRef", label: "Drawing no. & rev. (reference only)", placeholder: "SPDC-STR-104 Rev. 2", section: "References" },
-    { key: "specClause", label: "Specification clause", placeholder: "Sec. 5.3 — RCC works", section: "References" },
+    { key: "specClause", label: "Specification clause", placeholder: "Sec. 5.3 - RCC works", section: "References" },
     { key: "methodStmtNo", label: "Approved method stmt. no.", placeholder: "MS-STR-07 Rev. 1", section: "References" },
     { key: "previousIrNo", label: "Previous IR no. (if re-offer)", placeholder: "IR/CIV/021", section: "References" },
-    { key: "requiredDate", label: "Inspection required on — date", placeholder: "YYYY-MM-DD", section: "References" },
-    { key: "requiredTime", label: "Inspection required on — time", placeholder: "10:30", section: "References" },
+    { key: "requiredDate", label: "Inspection required date", placeholder: "YYYY-MM-DD", section: "References" },
+    { key: "requiredTime", label: "Inspection required time", placeholder: "10:30", section: "References" },
     { key: "checklistRef", label: "Linked activity checklist no.", placeholder: "CL/CIV/104", section: "References" },
   ],
-  subjectHint: "IR — Quality inspection: [activity]",
+  subjectHint: "IR - Quality inspection: [activity]",
   bodyTemplate: [
-    "REQUEST FOR INSPECTION (RIA) — SPDC/QA/F-01",
+    "REQUEST FOR INSPECTION (RIA) - SPDC/QA/F-01",
     "",
     "Project / facility: ",
     "Employer / client: ",
@@ -528,8 +536,11 @@ export function qapRoleCellClass(role?: string | null): string {
 }
 
 export function qapStatusRowClass(status?: string | null): string {
-  if (status === "Done") return "qap-row-done";
-  return "qap-row-open";
+  const s = String(status || "");
+  if (s === "Completed" || s === "Done") return "qap-row-done";
+  if (s === "Overdue" || /reject/i.test(s)) return "qap-row-danger";
+  if (s === "In progress" || s === "Awaiting client") return "qap-row-open";
+  return "";
 }
 
 export function cubeResultRowClass(result?: string | null): string {

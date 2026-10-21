@@ -15,6 +15,23 @@ import {
   type QapLibraryItem,
 } from "../../lib/qapSettings";
 
+type QapRoleRow = {
+  roleLabel: string;
+  party: string;
+  userId?: string | null;
+  vendorId?: string | null;
+  contactId?: string | null;
+  mapped?: boolean;
+};
+type QapPlanLine = { id: string; srNo?: string | null; section?: string | null; description?: string | null; workPackage?: string | null; isHeader?: boolean };
+
+function roleSelectValue(row: QapRoleRow): string {
+  if (row.userId) return `user:${row.userId}`;
+  if (row.vendorId) return `vendor:${row.vendorId}`;
+  if (row.contactId) return `contact:${row.contactId}`;
+  return "";
+}
+
 const blankItem = (): QapLibraryItem => ({ description: "", frequency: "", codeOfConformance: "", testAgency: "" });
 const inputCls = "w-full rounded-lg border border-line bg-white px-2 py-1.5 text-sm";
 
@@ -32,6 +49,12 @@ export default function QapSettingsPage() {
   const [newActivity, setNewActivity] = useState("");
   const [pick, setPick] = useState<Record<string, string[]>>({});
   const [adding, setAdding] = useState<Record<string, string>>({});
+  const [roleRows, setRoleRows] = useState<QapRoleRow[]>([]);
+  const [roleChoices, setRoleChoices] = useState<{ users: { id: string; fullName?: string }[]; vendors: { id: string; name?: string }[]; contacts: { id: string; personName?: string; orgSection?: string }[] }>({ users: [], vendors: [], contacts: [] });
+  const [unmappedRoles, setUnmappedRoles] = useState<string[]>([]);
+  const [planLines, setPlanLines] = useState<QapPlanLine[]>([]);
+  const [pkgQuery, setPkgQuery] = useState("");
+  const [weekForLines, setWeekForLines] = useState("Week 50");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const masterRef = useRef<HTMLInputElement | null>(null);
 
@@ -56,6 +79,49 @@ export default function QapSettingsPage() {
       }
       return `${f.name}: ${parts.join("; ")}.`;
     });
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void api<{
+      roles?: QapRoleRow[];
+      unmapped?: string[];
+      users?: { id: string; fullName?: string }[];
+      vendors?: { id: string; name?: string }[];
+      contacts?: { id: string; personName?: string; orgSection?: string }[];
+    }>(`/api/checklist/project/${id}/qap/roles`, { token })
+      .then((out) => {
+        if (cancelled) return;
+        setRoleRows(out.roles || []);
+        setUnmappedRoles(out.unmapped || []);
+        setRoleChoices({ users: out.users || [], vendors: out.vendors || [], contacts: out.contacts || [] });
+      })
+      .catch(() => {
+        if (!cancelled) setRoleRows([]);
+      });
+    void api<{ lines?: QapPlanLine[] }>(`/api/checklist/project/${id}/qap/plan-lines`, { token })
+      .then((out) => {
+        if (!cancelled) setPlanLines(out.lines || []);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanLines([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, token]);
+
+  const packageNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const line of planLines) if (line.workPackage) set.add(String(line.workPackage));
+    return Array.from(set).sort();
+  }, [planLines]);
+
+  const packageLines = useMemo(() => {
+    const q = pkgQuery.trim().toLowerCase();
+    if (!q) return planLines;
+    return planLines.filter((line) => String(line.workPackage || "").toLowerCase().includes(q));
+  }, [planLines, pkgQuery]);
 
   useEffect(() => {
     if (!data) return;
@@ -514,6 +580,154 @@ export default function QapSettingsPage() {
             </Button>
             <Button type="button" variant="ghost" className="!text-sm" onClick={reload}>Refresh</Button>
           </div>
+        </Card>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="font-semibold">5. Roles</h3>
+        {unmappedRoles.length ? (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {unmappedRoles.length} role(s) are not mapped: {unmappedRoles.join(", ")}
+          </p>
+        ) : (
+          <p className="text-xs text-steel-muted">Every QAP role label on this project has a person, vendor, or matrix contact.</p>
+        )}
+        <Card className="!p-3 space-y-2">
+          {!roleRows.length ? <p className="text-sm text-steel-muted">No role labels yet. Load the QAP lines first.</p> : null}
+          {roleRows.map((row, i) => (
+            <div key={`${row.party}-${row.roleLabel}-${i}`} className="grid sm:grid-cols-[8rem_1fr_1.4fr] gap-2 items-center text-sm">
+              <Badge tone={row.mapped ? "ok" : "warn"}>{row.party}</Badge>
+              <span className="font-medium truncate" title={row.roleLabel}>{row.roleLabel}</span>
+              <select
+                className={inputCls}
+                disabled={!canManage || Boolean(busy)}
+                value={roleSelectValue(row)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const next = { userId: null as string | null, vendorId: null as string | null, contactId: null as string | null, mapped: false };
+                  if (v.startsWith("user:")) next.userId = v.slice(5);
+                  else if (v.startsWith("vendor:")) next.vendorId = v.slice(7);
+                  else if (v.startsWith("contact:")) next.contactId = v.slice(8);
+                  next.mapped = !!(next.userId || next.vendorId || next.contactId);
+                  setRoleRows(roleRows.map((r, k) => (k === i ? { ...r, ...next } : r)));
+                }}
+              >
+                <option value="">Not mapped</option>
+                <optgroup label="Project users">
+                  {roleChoices.users.map((u) => (
+                    <option key={u.id} value={`user:${u.id}`}>{u.fullName || u.id}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Vendors">
+                  {roleChoices.vendors.map((v) => (
+                    <option key={v.id} value={`vendor:${v.id}`}>{v.name || v.id}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Communication matrix">
+                  {roleChoices.contacts.map((c) => (
+                    <option key={c.id} value={`contact:${c.id}`}>
+                      {c.personName || c.id}{c.orgSection ? ` (${c.orgSection})` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+          ))}
+          {canManage ? (
+            <Button
+              type="button"
+              disabled={Boolean(busy) || !roleRows.length}
+              onClick={() =>
+                void run("roles", "Saving QAP roles", async () => {
+                  await api(`/api/checklist/project/${id}/qap/roles`, {
+                    method: "PUT",
+                    token,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      roles: roleRows.map((r) => ({
+                        roleLabel: r.roleLabel,
+                        party: r.party,
+                        userId: r.userId || null,
+                        vendorId: r.vendorId || null,
+                        contactId: r.contactId || null,
+                      })),
+                    }),
+                  });
+                  setUnmappedRoles(
+                    roleRows.filter((r) => !(r.userId || r.vendorId || r.contactId)).map((r) => `${r.party}: ${r.roleLabel}`),
+                  );
+                  return "QAP roles saved.";
+                })
+              }
+            >
+              {busy === "roles" ? "Saving..." : "Save roles"}
+            </Button>
+          ) : null}
+        </Card>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="font-semibold">6. Package-wise master</h3>
+        <Card className="space-y-3">
+          <p className="text-sm text-steel-muted">
+            Filter the QAP plan by work package, then add those lines onto a week register.
+          </p>
+          <div className="flex flex-wrap gap-2 items-end">
+            {packageNames.length ? (
+              <label className="text-xs font-semibold text-steel-muted">
+                Package
+                <select className={`${inputCls} mt-1 min-w-[10rem]`} value={packageNames.includes(pkgQuery) ? pkgQuery : ""} onChange={(e) => setPkgQuery(e.target.value)}>
+                  <option value="">All packages</option>
+                  {packageNames.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="text-xs font-semibold text-steel-muted flex-1 min-w-[12rem]">
+              Work package filter
+              <input className={`${inputCls} mt-1`} value={pkgQuery} placeholder="Type a package name" onChange={(e) => setPkgQuery(e.target.value)} />
+            </label>
+            <label className="text-xs font-semibold text-steel-muted">
+              Week
+              <input className={`${inputCls} mt-1`} value={weekForLines} onChange={(e) => setWeekForLines(e.target.value)} />
+            </label>
+            {canManage ? (
+              <Button
+                type="button"
+                disabled={Boolean(busy) || !packageLines.length || !weekForLines.trim()}
+                onClick={() =>
+                  void run("week-lines", "Adding lines to the week", async () => {
+                    const out = await api<{ added: number; weekLabel: string }>(`/api/checklist/project/${id}/qap/add-to-week`, {
+                      method: "POST",
+                      token,
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        weekLabel: weekForLines.trim(),
+                        lineIds: packageLines.map((l) => l.id),
+                      }),
+                    });
+                    return `Added ${out.added} line(s) to ${out.weekLabel}.`;
+                  })
+                }
+              >
+                {busy === "week-lines" ? "Adding..." : "Add these lines to week"}
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-xs text-steel-muted">{packageLines.length} plan line(s) match this filter.</p>
+          <ul className="text-xs divide-y divide-line max-h-48 overflow-y-auto border border-line rounded-lg">
+            {packageLines.slice(0, 12).map((line) => (
+              <li key={line.id} className="px-2 py-1.5">
+                <span className="font-mono text-steel-muted">{line.srNo || "-"}</span>
+                {" "}
+                <span className="font-semibold">{line.section || "Activity"}</span>
+                <span className="text-steel-muted"> - {line.description || (line.isHeader ? "Group label" : "Line")}</span>
+                {line.workPackage ? <span className="text-steel-muted"> · {line.workPackage}</span> : null}
+              </li>
+            ))}
+            {packageLines.length > 12 ? <li className="px-2 py-1.5 text-steel-muted">and {packageLines.length - 12} more</li> : null}
+          </ul>
         </Card>
       </section>
     </div>

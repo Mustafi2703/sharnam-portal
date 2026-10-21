@@ -75,7 +75,7 @@ export function DrawingPackMenu({
     say("Generating the whole drawing pack…");
     try {
       await downloadAuthFile(`/api/drawings/project/${projectId}/pack.zip`, token, "Drawing-Pack.zip");
-      say("Drawing pack downloaded — master register, GFC log, RFI register and dashboard.");
+      say("Drawing pack downloaded: master register, Approval & GFC Log, RFI register and dashboard.");
     } catch (err) {
       say(err instanceof Error ? err.message : "Could not generate the pack");
     } finally {

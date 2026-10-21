@@ -2,6 +2,7 @@
  * Photos + site-instruction docs on Quality/Safety IRs → SharePoint Evidence folder,
  * and optional log into Site Observation / Site Instruction registers.
  */
+import { enclosureFileName } from "@sharnam/shared";
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
@@ -13,6 +14,8 @@ export type IrAttachment = {
   kind: "photo" | "doc" | "site_instruction";
   uploadedAt: string;
   uploadedBy?: string | null;
+  recordKey?: string | null;
+  recordLabel?: string | null;
 };
 
 const IR_KINDS = new Set(["QualityIR", "SafetyIR", "ActivityInspection", "QualityInspection", "SafetyChecklist"]);
@@ -35,6 +38,8 @@ export function parseIrAttachments(raw: string | null | undefined): IrAttachment
         kind: (x.kind === "doc" || x.kind === "site_instruction" ? x.kind : "photo") as IrAttachment["kind"],
         uploadedAt: String(x.uploadedAt || new Date().toISOString()),
         uploadedBy: x.uploadedBy ? String(x.uploadedBy) : null,
+        recordKey: x.recordKey ? String(x.recordKey) : null,
+        recordLabel: x.recordLabel ? String(x.recordLabel) : null,
       }));
   } catch {
     return [];
@@ -53,6 +58,8 @@ export async function addIrAttachments(opts: {
   userName?: string | null;
   files: { buffer: Buffer; originalname: string; mimetype?: string; fieldname?: string }[];
   kindHint?: "photo" | "doc" | "site_instruction";
+  recordLabel?: string;
+  recordKey?: string;
 }) {
   const rfi = await prisma.rfi.findUnique({ where: { id: opts.rfiId } });
   if (!rfi) throw new Error("Inspection request not found");
@@ -72,7 +79,9 @@ export async function addIrAttachments(opts: {
       opts.kindHint ||
       (/site.?instruction|si_doc/i.test(field) ? "site_instruction" : isImage ? "photo" : "doc");
     const safe = f.originalname.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
-    const name = `${Date.now()}-${kind}-${safe}`;
+    const name = opts.recordLabel
+      ? enclosureFileName(rfi.irNumber || rfi.number, opts.recordLabel, safe)
+      : `${Date.now()}-${kind}-${safe}`;
     const saved = await mockOneDrive.upload(
       project.code,
       folder,
@@ -87,7 +96,24 @@ export async function addIrAttachments(opts: {
       kind,
       uploadedAt: new Date().toISOString(),
       uploadedBy: opts.userName || null,
+      recordKey: opts.recordKey || null,
+      recordLabel: opts.recordLabel || null,
     });
+    if (kind === "photo") {
+      const day = new Date().toISOString().slice(0, 10);
+      await prisma.projectPhoto.create({
+        data: {
+          projectId: rfi.projectId,
+          fileUrl: saved.url,
+          sharePointUrl: saved.sharePointUrl || null,
+          album: day,
+          shotDate: new Date(`${day}T12:00:00+05:30`),
+          description: `${rfi.irNumber || rfi.number}${opts.recordLabel ? ` - ${opts.recordLabel}` : ""}`,
+          rfiId: rfi.id,
+          recordLabel: opts.recordLabel || null,
+        },
+      });
+    }
   }
 
   const next = [...existing, ...added].slice(-40);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { PICKLIST_DEFAULTS } from "@sharnam/shared";
 import { api } from "../api";
 
 export type DrawingPicklists = {
@@ -13,14 +14,14 @@ export type DrawingPicklists = {
 };
 
 export const DEFAULT_PICKLISTS: DrawingPicklists = {
-  drawingTypes: ["Concept Drawings", "Schematic Drawings", "Detailed Design (DD) Drawings", "Tender Drawings", "Good For Construction (GFC)"],
-  disciplines: ["Architecture", "Structural", "MEPF"],
-  delayResponsibility: ["Architecture Consultant", "Structural Consultant", "MEPF Consultant", "BIM Consultant", "Contractor", "PMC"],
-  issuedTo: ["Main Contractor", "PMC / Client"],
-  rfiPriorities: ["CRITICAL", "HIGH", "NORMAL", "LOW"],
-  rfiCategories: ["Drawing discrepancy", "Missing information", "Design clarification", "Specification conflict", "Site constraint", "Material substitution", "Statutory requirement", "Interface / coordination"],
-  impactLevels: ["None", "Low", "Medium", "High"],
-  coordinationPriorities: ["Low", "Medium", "High", "Critical"],
+  drawingTypes: [...PICKLIST_DEFAULTS.drawingTypes],
+  disciplines: [...PICKLIST_DEFAULTS.disciplines],
+  delayResponsibility: [...PICKLIST_DEFAULTS.delayResponsibility],
+  issuedTo: [...PICKLIST_DEFAULTS.issuedTo],
+  rfiPriorities: [...PICKLIST_DEFAULTS.rfiPriorities],
+  rfiCategories: [...PICKLIST_DEFAULTS.rfiCategories],
+  impactLevels: [...PICKLIST_DEFAULTS.impactLevels],
+  coordinationPriorities: [...PICKLIST_DEFAULTS.coordinationPriorities],
 };
 
 export const PICKLIST_META: { key: keyof DrawingPicklists; title: string; hint: string }[] = [
@@ -37,6 +38,8 @@ export const PICKLIST_META: { key: keyof DrawingPicklists; title: string; hint: 
 export type PicklistState = {
   lists: DrawingPicklists;
   defaults: DrawingPicklists;
+  /** Packages from the project card (Project.workPackages), not a pick-list. */
+  packages: string[];
   custom: string[];
   used: { disciplines: string[]; drawingTypes: string[]; delayResponsibility: string[]; packages: string[] };
   loaded: boolean;
@@ -47,6 +50,7 @@ export function useDrawingPicklists(projectId?: string, token?: string | null) {
   const [state, setState] = useState<PicklistState>({
     lists: DEFAULT_PICKLISTS,
     defaults: DEFAULT_PICKLISTS,
+    packages: [],
     custom: [],
     used: { disciplines: [], drawingTypes: [], delayResponsibility: [], packages: [] },
     loaded: false,
@@ -55,9 +59,11 @@ export function useDrawingPicklists(projectId?: string, token?: string | null) {
     if (!projectId) return;
     try {
       const out = await api<any>(`/api/drawings/project/${projectId}/picklists`, { token });
+      const { packages: pkg, ...listRest } = out.lists || {};
       setState({
-        lists: { ...DEFAULT_PICKLISTS, ...(out.lists || {}) },
+        lists: { ...DEFAULT_PICKLISTS, ...listRest },
         defaults: { ...DEFAULT_PICKLISTS, ...(out.defaults || {}) },
+        packages: Array.isArray(pkg) ? pkg.map(String) : [],
         custom: out.custom || [],
         used: { disciplines: [], drawingTypes: [], delayResponsibility: [], packages: [], ...(out.used || {}) },
         loaded: true,

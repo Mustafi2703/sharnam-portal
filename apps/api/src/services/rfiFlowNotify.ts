@@ -33,6 +33,53 @@ export async function mergeRfiRecipients(projectId: string, extra?: string | nul
   return merged.length ? merged.join(", ") : undefined;
 }
 
+/** Who the RFI is assigned to: a portal user's email, or a matrix contact's email when there is no portal user. */
+export type RfiAssigneeRecipient = {
+  assigneeEmail?: string | null;
+  /** true = communication-matrix contact without a portal login */
+  assigneeIsContact?: boolean;
+};
+
+export function rfiAssigneeRecipient(rfi: {
+  assignedTo?: { email?: string | null } | null;
+  assigneeEmail?: string | null;
+  assigneeContactId?: string | null;
+}): RfiAssigneeRecipient {
+  const userEmail = rfi.assignedTo?.email?.trim();
+  if (userEmail) return { assigneeEmail: userEmail, assigneeIsContact: false };
+  const contactEmail = rfi.assigneeEmail?.trim();
+  if (contactEmail) return { assigneeEmail: contactEmail, assigneeIsContact: true };
+  return {};
+}
+
+/** Base To: list plus the assignee (deduped). Falls back to the project notification list when no base is given. */
+async function recipientsWithAssignee(
+  projectId: string,
+  base: string | undefined,
+  assignee: RfiAssigneeRecipient,
+): Promise<string | undefined> {
+  const assigneeEmails = splitEmails(assignee.assigneeEmail);
+  if (!assigneeEmails.length) return base;
+  const start = base ?? (await mergeRfiRecipients(projectId));
+  const merged = [...new Set([...splitEmails(start), ...assigneeEmails])];
+  return merged.length ? merged.join(", ") : undefined;
+}
+
+const CONTACT_REPLY_NOTE = "You do not need a portal login to reply - reply to this email.";
+
+/** Matrix contacts without a portal login get a reply-by-email line. */
+function withContactNote(
+  body: { bodyHtml: string; bodyText: string },
+  assignee: RfiAssigneeRecipient,
+): { bodyHtml: string; bodyText: string } {
+  if (!assignee.assigneeIsContact) return body;
+  const para = `<p style="margin:16px 0 0;font-size:13px;color:#334155">${CONTACT_REPLY_NOTE}</p>`;
+  const bodyHtml = /<\/body>/i.test(body.bodyHtml)
+    ? body.bodyHtml.replace(/<\/body>/i, `${para}</body>`)
+    : `${body.bodyHtml}${para}`;
+  return { bodyHtml, bodyText: `${body.bodyText}\n\n${CONTACT_REPLY_NOTE}` };
+}
+
 export const RFI_FLOW_KINDS = [
   "RequestForInformation",
   "DrawingChecklist",
@@ -123,6 +170,8 @@ export function rfiEmailContextFromRecord(
     specSectionLink?: string | null;
     questionReceivedFrom?: string | null;
     assignedTo?: { fullName: string } | null;
+    /** Matrix contact assignee (no portal user) */
+    assigneeName?: string | null;
     createdBy?: { fullName: string } | null;
     drawing?: { drawingNumber: string; title: string } | null;
     vendor?: { name: string } | null;
@@ -143,7 +192,7 @@ export function rfiEmailContextFromRecord(
     dueDate: rfi.dueDate,
     createdAt: rfi.createdAt,
     createdByName: rfi.createdBy?.fullName || null,
-    assignedToName: rfi.assignedTo?.fullName || null,
+    assignedToName: rfi.assignedTo?.fullName || rfi.assigneeName || null,
     linkedDrawingNumber: rfi.drawing?.drawingNumber || null,
     linkedDrawingTitle: rfi.drawing?.title || null,
     linkedChecklistName: linkedChecklistName || null,
@@ -164,14 +213,19 @@ export async function notifyRfiRaised(
     createdById?: string;
     toOverride?: string;
     extraEmails?: string | null;
-  } & RfiEmailContext
+  } & RfiEmailContext &
+    RfiAssigneeRecipient
 ) {
   const fill =
     opts.linkedAssignmentId != null
       ? checklistFillUrl(opts.projectId, opts.linkedAssignmentId, opts.rfiKind)
       : null;
   const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
-  const toOverride = opts.toOverride || (await mergeRfiRecipients(opts.projectId, opts.extraEmails));
+  const toOverride = await recipientsWithAssignee(
+    opts.projectId,
+    opts.toOverride || (await mergeRfiRecipients(opts.projectId, opts.extraEmails)),
+    opts,
+  );
   const ctx: RfiEmailContext = {
     projectCode: opts.projectCode,
     projectName: opts.projectName,
@@ -197,7 +251,7 @@ export async function notifyRfiRaised(
     formDataJson: opts.formDataJson,
   };
 
-  const { bodyHtml, bodyText } = buildRfiRaisedEmail({ ctx, fillUrl: fill, registerUrl: register });
+  const { bodyHtml, bodyText } = withContactNote(buildRfiRaisedEmail({ ctx, fillUrl: fill, registerUrl: register }), opts);
 
   const emailResult = await queueProjectEmail({
     projectId: opts.projectId,
@@ -332,7 +386,8 @@ export async function notifyRfiClosed(
     rfiId: string;
     createdById?: string;
     toOverride?: string;
-  } & RfiEmailContext
+  } & RfiEmailContext &
+    RfiAssigneeRecipient
 ) {
   const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
   const ctx: RfiEmailContext = {
@@ -356,7 +411,7 @@ export async function notifyRfiClosed(
     formDataJson: opts.formDataJson,
   };
 
-  const { bodyHtml, bodyText } = buildRfiClosedEmail({ ctx, registerUrl: register });
+  const { bodyHtml, bodyText } = withContactNote(buildRfiClosedEmail({ ctx, registerUrl: register }), opts);
 
   const emailResult = await queueProjectEmail({
     projectId: opts.projectId,
@@ -365,7 +420,7 @@ export async function notifyRfiClosed(
     bodyHtml,
     context: "rfi.status.closed",
     createdById: opts.createdById,
-    toOverride: opts.toOverride,
+    toOverride: await recipientsWithAssignee(opts.projectId, opts.toOverride, opts),
   });
 
   try {
@@ -395,7 +450,8 @@ export async function notifyRfiResponse(opts: {
   isOfficial?: boolean;
   createdById?: string;
   toOverride?: string;
-} & RfiEmailContext) {
+} & RfiEmailContext &
+  RfiAssigneeRecipient) {
   const register = rfiRegisterUrl(opts.projectId, opts.rfiKind, opts.rfiId);
   const ctx: RfiEmailContext = {
     projectCode: opts.projectCode,
@@ -418,13 +474,16 @@ export async function notifyRfiResponse(opts: {
     formDataJson: opts.formDataJson,
   };
 
-  const { bodyHtml, bodyText } = buildRfiResponseEmail({
-    ctx,
-    responseText: opts.responseText,
-    respondedByName: opts.respondedByName,
-    registerUrl: register,
-    isOfficial: opts.isOfficial,
-  });
+  const { bodyHtml, bodyText } = withContactNote(
+    buildRfiResponseEmail({
+      ctx,
+      responseText: opts.responseText,
+      respondedByName: opts.respondedByName,
+      registerUrl: register,
+      isOfficial: opts.isOfficial,
+    }),
+    opts,
+  );
 
   return queueProjectEmail({
     projectId: opts.projectId,
@@ -433,7 +492,7 @@ export async function notifyRfiResponse(opts: {
     bodyHtml,
     context: "rfi.respond",
     createdById: opts.createdById,
-    toOverride: opts.toOverride,
+    toOverride: await recipientsWithAssignee(opts.projectId, opts.toOverride, opts),
   });
 }
 
@@ -445,7 +504,8 @@ export async function notifyRfiFollowUp(
     createdById?: string;
     extraEmails?: string | null;
     note?: string | null;
-  } & RfiEmailContext
+  } & RfiEmailContext &
+    RfiAssigneeRecipient
 ) {
   const fill =
     opts.linkedAssignmentId != null
@@ -475,14 +535,21 @@ export async function notifyRfiFollowUp(
     formDataJson: opts.formDataJson,
   };
 
-  const { bodyHtml, bodyText } = buildRfiFollowUpEmail({
-    ctx,
-    registerUrl: register,
-    fillUrl: fill,
-    note: opts.note,
-  });
+  const { bodyHtml, bodyText } = withContactNote(
+    buildRfiFollowUpEmail({
+      ctx,
+      registerUrl: register,
+      fillUrl: fill,
+      note: opts.note,
+    }),
+    opts,
+  );
 
-  const toOverride = await mergeRfiRecipients(opts.projectId, opts.extraEmails);
+  const toOverride = await recipientsWithAssignee(
+    opts.projectId,
+    await mergeRfiRecipients(opts.projectId, opts.extraEmails),
+    opts,
+  );
   return queueProjectEmail({
     projectId: opts.projectId,
     subject: `Follow-up — ${opts.number}: ${opts.subject}`,

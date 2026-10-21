@@ -5,6 +5,8 @@ import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { findWorkbook } from "../lib/excelRoot.js";
 import { prisma } from "../prisma.js";
+import { delayDays } from "@sharnam/shared";
+import { packageNotAllowed, projectPackageNames } from "./workPackageCatalog.js";
 
 function n(v: unknown) {
   const x = Number(v);
@@ -307,14 +309,15 @@ export async function importMasterRegisterFromBuffer(
   projectId: string,
   buffer: Buffer,
   sourceName = "upload.xlsx",
-): Promise<{ lines: number; source: string; picklists?: string[] }> {
+): Promise<{ lines: number; source: string; picklists?: string[]; warnings: string[] }> {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const picklists = await applyInputSheetPicklists(projectId, wb);
+  const warnings: string[] = [];
   const master =
     wb.SheetNames.find((n) => /Master Drawing Register/i.test(n)) ||
     wb.SheetNames.find((n) => /master/i.test(n)) ||
     wb.SheetNames[0];
-  if (!master || !wb.Sheets[master]) return { lines: 0, source: sourceName, picklists };
+  if (!master || !wb.Sheets[master]) return { lines: 0, source: sourceName, picklists, warnings };
 
   const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[master], {
     header: 1,
@@ -327,6 +330,7 @@ export async function importMasterRegisterFromBuffer(
   });
 
   let lines = 0;
+  const allowedPackages = await projectPackageNames(projectId);
   for (let i = (headerIdx >= 0 ? headerIdx : 5) + 1; i < rows.length; i++) {
     const r = rows[i] as unknown[];
     const drawingNumber = String(r[4] ?? "").trim();
@@ -336,17 +340,23 @@ export async function importMasterRegisterFromBuffer(
 
     const planned = cellDate(r[12]);
     const actual = cellDate(r[13]);
-    let delayDays = n(r[14]);
-    if (!delayDays && planned && actual) {
-      delayDays = Math.ceil((actual.getTime() - planned.getTime()) / 86400000);
+    const submissionDelayDays = delayDays(planned, actual);
+    const rowLabel = `Row ${i + 1} (${drawingNumber})`;
+    const srNo = cellInt(r[0], 1, 99999);
+    if (srNo.bad) warnings.push(`${rowLabel}: Sr # "${String(r[0]).trim()}" is not a whole number, next number used`);
+    const copies = cellInt(r[18], 0, 99);
+    if (copies.bad) warnings.push(`${rowLabel}: No. of copies "${String(r[18]).trim()}" is not a whole number from 0 to 99, left empty`);
+    const projectPackage = String(r[1] ?? "").trim();
+    if (projectPackage && packageNotAllowed(projectPackage, allowedPackages)) {
+      warnings.push(`${rowLabel}: package "${projectPackage}" is not on the project set-up. The value was kept.`);
     }
 
     await prisma.drawingRegisterLine.upsert({
       where: { projectId_drawingNumber: { projectId, drawingNumber } },
       create: {
         projectId,
-        srNo: n(r[0]) || lines + 1,
-        projectPackage: String(r[1] ?? "").trim() || null,
+        srNo: srNo.value ?? lines + 1,
+        projectPackage: projectPackage || null,
         building: String(r[2] ?? "").trim() || null,
         discipline: String(r[3] ?? "").trim() || null,
         drawingNumber,
@@ -359,18 +369,18 @@ export async function importMasterRegisterFromBuffer(
         latestRevision: String(r[11] ?? "").trim() || null,
         plannedSubmissionDate: planned,
         actualSubmissionDate: actual,
-        submissionDelayDays: delayDays || null,
+        submissionDelayDays,
         delayResponsibility: String(r[15] ?? "").trim() || null,
         issuedTo: String(r[16] ?? "").trim() || null,
         issueDate: cellDate(r[17]),
-        copiesCount: n(r[18]) || null,
+        copiesCount: copies.value,
         criticalDrawing: String(r[19] ?? "").trim() || null,
         remarks: String(r[20] ?? "").trim() || null,
         source: sourceName,
       },
       update: {
-        srNo: n(r[0]) || undefined,
-        projectPackage: String(r[1] ?? "").trim() || null,
+        srNo: srNo.value ?? undefined,
+        projectPackage: projectPackage || null,
         building: String(r[2] ?? "").trim() || null,
         discipline: String(r[3] ?? "").trim() || null,
         drawingTitle: title,
@@ -382,11 +392,11 @@ export async function importMasterRegisterFromBuffer(
         latestRevision: String(r[11] ?? "").trim() || null,
         plannedSubmissionDate: planned,
         actualSubmissionDate: actual,
-        submissionDelayDays: delayDays || null,
+        submissionDelayDays,
         delayResponsibility: String(r[15] ?? "").trim() || null,
         issuedTo: String(r[16] ?? "").trim() || null,
         issueDate: cellDate(r[17]),
-        copiesCount: n(r[18]) || null,
+        copiesCount: copies.value,
         criticalDrawing: String(r[19] ?? "").trim() || null,
         remarks: String(r[20] ?? "").trim() || null,
         source: sourceName,
@@ -394,7 +404,17 @@ export async function importMasterRegisterFromBuffer(
     });
     lines += 1;
   }
-  return { lines, source: sourceName, picklists };
+  return { lines, source: sourceName, picklists, warnings: warnings.slice(0, 200) };
+}
+
+/** Whole number cell in [min, max]. Blank gives null; anything else that does not fit is flagged as bad and gives null. */
+function cellInt(v: unknown, min: number, max: number): { value: number | null; bad: boolean } {
+  if (v == null) return { value: null, bad: false };
+  const text = typeof v === "number" ? String(v) : String(v).trim();
+  if (!text) return { value: null, bad: false };
+  if (!/^\d+$/.test(text)) return { value: null, bad: true };
+  const num = Number(text);
+  return num < min || num > max ? { value: null, bad: true } : { value: num, bad: false };
 }
 
 /** The workbook's "Input" sheet (Latest Revision | Drawing Type | Discipline | Delay Responsibility) → this project's pick-lists. */
@@ -579,7 +599,7 @@ export async function importGfcLogFromBuffer(
           data: {
             drawingId: drawing.id,
             revisionNumber,
-            revisionLabel: `${revisionNumber} — GFC log import`,
+            revisionLabel: `${revisionNumber} - Approval & GFC Log import`,
             fileUrl: `/uploads/onedrive/pending/${drawingNumber}-${revisionNumber}.pdf`,
             fileName: `${drawingNumber}-${revisionNumber}.pdf`,
             published: false,
@@ -630,6 +650,11 @@ export async function importGfcLogFromBuffer(
       },
     });
 
+    const lineDelay = delayDays(line.plannedSubmissionDate, line.actualSubmissionDate);
+    if (lineDelay !== line.submissionDelayDays) {
+      await prisma.drawingRegisterLine.update({ where: { id: line.id }, data: { submissionDelayDays: lineDelay } });
+    }
+
     if (line.plannedSubmissionDate) {
       await prisma.drawingRevision.updateMany({
         where: { drawingId: drawing.id, revisionNumber: currentRev, plannedDate: null },
@@ -652,7 +677,7 @@ export async function importGfcLogFromBundledWorkbook(
   ]);
   if (!file) {
     throw new Error(
-      "Approval & GFC Drawing Log.xlsx not found on server. Upload the file with Import GFC log instead.",
+      "Approval-GFC-Drawing-Log.xlsx not found on server. Upload the file with Import Approval & GFC Log instead.",
     );
   }
   const fs = await import("fs");

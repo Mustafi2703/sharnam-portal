@@ -61,12 +61,15 @@ export async function advanceProjectWeeksAfterFill(opts: {
           pmcRole: r.pmcRole,
           clientRole: r.clientRole,
           records: r.records,
+          qapLineId: r.qapLineId,
+          isHeader: r.isHeader,
+          workPackage: r.workPackage,
           remarks: null,
           dailyChecks: null,
           contractorOk: false,
           pmcOk: false,
           clientOk: false,
-          status: "Open",
+          status: r.isHeader ? "Header" : "Not started",
         })),
       });
       qapCopied = rows.length;

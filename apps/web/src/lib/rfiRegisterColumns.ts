@@ -82,7 +82,6 @@ export const SPDC_RFI_RESPONSIBLE = [
   "Statutory Authority",
 ];
 
-export const SPDC_RFI_PACKAGES = ["P1-CIVIL", "P2-PEB", "Package A", "Package B"];
 
 export const TEST_RFI_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, operations@spdc.in";
 
@@ -103,6 +102,8 @@ export type DrawingRfiRow = {
   formDataJson?: string | null;
   linkedAssignmentId?: string | null;
   assignedTo?: { fullName: string } | null;
+  assigneeContactId?: string | null;
+  matrixAssignee?: boolean;
   createdBy?: { fullName: string } | null;
   vendor?: { name: string } | null;
   drawing?: { drawingNumber: string; title?: string; currentRev?: string } | null;

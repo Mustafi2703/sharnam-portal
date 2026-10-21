@@ -19,6 +19,40 @@ export function familyForPackFolder(folderName: string, target: PackFamily = "Qu
   return "QualityInspection";
 }
 
+/**
+ * Pack files unzipped without the UTF-8 flag decode Windows-1252 dashes / quotes as CP437
+ * ("Fixing – Peb" → "Fixing û Peb"). Checklist names are English, so these glyphs are never intended.
+ */
+const CP437_MOJIBAKE: Array<[RegExp, string]> = [
+  [/\s?û\s?/g, " – "],
+  [/\s?ù\s?/g, " — "],
+  [/Æ/g, "’"],
+  [/æ/g, "‘"],
+];
+export function repairPackName(name: string): string {
+  let out = name;
+  for (const [re, to] of CP437_MOJIBAKE) out = out.replace(re, to);
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
+/** Rename templates saved with CP437-garbled names; skipped when the clean name already exists in that family. */
+export async function repairMojibakeTemplateNames(): Promise<number> {
+  const broken = await prisma.checklistTemplate.findMany({
+    where: { OR: [{ name: { contains: "û" } }, { name: { contains: "ù" } }, { name: { contains: "Æ" } }] },
+    select: { id: true, name: true, checklistType: true },
+  });
+  let renamed = 0;
+  for (const t of broken) {
+    const name = repairPackName(t.name);
+    if (name === t.name) continue;
+    const clash = await prisma.checklistTemplate.findFirst({ where: { name, checklistType: t.checklistType }, select: { id: true } });
+    if (clash) continue;
+    await prisma.checklistTemplate.update({ where: { id: t.id }, data: { name } });
+    renamed++;
+  }
+  return renamed;
+}
+
 function listPackWorkbooks(root: string): { folder: string; name: string; fullPath: string }[] {
   const out: { folder: string; name: string; fullPath: string }[] = [];
   for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
@@ -30,7 +64,7 @@ function listPackWorkbooks(root: string): { folder: string; name: string; fullPa
       const folder = /hira/i.test(ent.name) ? "HIRA" : "General";
       out.push({
         folder,
-        name: ent.name.replace(/\.xlsx$/i, ""),
+        name: repairPackName(ent.name.replace(/\.xlsx$/i, "")),
         fullPath: full,
       });
       continue;
@@ -45,7 +79,7 @@ function listPackWorkbooks(root: string): { folder: string; name: string; fullPa
         else if (/\.xlsx$/i.test(e.name)) {
           out.push({
             folder: ent.name,
-            name: e.name.replace(/\.xlsx$/i, ""),
+            name: repairPackName(e.name.replace(/\.xlsx$/i, "")),
             fullPath: f,
           });
         }
@@ -142,6 +176,7 @@ export async function onboardChecklistPack(opts: {
   const root = resolveChecklistPackRoot();
   if (!root) throw new Error("Checklist pack not found — expected docs/New folder or seed/checklist-pack");
 
+  await repairMojibakeTemplateNames();
   const books = listPackWorkbooks(root);
   let created = 0;
   let refreshed = 0;

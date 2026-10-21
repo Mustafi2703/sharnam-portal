@@ -1,22 +1,12 @@
 /**
- * Per-project pick-lists for the Drawings module — managed from the Master Drawing Register and used by the
+ * Per-project pick-lists for the Drawings module, managed from the Master Drawing Register and used by the
  * register, the GFC upload, RFIs and design coordination, so every screen offers the same choices.
  * Stored as one JSON row in AppSetting (key `drawingPicklists:<projectId>`); anything not overridden uses the default.
  */
+import { effectiveDrawingsStart, istDayKey, PICKLIST_DEFAULTS, type PicklistKey } from "@sharnam/shared";
 import { prisma } from "../prisma.js";
 
-export const PICKLIST_DEFAULTS = {
-  drawingTypes: ["Concept Drawings", "Schematic Drawings", "Detailed Design (DD) Drawings", "Tender Drawings", "Good For Construction (GFC)"],
-  disciplines: ["Architecture", "Structural", "MEPF"],
-  delayResponsibility: ["Architecture Consultant", "Structural Consultant", "MEPF Consultant", "BIM Consultant", "Contractor", "PMC"],
-  issuedTo: ["Main Contractor", "PMC / Client"],
-  rfiPriorities: ["CRITICAL", "HIGH", "NORMAL", "LOW"],
-  rfiCategories: ["Drawing discrepancy", "Missing information", "Design clarification", "Specification conflict", "Site constraint", "Material substitution", "Statutory requirement", "Interface / coordination"],
-  impactLevels: ["None", "Low", "Medium", "High"],
-  coordinationPriorities: ["Low", "Medium", "High", "Critical"],
-} as const;
-
-export type PicklistKey = keyof typeof PICKLIST_DEFAULTS;
+export { PICKLIST_DEFAULTS, type PicklistKey };
 export const PICKLIST_KEYS = Object.keys(PICKLIST_DEFAULTS) as PicklistKey[];
 export type Picklists = Record<PicklistKey, string[]>;
 
@@ -69,14 +59,70 @@ export async function savePicklists(projectId: string, input: Partial<Record<Pic
     const value = given === null ? (current.custom.includes(k) ? current.lists[k] : null) : given;
     if (value && value.length && JSON.stringify(value) !== JSON.stringify(PICKLIST_DEFAULTS[k])) next[k] = value;
   }
-  if (!Object.keys(next).length) {
-    await prisma.appSetting.deleteMany({ where: { key: settingKey(projectId) } });
-  } else {
-    await prisma.appSetting.upsert({
-      where: { key: settingKey(projectId) },
-      create: { key: settingKey(projectId), value: JSON.stringify(next), updatedBy: userId || null },
-      update: { value: JSON.stringify(next), updatedBy: userId || null },
-    });
-  }
+  const raw = await readDrawingSettings(projectId);
+  await writeDrawingSettings(projectId, { ...next, ...startDateEntry(raw.drawingsStartDate) }, userId);
   return loadPicklists(projectId);
+}
+
+/** Clears every custom pick-list but keeps the drawings start date. */
+export async function resetPicklists(projectId: string, userId?: string) {
+  const raw = await readDrawingSettings(projectId);
+  await writeDrawingSettings(projectId, startDateEntry(raw.drawingsStartDate), userId);
+}
+
+const START_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function startDateEntry(value: unknown): { drawingsStartDate?: string } {
+  return typeof value === "string" && START_DATE_RE.test(value) ? { drawingsStartDate: value } : {};
+}
+
+async function readDrawingSettings(projectId: string): Promise<Record<string, unknown>> {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: settingKey(projectId) } });
+    const parsed = row ? JSON.parse(row.value) : {};
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeDrawingSettings(projectId: string, value: Record<string, unknown>, userId?: string) {
+  if (!Object.keys(value).length) {
+    await prisma.appSetting.deleteMany({ where: { key: settingKey(projectId) } });
+    return;
+  }
+  await prisma.appSetting.upsert({
+    where: { key: settingKey(projectId) },
+    create: { key: settingKey(projectId), value: JSON.stringify(value), updatedBy: userId || null },
+    update: { value: JSON.stringify(value), updatedBy: userId || null },
+  });
+}
+
+/** Drawings start date (yyyy-mm-dd) set in Drawing Settings, or null. */
+export async function loadDrawingsStartDate(projectId: string): Promise<string | null> {
+  const raw = await readDrawingSettings(projectId);
+  return startDateEntry(raw.drawingsStartDate).drawingsStartDate ?? null;
+}
+
+/** Saves (or clears with null) the drawings start date without touching the pick-lists. */
+export async function saveDrawingsStartDate(projectId: string, value: string | null, userId?: string) {
+  if (value != null && !START_DATE_RE.test(value)) throw new Error("drawingsStartDate must be yyyy-mm-dd");
+  const raw = await readDrawingSettings(projectId);
+  const { drawingsStartDate: _old, ...rest } = raw;
+  await writeDrawingSettings(projectId, { ...rest, ...startDateEntry(value) }, userId);
+  return loadDrawingsStartDate(projectId);
+}
+
+/** Week 1 anchor for the drawings register: Drawing Settings date, else the project start date. */
+export async function loadDrawingsWeekStart(projectId: string): Promise<{
+  drawingsStartDate: string | null;
+  projectStartDate: string | null;
+  effectiveStart: string | null;
+}> {
+  const [drawingsStartDate, project] = await Promise.all([
+    loadDrawingsStartDate(projectId),
+    prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true } }),
+  ]);
+  const projectStartDate = istDayKey(project?.startDate ?? null);
+  return { drawingsStartDate, projectStartDate, effectiveStart: effectiveDrawingsStart(drawingsStartDate, projectStartDate) };
 }

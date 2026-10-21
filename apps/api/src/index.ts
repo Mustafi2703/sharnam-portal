@@ -359,6 +359,10 @@ async function start() {
   ])
     .then(([a, b]) => (a || b) && console.log(`[quality] cube testing dates filled on ${a} / ${b} specimen(s)`))
     .catch((err) => console.warn("[quality] cube date backfill skipped:", err instanceof Error ? err.message : err));
+  void import("./services/checklistPackOnboard.js")
+    .then(({ repairMojibakeTemplateNames }) => repairMojibakeTemplateNames())
+    .then((n) => n && console.log(`[checklist] repaired ${n} garbled template name(s)`))
+    .catch((err) => console.warn("[checklist] template name repair skipped:", err instanceof Error ? err.message : err));
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`शरणम् API listening on http://0.0.0.0:${PORT}`);
   });

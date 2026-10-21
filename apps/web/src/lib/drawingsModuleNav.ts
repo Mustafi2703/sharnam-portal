@@ -1,4 +1,5 @@
-/** Horizontal sub-nav inside the Drawings module (GFC, register, design coordination, etc.) */
+/** Horizontal sub-nav inside the Drawings module. */
+import { GFC_SCREEN } from "./drawingsLabels";
 
 export type DrawingsNavItem = {
   key: string;
@@ -9,42 +10,53 @@ export type DrawingsNavItem = {
 };
 
 export const DRAWINGS_MODULE_NAV: DrawingsNavItem[] = [
-  { key: "hub", label: "Module hub", to: "hub/drawings" },
-  { key: "gfc", label: "Approval & GFC log", to: "drawings" },
+  { key: "hub", label: "Module Hub", to: "hub/drawings" },
   { key: "register", label: "Dashboard", to: "drawings/register" },
-  { key: "register-master", label: "Master register", to: "drawings/register/master" },
-  { key: "coordination", label: "Design coordination", to: "drawings/coordination" },
-  { key: "library", label: "Drawing files", to: "drawings/library" },
-  {
-    key: "checklist",
-    label: "Checklist manager",
-    to: "drawings/checklist-master",
-    roles: ["admin", "office", "employee"],
-  },
-  {
-    key: "fill-log",
-    label: "Checklist fill log",
-    to: "drawings/checklist-logs",
-  },
-  { key: "settings", label: "Drawing settings", to: "drawings/settings", roles: ["admin", "office"] },
-  {
-    key: "rfi-register",
-    label: "RFI register",
-    to: "rfis",
-    query: "view=register",
-  },
+  { key: "gfc", label: GFC_SCREEN, to: "drawings" },
+  { key: "register-master", label: "Master Register", to: "drawings/register/master" },
+  { key: "library", label: "Drawing Files", to: "drawings/library" },
   {
     key: "rfi-ask",
     label: "Ask PMC RFI",
     to: "rfis",
     query: "kind=RequestForInformation&compose=1",
   },
+  { key: "coordination", label: "Design Coordination", to: "drawings/coordination" },
+  {
+    key: "rfi-register",
+    label: "RFI Log",
+    to: "rfis",
+    query: "view=register",
+  },
+  {
+    key: "coordination-log",
+    label: "Coordination Log",
+    to: "drawings/coordination",
+    query: "view=log",
+  },
+  {
+    key: "checklist",
+    label: "Checklist Manager",
+    to: "drawings/checklist-master",
+    roles: ["admin", "office", "employee"],
+  },
+  {
+    key: "fill-log",
+    label: "Checklist Fill Log",
+    to: "drawings/checklist-logs",
+  },
+  { key: "settings", label: "Drawing Settings", to: "drawings/settings", roles: ["admin", "office"] },
 ];
+
+function onCoordination(rest: string) {
+  return rest === "drawings/coordination" || rest === "coordination";
+}
 
 export function drawingsNavActive(key: string, pathname: string, search: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
   const pid = parts.indexOf("projects");
   const rest = pid >= 0 ? parts.slice(pid + 2).join("/") : "";
+  const logView = new URLSearchParams(search).get("view") === "log";
 
   switch (key) {
     case "hub":
@@ -56,7 +68,9 @@ export function drawingsNavActive(key: string, pathname: string, search: string)
     case "register-master":
       return rest === "drawings/register/master";
     case "coordination":
-      return rest === "drawings/coordination" || rest === "coordination";
+      return onCoordination(rest) && !logView;
+    case "coordination-log":
+      return onCoordination(rest) && logView;
     case "library":
       return rest.startsWith("drawings/library");
     case "checklist":

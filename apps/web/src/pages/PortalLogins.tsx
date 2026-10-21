@@ -96,11 +96,11 @@ export const PORTAL_LOGINS: Record<string, PortalConfig> = {
   },
   drawings: {
     key: "drawings", title: "Drawings", shortLabel: "Drawings",
-    headline: "GFC register and project Documents.",
+    headline: "Approval & GFC Log and project Documents.",
     subtitle: "Upload sheets, DMS, Drawing Check Master, Ask.",
     demoEmail: "office@sharnam.demo",
     allowedRoles: ["admin", "office", "employee", "site_employee", "vendor"],
-    points: ["GFC register", "Checklist manager", "Ask"],
+    points: ["Approval & GFC Log", "Checklist manager", "Ask"],
     cta: "Enter Drawings", tone: "#1D4ED8", icon: "DW",
     landingPath: "/workspace", workspaceKey: "drawings", group: "module",
     policies: [...SHARNAM_PORTAL_POLICIES],

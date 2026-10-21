@@ -6,7 +6,7 @@
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
-import { drawingRegisterWeekStamp, publishDrawingRegistersToDrive } from "./drawingRegisterDrive.js";
+import { drawingRegisterWeekStamp, drawingsWeekFolderStamp, publishDrawingRegistersToDrive } from "./drawingRegisterDrive.js";
 import { buildSpdcRfiXlsxBuffer } from "./spdcRfiForm.js";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -21,6 +21,7 @@ export async function reconcileProjectSharePoint(projectId: string) {
   await publishDrawingRegistersToDrive(projectId);
 
   const week = drawingRegisterWeekStamp();
+  const drawingsWeek = await drawingsWeekFolderStamp(projectId);
   try {
     const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
     await publishQualityPackToDrive(projectId, "system-reconcile");
@@ -74,7 +75,7 @@ export async function reconcileProjectSharePoint(projectId: string) {
       "04.02/Master-Drawing-Register.pdf",
       "04.02/Design-Coordination-Register.xlsx",
       "04.02/Design-Coordination-Register.pdf",
-      `04.02/Weekly/${week}/`,
+      `04.02/Weekly/${drawingsWeek}/`,
       "08.01 Quality Assurance Plan + Weekly/",
       "08.03 Cube register + Weekly/",
       "08.01 Quality Dashboard + Weekly/",

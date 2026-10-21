@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -6,8 +6,6 @@ import { Badge, Button, Card } from "../components/ui";
 import { StandaloneFormHeader } from "../components/StandaloneFormHeader";
 import {
   ChecklistFillForm,
-  appendSignMeta,
-  type ChecklistSignMeta,
   emptyChecklistLine,
   emptyChecklistMeta,
   type ChecklistDrawingOption,
@@ -15,12 +13,41 @@ import {
   type ChecklistFillLine,
   type ChecklistFillMeta,
 } from "../components/ChecklistFillForm";
-import { closeEmbedOrWindow } from "../lib/inPageOverlay";
+import {
+  closeEmbedOrWindow,
+  closeInPageOverlay,
+  onOverlaySaveAndClose,
+  reportOverlayGuard,
+} from "../lib/inPageOverlay";
 import { drawingUnlockStorageKey, notifyDrawingUnlock } from "../lib/drawingCheckWindow";
 import { useStandaloneFormPage } from "../lib/useStandaloneFormPage";
 
+type GateDraft = {
+  id: string;
+  remarks?: string | null;
+  responsesJson?: string;
+  drawingId?: string | null;
+  revisionId?: string | null;
+};
+
+type GateTemplate = {
+  id: string;
+  templateId: string;
+  name: string;
+  discipline: string;
+  items: ChecklistFillItem[];
+  requirePhotosMin?: number;
+  assignmentId?: string | null;
+  nextReportNo?: string;
+  myDraft?: GateDraft | null;
+};
+
+const SUBMIT_ROLES = ["admin", "office", "employee", "site_employee"];
+const SIGNER_LABEL = "SPDC project team";
+
 /**
- * Drawing Check Master — used as the GFC upload gate overlay (embed=1).
+ * Drawing Check Master - used as the GFC upload gate overlay (embed=1).
+ * The template is routed by discipline; one SPDC project team signature unlocks the upload.
  * Standalone tool route redirects to the checklist fill log for assigned fills.
  */
 export default function DrawingPreCheckPage() {
@@ -31,19 +58,11 @@ export default function DrawingPreCheckPage() {
   const lockedDrawingId = searchParams.get("drawing") || "";
   const lockedRevisionId = searchParams.get("revision") || "";
   const lockedRevNumber = searchParams.get("rev") || "";
+  const discipline = (searchParams.get("discipline") || "").trim();
   const { token, user } = useAuth();
   useStandaloneFormPage();
 
-  if (!embed && projectId) {
-    return <Navigate to={`/projects/${projectId}/drawings/checklist-logs`} replace />;
-  }
-  const [template, setTemplate] = useState<{
-    name: string;
-    items: ChecklistFillItem[];
-    requirePhotosMin?: number;
-    assignmentId?: string;
-    myDraft?: { id: string; remarks?: string | null; responsesJson?: string; drawingId?: string | null; revisionId?: string | null } | null;
-  } | null>(null);
+  const [template, setTemplate] = useState<GateTemplate | null>(null);
   const [assignmentId, setAssignmentId] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -52,37 +71,31 @@ export default function DrawingPreCheckPage() {
   const [remarks, setRemarks] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
-  const [pmcSignatureFile, setPmcSignatureFile] = useState<File | null>(null);
-  const [clientSignatureFile, setClientSignatureFile] = useState<File | null>(null);
-  const [signMeta, setSignMeta] = useState<ChecklistSignMeta | null>(null);
-  const [clientContact, setClientContact] = useState("");
-
-  useEffect(() => {
-    if (!projectId || !token) return;
-    void api<{ clientContactName?: string | null }>(`/api/projects/${projectId}`, { token })
-      .then((p) => setClientContact(p?.clientContactName || ""))
-      .catch(() => setClientContact(""));
-  }, [projectId, token]);
   const [drawings, setDrawings] = useState<ChecklistDrawingOption[]>([]);
   const [drawingId, setDrawingId] = useState("");
   const [revisionId, setRevisionId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [done, setDone] = useState<{ unlockToken: string; name: string } | null>(null);
+  const [done, setDone] = useState<{ unlockToken: string; name: string; reportNo?: string } | null>(null);
+  const [dirty, setDirty] = useState(false);
 
-  const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
+  const role = user?.role || "";
+  const canFill = [...SUBMIT_ROLES, "vendor"].includes(role);
+  const canSubmit = SUBMIT_ROLES.includes(role);
+  const signerName = user?.fullName || user?.email || "";
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId || !embed) return;
+    if (!discipline) {
+      setError("Pick a discipline before opening the Drawing Check. Close this window and choose one.");
+      return;
+    }
     Promise.all([
-      api<{
-        name: string;
-        items: ChecklistFillItem[];
-        requirePhotosMin?: number;
-        assignmentId?: string;
-        myDraft?: { id: string; remarks?: string | null; responsesJson?: string; drawingId?: string | null; revisionId?: string | null } | null;
-      }>(`/api/checklist/project/${projectId}/drawing-check-template`, { token }),
+      api<GateTemplate>(
+        `/api/checklist/project/${projectId}/drawing-check-template?discipline=${encodeURIComponent(discipline)}`,
+        { token },
+      ),
       api<ChecklistDrawingOption[]>(`/api/drawings/project/${projectId}`, { token }).catch(() => []),
     ])
       .then(([t, dwg]) => {
@@ -93,14 +106,18 @@ export default function DrawingPreCheckPage() {
         (t.items || []).forEach((i) => {
           init[i.id] = emptyChecklistLine();
         });
-        const draft = t.myDraft;
+        let boundRef = "";
         if (lockedDrawingId) {
           setDrawingId(lockedDrawingId);
           const dwgMatch = (dwg || []).find((d) => d.id === lockedDrawingId);
-          setRevisionId(
-            lockedRevisionId || dwgMatch?.revisions?.find((r) => r.published)?.id || dwgMatch?.revisions?.[0]?.id || ""
-          );
+          const revId =
+            lockedRevisionId || dwgMatch?.revisions?.find((r) => r.published)?.id || dwgMatch?.revisions?.[0]?.id || "";
+          setRevisionId(revId);
+          const revNo = lockedRevNumber || dwgMatch?.revisions?.find((r) => r.id === revId)?.revisionNumber || "";
+          if (dwgMatch?.drawingNumber && revNo) boundRef = `${dwgMatch.drawingNumber} Rev ${revNo}`;
         }
+        const meta: ChecklistFillMeta = { ...emptyChecklistMeta(), reportNo: t.nextReportNo || "", refDrawing: boundRef };
+        const draft = t.myDraft;
         if (draft) {
           setDraftId(draft.id);
           setRemarks(draft.remarks || "");
@@ -114,12 +131,8 @@ export default function DrawingPreCheckPage() {
           }
           const metaRaw = saved._meta as Partial<ChecklistFillMeta> | undefined;
           if (metaRaw && typeof metaRaw === "object") {
-            setFillMeta({
-              reportNo: metaRaw.reportNo || "",
-              location: metaRaw.location || "",
-              refDrawing: metaRaw.refDrawing || "",
-              quantity: metaRaw.quantity || "",
-            });
+            meta.location = metaRaw.location || "";
+            if (!boundRef) meta.refDrawing = metaRaw.refDrawing || "";
           }
           Object.keys(init).forEach((itemId) => {
             const row = saved[itemId] || {};
@@ -131,12 +144,18 @@ export default function DrawingPreCheckPage() {
             };
           });
         }
+        setFillMeta(meta);
         setResponses(init);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load Drawing Check Master"));
-  }, [projectId, token, lockedDrawingId, lockedRevisionId]);
+  }, [projectId, token, embed, discipline, lockedDrawingId, lockedRevisionId, lockedRevNumber]);
+
+  useEffect(() => {
+    reportOverlayGuard({ dirty: dirty && !done, hasDraft: !!draftId, canSaveDraft: canFill && !!template });
+  }, [dirty, done, draftId, canFill, template]);
 
   function patchLine(itemId: string, patch: Partial<ChecklistFillLine>) {
+    setDirty(true);
     setResponses((prev) => ({
       ...prev,
       [itemId]: { ...(prev[itemId] || emptyChecklistLine()), ...patch },
@@ -169,20 +188,19 @@ export default function DrawingPreCheckPage() {
       };
       if (r.remarks?.trim()) itemComments[lineId] = r.remarks.trim();
     });
-    payload._meta = { ...fillMeta };
+    payload._meta = { ...fillMeta, quantity: "" };
     const fd = new FormData();
     fd.append("responsesJson", JSON.stringify(payload));
     fd.append("itemCommentsJson", JSON.stringify(itemComments));
     fd.append("remarks", remarks || "Pre-upload drawing check");
+    fd.append("discipline", discipline);
+    if (template?.id) fd.append("templateId", template.id);
     if (drawingId) fd.append("drawingId", drawingId);
     if (revisionId) fd.append("revisionId", revisionId);
     const revNo = selectedRevisionNumber();
     if (revNo) fd.append("revisionNumber", revNo);
     photos.forEach((f) => fd.append("photos", f));
     if (signatureFile) fd.append("signature", signatureFile, signatureFile.name);
-    if (pmcSignatureFile) fd.append("signaturePmc", pmcSignatureFile, pmcSignatureFile.name);
-    if (clientSignatureFile) fd.append("signatureClient", clientSignatureFile, clientSignatureFile.name);
-    appendSignMeta(fd, signMeta);
     Object.entries(responses).forEach(([lineId, r]) => {
       r.photos.forEach((f) => fd.append(`item_${lineId}_photo`, f));
       r.docs.forEach((f) => fd.append(`item_${lineId}_doc`, f));
@@ -190,53 +208,83 @@ export default function DrawingPreCheckPage() {
     return fd;
   }
 
-  async function saveDraft() {
-    if (!assignmentId) {
-      setError("Checklist assignment is not ready yet — try again in a moment.");
-      return;
-    }
+  /** The assignment is created on first draft save, not when the gate opens. */
+  async function ensureAssignment(): Promise<string | null> {
+    if (assignmentId) return assignmentId;
+    if (!projectId || !template) return null;
+    const out = await api<{ assignmentId: string }>(`/api/checklist/project/${projectId}/drawing-check-template/assign`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ discipline, templateId: template.id }),
+    });
+    setAssignmentId(out.assignmentId);
+    return out.assignmentId;
+  }
+
+  async function saveDraft(): Promise<boolean> {
     setSavingDraft(true);
     setError("");
     setNotice("");
     try {
-      const saved = await api<{ id: string }>(`/api/checklist/assignments/${assignmentId}/draft`, {
+      const aid = await ensureAssignment();
+      if (!aid) {
+        setError("The checklist is not ready yet. Try again in a moment.");
+        return false;
+      }
+      const saved = await api<{ id: string }>(`/api/checklist/assignments/${aid}/draft`, {
         method: "POST",
         token,
         body: buildFormData(),
       });
       setDraftId(saved.id);
-      setNotice(`Draft saved — ${answered}/${items.length} answered. It is in the checklist fill log. Close this window and continue later.`);
+      setDirty(false);
+      setNotice(`Draft saved: ${answered}/${items.length} answered. It is in the checklist fill log. Close this window and continue later.`);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Draft save failed");
+      return false;
     } finally {
       setSavingDraft(false);
     }
   }
 
+  const saveDraftRef = useRef(saveDraft);
+  saveDraftRef.current = saveDraft;
+  useEffect(
+    () =>
+      onOverlaySaveAndClose(() => {
+        void saveDraftRef.current().then((ok) => {
+          if (!ok) return;
+          reportOverlayGuard({ dirty: false, hasDraft: true, canSaveDraft: true });
+          closeInPageOverlay();
+        });
+      }),
+    [],
+  );
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!template || !projectId) return;
     if (!signatureFile) {
-      setError("Upload the stakeholder signature before submitting. Save a draft if the checklist is not complete.");
+      setError("Sign the Drawing Check before submitting. Save a draft if the checklist is not complete.");
       return;
     }
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const fd = buildFormData();
-
-      const res = await api<{ unlockToken: string; template: { name: string } }>(
+      const res = await api<{ unlockToken: string; reportNo?: string; template: { name: string } }>(
         `/api/checklist/project/${projectId}/drawing-precheck`,
-        { method: "POST", token, body: fd }
+        { method: "POST", token, body: buildFormData() },
       );
+      setDirty(false);
       try {
         localStorage.setItem(drawingUnlockStorageKey(projectId), res.unlockToken);
       } catch {
         /* ignore */
       }
+      setDone({ unlockToken: res.unlockToken, name: res.template?.name || template.name, reportNo: res.reportNo });
       notifyDrawingUnlock(projectId, res.unlockToken);
-      setDone({ unlockToken: res.unlockToken, name: res.template?.name || template.name });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checklist failed");
     } finally {
@@ -244,20 +292,22 @@ export default function DrawingPreCheckPage() {
     }
   }
 
+  if (!embed && projectId) {
+    return <Navigate to={`/projects/${projectId}/drawings/checklist-logs`} replace />;
+  }
+
+  const eyebrow = discipline ? `Drawings · pre-upload gate · ${discipline}` : "Drawings · pre-upload gate";
+
   if (done) {
     return (
       <div className="standalone-form-page standalone-form-page--paper">
-        <StandaloneFormHeader
-          variant="navy"
-          eyebrow="Drawings · pre-upload gate"
-          title="Drawing Check Master"
-        />
+        <StandaloneFormHeader hideSession={embed} variant="navy" eyebrow={eyebrow} title="Drawing Check Master" />
         <main className="standalone-form-page__main standalone-form-page__main--narrow">
           <Card className="!p-8 text-center space-y-4">
             <Badge tone="ok">Unlocked</Badge>
             <h1 className="font-display text-2xl text-ink">Checklist complete</h1>
             <p className="text-steel-muted text-sm max-w-md mx-auto">
-              “{done.name}” is signed and stored. Return to the upload dialog and add the PDF and DWG.
+              “{done.name}”{done.reportNo ? ` (${done.reportNo})` : ""} is signed and stored. Return to the upload dialog and add the PDF and DWG.
             </p>
             <div className="flex flex-wrap gap-2 justify-center pt-2">
               <Button type="button" onClick={() => closeEmbedOrWindow()}>
@@ -278,7 +328,7 @@ export default function DrawingPreCheckPage() {
   if (!template && !error) {
     return (
       <div className="standalone-form-page standalone-form-page--paper">
-        <StandaloneFormHeader variant="navy" eyebrow="Drawings · pre-upload gate" title="Drawing Check Master" />
+        <StandaloneFormHeader hideSession={embed} variant="navy" eyebrow={eyebrow} title="Drawing Check Master" />
         <main className="standalone-form-page__main">
           <p className="text-sm text-steel-muted">Loading checklist…</p>
         </main>
@@ -289,7 +339,17 @@ export default function DrawingPreCheckPage() {
   if (error && !template) {
     return (
       <div className="standalone-form-page standalone-form-page--paper">
-        <StandaloneFormHeader variant="navy" eyebrow="Drawings · pre-upload gate" title="Drawing Check Master" />
+        <StandaloneFormHeader
+          hideSession={embed}
+          variant="navy"
+          eyebrow={eyebrow}
+          title="Drawing Check Master"
+          actions={
+            <Button type="button" variant="ghost" className="!text-xs !text-white hover:!bg-white/10" onClick={() => closeEmbedOrWindow()}>
+              Close
+            </Button>
+          }
+        />
         <main className="standalone-form-page__main">
           <p className="text-sm text-danger bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
         </main>
@@ -300,12 +360,15 @@ export default function DrawingPreCheckPage() {
   return (
     <ChecklistFillForm
       family="DrawingCheck"
-      eyebrow="Drawings · pre-upload gate"
+      hideSession={embed}
+      headerVariant="drawing"
+      discipline={template?.discipline || discipline}
+      eyebrow={eyebrow}
       title={template?.name || "Drawing Check Master"}
       subtitle={
         revisionMode
-          ? "This drawing and revision are already selected. Save a draft if it is not complete. When every line is filled, upload the stakeholder signature and submit."
-          : "Complete every line before the GFC file is uploaded. Save a draft if it is not ready — it stays in the fill log."
+          ? "This drawing and revision are already selected. Save a draft if it is not complete. When every line is answered, sign and submit."
+          : "Complete every line before the GFC file is uploaded. Save a draft if it is not ready; it stays in the fill log."
       }
       category="Drawing Check Master"
       items={items}
@@ -313,9 +376,15 @@ export default function DrawingPreCheckPage() {
       responses={responses}
       onPatchLine={patchLine}
       fillMeta={fillMeta}
-      onFillMeta={setFillMeta}
+      onFillMeta={(m) => {
+        setDirty(true);
+        setFillMeta(m);
+      }}
       remarks={remarks}
-      onRemarks={setRemarks}
+      onRemarks={(v) => {
+        setDirty(true);
+        setRemarks(v);
+      }}
       drawings={drawings}
       drawingId={drawingId}
       revisionId={revisionId}
@@ -327,19 +396,21 @@ export default function DrawingPreCheckPage() {
       lockedDrawingLabel={
         drawingId
           ? `${drawings.find((d) => d.id === drawingId)?.drawingNumber || "Drawing"}${
-              selectedRevisionNumber() ? ` · ${selectedRevisionNumber()}` : ""
+              selectedRevisionNumber() ? ` Rev ${selectedRevisionNumber()}` : ""
             }`
           : undefined
       }
       overallPhotos={photos}
       onOverallPhotos={setPhotos}
-      onSignature={setSignatureFile}
-      onPmcSignature={setPmcSignatureFile}
-      onClientSignature={setClientSignatureFile}
-      canPmcSignClient={["admin", "office", "employee"].includes(user?.role || "")}
-      signerName={user?.fullName || user?.email || undefined}
-      clientSignerName={clientContact || undefined}
-      onSignMeta={setSignMeta}
+      onSignature={(f) => {
+        if (f) setDirty(true);
+        setSignatureFile(f);
+      }}
+      requireSignature
+      signerLabel={SIGNER_LABEL}
+      signerName={signerName || undefined}
+      signerNameLocked
+      submitBlockedReason={canSubmit ? undefined : "Only SPDC project team members can sign the Drawing Check. Save a draft instead."}
       minPhotos={0}
       photoTotal={photoTotal}
       answered={answered}
@@ -348,7 +419,8 @@ export default function DrawingPreCheckPage() {
       savingDraft={savingDraft}
       submitting={busy}
       msg={error || notice}
-      onSaveDraft={assignmentId ? () => void saveDraft() : undefined}
+      onSaveDraft={() => void saveDraft()}
+      onClose={() => closeEmbedOrWindow()}
       onSubmit={submit}
       submitLabel="Sign & submit"
     />

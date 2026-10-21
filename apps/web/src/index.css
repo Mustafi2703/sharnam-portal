@@ -3111,6 +3111,13 @@ html.is-tool-window #root {
 .qap-row-open td {
   background: color-mix(in srgb, #fffbeb 35%, white);
 }
+.qap-row-danger td {
+  background: color-mix(in srgb, #fee2e2 50%, white);
+}
+.qap-line-header td {
+  background: #f1f5f9 !important;
+  font-weight: 600;
+}
 .qap-daily-done {
   background: #bbf7d0;
   color: #14532d;

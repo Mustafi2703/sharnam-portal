@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Button, Card } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 import { PICKLIST_META, type DrawingPicklists, type PicklistState } from "../lib/drawingPicklists";
 
 type Draft = Record<keyof DrawingPicklists, string[]>;
@@ -18,6 +20,7 @@ export function DrawingPicklistSetup({
   onSaved: () => void | Promise<void>;
 }) {
   const [draft, setDraft] = useState<Draft>(state.lists);
+  const [templates, setTemplates] = useState<{ id: string; name: string; discipline?: string | null; isActive?: boolean }[]>([]);
   const [adding, setAdding] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -25,6 +28,29 @@ export function DrawingPicklistSetup({
   useEffect(() => {
     setDraft(state.lists);
   }, [state.lists]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ id: string; name: string; discipline?: string | null; isActive?: boolean }[]>(
+      "/api/checklist/templates?type=DrawingCheck",
+      { token },
+    )
+      .then((rows) => {
+        if (!cancelled) setTemplates(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, state.loaded]);
+
+  const activeTemplates = templates.filter((t) => t.isActive !== false);
+  const missingChecklists = (draft.disciplines || []).filter(
+    (d) => !activeTemplates.some((t) => (t.discipline || "").toLowerCase() === d.toLowerCase()),
+  );
+  const strayTemplates = activeTemplates.filter(
+    (t) => t.discipline && !(draft.disciplines || []).some((d) => d.toLowerCase() === String(t.discipline).toLowerCase()),
+  );
 
   const changed = PICKLIST_META.some((m) => JSON.stringify(draft[m.key]) !== JSON.stringify(state.lists[m.key]));
   const set = (key: keyof DrawingPicklists, next: string[]) => setDraft({ ...draft, [key]: next });
@@ -85,9 +111,29 @@ export function DrawingPicklistSetup({
   return (
     <div className="space-y-3">
       <p className="text-xs text-steel-muted">
-        Add, remove or reorder the options. Changing a list only changes what can be picked — rows already using an older value keep it. Latest revision stays Yes / No; packages come from the register
-        {state.used.packages.length ? ` (${state.used.packages.join(", ")})` : ""}.
+        Add, remove or reorder the options. Changing a list only changes what can be picked. Rows already using an older value keep it. Latest revision stays Yes / No.{" "}
+        <Link to={`/projects/${projectId}/setup`} className="text-brand font-semibold">{formatUiText("Packages come from the project set-up. Edit them in Project set-up.")}</Link>
       </p>
+      {missingChecklists.length || strayTemplates.length ? (
+        <Card className="!p-3 space-y-1 text-sm">
+          {missingChecklists.map((d) => (
+            <p key={d}>
+              No checklist for {d} - uploads in {d} will be blocked.{" "}
+              <Link to={`/projects/${projectId}/drawings/checklist-master`} className="text-brand font-semibold">
+                {formatUiText("Create template")}
+              </Link>
+            </p>
+          ))}
+          {strayTemplates.map((t) => (
+            <p key={t.id}>
+              {t.name} is set to {t.discipline}, which is not in this project's discipline list.{" "}
+              <Link to={`/projects/${projectId}/drawings/checklist-master`} className="text-brand font-semibold">
+                {formatUiText("Edit template discipline")}
+              </Link>
+            </p>
+          ))}
+        </Card>
+      ) : null}
       <div className="grid md:grid-cols-2 gap-3">
         {PICKLIST_META.map((m) => {
           const list = draft[m.key];
@@ -106,7 +152,20 @@ export function DrawingPicklistSetup({
                     <span className="flex-1 truncate">{v}</span>
                     <button type="button" className="px-1 text-steel-muted hover:text-ink disabled:opacity-30" disabled={i === 0} onClick={() => move(m.key, i, -1)} aria-label="Move up">↑</button>
                     <button type="button" className="px-1 text-steel-muted hover:text-ink disabled:opacity-30" disabled={i === list.length - 1} onClick={() => move(m.key, i, 1)} aria-label="Move down">↓</button>
-                    <button type="button" className="px-1 text-danger" onClick={() => set(m.key, list.filter((_, k) => k !== i))} aria-label={`Remove ${v}`}>×</button>
+                    <button
+                      type="button"
+                      className="px-1 text-danger"
+                      aria-label={`Remove ${v}`}
+                      onClick={() => {
+                        if (m.key === "disciplines" && state.used.disciplines.some((u) => u.toLowerCase() === v.toLowerCase())) {
+                          setNote(`${v} is used on existing drawings, so it was not removed. Renaming it needs a migration.`);
+                          return;
+                        }
+                        set(m.key, list.filter((_, k) => k !== i));
+                      }}
+                    >
+                      ×
+                    </button>
                   </li>
                 ))}
               </ul>

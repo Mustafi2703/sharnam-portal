@@ -18,6 +18,9 @@ export type SignSlot = {
 };
 
 export type SignSource = {
+  /** "PreUploadDrawing" = Drawing Check upload gate: one SPDC project team signature only. */
+  purpose?: string | null;
+  responsesJson?: string | null;
   createdAt?: Date | string | null;
   reviewedAt?: Date | string | null;
   submittedBy?: { fullName?: string | null } | null;
@@ -203,6 +206,16 @@ function slot(role: string, name: string, date: string, url?: string | null): Si
 export function collectChecklistSignSlots(src: SignSource, dir?: DirectorySignMap): SignSlot[] {
   const signs = (src.photos || []).filter(isSignPhoto);
   const fillPhoto = signs.find((p) => signRole(p) === "inspector");
+  if (src.purpose === "PreUploadDrawing") {
+    let metaSigner = "";
+    try {
+      metaSigner = String(JSON.parse(src.responsesJson || "{}")?._meta?.signerName || "");
+    } catch {
+      metaSigner = "";
+    }
+    const name = metaSigner || signName(fillPhoto) || src.submittedBy?.fullName || "";
+    return [slot("SPDC project team", name, fmtDate(src.createdAt), fillPhoto?.fileUrl)];
+  }
   const pmcPhoto = signs.find((p) => signRole(p) === "pmc");
   const clientPhoto = signs.find((p) => signRole(p) === "client");
   const clientByPmc = /on behalf|pmc proxy/i.test(String(clientPhoto?.caption || ""));

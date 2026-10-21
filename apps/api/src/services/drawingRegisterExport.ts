@@ -2,8 +2,9 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import type PDFKit from "pdfkit";
 import { prisma } from "../prisma.js";
-import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
+import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME, delayDays, delayIsRunning, drawingsWeekNumber } from "@sharnam/shared";
 import { sharnamLogoPath } from "./brandedExport.js";
+import { loadDrawingsWeekStart } from "./drawingPicklists.js";
 
 const HEADER_FILL = "FF1E3A5F";
 const SLATE = "FF445469";
@@ -17,14 +18,11 @@ function day(value: Date | null | undefined) {
   return d.toISOString().slice(0, 10);
 }
 
-function isoWeekLabel() {
-  const now = new Date();
-  const utc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const dayNum = utc.getUTCDay() || 7;
-  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `Week ${week}`;
+/** This week's drawings week label, counted from the Drawing Settings start (or the project start). */
+async function drawingsWeekLabel(projectId: string, now = new Date()) {
+  const { effectiveStart } = await loadDrawingsWeekStart(projectId);
+  const n = drawingsWeekNumber(now, effectiveStart);
+  return n == null ? "Week -" : `Week ${n}`;
 }
 
 export type RegisterPivotBundle = {
@@ -84,32 +82,17 @@ async function fileLinkCounts(projectId: string) {
   ].filter((r) => r.value > 0);
 }
 
-const DAY_MS = 86_400_000;
-
-function startOfUtcDay(d: Date) {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-}
-
 /**
- * Submission delay in days.
- * - Submitted: actual − planned (negative = early).
- * - Not submitted and past the planned date: running delay, today − planned.
- * - Otherwise: whatever was stored (imported sheets), or null.
+ * Submission delay in days, from the shared rule so the table, charts, Excel and PDF agree.
+ * Early submissions count as 0; a missing planned date gives null. The stored value is ignored.
  */
 export function effectiveDelayDays(
   planned: Date | null | undefined,
   actual: Date | null | undefined,
-  stored?: number | null,
+  _stored?: number | null,
   today = new Date(),
 ): { days: number | null; running: boolean } {
-  if (planned && actual) {
-    return { days: Math.round((startOfUtcDay(actual) - startOfUtcDay(planned)) / DAY_MS), running: false };
-  }
-  if (planned && !actual) {
-    const days = Math.round((startOfUtcDay(today) - startOfUtcDay(planned)) / DAY_MS);
-    return days > 0 ? { days, running: true } : { days: stored ?? null, running: false };
-  }
-  return { days: stored ?? null, running: false };
+  return { days: delayDays(planned, actual, today), running: delayIsRunning(planned, actual, today) };
 }
 
 async function loadRegisterLines(projectId: string) {
@@ -166,7 +149,7 @@ export async function loadRegisterPivotBundle(projectId: string): Promise<Regist
 
   return {
     project,
-    weekLabel: isoWeekLabel(),
+    weekLabel: await drawingsWeekLabel(projectId),
     lines,
     pivots: {
       byBuildingDiscipline,
@@ -867,7 +850,7 @@ export async function buildApprovalGfcLogPdf(projectId: string): Promise<Buffer>
   });
   return renderBrandedTablePdf({
     title: `${(project.location || project.name).toUpperCase()} : APPROVAL & GFC DRAWING LOG`,
-    subtitle: `${project.name} (${project.code}) · ${isoWeekLabel()} · ${drawings.length} drawings`,
+    subtitle: `${project.name} (${project.code}) · ${await drawingsWeekLabel(projectId)} · ${drawings.length} drawings`,
     columns,
     rows,
   });
@@ -970,7 +953,7 @@ export async function buildDesignCoordinationRegisterPdf(projectId: string): Pro
   const widths = [4, 8, 18, 30, 10, 12, 7, 14, 10, 8, 7, 9, 9, 9];
   return renderBrandedTablePdf({
     title: "Design Coordination Register",
-    subtitle: `${project.name} (${project.code}) · ${isoWeekLabel()} · ${rows.length} issues`,
+    subtitle: `${project.name} (${project.code}) · ${await drawingsWeekLabel(projectId)} · ${rows.length} issues`,
     columns: COORDINATION_HEADERS.map((header, i) => ({ header, width: widths[i] })),
     rows,
     cellStyle: (ri, ci) => {

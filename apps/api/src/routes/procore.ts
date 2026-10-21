@@ -641,7 +641,7 @@ guardProjectParam(rfiRouter);
 guardRecord(rfiRouter, "/:id", async (id) => (await prisma.rfi.findUnique({ where: { id }, select: { projectId: true } }))?.projectId);
 
 const rfiDetailInclude = {
-  assignedTo: { select: { id: true, fullName: true } },
+  assignedTo: { select: { id: true, fullName: true, email: true } },
   createdBy: { select: { id: true, fullName: true } },
   drawing: {
     select: {
@@ -727,6 +727,76 @@ function canonicalStoredRfiKind(kind: string): string {
   return kind;
 }
 
+const RFI_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Empty is allowed. A filled package must be on the project card, or already on this record. */
+async function rejectUnknownPackage(projectId: string, value: unknown, legacy: string[] = []): Promise<string | null> {
+  const pkg = String(value ?? "").trim();
+  if (!pkg) return null;
+  const { projectPackageNames, packageNotAllowed } = await import("../services/workPackageCatalog.js");
+  return packageNotAllowed(pkg, await projectPackageNames(projectId), legacy);
+}
+
+type RfiAssigneeFields = {
+  assignedToId: string | null;
+  assigneeContactId: string | null;
+  assigneeEmail: string | null;
+  assigneeName: string | null;
+};
+
+/**
+ * Resolve the RFI assignee: a portal user (assignedToId) or a communication-matrix contact
+ * without a portal login (assigneeContactId). Returns undefined when the body sets neither.
+ */
+async function resolveRfiAssignee(
+  projectId: string,
+  body: { assignedToId?: unknown; assigneeContactId?: unknown },
+): Promise<{ error: string } | { fields: RfiAssigneeFields } | undefined> {
+  const userId = body.assignedToId ? String(body.assignedToId) : "";
+  const contactId = body.assigneeContactId ? String(body.assigneeContactId) : "";
+  if (userId) {
+    const onProject = await prisma.projectMember.findFirst({
+      where: { projectId, userId },
+      select: { id: true },
+    });
+    if (!onProject) {
+      // Communication matrix people (matched by email to a User) may not be ProjectMember yet
+      const assignee = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      const email = assignee?.email?.trim();
+      const onMatrix = email
+        ? await prisma.communicationContact.findFirst({ where: { projectId, email }, select: { id: true } })
+        : null;
+      if (!onMatrix) {
+        return { error: "Assignee must be on this project's directory or communication matrix (matching email)." };
+      }
+    }
+    return { fields: { assignedToId: userId, assigneeContactId: null, assigneeEmail: null, assigneeName: null } };
+  }
+  if (contactId) {
+    const contact = await prisma.communicationContact.findFirst({
+      where: { id: contactId, projectId, isSectionHeader: false },
+      select: { id: true, email: true, personName: true, orgName: true },
+    });
+    if (!contact) return { error: "That contact is not on this project's communication matrix." };
+    const email = String(contact.email || "").trim();
+    if (!email || !RFI_EMAIL_RE.test(email)) {
+      return { error: "That matrix contact has no valid email. Add the email on the communication matrix first." };
+    }
+    return {
+      fields: {
+        assignedToId: null,
+        assigneeContactId: contact.id,
+        assigneeEmail: email,
+        assigneeName: contact.personName || contact.orgName || email,
+      },
+    };
+  }
+  if (body.assignedToId !== undefined || body.assigneeContactId !== undefined) {
+    return { fields: { assignedToId: null, assigneeContactId: null, assigneeEmail: null, assigneeName: null } };
+  }
+  return undefined;
+}
+
 rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
   const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
   const canRespond = await roleOnRfiMatrix(req.params.projectId, req.user!.role);
@@ -792,6 +862,8 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       });
     }
   }
+  const packageError = await rejectUnknownPackage(req.params.projectId, formObj.package || formObj.projectPackage);
+  if (packageError) return res.status(400).json({ error: packageError, fields: { package: packageError } });
   const fillNeedsTarget = [
     "QualityInspection",
     "SafetyChecklist",
@@ -801,38 +873,52 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
     "ActivityInspection",
     "SiteExecution",
   ].includes(rfiKind);
-  if (fillNeedsTarget && !isClient && !req.body.assignedToId && !req.body.responsibleVendorId) {
+  if (
+    fillNeedsTarget &&
+    !isClient &&
+    !req.body.assignedToId &&
+    !req.body.assigneeContactId &&
+    !req.body.responsibleVendorId
+  ) {
     return res.status(400).json({
       error: "Raise to a named person or vendor from this project's directory or communication matrix.",
     });
   }
-  // Checklist master link is optional — attach later from masters when ready.
-  if (req.body.assignedToId) {
-    const assigneeId = String(req.body.assignedToId);
-    const onProject = await prisma.projectMember.findFirst({
-      where: { projectId: req.params.projectId, userId: assigneeId },
-      select: { id: true },
+  // Drawings RFI (SPDC RFI form): a drawing on this project and one of its published revisions are required.
+  let drawingLink: { drawingId: string; drawingNumber: string; revisionNumber: string } | null = null;
+  if (rfiKind === "RequestForInformation" && String(rawKind) !== "Manual" && !isClient) {
+    const drawingId = String(req.body.linkedDrawingId || "").trim();
+    if (!drawingId) {
+      return res.status(400).json({ error: "Link the drawing and revision this RFI is about." });
+    }
+    const drawing = await prisma.drawing.findFirst({
+      where: { id: drawingId, projectId: req.params.projectId },
+      select: {
+        id: true,
+        drawingNumber: true,
+        revisions: { where: { published: true }, select: { id: true, revisionNumber: true } },
+      },
     });
-    if (!onProject) {
-      // Communication matrix people (matched by email → User) may not be ProjectMember yet
-      const assignee = await prisma.user.findUnique({
-        where: { id: assigneeId },
-        select: { email: true },
-      });
-      const email = assignee?.email?.trim();
-      const onMatrix = email
-        ? await prisma.communicationContact.findFirst({
-            where: { projectId: req.params.projectId, email },
-            select: { id: true },
-          })
-        : null;
-      if (!onMatrix) {
-        return res.status(400).json({
-          error: "Assignee must be on this project's directory or communication matrix (matching email).",
-        });
-      }
+    if (!drawing) return res.status(400).json({ error: "That drawing is not on this project." });
+    const revId = String(req.body.linkedRevisionId || "").trim();
+    const revText = String(formObj.dwgRev || formObj.drawingRev || "").trim();
+    const revision = revId
+      ? drawing.revisions.find((r) => r.id === revId)
+      : revText
+        ? drawing.revisions.find((r) => r.revisionNumber === revText)
+        : undefined;
+    if (!revision) {
+      return res.status(400).json({ error: "Pick a published revision of the linked drawing." });
+    }
+    drawingLink = { drawingId: drawing.id, drawingNumber: drawing.drawingNumber, revisionNumber: revision.revisionNumber };
+    if (req.body.formDataJson && typeof req.body.formDataJson === "object") {
+      req.body.formDataJson = { ...req.body.formDataJson, drawingRef: drawing.drawingNumber, dwgRev: revision.revisionNumber };
     }
   }
+  // Checklist master link is optional - attach later from masters when ready.
+  const assigneeOut = await resolveRfiAssignee(req.params.projectId, req.body);
+  if (assigneeOut && "error" in assigneeOut) return res.status(400).json({ error: assigneeOut.error });
+  const assigneeFields = assigneeOut?.fields;
   if (req.body.responsibleVendorId) {
     const assignedCompany = await prisma.projectVendor.findFirst({
       where: { projectId: req.params.projectId, vendorId: String(req.body.responsibleVendorId) },
@@ -852,12 +938,28 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
   const due = req.body.dueDate
     ? new Date(req.body.dueDate)
     : new Date(Date.now() + (slaDays[priority] || 14) * 86400000);
-  const formDataJson =
+  let formDataJson =
     req.body.formDataJson && typeof req.body.formDataJson === "object"
       ? JSON.stringify(req.body.formDataJson)
       : typeof req.body.formDataJson === "string"
         ? req.body.formDataJson
         : null;
+  let qualityLineId: string | null = null;
+  let qualityStatus: string | undefined;
+  let qualityAssignment: string | null = null;
+  if (rfiKind === "QualityIR") {
+    const { prepareQualityIrCreate } = await import("../services/qapIrFlow.js");
+    const prepared = await prepareQualityIrCreate({
+      projectId: req.params.projectId,
+      user: req.user!,
+      body: req.body,
+    });
+    if ("error" in prepared) return res.status(prepared.status).json({ error: prepared.error });
+    formDataJson = JSON.stringify(prepared.form);
+    qualityLineId = prepared.qapLineId;
+    qualityStatus = prepared.status;
+    qualityAssignment = prepared.linkedAssignmentId;
+  }
 
   const rfi = await prisma.rfi.create({
     data: {
@@ -868,14 +970,18 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       rfiKind,
       irNumber: req.body.irNumber || null,
       formDataJson,
-      status: req.body.status || "Open",
+      status: qualityStatus || req.body.status || "Open",
+      qapLineId: qualityLineId,
       ballInCourt: "Assignee",
-      assignedToId: req.body.assignedToId || null,
+      assignedToId: assigneeFields?.assignedToId ?? null,
+      assigneeContactId: assigneeFields?.assigneeContactId ?? null,
+      assigneeEmail: assigneeFields?.assigneeEmail ?? null,
+      assigneeName: assigneeFields?.assigneeName ?? null,
       createdById: req.user!.id,
       dueDate: due,
-      linkedDrawingId: isClient || noDrawingLink ? null : req.body.linkedDrawingId || null,
+      linkedDrawingId: isClient || noDrawingLink ? null : drawingLink?.drawingId || req.body.linkedDrawingId || null,
       linkedChecklistItemId: req.body.linkedChecklistItemId || null,
-      linkedAssignmentId: req.body.linkedAssignmentId || null,
+      linkedAssignmentId: qualityAssignment || req.body.linkedAssignmentId || null,
       attachmentsJson: req.body.attachmentsJson ? JSON.stringify(req.body.attachmentsJson) : req.body.attachmentNote || null,
       responsibleVendorId: req.body.responsibleVendorId || null,
       scheduleImpact: req.body.scheduleImpact || "None",
@@ -885,13 +991,18 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       questionReceivedFrom: isClient ? "Client portal" : req.body.questionReceivedFrom,
     },
     include: {
-      assignedTo: { select: { fullName: true } },
+      assignedTo: { select: { fullName: true, email: true } },
       createdBy: { select: { fullName: true } },
       drawing: { select: { drawingNumber: true, title: true } },
       vendor: { select: { id: true, name: true } },
     },
   });
-  await audit("rfi.create", { userId: req.user!.id, entity: "Rfi", entityId: rfi.id });
+  await audit("rfi.create", {
+    userId: req.user!.id,
+    entity: "Rfi",
+    entityId: rfi.id,
+    meta: rfi.assigneeContactId ? { assigneeContactId: rfi.assigneeContactId, assigneeEmail: rfi.assigneeEmail } : undefined,
+  });
   // File the RFI form + register in SharePoint, but answer within the gateway limit: the sync keeps
   // running in the background when SharePoint is slow (the row is already saved).
   let sharePointExports: Array<{ kind: string; path: string; url?: string | null }> = [];
@@ -917,13 +1028,14 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
           })
         : Promise.resolve(null),
     ]);
-    const { notifyRfiRaised, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
+    const { notifyRfiRaised, rfiEmailContextFromRecord, rfiAssigneeRecipient } = await import("../services/rfiFlowNotify.js");
     await notifyRfiRaised({
       projectId: req.params.projectId,
       rfiId: rfi.id,
       linkedAssignmentId: rfi.linkedAssignmentId,
       createdById: req.user!.id,
       extraEmails: req.body.extraEmails || req.body.notifyEmails || null,
+      ...rfiAssigneeRecipient(rfi),
       ...rfiEmailContextFromRecord(
         rfi,
         project,
@@ -1112,6 +1224,8 @@ rfiRouter.post(
         rfiId: req.params.id,
         userId: req.user!.id,
         userName: req.user!.fullName,
+        recordLabel: req.body?.recordLabel ? String(req.body.recordLabel) : undefined,
+        recordKey: req.body?.recordKey ? String(req.body.recordKey) : undefined,
         files,
         kindHint,
       });
@@ -1224,7 +1338,7 @@ rfiRouter.post("/:id/follow-up", requireRoles("admin", "office", "site_employee"
     where: { id: existing.projectId },
     select: { code: true, name: true },
   });
-  const { notifyRfiFollowUp, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
+  const { notifyRfiFollowUp, rfiEmailContextFromRecord, rfiAssigneeRecipient } = await import("../services/rfiFlowNotify.js");
   const result = await notifyRfiFollowUp({
     projectId: existing.projectId,
     rfiId: existing.id,
@@ -1232,6 +1346,7 @@ rfiRouter.post("/:id/follow-up", requireRoles("admin", "office", "site_employee"
     createdById: req.user!.id,
     extraEmails: req.body.extraEmails || req.body.notifyEmails || null,
     note: req.body.note || null,
+    ...rfiAssigneeRecipient(existing),
     ...rfiEmailContextFromRecord(existing, project),
   });
   await audit("rfi.follow-up", { userId: req.user!.id, entity: "Rfi", entityId: existing.id });
@@ -1274,14 +1389,14 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
       prisma.rfi.findUnique({
         where: { id: existing.id },
         include: {
-          assignedTo: { select: { fullName: true } },
+          assignedTo: { select: { fullName: true, email: true } },
           createdBy: { select: { fullName: true } },
           drawing: { select: { drawingNumber: true, title: true } },
           vendor: { select: { name: true } },
         },
       }),
     ]);
-    const { notifyRfiResponse, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
+    const { notifyRfiResponse, rfiEmailContextFromRecord, rfiAssigneeRecipient } = await import("../services/rfiFlowNotify.js");
     if (fullRfi) {
       await notifyRfiResponse({
         projectId: existing.projectId,
@@ -1290,6 +1405,7 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
         respondedByName: req.user!.fullName || undefined,
         isOfficial: !!req.body.isOfficialResponse,
         createdById: req.user!.id,
+        ...rfiAssigneeRecipient(fullRfi),
         ...rfiEmailContextFromRecord(fullRfi, project),
       });
     }
@@ -1306,6 +1422,34 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
 rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
   const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "RFI not found" });
+  const incomingForm = req.body?.formDataJson && typeof req.body.formDataJson === "object" ? req.body.formDataJson : null;
+  if (incomingForm) {
+    let currentPkg = "";
+    try {
+      currentPkg = String(JSON.parse(existing.formDataJson || "{}")?.package || "");
+    } catch {
+      currentPkg = "";
+    }
+    const packageError = await rejectUnknownPackage(existing.projectId, incomingForm.package || incomingForm.projectPackage, currentPkg ? [currentPkg] : []);
+    if (packageError) return res.status(400).json({ error: packageError, fields: { package: packageError } });
+  }
+  let formDataJson: string | undefined;
+  let clearanceStatus: string | undefined;
+  let qualityClosed = false;
+  let notifyClient = false;
+  if (existing.rfiKind === "QualityIR") {
+    const { applyQualityIrPatch, notifyQualityIr } = await import("../services/qapIrFlow.js");
+    const out = await applyQualityIrPatch({ existing, user: req.user!, body: req.body });
+    if ("error" in out) return res.status(out.status).json({ error: out.error });
+    formDataJson = out.formDataJson;
+    clearanceStatus = out.nextStatus;
+    qualityClosed = out.closed;
+    notifyClient = out.notifyClient;
+    if (req.body.submit === true && existing.qapLineId) {
+      const line = await prisma.qapLine.findUnique({ where: { id: existing.qapLineId } });
+      if (line) await notifyQualityIr(existing.projectId, "submit", line, existing.irNumber || existing.number);
+    }
+  } else {
   const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
   const allowed = await roleOnRfiMatrix(existing.projectId, req.user!.role);
   if (!allowed) {
@@ -1313,9 +1457,7 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       error: "Only Communication Matrix parties (or Sharnam office) can close / update this RFI.",
     });
   }
-  // Safety IR (F-01) clearance: PMC records S1–S4, validity and conditions on the request.
-  let formDataJson: string | undefined;
-  let clearanceStatus: string | undefined;
+  // Safety IR clearance: PMC records S1-S4, validity and conditions on the request.
   if (req.body.formPatch && typeof req.body.formPatch === "object") {
     const allowed = ["clearanceResult", "validUpTo", "actionRequired", "riskRating", "clearanceSoughtFrom", "inspectedBy", "inspectedAt"];
     let form: Record<string, unknown> = {};
@@ -1333,6 +1475,7 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       clearanceStatus = /^S[12]/.test(String(form.clearanceResult)) ? "Approved" : "Rejected";
     }
     formDataJson = JSON.stringify(form);
+  }
   }
   const fillKinds = new Set([
     "QualityIR",
@@ -1366,18 +1509,28 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
     }
   }
 
+  const assigneeOut = await resolveRfiAssignee(existing.projectId, req.body);
+  if (assigneeOut && "error" in assigneeOut) return res.status(400).json({ error: assigneeOut.error });
+
   const rfi = await prisma.rfi.update({
     where: { id: req.params.id },
     data: {
-      status: req.body.status ?? clearanceStatus,
+      status: clearanceStatus || req.body.status,
       ballInCourt: req.body.ballInCourt ?? (clearanceStatus ? "Contractor" : undefined),
-      assignedToId: req.body.assignedToId,
+      ...(assigneeOut ? assigneeOut.fields : {}),
       ...(formDataJson ? { formDataJson } : {}),
       ...(linkedAssignmentId !== undefined ? { linkedAssignmentId } : {}),
       ...(linkedChecklistItemId !== undefined ? { linkedChecklistItemId } : {}),
-      closedAt: req.body.status === "Closed" ? new Date() : undefined,
+      closedAt: qualityClosed || req.body.status === "Closed" ? new Date() : undefined,
     },
   });
+  if (notifyClient && existing.qapLineId) {
+    const line = await prisma.qapLine.findUnique({ where: { id: existing.qapLineId } });
+    if (line) {
+      const { notifyQualityIr } = await import("../services/qapIrFlow.js");
+      await notifyQualityIr(existing.projectId, "client", line, existing.irNumber || existing.number);
+    }
+  }
   if (newlyLinkedAssignmentId && isChecklistFillRfiKind(existing.rfiKind)) {
     import("../services/ensureFillRequestDraft.js")
       .then(({ ensureFillRequestDraft }) =>
@@ -1420,7 +1573,7 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
         prisma.rfi.findUnique({
           where: { id: rfi.id },
           include: {
-            assignedTo: { select: { fullName: true } },
+            assignedTo: { select: { fullName: true, email: true } },
             createdBy: { select: { fullName: true } },
             drawing: { select: { drawingNumber: true, title: true } },
             vendor: { select: { name: true } },
@@ -1433,12 +1586,13 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
             })
           : Promise.resolve(null),
       ]);
-      const { notifyRfiClosed, rfiEmailContextFromRecord } = await import("../services/rfiFlowNotify.js");
+      const { notifyRfiClosed, rfiEmailContextFromRecord, rfiAssigneeRecipient } = await import("../services/rfiFlowNotify.js");
       if (closedRfi) {
         await notifyRfiClosed({
           projectId: existing.projectId,
           rfiId: rfi.id,
           createdById: req.user!.id,
+          ...rfiAssigneeRecipient(closedRfi),
           ...rfiEmailContextFromRecord(closedRfi, project, assignment?.template?.name || null),
         });
       }
@@ -2032,6 +2186,20 @@ directoryRouter.delete("/coordination/:id", requireRoles("admin", "office"), asy
 });
 
 directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
+  const linkedDrawingId = String(req.body.linkedDrawingId || "").trim();
+  if (!linkedDrawingId) {
+    return res.status(400).json({ error: "Pick the GFC drawing this issue is about." });
+  }
+  const drawingOnProject = await prisma.drawing.findFirst({
+    where: { id: linkedDrawingId, projectId: req.params.projectId },
+    select: { id: true },
+  });
+  if (!drawingOnProject) return res.status(400).json({ error: "That drawing is not on this project." });
+  if (!String(req.body.title || "").trim()) return res.status(400).json({ error: "Describe the issue." });
+  if (!String(req.body.discipline || "").trim()) return res.status(400).json({ error: "Pick the drawing type." });
+  if (!RFI_EMAIL_RE.test(String(req.body.assignedToEmail || "").trim())) {
+    return res.status(400).json({ error: "Pick an assignee with an email address." });
+  }
   const row = await prisma.designCoordinationIssue.create({
     data: {
       projectId: req.params.projectId,
@@ -2041,7 +2209,7 @@ directoryRouter.post("/project/:projectId/coordination", requireRoles("admin", "
       location: req.body.location,
       priority: req.body.priority || "Medium",
       ballInCourt: req.body.ballInCourt || "Assignee",
-      linkedDrawingId: req.body.linkedDrawingId || null,
+      linkedDrawingId: drawingOnProject.id,
       assignedToName: req.body.assignedToName || null,
       assignedToId: req.body.assignedToId || null,
       assignedToEmail: req.body.assignedToEmail || null,
@@ -2134,6 +2302,15 @@ function publishCoordinationRegisterInBackground(projectId: string, issueId?: st
 directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const before = await prisma.designCoordinationIssue.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });
+  if (req.body.linkedDrawingId !== undefined) {
+    const nextDrawingId = String(req.body.linkedDrawingId || "").trim();
+    if (!nextDrawingId) return res.status(400).json({ error: "A coordination issue must stay linked to a GFC drawing." });
+    const onProject = await prisma.drawing.findFirst({
+      where: { id: nextDrawingId, projectId: before.projectId },
+      select: { id: true },
+    });
+    if (!onProject) return res.status(400).json({ error: "That drawing is not on this project." });
+  }
   const row = await prisma.designCoordinationIssue.update({
     where: { id: req.params.id },
     data: {

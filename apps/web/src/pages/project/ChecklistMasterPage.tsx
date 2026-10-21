@@ -14,6 +14,42 @@ import { FilePickButton } from "../../components/FilePickButton";
 import { StatusNote } from "../../components/StatusNote";
 import { QualitySiteRegister } from "../../components/QualitySiteRegister";
 import { SafetySiteRegister } from "../../components/SafetySiteRegister";
+import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
+import { formatUiText } from "../../lib/formatUiText";
+
+function lineHasInstruction(i: { instruction?: string | null; instructionFileUrl?: string | null }) {
+  return Boolean(String(i.instruction || "").trim() || i.instructionFileUrl);
+}
+
+function DrawingCheckDisciplineWarnings({
+  disciplines,
+  templates,
+  onOpen,
+}: {
+  disciplines: string[];
+  templates: { id: string; name: string; discipline?: string | null; isActive?: boolean }[];
+  onOpen: (id: string) => void;
+}) {
+  const active = templates.filter((t) => t.isActive !== false);
+  const missing = disciplines.filter((d) => !active.some((t) => (t.discipline || "").toLowerCase() === d.toLowerCase()));
+  const stray = active.filter((t) => t.discipline && !disciplines.some((d) => d.toLowerCase() === String(t.discipline).toLowerCase()));
+  if (!missing.length && !stray.length) return null;
+  return (
+    <Card className="!p-3 space-y-1 text-sm">
+      {missing.map((d) => (
+        <p key={d}>No checklist for {d} - uploads in {d} will be blocked.</p>
+      ))}
+      {stray.map((t) => (
+        <p key={t.id}>
+          {t.name} is set to {t.discipline}, which is not in this project's discipline list.{" "}
+          <button type="button" className="text-brand font-semibold" onClick={() => onOpen(t.id)}>
+            {formatUiText("Edit template discipline")}
+          </button>
+        </p>
+      ))}
+    </Card>
+  );
+}
 
 const FAMILIES = [
   { value: "DrawingCheck", label: "Drawing check · RFI (SPDC RFI form)" },
@@ -74,6 +110,9 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
     ((family === "QualityInspection" || family === "Safety") && user?.role === "client");
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
+  const [excelMode, setExcelMode] = useState<"create" | "merge">("create");
+  const [onlyMissingInstruction, setOnlyMissingInstruction] = useState(false);
+  const picklists = useDrawingPicklists(id, token);
   const [createBusy, setCreateBusy] = useState(false);
   const [catalog, setCatalog] = useState<{ srNo: number; name: string; category: string }[]>([]);
   const [masterTab, setMasterTab] = useState<"templates" | "site-observation" | "site-instruction">("templates");
@@ -164,6 +203,8 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
         category: detail.category,
         instructions: detail.instructions,
         requirePhotosMin: detail.requirePhotosMin,
+        requireInstructions: !!detail.requireInstructions,
+        ...(family === "DrawingCheck" ? { discipline: detail.discipline || null } : {}),
       }),
     });
     setDetail(updated);
@@ -174,16 +215,32 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
   async function addItem(e: FormEvent) {
     e.preventDefault();
     if (!detail) return;
-    await api(`/api/checklist/templates/${detail.id}/items`, {
-      method: "POST",
-      token,
-      body: JSON.stringify(itemForm),
-    });
+    if (detail.requireInstructions && !itemForm.instruction.trim()) {
+      setMsg("This checklist requires an instruction on every line. Add one before saving.");
+      return;
+    }
+    try {
+      await api(`/api/checklist/templates/${detail.id}/items`, {
+        method: "POST",
+        token,
+        body: JSON.stringify(itemForm),
+      });
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not add line");
+      return;
+    }
     setItemForm({ description: "", instruction: "", section: "General", requirePhoto: false });
     const fresh = await api(`/api/checklist/templates/${detail.id}`, { token });
     setDetail(fresh);
     setMsg("Line item added");
+    await load();
   }
+
+  const detailItems: any[] = detail?.items || [];
+  const instructedCount = detailItems.filter(lineHasInstruction).length;
+  const missingInstructionCount = detailItems.length - instructedCount;
+  const assignBlocked = !!detail?.requireInstructions && missingInstructionCount > 0;
+  const disciplineOptions = withCurrent(picklists.lists.disciplines, detail?.discipline);
 
   const pageShell = id
     ? "quality-module page-scroll-full flex flex-col gap-6 pb-8 min-w-0 w-full"
@@ -526,6 +583,33 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               if (!excelFile) return;
               setExcelBusy(true);
               setMsg("");
+              if (excelMode === "merge") {
+                if (!detail) {
+                  setMsg("Select a template to update first.");
+                  setExcelBusy(false);
+                  return;
+                }
+                try {
+                  const fd = new FormData();
+                  fd.append("file", excelFile);
+                  const out = await api<{ template: any; updated: number; created: number; unchanged: number; skipped: string[] }>(
+                    `/api/checklist/templates/${detail.id}/import-excel`,
+                    { method: "POST", token, body: fd }
+                  );
+                  setDetail(out.template);
+                  setMsg(
+                    `${detail.name}: ${out.updated} line(s) updated, ${out.created} added, ${out.unchanged} unchanged` +
+                      (out.skipped.length ? `, ${out.skipped.length} skipped (no instruction).` : ".")
+                  );
+                  setExcelFile(null);
+                  await load();
+                } catch (err) {
+                  setMsg(err instanceof Error ? err.message : "Import failed");
+                } finally {
+                  setExcelBusy(false);
+                }
+                return;
+              }
               try {
                 const fd = new FormData();
                 fd.append("file", excelFile);
@@ -548,18 +632,42 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
               }
             }}
           >
+            <Select
+              label="Upload into"
+              fieldClassName="min-w-[16rem]"
+              value={excelMode}
+              onChange={(e) => setExcelMode(e.target.value as "create" | "merge")}
+            >
+              <option value="create">{formatUiText("A new template")}</option>
+              <option value="merge" disabled={!detail}>
+                {detail ? `${formatUiText("Selected template")}: ${detail.name}` : formatUiText("Selected template (pick one first)")}
+              </option>
+            </Select>
             <input
               type="file"
               accept=".xlsx,.xls,.csv"
               onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
               className="text-sm"
             />
-            <Button type="submit" disabled={!excelFile || excelBusy}>
+            <Button type="submit" disabled={!excelFile || excelBusy || (excelMode === "merge" && !detail)}>
               {excelBusy ? "Importing…" : "Upload CSV / Excel"}
             </Button>
+            {excelMode === "merge" ? (
+              <p className="basis-full text-[11px] text-steel-muted">
+                Rows match existing lines by description. Filled instruction, section and photo cells update the line; new descriptions are added as new lines.
+              </p>
+            ) : null}
           </form>
         </Card>
       )}
+
+      {id && family === "DrawingCheck" && picklists.loaded ? (
+        <DrawingCheckDisciplineWarnings
+          disciplines={picklists.lists.disciplines}
+          templates={templates}
+          onOpen={(templateId) => setActiveId(templateId)}
+        />
+      ) : null}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="space-y-3">
@@ -573,8 +681,14 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   onClick={() => setActiveId(t.id)}
                 >
                   {t.name}{" "}
+                  {family === "DrawingCheck" ? (
+                    <Badge tone={t.discipline ? "brand" : "warn"} className="ml-1">
+                      {t.discipline || "No discipline"}
+                    </Badge>
+                  ) : null}{" "}
                   <span className="text-xs text-steel-muted">
                     · {t._count?.items ?? "?"} lines
+                    {` · ${formatUiText("Instructions")}: ${t.instructionCount ?? 0} / ${t._count?.items ?? 0}`}
                     {family === "DrawingCheck" ? "" : ` · photos≥${t.requirePhotosMin ?? 0}`}
                   </span>
                 </button>
@@ -630,21 +744,64 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   rows={2}
                   disabled={!canEdit}
                 />
+                {family === "DrawingCheck" ? (
+                  <Select
+                    label="Discipline"
+                    hint="The upload gate opens this checklist for drawings of this discipline."
+                    value={detail.discipline || ""}
+                    onChange={(e) => setDetail({ ...detail, discipline: e.target.value || null })}
+                    disabled={!canEdit}
+                  >
+                    <option value="">{formatUiText("Select discipline")}</option>
+                    {disciplineOptions.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={!!detail.requireInstructions}
+                    onChange={(e) => setDetail({ ...detail, requireInstructions: e.target.checked })}
+                    disabled={!canEdit}
+                  />
+                  {formatUiText("Require an instruction on every line")}
+                </label>
                 {canEdit && <Button type="submit" className="!bg-sky-600 !font-medium">Save header</Button>}
               </form>
 
               <div className="border-t border-line pt-3">
-                <h4 className="text-sm font-semibold mb-1">Line items</h4>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                  <h4 className="text-sm font-semibold">Line items</h4>
+                  <Badge tone={missingInstructionCount ? "warn" : "ok"}>
+                    {`${formatUiText("Instructions")}: ${instructedCount} / ${detailItems.length}`}
+                  </Badge>
+                </div>
                 <p className="text-xs text-steel-muted mb-2">
-                  Each line needs its own instruction (text and optional file). Site uses this on fill — quality is not locked to a drawing.
+                  Add an instruction for each line so reviewers know what to check.{" "}
+                  {detail.requireInstructions ? "This checklist requires one on every line." : "Lines without one are allowed."}
                 </p>
+                <label className="flex items-center gap-2 text-xs text-steel-muted mb-2">
+                  <input
+                    type="checkbox"
+                    checked={onlyMissingInstruction}
+                    onChange={(e) => setOnlyMissingInstruction(e.target.checked)}
+                  />
+                  {formatUiText("Show lines without instruction")} ({missingInstructionCount})
+                </label>
                 <ul className="space-y-3 max-h-[28rem] overflow-y-auto text-sm">
-                  {(detail.items || []).map((i: any) => (
+                  {onlyMissingInstruction && missingInstructionCount === 0 ? (
+                    <li className="text-xs text-steel-muted">Every line has an instruction.</li>
+                  ) : null}
+                  {detailItems.filter((i) => !onlyMissingInstruction || !lineHasInstruction(i)).map((i: any) => (
                     <ChecklistLineEditor
                       key={i.id}
                       item={i}
                       canEdit={canEdit}
                       token={token}
+                      requireInstruction={!!detail.requireInstructions}
                       showPhoto={family !== "DrawingCheck"}
                       onSaved={async (fresh) => {
                         if (fresh) {
@@ -656,6 +813,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                         } else if (detail?.id) {
                           setDetail(await api(`/api/checklist/templates/${detail.id}`, { token }));
                         }
+                        await load();
                       }}
                       onMsg={setMsg}
                     />
@@ -704,6 +862,12 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                     <Button
                       type="button"
                       className="!bg-sky-600 !font-medium"
+                      disabled={assignBlocked}
+                      title={
+                        assignBlocked
+                          ? `Add an instruction to every line first (${missingInstructionCount} missing).`
+                          : undefined
+                      }
                       onClick={async () => {
                         try {
                           await api(`/api/checklist/project/${id}/assign`, {
@@ -720,6 +884,11 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                       Assign to this project
                     </Button>
                   )}
+                  {canEdit && assignBlocked ? (
+                    <span className="text-xs text-warn">
+                      Add an instruction to every line before assigning ({missingInstructionCount} missing).
+                    </span>
+                  ) : null}
                   {canEdit && (
                     <Link to={`/projects/${id}/checklist/assign`} className="text-sm font-semibold text-brand">
                       Assign catalog →
@@ -742,6 +911,7 @@ function ChecklistLineEditor({
   canEdit,
   token,
   showPhoto,
+  requireInstruction = false,
   onSaved,
   onMsg,
 }: {
@@ -758,6 +928,7 @@ function ChecklistLineEditor({
   canEdit: boolean;
   token: string | null;
   showPhoto: boolean;
+  requireInstruction?: boolean;
   onSaved: (fresh?: any) => void | Promise<void>;
   onMsg: (text: string) => void;
 }) {
@@ -773,6 +944,10 @@ function ChecklistLineEditor({
   }, [item.id, item.description, item.instruction, item.requirePhoto]);
 
   async function saveMeta() {
+    if (requireInstruction && !instruction.trim() && !item.instructionFileUrl) {
+      onMsg("This checklist requires an instruction on every line. Add one before saving.");
+      return;
+    }
     setBusy(true);
     try {
       const fresh = await api(`/api/checklist/items/${item.id}`, {

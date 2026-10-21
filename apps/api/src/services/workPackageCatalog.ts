@@ -11,6 +11,31 @@ function isBidDisciplineCatalogName(name: string) {
 }
 
 /** Remove R2 comparative bid sheet names that were mistakenly saved as work packages. */
+export function parseWorkPackagesJson(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((item) => String(item || "").trim()).filter(Boolean);
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Packages on the project card, with bid-sheet names removed. */
+export async function projectPackageNames(projectId: string): Promise<string[]> {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { workPackages: true } });
+  return sanitizeProjectWorkPackages(parseWorkPackagesJson(project?.workPackages));
+}
+
+/** Null when the value is allowed (or empty). Legacy values already on the record stay allowed. */
+export function packageNotAllowed(value: string, allowed: string[], legacy: string[] = []): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  const ok = [...allowed, ...legacy].some((p) => p.trim().toLowerCase() === v.toLowerCase());
+  return ok ? null : "Package is not on this project's set-up. Add it in Project set-up.";
+}
+
 export function sanitizeProjectWorkPackages(raw: string[] | null | undefined): string[] {
   const seen = new Set<string>();
   const out: string[] = [];

@@ -15,6 +15,7 @@ import {
   isChecklistFillRfiKind,
   rfiMetaFromResponses,
 } from "../services/ensureFillRequestDraft.js";
+import { mountQapQuality } from "./qapQualityRoutes.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -127,6 +128,7 @@ const qualityPublishJobs = new Map<string, QualityPublishJob>();
 
 export const checklistRouter = Router();
 checklistRouter.use(requireAuth);
+mountQapQuality(checklistRouter);
 guardProjectParam(checklistRouter);
 guardRecord(checklistRouter, "/assignments/:assignmentId", async (id) => (await prisma.checklistAssignment.findUnique({ where: { id }, select: { projectId: true } }))?.projectId, "assignmentId");
 guardRecord(checklistRouter, "/submissions/:id", async (id) => (await prisma.checklistSubmission.findUnique({ where: { id }, select: { assignment: { select: { projectId: true } } } }))?.assignment.projectId);
@@ -136,6 +138,19 @@ checklistRouter.post(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
   const { templateId } = req.body;
+  const tpl = await prisma.checklistTemplate.findUnique({
+    where: { id: String(templateId || "") },
+    select: { requireInstructions: true, items: { select: { instruction: true, instructionFileUrl: true } } },
+  });
+  if (!tpl) return res.status(404).json({ error: "Checklist template not found" });
+  if (tpl.requireInstructions) {
+    const missing = tpl.items.filter((i) => !itemHasInstruction(i)).length;
+    if (missing) {
+      return res.status(400).json({
+        error: `Add an instruction to every line before assigning (${missing} of ${tpl.items.length} lines have none).`,
+      });
+    }
+  }
   const assignment = await prisma.checklistAssignment.upsert({
     where: {
       projectId_templateId: { projectId: req.params.projectId, templateId },
@@ -239,8 +254,25 @@ checklistRouter.get("/templates", async (req, res) => {
     include: { _count: { select: { items: true } } },
     orderBy: [{ category: "asc" }, { name: "asc" }],
   });
-  res.json(templates);
+  const withInstruction = templates.length
+    ? await prisma.checklistItem.groupBy({
+        by: ["templateId"],
+        where: {
+          templateId: { in: templates.map((t) => t.id) },
+          OR: [{ AND: [{ instruction: { not: null } }, { NOT: { instruction: "" } }] }, { instructionFileUrl: { not: null } }],
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const instructed = new Map(withInstruction.map((g) => [g.templateId, g._count._all]));
+  res.json(templates.map((t) => ({ ...t, instructionCount: instructed.get(t.id) || 0 })));
 });
+
+function itemHasInstruction(item: { instruction?: string | null; instructionFileUrl?: string | null }) {
+  return Boolean(String(item.instruction || "").trim() || item.instructionFileUrl);
+}
+
+const REQUIRE_INSTRUCTION_ERROR = "This checklist requires an instruction on every line. Add one before saving.";
 
 /** Re-import DrawingCheck templates from Drwing check master checklist.xlt.xls (editable afterward in master UI). */
 checklistRouter.post(
@@ -1087,7 +1119,7 @@ checklistRouter.post(
     const reviewerId = req.user!.id;
     void (async () => {
       try {
-        const { notifyChecklistReviewed, notifyRfiClosed, rfiEmailContextFromRecord } = await import(
+        const { notifyChecklistReviewed, notifyRfiClosed, rfiAssigneeRecipient, rfiEmailContextFromRecord } = await import(
           "../services/rfiFlowNotify.js"
         );
         await notifyChecklistReviewed({
@@ -1112,7 +1144,7 @@ checklistRouter.post(
             const closedFull = await prisma.rfi.findUnique({
               where: { id: r.id },
               include: {
-                assignedTo: { select: { fullName: true } },
+                assignedTo: { select: { fullName: true, email: true } },
                 createdBy: { select: { fullName: true } },
                 drawing: { select: { drawingNumber: true, title: true } },
                 vendor: { select: { name: true } },
@@ -1123,6 +1155,7 @@ checklistRouter.post(
                 projectId: existing.assignment.projectId,
                 rfiId: r.id,
                 createdById: reviewerId,
+                ...rfiAssigneeRecipient(closedFull),
                 ...rfiEmailContextFromRecord(closedFull, project, existing.assignment.template.name),
               });
             }
@@ -1586,6 +1619,8 @@ checklistRouter.post(
       instructions,
       requirePhotosMin,
       items,
+      discipline,
+      requireInstructions,
     } = req.body || {};
     if (!name || !category) return res.status(400).json({ error: "name and category required" });
     const type = TEMPLATE_TYPES.includes(checklistType) ? checklistType : "SiteExecution";
@@ -1616,6 +1651,9 @@ checklistRouter.post(
             requirePhoto: type === "DrawingCheck" ? false : Boolean(i.requirePhoto),
           }))
       : [];
+    if (requireInstructions && lineItems.some((i) => !String(i.instruction || "").trim())) {
+      return res.status(400).json({ error: REQUIRE_INSTRUCTION_ERROR });
+    }
     const template = await prisma.checklistTemplate.create({
       data: {
         name: String(name),
@@ -1623,6 +1661,8 @@ checklistRouter.post(
         checklistType: type,
         instructions: instructions ? String(instructions) : null,
         requirePhotosMin: photoMin,
+        discipline: discipline ? String(discipline).trim() || null : null,
+        requireInstructions: Boolean(requireInstructions),
         source: "manual",
         items: lineItems.length ? { create: lineItems } : undefined,
       },
@@ -1713,6 +1753,102 @@ checklistRouter.post(
   }
 );
 
+/**
+ * Upload CSV / Excel into an existing template. Rows match lines by description (case and spacing ignored):
+ * matched lines get the non-empty instruction / section / requirePhoto values, unmatched rows become new lines.
+ */
+checklistRouter.post(
+  "/templates/:id/import-excel",
+  requireRoles("admin", "office", "employee", "client"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    if (!req.file) return res.status(400).json({ error: "Excel or CSV file required" });
+    const template = await prisma.checklistTemplate.findUnique({
+      where: { id: req.params.id },
+      include: { items: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!template) return res.status(404).json({ error: "Checklist template not found" });
+
+    let workbook: WorkBook;
+    try {
+      workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    } catch {
+      return res.status(400).json({ error: "Could not read the file" });
+    }
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+    const byDescription = new Map(template.items.map((i) => [norm(i.description || ""), i]));
+    const isDrawing = template.checklistType === "DrawingCheck";
+
+    let updated = 0;
+    let created = 0;
+    let unchanged = 0;
+    const skipped: string[] = [];
+    let sortOrder = template.items.reduce((m, i) => Math.max(m, i.sortOrder || 0), 0);
+    const seen = new Set<string>();
+
+    for (const row of rows) {
+      const description = String(
+        row.description || row.Description || row.item || row.Item || row.check || row.Check || row["Line item"] || ""
+      ).trim();
+      if (!description) continue;
+      const key = norm(description);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const instruction = String(row.instruction || row.Instruction || row.QI || row.guidance || "").trim();
+      const section = String(row.section || row.Section || row.category || row.Category || "").trim();
+      const photoRaw = String(row.requirePhoto ?? row.photo ?? row.Photo ?? "").trim();
+      const match = byDescription.get(key);
+      if (match) {
+        const data: { instruction?: string; section?: string; requirePhoto?: boolean } = {};
+        if (instruction && instruction !== (match.instruction || "")) data.instruction = instruction;
+        if (section && section !== (match.section || "")) data.section = section;
+        if (!isDrawing && photoRaw) {
+          const want = /^(y|yes|true|1)$/i.test(photoRaw);
+          if (want !== match.requirePhoto) data.requirePhoto = want;
+        }
+        if (Object.keys(data).length) {
+          await prisma.checklistItem.update({ where: { id: match.id }, data });
+          updated += 1;
+        } else {
+          unchanged += 1;
+        }
+        continue;
+      }
+      if (template.requireInstructions && !instruction) {
+        skipped.push(description);
+        continue;
+      }
+      sortOrder += 1;
+      await prisma.checklistItem.create({
+        data: {
+          templateId: template.id,
+          itemCode: String(sortOrder),
+          description,
+          instruction: instruction || null,
+          section: section || "General",
+          sortOrder,
+          requirePhoto: isDrawing ? false : /^(y|yes|true|1)$/i.test(photoRaw),
+        },
+      });
+      created += 1;
+    }
+
+    await audit("checklist.template.merge_import", {
+      userId: req.user!.id,
+      entity: "ChecklistTemplate",
+      entityId: template.id,
+      meta: { file: req.file.originalname, updated, created, unchanged, skipped: skipped.length },
+    });
+    const fresh = await prisma.checklistTemplate.findUnique({
+      where: { id: template.id },
+      include: { items: { orderBy: { sortOrder: "asc" } }, _count: { select: { items: true } } },
+    });
+    res.json({ template: fresh, updated, created, unchanged, skipped });
+  }
+);
+
 checklistRouter.patch(
   "/templates/:id",
   requireRoles("admin", "office", "employee", "client"),
@@ -1726,6 +1862,8 @@ checklistRouter.patch(
     if (body.checklistType === "DrawingCheck" || data.checklistType === "DrawingCheck") data.requirePhotosMin = 0;
     if (body.isActive != null) data.isActive = Boolean(body.isActive);
     if (body.checklistType && TEMPLATE_TYPES.includes(body.checklistType)) data.checklistType = body.checklistType;
+    if (body.discipline !== undefined) data.discipline = body.discipline ? String(body.discipline).trim() || null : null;
+    if (body.requireInstructions != null) data.requireInstructions = Boolean(body.requireInstructions);
     const template = await prisma.checklistTemplate.update({
       where: { id: req.params.id },
       data,
@@ -1743,8 +1881,12 @@ checklistRouter.post(
     if (!description) return res.status(400).json({ error: "description required" });
     const parent = await prisma.checklistTemplate.findUnique({
       where: { id: req.params.id },
-      select: { checklistType: true },
+      select: { checklistType: true, requireInstructions: true },
     });
+    if (!parent) return res.status(404).json({ error: "Checklist template not found" });
+    if (parent.requireInstructions && !String(instruction || "").trim() && !req.body?.instructionFileUrl) {
+      return res.status(400).json({ error: REQUIRE_INSTRUCTION_ERROR });
+    }
     const count = await prisma.checklistItem.count({ where: { templateId: req.params.id } });
     const item = await prisma.checklistItem.create({
       data: {
@@ -1805,6 +1947,18 @@ checklistRouter.patch(
   requireRoles("admin", "office", "employee", "client"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
+    const current = await prisma.checklistItem.findUnique({
+      where: { id: req.params.id },
+      select: { instruction: true, instructionFileUrl: true, template: { select: { requireInstructions: true } } },
+    });
+    if (!current) return res.status(404).json({ error: "Line item not found" });
+    if (current.template.requireInstructions) {
+      const nextInstruction = body.instruction != null ? String(body.instruction) : current.instruction;
+      const nextFile = body.instructionFileUrl != null ? String(body.instructionFileUrl) || null : current.instructionFileUrl;
+      if (!itemHasInstruction({ instruction: nextInstruction, instructionFileUrl: nextFile })) {
+        return res.status(400).json({ error: REQUIRE_INSTRUCTION_ERROR });
+      }
+    }
     const item = await prisma.checklistItem.update({
       where: { id: req.params.id },
       data: {
@@ -1832,54 +1986,56 @@ checklistRouter.delete(
 );
 
 /**
- * Drawing Check Master — must be filled before drawing/revision upload.
+ * Drawing Check Master - must be filled before drawing/revision upload.
  * Returns unlockToken consumed by drawing create/revision APIs.
+ * Template is routed by discipline; one SPDC project team signature is required.
  */
 checklistRouter.post(
   "/project/:projectId/drawing-precheck",
-  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  requireRoles("admin", "office", "employee", "site_employee"),
   upload.any(),
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
     const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
     if (!project) return res.status(404).json({ error: "Project not found" });
 
-    let template = await prisma.checklistTemplate.findFirst({
-      where: { checklistType: "DrawingCheck", isActive: true },
-      include: { items: { orderBy: { sortOrder: "asc" } } },
-      orderBy: { createdAt: "asc" },
-    });
-    if (!template) {
-      template = await prisma.checklistTemplate.findFirst({
-        where: {
-          OR: [
-            { source: "Drwing check master checklist.xlt.xls" },
-            { name: { contains: "Drawing Review" } },
-          ],
-        },
-        include: { items: { orderBy: { sortOrder: "asc" } } },
+    if (req.user!.role !== "admin") {
+      const member = await prisma.projectMember.findFirst({
+        where: { projectId, userId: req.user!.id },
+        select: { id: true },
+      });
+      if (!member) return res.status(403).json({ error: "Only SPDC project team members can sign the Drawing Check" });
+    }
+
+    const discipline = String(req.body?.discipline || "").trim();
+    if (!discipline) return res.status(400).json({ error: "discipline is required for the Drawing Check." });
+    const {
+      resolveDrawingCheckTemplate,
+      noDrawingCheckTemplateMessage,
+      confirmDrawingCheckReportNo,
+    } = await import("../services/drawingCheckRouting.js");
+    const template = await resolveDrawingCheckTemplate(prisma, projectId, discipline);
+    if (!template) return res.status(404).json({ error: noDrawingCheckTemplateMessage(discipline) });
+    const sentTemplateId = String(req.body?.templateId || "").trim();
+    if (!sentTemplateId) return res.status(400).json({ error: "templateId is required. Reload the Drawing Check and try again." });
+    if (sentTemplateId !== template.id) {
+      return res.status(409).json({
+        error: "The Drawing Check template for this discipline has changed. Reload the checklist and fill it again.",
       });
     }
-    if (!template) return res.status(404).json({ error: "Drawing Check Master template not found. Create one in Checklist master." });
-
-    const assignment = await prisma.checklistAssignment.upsert({
-      where: { projectId_templateId: { projectId, templateId: template.id } },
-      create: { projectId, templateId: template.id },
-      update: {},
-    });
 
     const responsesJson =
       typeof req.body?.responsesJson === "string"
         ? req.body.responsesJson
         : JSON.stringify(req.body?.responsesJson || req.body?.responses || {});
 
+    let parsed: Record<string, any>;
     try {
-      JSON.parse(responsesJson);
+      parsed = JSON.parse(responsesJson) || {};
     } catch {
       return res.status(400).json({ error: "Invalid responsesJson" });
     }
 
-    const parsed = JSON.parse(responsesJson) as Record<string, { answer?: string }>;
     const unanswered = template.items.filter((i) => !parsed[i.id]?.answer);
     if (unanswered.length) {
       return res.status(400).json({
@@ -1891,31 +2047,71 @@ checklistRouter.post(
     const revisionId = typeof req.body?.revisionId === "string" && req.body.revisionId ? req.body.revisionId : null;
     const revisionNumber =
       typeof req.body?.revisionNumber === "string" && req.body.revisionNumber ? req.body.revisionNumber : null;
+    let boundRef = "";
     if (drawingId) {
       const found = await prisma.drawing.findFirst({
         where: { id: drawingId, projectId },
-        include: { revisions: { select: { id: true } } },
+        include: { revisions: { select: { id: true, revisionNumber: true } } },
       });
       if (!found) return res.status(400).json({ error: "Drawing not found on this project." });
       if (revisionId && !found.revisions.some((r) => r.id === revisionId)) {
         return res.status(400).json({ error: "Select a valid revision for this drawing." });
       }
+      const rev = revisionNumber || found.revisions.find((r) => r.id === revisionId)?.revisionNumber || "";
+      if (rev) boundRef = `${found.drawingNumber} Rev ${rev}`;
+    }
+
+    const meta: Record<string, unknown> = parsed._meta && typeof parsed._meta === "object" ? { ...parsed._meta } : {};
+    const refDrawing = String(meta.refDrawing || "").trim() || boundRef;
+    if (!refDrawing) {
+      return res.status(400).json({ error: "Enter the Ref. drawing (drawing no. and revision) before submitting." });
     }
 
     const files = (req.files as Express.Multer.File[]) || [];
-    const hasSignature = files.some((f) => f.fieldname === "signature" || isSignatureUploadName(f.originalname, f.fieldname));
-    if (!hasSignature) {
+    const signatureFiles = files.filter((f) => f.fieldname === "signature");
+    if (signatureFiles.length !== 1) {
       return res.status(400).json({
-        error: "Upload the stakeholder signature before submitting a complete checklist. Save a draft if it is not ready.",
+        error: "Sign the Drawing Check (one SPDC project team signature) before submitting. Save a draft if it is not ready.",
       });
     }
+    // PMC / client pads do not exist on this gate; drop any extra signature fields.
+    const keptFiles = files.filter(
+      (f) => f.fieldname === "signature" || !isSignatureUploadName(f.originalname, f.fieldname),
+    );
+
+    const { reportNo, reissued } = await confirmDrawingCheckReportNo(
+      prisma,
+      projectId,
+      project.code,
+      discipline,
+      String(meta.reportNo || ""),
+    );
+    const signerName = req.user!.fullName || req.user!.email || "";
+    parsed._meta = {
+      ...meta,
+      reportNo,
+      refDrawing,
+      discipline,
+      templateId: template.id,
+      signerRole: "SPDC project team",
+      signerName,
+      signerId: req.user!.id,
+    };
+    const storedResponses = JSON.stringify(parsed);
+
+    const assignment = await prisma.checklistAssignment.upsert({
+      where: { projectId_templateId: { projectId, templateId: template.id } },
+      create: { projectId, templateId: template.id },
+      update: {},
+    });
+
     const unlockToken = `dwgchk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     const submission = await prisma.checklistSubmission.create({
       data: {
         assignmentId: assignment.id,
         submittedById: req.user!.id,
         status: "Submitted",
-        responsesJson,
+        responsesJson: storedResponses,
         remarks: req.body?.remarks || "Pre-upload drawing check",
         purpose: "PreUploadDrawing",
         unlockToken,
@@ -1926,12 +2122,12 @@ checklistRouter.post(
     });
 
     const itemAttachCount = await persistChecklistUploads({
-      files,
+      files: keptFiles,
       submissionId: submission.id,
       projectCode: project.code,
       commentsRaw: req.body?.itemCommentsJson,
-      body: req.body,
-      submitterName: req.user?.fullName,
+      body: { ...req.body, signerNameInspector: signerName },
+      submitterName: signerName,
       checklistType: "DrawingCheck",
     });
 
@@ -1939,10 +2135,18 @@ checklistRouter.post(
       userId: req.user!.id,
       entity: "ChecklistSubmission",
       entityId: submission.id,
-      meta: { projectId, unlockToken, files: files.length, itemAttachments: itemAttachCount },
+      meta: {
+        projectId,
+        unlockToken,
+        discipline,
+        templateId: template.id,
+        reportNo,
+        files: keptFiles.length,
+        itemAttachments: itemAttachCount,
+      },
     });
 
-    // Unlock token is usable now — file the signed check in SharePoint in the background.
+    // Unlock token is usable now - file the signed check in SharePoint in the background.
     import("../services/syncChecklistSubmissionToDrive.js")
       .then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(submission.id))
       .catch((err) => console.warn("[checklist] drive sync on drawing precheck:", err instanceof Error ? err.message : err));
@@ -1950,49 +2154,83 @@ checklistRouter.post(
     res.status(201).json({
       submissionId: submission.id,
       unlockToken,
-      template: { id: template.id, name: template.name, itemCount: template.items.length },
+      reportNo,
+      reportNoReissued: reissued,
+      template: { id: template.id, name: template.name, itemCount: template.items.length, discipline },
       expiresHint: "Use once on the next drawing/revision upload",
     });
   }
 );
 
+/** Read-only: resolve the Drawing Check template for a discipline. Opening the gate writes nothing. */
 checklistRouter.get("/project/:projectId/drawing-check-template", async (req: AuthedRequest, res) => {
   const projectId = req.params.projectId;
-  let template = await prisma.checklistTemplate.findFirst({
-    where: { checklistType: "DrawingCheck", isActive: true },
-    include: { items: { orderBy: { sortOrder: "asc" } } },
-    orderBy: { createdAt: "asc" },
-  });
-  if (!template) {
-    template = await prisma.checklistTemplate.findFirst({
-      where: {
-        OR: [
-          { source: "Drwing check master checklist.xlt.xls" },
-          { name: { contains: "Drawing Review" } },
-        ],
-      },
-      include: { items: { orderBy: { sortOrder: "asc" } } },
-    });
-  }
-  if (!template) return res.status(404).json({ error: "Drawing Check Master not found" });
+  const discipline = typeof req.query.discipline === "string" ? req.query.discipline.trim() : "";
+  if (!discipline) return res.status(400).json({ error: "Pick a discipline before opening the Drawing Check." });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
 
-  const assignment = await prisma.checklistAssignment.upsert({
+  const { resolveDrawingCheckTemplate, noDrawingCheckTemplateMessage, nextDrawingCheckReportNo } = await import(
+    "../services/drawingCheckRouting.js"
+  );
+  const template = await resolveDrawingCheckTemplate(prisma, projectId, discipline);
+  if (!template) return res.status(404).json({ error: noDrawingCheckTemplateMessage(discipline) });
+
+  const assignment = await prisma.checklistAssignment.findUnique({
     where: { projectId_templateId: { projectId, templateId: template.id } },
-    create: { projectId, templateId: template.id },
-    update: {},
+    select: { id: true },
   });
 
   let myDraft: { id: string; remarks: string | null; responsesJson: string; drawingId: string | null; revisionId: string | null } | null =
     null;
-  if (req.user?.id) {
+  if (req.user?.id && assignment) {
     myDraft = await prisma.checklistSubmission.findFirst({
       where: { assignmentId: assignment.id, submittedById: req.user.id, status: "Draft" },
       select: { id: true, remarks: true, responsesJson: true, drawingId: true, revisionId: true },
     });
   }
 
-  res.json({ ...template, requirePhotosMin: 0, assignmentId: assignment.id, myDraft });
+  const nextReportNo = await nextDrawingCheckReportNo(prisma, projectId, project.code, discipline);
+
+  res.json({
+    ...template,
+    templateId: template.id,
+    discipline,
+    requirePhotosMin: 0,
+    assignmentId: assignment?.id || null,
+    nextReportNo,
+    myDraft,
+  });
 });
+
+/**
+ * Drawing Check draft save needs an assignment. Created here (on first save), not when the gate opens.
+ * Vendors keep draft access as before; only the final submit is limited to the SPDC team.
+ */
+checklistRouter.post(
+  "/project/:projectId/drawing-check-template/assign",
+  requireRoles("admin", "office", "employee", "site_employee", "vendor"),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const discipline = String(req.body?.discipline || "").trim();
+    if (!discipline) return res.status(400).json({ error: "discipline is required." });
+    const { resolveDrawingCheckTemplate, noDrawingCheckTemplateMessage } = await import("../services/drawingCheckRouting.js");
+    const template = await resolveDrawingCheckTemplate(prisma, projectId, discipline);
+    if (!template) return res.status(404).json({ error: noDrawingCheckTemplateMessage(discipline) });
+    const sentTemplateId = String(req.body?.templateId || "").trim();
+    if (sentTemplateId && sentTemplateId !== template.id) {
+      return res.status(409).json({
+        error: "The Drawing Check template for this discipline has changed. Reload the checklist and fill it again.",
+      });
+    }
+    const assignment = await prisma.checklistAssignment.upsert({
+      where: { projectId_templateId: { projectId, templateId: template.id } },
+      create: { projectId, templateId: template.id },
+      update: {},
+    });
+    res.json({ assignmentId: assignment.id, templateId: template.id });
+  }
+);
 
 /** Quality + Safety module dashboards */
 checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) => {
@@ -2127,6 +2365,17 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
     }
     return Math.round(m3 * 10) / 10;
   })();
+  const { refreshQapWeek } = await import("../services/qapQuality.js");
+  const qapSummary = await refreshQapWeek(projectId).catch((err) => {
+    console.warn("[qap] status refresh:", err instanceof Error ? err.message : err);
+    return [];
+  });
+  const qapLive = await prisma.qapActivity.findMany({
+    where: { projectId },
+    orderBy: [{ weekLabel: "desc" }, { section: "asc" }, { srNo: "asc" }],
+  });
+  const summaryById = new Map(qapSummary.map((s) => [String(s.activityId || ""), s]));
+  const qapRows = qapLive.map((row) => ({ ...row, ir: summaryById.get(row.id) || null }));
   res.json({
     workbook: workbookOut,
     siteRecords,
@@ -2140,8 +2389,8 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
       siteExecutionFills: siteFills,
       openInspections: openQi,
       openFillRfis: openRfis,
-      qapOpen: qap.filter((q) => q.status === "Open").length,
-      qapDone: qap.filter((q) => q.status === "Done" || q.completedAt).length,
+      qapOpen: qapRows.filter((q) => !q.isHeader && q.status !== "Completed" && q.status !== "Header").length,
+      qapDone: qapRows.filter((q) => q.status === "Completed").length,
       openNcrs: ncrs.filter((n) => n.status === "Open").length,
       cubes: cubes.length,
       cubesPass: cubes.filter((c) => /pass/i.test(c.result || "")).length,
@@ -2158,7 +2407,7 @@ checklistRouter.get("/project/:projectId/quality-dashboard", async (req, res) =>
         f.assignment.template._count.items
       )
     ),
-    qap,
+    qap: qapRows,
     ncrs,
     cubes,
     charts: {
@@ -2472,12 +2721,15 @@ checklistRouter.post(
         pmcRole: r.pmcRole,
         clientRole: r.clientRole,
         records: r.records,
+        qapLineId: r.qapLineId,
+        isHeader: r.isHeader,
+        workPackage: r.workPackage,
         remarks: null,
         dailyChecks: null,
         contractorOk: false,
         pmcOk: false,
         clientOk: false,
-        status: "Open",
+        status: r.isHeader ? "Header" : "Not started",
       })),
     });
     republishQapIso(projectId, req.user!.id);
@@ -2529,10 +2781,6 @@ checklistRouter.patch(
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
     const data: Record<string, unknown> = {};
-    if (body.status != null) data.status = String(body.status);
-    if (body.contractorOk != null) data.contractorOk = Boolean(body.contractorOk);
-    if (body.pmcOk != null) data.pmcOk = Boolean(body.pmcOk);
-    if (body.clientOk != null) data.clientOk = Boolean(body.clientOk);
     if (body.activity != null) data.activity = String(body.activity);
     if (body.section != null) data.section = String(body.section);
     if (body.description != null) data.description = String(body.description);
@@ -2549,42 +2797,6 @@ checklistRouter.patch(
     if (body.dailyChecks != null) data.dailyChecks = typeof body.dailyChecks === "string" ? body.dailyChecks : JSON.stringify(body.dailyChecks);
     if (body.weekLabel != null) data.weekLabel = String(body.weekLabel);
     if (body.srNo != null) data.srNo = String(body.srNo);
-    if (body.status === "Done" || body.completedAt) data.completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
-    if (body.status === "Open") data.completedAt = null;
-
-    if (body.status == null) {
-      let daily: Record<string, boolean> = {};
-      const rawDaily = data.dailyChecks ?? existing.dailyChecks;
-      if (typeof rawDaily === "string") {
-        try {
-          daily = JSON.parse(rawDaily) as Record<string, boolean>;
-        } catch {
-          daily = {};
-        }
-      }
-      const { qapStatusFromRow } = await import("../services/qualityDashboardSheets.js");
-      const flags = qapStatusFromRow({
-        srNo: String(data.srNo ?? existing.srNo ?? ""),
-        section: String(data.section ?? existing.section ?? existing.activity ?? ""),
-        description: String(data.description ?? existing.description ?? ""),
-        frequency: String(data.frequency ?? existing.frequency ?? ""),
-        codeOfConformance: String(data.codeOfConformance ?? existing.codeOfConformance ?? ""),
-        testAgency: String(data.testAgency ?? existing.testAgency ?? ""),
-        contractorPerformer: String(data.contractorPerformer ?? existing.contractorPerformer ?? ""),
-        contractorChecker: String(data.contractorChecker ?? existing.contractorChecker ?? ""),
-        pmcRole: String(data.pmcRole ?? existing.pmcRole ?? ""),
-        clientRole: String(data.clientRole ?? existing.clientRole ?? ""),
-        records: String(data.records ?? existing.records ?? ""),
-        remarks: String(data.remarks ?? existing.remarks ?? ""),
-        dailyChecks: daily,
-      });
-      data.contractorOk = flags.contractorOk;
-      data.pmcOk = flags.pmcOk;
-      data.clientOk = flags.clientOk;
-      data.status = flags.status;
-      data.completedAt = flags.status === "Done" ? existing.completedAt || new Date() : null;
-    }
-
     const row = await prisma.qapActivity.update({
       where: { id: existing.id },
       data,
@@ -2688,6 +2900,8 @@ checklistRouter.post(
         plannedClosure: body.plannedClosure ? new Date(body.plannedClosure) : null,
         status: String(body.status || "Open").slice(0, 40),
         source: "portal",
+        rfiId: body.rfiId ? String(body.rfiId) : null,
+        qapLineId: body.qapLineId ? String(body.qapLineId) : null,
         formDataJson: JSON.stringify(
           typeof body.formDataJson === "string"
             ? {
@@ -2739,6 +2953,20 @@ checklistRouter.post(
       location: row.location,
       plannedClosure: row.plannedClosure,
     });
+    if (row.rfiId && row.number) {
+      const ir = await prisma.rfi.findFirst({ where: { id: row.rfiId, projectId: req.params.projectId } });
+      if (ir) {
+        let form: Record<string, unknown> = {};
+        try {
+          form = ir.formDataJson ? JSON.parse(ir.formDataJson) : {};
+        } catch {
+          form = {};
+        }
+        form.ncrNo = row.number;
+        form.ncrId = row.id;
+        await prisma.rfi.update({ where: { id: ir.id }, data: { formDataJson: JSON.stringify(form) } });
+      }
+    }
     if (project?.code) {
       // File the form + register in SharePoint, but never hold the browser past the gateway timeout:
       // after 20 s the NCR is returned and the upload finishes in the background.

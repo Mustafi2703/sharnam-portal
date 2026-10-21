@@ -80,7 +80,7 @@ export function parseQapWeek50Workbook(buffer: Buffer): {
   weekLabel: string;
   dayLabels: string[];
   sheetName: string;
-  rows: Array<QapDetailRow & { dailyChecks: Record<string, boolean> }>;
+  rows: Array<QapDetailRow & { dailyChecks: Record<string, boolean>; isHeader: boolean }>;
 } {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheetName = pickQapPlanSheetName(wb.SheetNames);
@@ -117,30 +117,38 @@ export function parseQapWeek50Workbook(buffer: Buffer): {
   const sub = rows[dataStart] || [];
   if (/performer|checker/i.test(`${s(sub[6])} ${s(sub[7])} ${s(sub[8])}`)) dataStart = headerIdx + 2;
 
-  const enriched: Array<QapDetailRow & { dailyChecks: Record<string, boolean> }> = [];
+  const enriched: Array<QapDetailRow & { dailyChecks: Record<string, boolean>; isHeader: boolean }> = [];
   let section = "";
   for (let i = dataStart; i < rows.length; i++) {
     const r = rows[i] as unknown[];
     const srRaw = s(r[0], 20);
     const act = s(r[1], 120);
     const detail = s(r[2], 400);
+    const frequency = s(r[3], 120);
+    const contractorPerformer = s(r[6], 80);
+    const contractorChecker = s(r[7], 80);
+    const pmcRole = s(r[8], 80);
+    const clientRole = s(r[9], 80);
+    const header = !frequency && !contractorPerformer && !contractorChecker && !pmcRole && !clientRole && !!(act || detail);
     if (act) section = act;
-    if (!detail) continue;
+    if (!detail && !header) continue;
+    if (header && !detail && !act) continue;
     const srNo = srRaw && /^\d+$/.test(srRaw) ? srRaw : null;
-    const row: QapDetailRow & { dailyChecks: Record<string, boolean> } = {
+    const row: QapDetailRow & { dailyChecks: Record<string, boolean>; isHeader: boolean } = {
       srNo,
       section: section || act || "General",
-      description: detail,
-      frequency: s(r[3], 120),
+      description: detail || act,
+      frequency,
       codeOfConformance: s(r[4], 160),
       testAgency: s(r[5], 120),
-      contractorPerformer: s(r[6], 80),
-      contractorChecker: s(r[7], 80),
-      pmcRole: s(r[8], 80),
-      clientRole: s(r[9], 80),
+      contractorPerformer,
+      contractorChecker,
+      pmcRole,
+      clientRole,
       records: s(r[10], 160),
       remarks: s(r[11], 120),
       dailyChecks: dayLabels.length ? parseDailyChecks(r, headerRow, dayStartCol) : {},
+      isHeader: header,
     };
     enriched.push(row);
   }
@@ -194,6 +202,7 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
           clientRole: row.clientRole || null,
           records: row.records || null,
           remarks: row.remarks || null,
+          isHeader: row.isHeader,
           /** Always persist day keys from the Week 50 header so the UI shows all QC-log columns. */
           dailyChecks:
             parsed.dayLabels.length > 0
@@ -212,6 +221,9 @@ export async function importQapWorkbook(projectId: string, buffer: Buffer, repla
       });
     }
   });
+
+  const { ensureQapLines } = await import("./qapQuality.js");
+  await ensureQapLines(projectId).catch((err) => console.warn("[qap] line link:", err instanceof Error ? err.message : err));
 
   /** Sheet1 (+ Sheet2) activity master + pick-lists for Add from library / datalist editors. */
   const { onboardQapMasterForProject } = await import("./qapSettings.js");

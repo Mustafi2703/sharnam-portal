@@ -4,6 +4,7 @@ import { FilePickButton } from "./FilePickButton";
 import { SignaturePad } from "./SignaturePad";
 import { StandaloneFormHeader } from "./StandaloneFormHeader";
 import { StatusNote } from "./StatusNote";
+import { formatUiText } from "../lib/formatUiText";
 
 export type ChecklistFillItem = {
   id: string;
@@ -153,7 +154,26 @@ type Props = {
   onClose?: () => void;
   submitLabel?: string;
   headerActions?: ReactNode;
+  /** Embedded in an in-page overlay: hide account / Log out controls. */
+  hideSession?: boolean;
+  /** "drawing" = Drawing Check gate header (auto report no., ref. drawing, building / area, discipline). */
+  headerVariant?: "site" | "drawing";
+  /** Read-only discipline chip on the drawing header. */
+  discipline?: string;
+  /** Keep submit disabled until the first signature pad has been signed. */
+  requireSignature?: boolean;
+  /** Label for the first signer (name field + pad). Defaults to Inspector / site engineer. */
+  signerLabel?: string;
+  /** First signer name is fixed (e.g. the logged in user). */
+  signerNameLocked?: boolean;
+  /** When set, submit stays disabled and this reason shows under the button. */
+  submitBlockedReason?: string;
 };
+
+/** "1", "1.", "01" are plain numbers: the line badge already shows the number. */
+function isPlainNumberCode(code?: string) {
+  return /^\d+\.?$/.test(String(code || "").trim());
+}
 
 export function ChecklistFillForm({
   family,
@@ -203,7 +223,19 @@ export function ChecklistFillForm({
   onClose,
   submitLabel = "Submit checklist form",
   headerActions,
+  hideSession = false,
+  headerVariant = "site",
+  discipline,
+  requireSignature = false,
+  signerLabel,
+  signerNameLocked = false,
+  submitBlockedReason,
 }: Props) {
+  const [hasSignature, setHasSignature] = useState(false);
+  const captureSignature = (file: File | null) => {
+    setHasSignature(!!file);
+    onSignature(file);
+  };
   const [signMeta, setSignMeta] = useState<ChecklistSignMeta>(() => ({
     inspectorName: signerName || "",
     pmcName: pmcSignerName || "",
@@ -238,10 +270,24 @@ export function ChecklistFillForm({
           selectedDrawing.title ? ` — ${selectedDrawing.title}` : ""
         }${revisionId ? ` · ${revisions.find((r) => r.id === revisionId)?.revisionNumber || ""}` : ""}`
       : "");
+  const drawingHeader = headerVariant === "drawing";
+  const refDrawingLocked = drawingHeader && !!boundDrawing;
+  const refDrawingMissing = drawingHeader && !refDrawingLocked && !fillMeta.refDrawing.trim();
+  const signatureMissing = requireSignature && !clientSignOnly && !hasSignature;
+
+  // Number only the sections that render, so the first visible one is always 1.
+  const sectionKeys = [
+    pickerOn ? "drawing" : null,
+    "header",
+    "lines",
+    drawingHeader ? "signoff" : null,
+  ].filter(Boolean) as string[];
+  const sectionNo = (key: string) => sectionKeys.indexOf(key) + 1;
 
   return (
     <div className="standalone-form-page standalone-form-page--paper">
       <StandaloneFormHeader
+        hideSession={hideSession}
         variant="navy"
         eyebrow={eyebrow || familyLabel}
         title={title}
@@ -308,7 +354,7 @@ export function ChecklistFillForm({
 
         {pickerOn && (
           <Card className="!p-5">
-            <h3 className="font-semibold text-sm mb-1">1. Drawing & revision</h3>
+            <h3 className="font-semibold text-sm mb-1">{sectionNo("drawing")}. Drawing & revision</h3>
             <p className="text-xs text-steel-muted mb-3">
               {requireDrawing
                 ? "Pick the published sheet this fill refers to."
@@ -361,7 +407,7 @@ export function ChecklistFillForm({
           </Card>
         )}
 
-        {!pickerOn && boundDrawing ? (
+        {!pickerOn && boundDrawing && !drawingHeader ? (
           <Card className="!p-4">
             <p className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Drawing & revision</p>
             <p className="text-sm font-semibold text-ink mt-1">{boundDrawing}</p>
@@ -369,8 +415,61 @@ export function ChecklistFillForm({
           </Card>
         ) : null}
 
+        {drawingHeader ? (
+          <Card className="!p-5">
+            <h3 className="font-semibold text-sm mb-3">
+              {sectionNo("header")}. {formatUiText("Sheet header")}
+            </h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <label className="block text-sm">
+                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Report no.</span>
+                <Input className="mt-1 bg-sand/50" value={fillMeta.reportNo} readOnly aria-readonly="true" placeholder="Auto" />
+                <span className="text-[11px] text-steel-muted">{formatUiText("Auto-generated")}</span>
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">
+                  Ref. drawing{refDrawingLocked ? "" : " *"}
+                </span>
+                {refDrawingLocked ? (
+                  <Input
+                    className="mt-1 bg-sand/50"
+                    value={fillMeta.refDrawing || boundDrawing}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                ) : (
+                  <Input
+                    className="mt-1"
+                    required
+                    aria-required="true"
+                    placeholder="Drawing no. and revision, e.g. A-101 R0"
+                    value={fillMeta.refDrawing}
+                    onChange={(e) => onFillMeta({ ...fillMeta, refDrawing: e.target.value })}
+                    disabled={!editable}
+                  />
+                )}
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Building / area</span>
+                <Input
+                  className="mt-1"
+                  placeholder="Building or area"
+                  value={fillMeta.location}
+                  onChange={(e) => onFillMeta({ ...fillMeta, location: e.target.value })}
+                  disabled={!editable}
+                />
+              </label>
+              <div className="block text-sm">
+                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Discipline</span>
+                <div className="mt-2">
+                  <Badge tone="brand">{discipline || "Not set"}</Badge>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ) : (
         <Card className="!p-5">
-          <h3 className="font-semibold text-sm mb-3">2. Sheet header (SPDC)</h3>
+          <h3 className="font-semibold text-sm mb-3">{sectionNo("header")}. Sheet header (SPDC)</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <label className="block text-sm">
               <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Report no.</span>
@@ -414,12 +513,15 @@ export function ChecklistFillForm({
             </label>
           </div>
         </Card>
+        )}
 
         <form onSubmit={onSubmit} className="surface brand-frame p-5 sm:p-7 space-y-6">
           <div className="pb-4 border-b border-line flex flex-wrap gap-3 justify-between">
             <div>
-              <div className="text-xs font-mono uppercase text-steel-muted">3. Checklist lines</div>
-              <div className="font-semibold mt-1">Answer each line · photos, files, or SharePoint links</div>
+              <div className="text-xs font-mono uppercase text-steel-muted">{sectionNo("lines")}. Checklist lines</div>
+              <div className="font-semibold mt-1">
+                {drawingHeader ? formatUiText("Answer each line") : "Answer each line · photos, files, or SharePoint links"}
+              </div>
             </div>
             <Input
               className="max-w-xs"
@@ -438,14 +540,17 @@ export function ChecklistFillForm({
                   .filter((i) => (i.section || "General") === section)
                   .map((item, idx) => {
                     const line = responses[item.id] || emptyChecklistLine();
+                    const showCode = !!item.itemCode?.trim() && !isPlainNumberCode(item.itemCode);
                     return (
                       <div key={item.id} className="border border-line bg-paper rounded-xl p-4 sm:p-5 space-y-3 text-ink">
                         <div className="flex gap-3">
-                          <span className="shrink-0 h-7 w-7 rounded-lg bg-[#1c222b] text-white text-xs font-bold grid place-items-center">
-                            {idx + 1}
-                          </span>
+                          {showCode ? null : (
+                            <span className="shrink-0 h-7 w-7 rounded-lg bg-[#1c222b] text-white text-xs font-bold grid place-items-center">
+                              {idx + 1}
+                            </span>
+                          )}
                           <div className="min-w-0 flex-1 text-[15px] leading-relaxed font-semibold text-ink">
-                            {item.itemCode && <span className="font-mono text-brand mr-2">{item.itemCode}</span>}
+                            {showCode && <span className="font-mono text-brand mr-2">{item.itemCode}</span>}
                             {item.description}
                           </div>
                         </div>
@@ -573,6 +678,9 @@ export function ChecklistFillForm({
           </div>
 
           <div className="pt-4 border-t border-line space-y-4">
+            {drawingHeader ? (
+              <div className="text-xs font-mono uppercase text-steel-muted">{sectionNo("signoff")}. Sign-off</div>
+            ) : null}
             <div className="grid md:grid-cols-2 gap-4">
               {evidenceOn && (
               <div className="space-y-2">
@@ -610,16 +718,27 @@ export function ChecklistFillForm({
                 />
               </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 checklist-sign-grid">
+              <div
+                className={`grid grid-cols-1 gap-3 checklist-sign-grid ${
+                  onPmcSignature || onClientSignature || clientSignOnly ? "md:grid-cols-3" : "md:col-span-2 max-w-xl"
+                }`}
+              >
                 {!clientSignOnly ? (
                   <div className="space-y-2">
                     <Input
-                      label="Inspector / site engineer — name"
-                      value={signMeta.inspectorName}
+                      label={signerLabel ? `${signerLabel} - name` : "Inspector / site engineer - name"}
+                      value={signerNameLocked ? signerName || signMeta.inspectorName : signMeta.inspectorName}
                       onChange={(e) => patchSign({ inspectorName: e.target.value })}
+                      readOnly={signerNameLocked}
+                      aria-readonly={signerNameLocked || undefined}
+                      className={signerNameLocked ? "bg-sand/50" : undefined}
                       placeholder="Name of person who filled this"
                     />
-                    <SignaturePad onCapture={onSignature} personName={signMeta.inspectorName} label="Inspector / site engineer" />
+                    <SignaturePad
+                      onCapture={captureSignature}
+                      personName={signerNameLocked ? signerName || signMeta.inspectorName : signMeta.inspectorName}
+                      label={signerLabel ? `${signerLabel} - signature` : "Inspector / site engineer"}
+                    />
                   </div>
                 ) : null}
                 {!clientSignOnly && onPmcSignature ? (
@@ -682,7 +801,10 @@ export function ChecklistFillForm({
                         ? !clientSignatureReady
                         : answered < items.length ||
                           (minPhotos > 0 && photoTotal < minPhotos) ||
-                          (requireDrawing && drawings.length > 0 && !drawingId))
+                          (requireDrawing && drawings.length > 0 && !drawingId) ||
+                          refDrawingMissing ||
+                          signatureMissing ||
+                          !!submitBlockedReason)
                     }
                   >
                     {submitting ? "Submitting…" : clientSignOnly ? "Submit my signature" : submitLabel}
@@ -690,6 +812,14 @@ export function ChecklistFillForm({
                 </>
               )}
             </div>
+            {canFill && !clientSignOnly && (submitBlockedReason || refDrawingMissing || signatureMissing) ? (
+              <p className="text-xs text-steel-muted">
+                {submitBlockedReason ||
+                  (refDrawingMissing
+                    ? "Enter the Ref. drawing (drawing no. and revision) to submit."
+                    : "Sign the pad and click Save signature to submit.")}
+              </p>
+            ) : null}
           </div>
         </form>
       </main>

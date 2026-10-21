@@ -67,6 +67,7 @@ export default function InspectionRegisterPage() {
   const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [project, setProject] = useState<any>(null);
+  const [irChip, setIrChip] = useState<"" | "short" | "reoffer" | "ncr">("");
   const [fillTotals, setFillTotals] = useState<{
     fills: number;
     safetyFills: number;
@@ -147,6 +148,17 @@ export default function InspectionRegisterPage() {
     const kind = kindForRegisterTab(tab);
     return rows.filter((r) => canonicalRfiKind(r.rfiKind) === kind);
   }, [rows, tab]);
+
+  const listed = useMemo(() => {
+    if (tab !== "quality-ir" || !irChip) return filtered;
+    return filtered.filter((r) => {
+      const f = parseFormDataJson(r.formDataJson);
+      if (irChip === "short") return String(f.shortNotice || "") === "true";
+      if (irChip === "reoffer") return Boolean(r.previousIrId);
+      if (irChip === "ncr") return Boolean(String(f.ncrNo || "").trim());
+      return true;
+    });
+  }, [filtered, tab, irChip]);
 
   // Deep-link `?rfi=` from overview / dashboard into the owning register row.
   useEffect(() => {
@@ -357,6 +369,10 @@ export default function InspectionRegisterPage() {
     formDataJson: Record<string, string>;
     assignedToId: string;
     linkedAssignmentId: string;
+    qapLineId?: string;
+    onBehalf?: boolean;
+    unlinkedReason?: string;
+    status?: string;
   }) {
     setBusy(true);
     try {
@@ -374,6 +390,10 @@ export default function InspectionRegisterPage() {
           linkedChecklistItemId:
             tabChecklist.assignments.find((a) => a.id === payload.linkedAssignmentId)?.template?.id || null,
           linkedDrawingId: null,
+          qapLineId: payload.qapLineId || null,
+          onBehalf: payload.onBehalf === true,
+          unlinkedReason: payload.unlinkedReason || undefined,
+          status: payload.rfiKind === "QualityIR" ? "Draft" : payload.status,
         }),
       });
       await load();
@@ -406,7 +426,7 @@ export default function InspectionRegisterPage() {
 
       <ReferenceSheetToolbar
         sheetLabel={tab === "hse-register" ? "HSE register" : `${formRef.title} register`}
-        rowCount={filtered.length}
+        rowCount={listed.length}
         canEdit={canCreate}
         onAddRow={
           canCreate
@@ -466,6 +486,10 @@ export default function InspectionRegisterPage() {
         <div id="add-inspection-form">
         <SpdcInspectionFormPanel
           formKind={formKind}
+          projectId={id}
+          token={token}
+          initialQapLineId={searchParams.get("qapLineId")}
+          lockQapLine={Boolean(searchParams.get("qapLineId"))}
           users={users}
           qualityIrOptions={tab === "safety-ir" ? qualityIrOptions : []}
           checklistAssignments={tabChecklist.assignments}
@@ -484,7 +508,7 @@ export default function InspectionRegisterPage() {
               {tab === "hse-register" ? HSE_REGISTER_REF.title : `${formRef.title} register`}
             </h3>
             <p className="text-xs text-steel-muted mt-0.5">
-              {filtered.length} entr{filtered.length === 1 ? "y" : "ies"} · Ref: {formRef.workbook}
+              {listed.length} entr{listed.length === 1 ? "y" : "ies"} · Ref: {formRef.workbook}
             </p>
           </div>
           {tab === "hse-register" && canCreate && (
@@ -493,8 +517,31 @@ export default function InspectionRegisterPage() {
             </Button>
           )}
         </div>
+        {tab === "quality-ir" ? (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {(
+              [
+                ["", "All"],
+                ["short", "Short notice"],
+                ["reoffer", "Re-offered"],
+                ["ncr", "With NCR"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setIrChip(key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                  irChip === key ? "bg-brand text-white border-brand" : "bg-white border-sand text-steel"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <InspectionRegisterTable
-          rows={filtered}
+          rows={listed}
           formRef={tab === "hse-register" ? SAFETY_IR_FORM : formRef}
           variant={tab === "hse-register" ? "hse" : "register"}
           activeId={active}

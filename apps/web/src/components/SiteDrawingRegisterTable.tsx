@@ -117,7 +117,7 @@ export function SiteDrawingRegisterTable({
                       <td className="site-register__col-fixed site-register__col-wide align-top" rowSpan={SITE_REGISTER_ISSUE_ROWS.length}>
                         <div className="font-medium text-ink">{d.title}</div>
                         <Link to={`/projects/${projectId}/drawings`} className="site-register__link text-[10px] font-semibold">
-                          GFC log →
+                          Approval & GFC Log →
                         </Link>
                       </td>
                       <td className="site-register__col-fixed align-top" rowSpan={SITE_REGISTER_ISSUE_ROWS.length}>
@@ -164,7 +164,7 @@ export function SiteDrawingRegisterTable({
             <tbody>
               <tr>
                 <td colSpan={5 + SITE_REGISTER_REV_SLOTS.length + 1} className="empty">
-                  No drawings — upload on GFC register first.
+                  No drawings. Upload on the Approval & GFC Log first.
                 </td>
               </tr>
             </tbody>

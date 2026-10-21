@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useAuth } from "../../auth";
@@ -19,6 +19,8 @@ const QAP_FOLDER = "08_QUALITY_HSE_AND_ENVIRONMENT/08.01_Quality_Plans_and_Inspe
  */
 export default function QapPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const statusFromUrl = searchParams.get("status") || "";
   const { token, user } = useAuth();
   const [dash, setDash] = useState<any>(null);
   const [project, setProject] = useState<QapProjectMeta | null>(null);
@@ -310,7 +312,7 @@ export default function QapPage() {
       </div>
 
       <ReferenceSheetToolbar
-        sheetLabel={`QAP — ${weekFilter || "Week 50"}`}
+        sheetLabel={`QAP - ${weekFilter || "All weeks"}`}
         rowCount={qapRows.length}
         canEdit={canManage}
         busy={busy}
@@ -439,6 +441,7 @@ export default function QapPage() {
           project={project}
           loading={busy && qapRows.length === 0}
           onProjectUpdated={load}
+          initialStatus={statusFromUrl}
         />
       </div>
     </div>

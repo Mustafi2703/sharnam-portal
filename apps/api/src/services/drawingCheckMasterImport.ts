@@ -2,6 +2,7 @@ import path from "path";
 import XLSX from "../lib/xlsx.js";
 import { findWorkbook } from "../lib/excelRoot.js";
 import { prisma } from "../prisma.js";
+import { disciplineForDrawingCheckName } from "./drawingCheckRouting.js";
 
 function readDrawingCheckRows(file: string): string[][] {
   const wb = XLSX.readFile(file);
@@ -64,6 +65,7 @@ export async function importDrawingCheckTemplatesFromWorkbook(): Promise<{
           source: path.basename(file),
           instructions: "Complete before uploading any drawing or revision (GFC gate).",
           requirePhotosMin: 0,
+          discipline: disciplineForDrawingCheckName(name),
           items: { create: sectionItems },
         },
       });

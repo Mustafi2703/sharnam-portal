@@ -74,8 +74,10 @@ export function ReferenceSheetToolbar({
   return (
     <div className="sheet-actions-bar shrink-0 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
       <div className="min-w-0 text-left">
-        <strong className="text-sm text-ink">{formatUiText(sheetLabel)}</strong>
-        {rowCount != null && <span className="text-xs text-steel-muted ml-2">{rowCount} rows</span>}
+        <strong className="text-sm text-ink">
+          {formatUiText(sheetLabel)}
+          {rowCount != null ? ` - ${rowCount} rows` : ""}
+        </strong>
         {uploadHint && <p className="text-xs text-steel-muted mt-0.5 max-w-xl">{uploadHint}</p>}
         <StatusNote msg={message} className="mt-0.5" compact />
         {sharePointUrl && showDrive && (

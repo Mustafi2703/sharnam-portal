@@ -278,7 +278,7 @@ export function MasterDrawingRegisterTable({
                         Upload rev on GFC →
                       </Link>
                       <Link to={`/projects/${projectId}/drawings`} className="text-[10px] font-semibold text-brand whitespace-nowrap">
-                        Open GFC register →
+                        Open Approval & GFC Log →
                       </Link>
                     </div>
                   ) : (
@@ -310,7 +310,7 @@ export function MasterDrawingRegisterTable({
                           const linked = Boolean(r.drawing?.id);
                           if (
                             !window.confirm(
-                              `Delete ${cleanDrawingNumber(r.drawingNumber)}?${linked ? " This also removes its row on the Approval & GFC log and its revisions — they are one record." : ""} SharePoint files stay.`,
+                              `Delete ${cleanDrawingNumber(r.drawingNumber)}?${linked ? " This also removes its row on the Approval & GFC Log and its revisions. They are one record." : ""} SharePoint files stay.`,
                             )
                           )
                             return;
