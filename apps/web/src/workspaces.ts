@@ -132,6 +132,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
       roles: ["admin", "office", "site_employee", "employee", "vendor"],
       blurb: "Vendor assignments.",
     },
+    {
+      to: "email",
+      label: "Email",
+      roles: ["admin", "office", "site_employee", "employee"],
+      blurb: "Project email and WhatsApp notices. Separate from the communication matrix.",
+    },
   ],
   quality: [
     {
@@ -603,6 +609,12 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "finance", label: "Material invoices", query: "tab=invoices", blurb: "PEB / steel / fire tax invoices." },
     { to: "finance", label: "Payment Summary", query: "tab=summary", blurb: "Payment summary rollup." },
     { to: "finance", label: "Audit Sheets", query: "tab=audit", blurb: "Audit sheets → drive export." },
+    {
+      to: "expense-vouchers",
+      label: "Daily expense voucher",
+      roles: ["admin", "office", "site_employee", "employee"],
+      blurb: "Today's site expenses. HR approves. Separate from Communications.",
+    },
   ],
   reports: [
     { to: "dpr-maker", label: "DPR maker", blurb: "Fill SPDC INPUT → publish template XLSX per discipline.", sheet: "SPDC_DPR_*_DASHBOARD" },

@@ -74,6 +74,8 @@ export function resolveProjectWorkspace(pathname: string, search: string): Works
   if (tail === "progress" || tail.startsWith("progress/")) return "progress";
   if (tail === "audit-kpi" || tail.startsWith("audit-kpi")) return "auditKpi";
   if (tail === "diary") return "progress";
+  if (tail === "expense-vouchers") return "finance";
+  if (tail === "email") return "home";
   if (tail === "site-pilot") return "comms";
   if (tail.startsWith("progress/")) return "progress";
   if (["dpr-maker", "wpr-maker"].includes(tail)) return "reports";
