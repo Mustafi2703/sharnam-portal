@@ -54,6 +54,10 @@ export async function createOrReuseProject(data: ProjectCreateInput) {
         ...(data.workPackages ? { workPackages: data.workPackages } : {}),
       },
     });
+    void import("../modules/audit-kpi/seedFromSheets.js")
+      .then(({ seedAuditKpiFromSheets }) => seedAuditKpiFromSheets(prisma, project.id, { missingOnly: true }))
+      .then((stats) => console.log(`[audit-kpi] templates for ${project.code}:`, stats))
+      .catch((err) => console.warn("[audit-kpi] template seed failed:", err instanceof Error ? err.message : err));
     return { project, created: true };
   } catch (err) {
     if (isUniqueConstraint(err)) {

@@ -4,22 +4,30 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
-import { seedAuditKpiFromSheets } from "../modules/audit-kpi/seedFromSheets.js";
+import { seedAuditKpiFromSheets, seedChecklistForAudit } from "../modules/audit-kpi/seedFromSheets.js";
 import { audit } from "../services/audit.js";
 import { mockOneDrive } from "../services/mockOneDrive.js";
 import {
+  auditScoreFor,
+  countUnlinkedLowScores,
+  isAuditClosed,
+  listProjectAudits,
+  nextAuditRef,
+  resolveAudit,
+} from "../modules/audit-kpi/audits.js";
+import { listDriveSuggestions } from "../modules/audit-kpi/driveSuggestions.js";
+import { computeKpiSnapshot, snapshotTrendWeek } from "../modules/audit-kpi/snapshot.js";
+import { refreshProjectSubjects } from "../modules/audit-kpi/subjectSources.js";
+import {
   SITE_WALK_EVIDENCE_FOLDER,
   asFraction,
-  auditVerdict,
   findingTiming,
-  findingsOpen,
+  kpiRag,
+  roleKraResult,
   mergeDetailPatch,
   parseDetail,
-  rollupAreas,
   subjectPctClosed,
   subjectRag,
-  tallyScores,
-  WALK_SECTIONS,
   type DetailMap,
 } from "../modules/audit-kpi/scoring.js";
 
@@ -46,6 +54,15 @@ guardRecord(auditKpiRouter, "/trend/:id", async (id) => {
   const row = await prisma.kpiTrendWeek.findUnique({ where: { id }, select: { projectId: true } });
   return row?.projectId;
 });
+guardRecord(
+  auditKpiRouter,
+  "/audits/:auditId",
+  async (id) => {
+    const row = await prisma.siteAudit.findUnique({ where: { id }, select: { projectId: true } });
+    return row?.projectId;
+  },
+  "auditId"
+);
 
 const editors = ["admin", "office", "employee"] as const;
 const walkEditors = ["admin", "office", "employee", "site_employee"] as const;
@@ -74,101 +91,96 @@ function toCsv(headers: string[], rows: unknown[][]) {
   return [headers.join(","), ...rows.map((r) => r.map(csvEscape).join(","))].join("\n");
 }
 
+/** @deprecated Prefer GET /audits/:auditId/dashboard. Resolves to the latest open audit. */
 auditKpiRouter.get("/project/:projectId/dashboard", async (req, res) => {
   const projectId = req.params.projectId;
-  const [findings, subjects, siteAudit, checklist] = await Promise.all([
-    prisma.auditFinding.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
-    prisma.kpiSubject.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
-    prisma.siteAudit.findFirst({ where: { projectId }, orderBy: { createdAt: "desc" } }),
-    prisma.auditChecklistItem.findMany({
-      where: { projectId, section: { in: ["SiteWalk", "FolderSample"] } },
-      select: { section: true, itemNo: true, score: true },
+  const audit = await resolveAudit(projectId, req.query.auditId ? String(req.query.auditId) : null);
+  const [findings, snap, auditScore] = await Promise.all([
+    prisma.auditFinding.findMany({
+      where: { projectId, ...(audit ? { siteAuditId: audit.id } : {}) },
+      orderBy: { srNo: "asc" },
+      include: { siteAudit: { select: { id: true, auditRef: true } } },
     }),
+    computeKpiSnapshot(projectId),
+    audit ? auditScoreFor(audit.id) : Promise.resolve(null),
   ]);
-
-  const walk = checklist.filter((r) => r.section === "SiteWalk");
-  const folders = checklist.filter((r) => r.section === "FolderSample");
-  const walkTally = tallyScores(walk.map((r) => r.score));
-  const folderTally = tallyScores(folders.map((r) => r.score));
-  const combined = tallyScores([...walk.map((r) => r.score), ...folders.map((r) => r.score)]);
-  const critical = findings.filter((f) => f.severity === "Critical").length;
-  const raised = findings.filter((f) => f.findingNo).length;
-  const openBySheet = findingsOpen(findings.map((f) => f.status));
-  const sections = WALK_SECTIONS.map((sec) => {
-    const inBand = walk.filter((r) => r.itemNo >= sec.from && r.itemNo <= sec.to);
-    const tally = tallyScores(inBand.map((r) => r.score));
-    return { title: sec.title, checks: inBand.length, met: tally.met, notMet: tally.notMet, score: tally.score };
-  });
-
-  const presentedSubjects = subjects.map((s) => presentSubject(s));
-  const roll = rollupAreas(presentedSubjects);
-  const oldest = presentedSubjects.reduce((max, s) => Math.max(max, s.oldestOpenDays || 0), 0);
-  const siteOverdue = presentedSubjects.filter((s) => s.custodian === "SITE" && s.overdueCount > 0).length;
-  const hoOverdue = presentedSubjects.filter((s) => s.custodian === "HO" && s.overdueCount > 0).length;
-  const withOverdue = presentedSubjects.filter((s) => s.overdueCount > 0).length;
-
-  const closedFindings = findings.filter((f) => f.status === "Closed").length;
+  const closedFindings = findings.filter((row) => row.status === "Closed").length;
   res.json({
-    audit: siteAudit,
-    auditScore: {
-      folders: folders.length,
-      walkChecks: walk.length,
-      scored: combined.scored,
-      notMet: combined.notMet,
-      overall: combined.score,
-      critical,
-      folderScore: folderTally.score,
-      walkScore: walkTally.score,
-      findingsRaised: raised,
-      findingsOpen: openBySheet,
-      verdict: auditVerdict(combined.score, critical),
-      sections,
-    },
-    kpi: {
-      subjects: roll.totals.subjects,
-      records: roll.totals.records,
-      open: roll.totals.open,
-      closed: roll.totals.closed,
-      pctClosed: roll.totals.pctClosed,
-      avgKra: roll.totals.avgKra,
-      overdueItems: roll.totals.overdue,
-      red: roll.totals.red,
-      amber: roll.totals.amber,
-      green: roll.totals.green,
-      inUse: roll.totals.subjects - roll.totals.unused,
-      unused: roll.totals.unused,
-      areas: roll.areas,
-      health: [
-        { indicator: "Subjects with any overdue item", value: withOverdue, target: "0", source: "All subjects" },
-        { indicator: "Total overdue items on the project", value: roll.totals.overdue, target: "0", source: "All subjects" },
-        { indicator: "Oldest open item (days)", value: oldest, target: "<= 14", source: "All subjects" },
-        { indicator: "Overall closure rate", value: roll.totals.pctClosed, target: ">= 90%", source: "All subjects" },
-        { indicator: "Average KRA score", value: roll.totals.avgKra, target: ">= 90%", source: "KRA score column" },
-        { indicator: "Subjects red-rated", value: roll.totals.red, target: "0", source: "RAG" },
-        { indicator: "SITE subjects with overdue", value: siteOverdue, target: "0", source: "Site custodian" },
-        { indicator: "HO subjects with overdue", value: hoOverdue, target: "0", source: "Head office" },
-        { indicator: "Subjects never used", value: roll.totals.unused, target: "Falling", source: "Adoption measure" },
-      ],
-    },
+    audit,
+    auditScore,
+    kpi: snap.kpi,
     totals: {
       findings: findings.length,
       openFindings: findings.length - closedFindings,
       closedFindings,
-      checklistItems: checklist.length,
-      subjects: presentedSubjects.length,
-      overdueSubjects: withOverdue,
+      checklistItems: auditScore ? auditScore.walkChecks + auditScore.folders : 0,
+      subjects: snap.presented.length,
+      overdueSubjects: snap.presented.filter((row) => row.overdueCount > 0).length,
       ragCounts: {
-        RED: roll.totals.red,
-        AMBER: roll.totals.amber,
-        GREEN: roll.totals.green,
-        UNUSED: roll.totals.unused,
+        RED: snap.roll.totals.red,
+        AMBER: snap.roll.totals.amber,
+        GREEN: snap.roll.totals.green,
+        UNUSED: snap.roll.totals.unused,
       },
-      avgClosurePct: Math.round(roll.totals.pctClosed * 100),
+      avgClosurePct: Math.round(snap.roll.totals.pctClosed * 100),
     },
     findings: findings.map(presentFinding),
-    subjects: presentedSubjects.slice(0, 50),
-    subjectCount: presentedSubjects.length,
+    subjects: snap.presented.slice(0, 50),
+    subjectCount: snap.presented.length,
   });
+});
+
+auditKpiRouter.get("/project/:projectId/audits", async (req, res) => {
+  const audits = await listProjectAudits(req.params.projectId);
+  res.json({ audits });
+});
+
+auditKpiRouter.post(
+  "/project/:projectId/audits",
+  requireRoles(...editors),
+  async (req: AuthedRequest, res) => {
+    const projectId = req.params.projectId;
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    const body = req.body || {};
+    const planned = body.plannedDate ? new Date(String(body.plannedDate)) : null;
+    const row = await prisma.siteAudit.create({
+      data: {
+        projectId,
+        title: body.title ? String(body.title) : "Site document audit",
+        auditRef: await nextAuditRef(projectId, project.code),
+        status: "Planned",
+        leadAuditor: body.leadAuditor ? String(body.leadAuditor) : null,
+        plannedDate: planned,
+        auditDate: body.auditDate ? new Date(String(body.auditDate)) : planned,
+      },
+    });
+    const seeded = await seedChecklistForAudit(prisma, projectId, row.id);
+    res.status(201).json({ audit: row, checklistAdded: seeded.checklistAdded });
+  }
+);
+
+auditKpiRouter.get("/audits/:auditId", async (req, res) => {
+  const audit = await prisma.siteAudit.findUnique({ where: { id: req.params.auditId } });
+  if (!audit) return res.status(404).json({ error: "Not found" });
+  const auditScore = await auditScoreFor(audit.id);
+  res.json({ audit, auditScore });
+});
+
+auditKpiRouter.get("/audits/:auditId/checklist", async (req, res) => {
+  const section = req.query.section ? String(req.query.section) : undefined;
+  const rows = await prisma.auditChecklistItem.findMany({
+    where: { siteAuditId: req.params.auditId, ...(section ? { section } : {}) },
+    orderBy: [{ section: "asc" }, { itemNo: "asc" }],
+  });
+  res.json({ items: rows.map(presentChecklist) });
+});
+
+auditKpiRouter.get("/audits/:auditId/dashboard", async (req, res) => {
+  const audit = await prisma.siteAudit.findUnique({ where: { id: req.params.auditId } });
+  if (!audit) return res.status(404).json({ error: "Not found" });
+  const auditScore = await auditScoreFor(audit.id);
+  res.json({ audit, auditScore });
 });
 
 function findingData(body: Record<string, unknown>, userName?: string) {
@@ -199,9 +211,11 @@ function findingData(body: Record<string, unknown>, userName?: string) {
 }
 
 auditKpiRouter.get("/project/:projectId/findings", async (req, res) => {
+  const auditId = req.query.auditId ? String(req.query.auditId) : undefined;
   const rows = await prisma.auditFinding.findMany({
-    where: { projectId: req.params.projectId },
+    where: { projectId: req.params.projectId, ...(auditId ? { siteAuditId: auditId } : {}) },
     orderBy: { srNo: "asc" },
+    include: { siteAudit: { select: { id: true, auditRef: true } } },
   });
   res.json({ findings: rows.map(presentFinding) });
 });
@@ -239,11 +253,22 @@ auditKpiRouter.post(
       }
     }
     const maxSr = existingNos.reduce((m, r) => Math.max(m, r.srNo || 0), 0);
-    const siteAudit = await prisma.siteAudit.findFirst({ where: { projectId }, select: { id: true } });
+    let siteAuditId: string | null = null;
+    if (body.siteAuditId) {
+      const linked = await prisma.siteAudit.findFirst({
+        where: { id: String(body.siteAuditId), projectId },
+        select: { id: true },
+      });
+      if (!linked) return res.status(400).json({ error: "Audit not found on this project" });
+      siteAuditId = linked.id;
+    } else {
+      const siteAudit = await resolveAudit(projectId);
+      siteAuditId = siteAudit?.id || null;
+    }
     const row = await prisma.auditFinding.create({
       data: {
         projectId,
-        siteAuditId: siteAudit?.id || null,
+        siteAuditId,
         findingNo,
         srNo: body.srNo ? Number(body.srNo) : maxSr + 1,
         description: String(body.description),
@@ -251,6 +276,7 @@ auditKpiRouter.post(
         status: body.status || "Open",
         ...findingData(body, req.user!.fullName),
       },
+      include: { siteAudit: { select: { id: true, auditRef: true } } },
     });
     res.status(201).json(presentFinding(row));
   }
@@ -293,10 +319,16 @@ function checklistWrite(body: Record<string, unknown>, existingDetail?: string |
   return data;
 }
 
+/** @deprecated Prefer GET /audits/:auditId/checklist. Resolves to the latest open audit. */
 auditKpiRouter.get("/project/:projectId/checklist", async (req, res) => {
   const section = req.query.section ? String(req.query.section) : undefined;
+  const audit = await resolveAudit(req.params.projectId, req.query.auditId ? String(req.query.auditId) : null);
   const rows = await prisma.auditChecklistItem.findMany({
-    where: { projectId: req.params.projectId, ...(section ? { section } : {}) },
+    where: {
+      projectId: req.params.projectId,
+      ...(audit ? { siteAuditId: audit.id } : {}),
+      ...(section ? { section } : {}),
+    },
     orderBy: [{ section: "asc" }, { itemNo: "asc" }],
   });
   res.json({ items: rows.map(presentChecklist) });
@@ -310,6 +342,21 @@ auditKpiRouter.patch(
     if (!existing) return res.status(404).json({ error: "Not found" });
     if (req.user!.role === "site_employee" && existing.section !== "SiteWalk") {
       return res.status(403).json({ error: "Site staff can update the site walk only" });
+    }
+    const parent = await prisma.siteAudit.findUnique({ where: { id: existing.siteAuditId }, select: { status: true } });
+    if (parent && isAuditClosed(parent.status) && req.body?.score !== undefined) {
+      return res.status(400).json({ error: "This audit is closed. Scores are read-only." });
+    }
+    const detail = req.body?.detail;
+    if (detail && typeof detail === "object" && "findingRef" in detail) {
+      const ref = String((detail as { findingRef?: unknown }).findingRef || "").trim();
+      if (ref) {
+        const finding = await prisma.auditFinding.findFirst({
+          where: { projectId: existing.projectId, findingNo: ref, siteAuditId: existing.siteAuditId },
+          select: { id: true },
+        });
+        if (!finding) return res.status(400).json({ error: "Finding ref is not on this audit" });
+      }
     }
     const row = await prisma.auditChecklistItem.update({
       where: { id: existing.id },
@@ -333,10 +380,14 @@ auditKpiRouter.post(
       body.detail = detail;
     }
     const projectId = req.params.projectId;
+    const audit = body.siteAuditId
+      ? await prisma.siteAudit.findFirst({ where: { id: String(body.siteAuditId), projectId } })
+      : await resolveAudit(projectId);
+    if (!audit) return res.status(400).json({ error: "Create an audit before adding rows" });
     const requestedNo = body.itemNo != null && body.itemNo !== "" ? Number(body.itemNo) : null;
     if (requestedNo != null) {
       const existing = await prisma.auditChecklistItem.findUnique({
-        where: { projectId_section_itemNo: { projectId, section, itemNo: requestedNo } },
+        where: { siteAuditId_section_itemNo: { siteAuditId: audit.id, section, itemNo: requestedNo } },
       });
       if (existing) {
         const row = await prisma.auditChecklistItem.update({
@@ -347,15 +398,14 @@ auditKpiRouter.post(
       }
     }
     const maxNo = await prisma.auditChecklistItem.aggregate({
-      where: { projectId, section },
+      where: { siteAuditId: audit.id, section },
       _max: { itemNo: true },
     });
     const itemNo = requestedNo ?? (maxNo._max.itemNo ?? 0) + 1;
-    const siteAudit = await prisma.siteAudit.findFirst({ where: { projectId }, select: { id: true } });
     const row = await prisma.auditChecklistItem.create({
       data: {
         projectId,
-        siteAuditId: siteAudit?.id || null,
+        siteAuditId: audit.id,
         section,
         itemNo,
         prompt,
@@ -390,7 +440,7 @@ auditKpiRouter.post(
       where: { id: item.id },
       data: {
         photoRef,
-        evidenceUrl: saved.url,
+        evidenceUrl: saved.sharePointUrl || saved.url,
         evidenceName: photoRef,
       },
     });
@@ -403,6 +453,13 @@ auditKpiRouter.post(
     res.status(201).json(presentChecklist(row));
   }
 );
+
+function readKraScore(v: unknown): { ok: true; value: string | null } | { ok: false } {
+  if (v == null || String(v).trim() === "") return { ok: true, value: null };
+  const s = String(v).trim();
+  if (!/^[1-5]$/.test(s)) return { ok: false };
+  return { ok: true, value: s };
+}
 
 function intField(v: unknown, fallback = 0) {
   if (v == null || v === "") return fallback;
@@ -495,6 +552,10 @@ auditKpiRouter.patch(
     const existing = await prisma.kpiSubject.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
+    const portalFields = ["recordsCount", "openCount", "closedCount", "overdueCount", "oldestOpenDays", "pctClosed", "rag"] as const;
+    if (existing.dataSource?.startsWith("portal:") && portalFields.some((key) => body[key] !== undefined)) {
+      return res.status(400).json({ error: "This subject is filled from the portal. Run refresh instead." });
+    }
     const data: Record<string, unknown> = { ...subjectFigures(body, existing) };
     for (const k of ["isoArea", "folder", "isoClause", "name", "custodian", "relativePath", "workbookFileName"] as const) {
       if (body[k] !== undefined) data[k] = body[k] === "" ? null : body[k];
@@ -512,21 +573,57 @@ auditKpiRouter.get("/project/:projectId/role-kra", async (req, res) => {
     prisma.kpiSubject.findMany({ where: { projectId } }),
   ]);
   const presented = subjects.map((s) => presentSubject(s));
-  const kras = rows.map((row) => {
-    const owns = rows.find((r) => r.roleKey === row.roleKey && r.kraNo === "OWNS");
+  const byRole = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const list = byRole.get(row.roleKey) || [];
+    list.push(row);
+    byRole.set(row.roleKey, list);
+  }
+  const roleSummary = new Map<string, ReturnType<typeof roleKraResult> & { holder: string | null; subjectCount: number; redCount: number; amberCount: number; greenCount: number; avgKra: number | null; subjectKraScored: number }>();
+  for (const [roleKey, lines] of byRole) {
+    const owns = lines.find((row) => row.kraNo === "OWNS");
     const area = owns?.description || "";
     const owned = area === "All areas" || !area ? presented : presented.filter((s) => s.isoArea === area);
     const kraValues = owned.map((s) => asFraction(s.kraScore)).filter((n): n is number => n != null);
-    return {
-      ...row,
+    const scores = lines
+      .filter((row) => row.lineKind === "kra")
+      .map((row) => (/^[1-5]$/.test(row.reviewerScore || "") ? Number(row.reviewerScore) : null));
+    const outcome = roleKraResult(scores);
+    roleSummary.set(roleKey, {
+      ...outcome,
+      holder: owns?.holder || lines.find((row) => row.holder)?.holder || null,
       subjectCount: owned.length,
       redCount: owned.filter((s) => s.rag === "RED").length,
       amberCount: owned.filter((s) => s.rag === "AMBER").length,
       greenCount: owned.filter((s) => s.rag === "GREEN").length,
-      avgKra: kraValues.length ? kraValues.reduce((a, n) => a + n, 0) / kraValues.length : 0,
+      avgKra: kraValues.length ? kraValues.reduce((a, n) => a + n, 0) / kraValues.length : null,
+      subjectKraScored: kraValues.length,
+    });
+  }
+  const kras = rows.map((row) => {
+    const summary = roleSummary.get(row.roleKey);
+    const auto = row.lineKind === "kpi" ? kpiRag(row.target, row.actual) : null;
+    const score = row.lineKind === "kra" && /^[1-5]$/.test(row.reviewerScore || "") ? row.reviewerScore : null;
+    return {
+      ...row,
+      score,
+      periodRag: auto ?? row.periodRag,
+      ragAutomatic: auto != null,
+      subjectCount: summary?.subjectCount ?? 0,
+      redCount: summary?.redCount ?? 0,
+      amberCount: summary?.amberCount ?? 0,
+      greenCount: summary?.greenCount ?? 0,
+      avgKra: summary?.avgKra ?? null,
+      subjectKraScored: summary?.subjectKraScored ?? 0,
+      kraAverage: summary?.kraAverage ?? null,
+      kraScored: summary?.kraScored ?? 0,
+      kraLines: summary?.kraLines ?? 0,
+      result: summary?.result ?? "INCOMPLETE",
+      holder: row.holder || summary?.holder || null,
     };
   });
-  res.json({ kras });
+  const roles = [...roleSummary.entries()].map(([roleKey, summary]) => ({ roleKey, ...summary }));
+  res.json({ kras, roles });
 });
 
 auditKpiRouter.post(
@@ -539,17 +636,24 @@ auditKpiRouter.post(
     if (!roleKey || !kraNo) return res.status(400).json({ error: "roleKey and kraNo required" });
     const projectId = req.params.projectId;
     const existing = await prisma.kpiRoleKra.findFirst({ where: { projectId, roleKey, kraNo } });
+    const self = readKraScore(body.selfScore);
+    const reviewer = readKraScore(body.reviewerScore);
+    if (!self.ok || !reviewer.ok) return res.status(400).json({ error: "Score must be a whole number from 1 to 5" });
+    const lineKind = body.lineKind ? String(body.lineKind) : kraNo.startsWith("KRA") ? "kra" : "kpi";
+    const target = body.target ? String(body.target) : existing?.target || null;
+    const actual = body.actual != null && body.actual !== "" ? String(body.actual) : existing?.actual || null;
+    const auto = lineKind === "kpi" ? kpiRag(target, actual) : null;
     const data = {
       description: body.description ? String(body.description) : null,
       consequence: body.consequence ? String(body.consequence) : null,
       evidenceHint: body.evidenceHint ? String(body.evidenceHint) : null,
-      target: body.target ? String(body.target) : null,
-      lineKind: body.lineKind ? String(body.lineKind) : kraNo.startsWith("KRA") ? "kra" : "kpi",
+      target,
+      lineKind,
       holder: body.holder ? String(body.holder) : null,
-      selfScore: body.selfScore != null ? String(body.selfScore) : null,
-      reviewerScore: body.reviewerScore != null ? String(body.reviewerScore) : null,
-      actual: body.actual != null ? String(body.actual) : null,
-      periodRag: body.periodRag ? String(body.periodRag) : null,
+      selfScore: body.selfScore !== undefined ? self.value : existing?.selfScore || null,
+      reviewerScore: body.reviewerScore !== undefined ? reviewer.value : existing?.reviewerScore || null,
+      actual,
+      periodRag: auto ?? (body.periodRag ? String(body.periodRag) : null),
     };
     const row = existing
       ? await prisma.kpiRoleKra.update({ where: { id: existing.id }, data })
@@ -566,14 +670,22 @@ auditKpiRouter.patch(
     if (!existing) return res.status(404).json({ error: "Not found" });
     const body = req.body || {};
     const data: Record<string, unknown> = {};
+    if (body.selfScore !== undefined) {
+      const self = readKraScore(body.selfScore);
+      if (!self.ok) return res.status(400).json({ error: "Score must be a whole number from 1 to 5" });
+      data.selfScore = self.value;
+    }
+    if (body.reviewerScore !== undefined) {
+      const reviewer = readKraScore(body.reviewerScore);
+      if (!reviewer.ok) return res.status(400).json({ error: "Score must be a whole number from 1 to 5" });
+      data.reviewerScore = reviewer.value;
+    }
     for (const k of [
       "description",
       "consequence",
       "evidenceHint",
       "target",
       "holder",
-      "selfScore",
-      "reviewerScore",
       "actual",
       "periodRag",
       "lineKind",
@@ -582,6 +694,11 @@ auditKpiRouter.patch(
     ] as const) {
       if (body[k] !== undefined) data[k] = body[k] === "" ? null : String(body[k]);
     }
+    const target = "target" in data ? (data.target as string | null) : existing.target;
+    const actual = "actual" in data ? (data.actual as string | null) : existing.actual;
+    const lineKind = String(data.lineKind ?? existing.lineKind ?? "");
+    const auto = lineKind === "kpi" ? kpiRag(target, actual) : null;
+    if (auto) data.periodRag = auto;
     const row = await prisma.kpiRoleKra.update({ where: { id: existing.id }, data });
     res.json(row);
   }
@@ -600,6 +717,18 @@ auditKpiRouter.get("/project/:projectId/trend", async (req, res) => {
   });
   res.json({ weeks: withMovement });
 });
+
+auditKpiRouter.post(
+  "/project/:projectId/trend/snapshot",
+  requireRoles(...editors),
+  async (req, res) => {
+    const out = await snapshotTrendWeek(req.params.projectId, { force: req.query.force === "1" });
+    if (!out.ok) {
+      return res.status(409).json({ error: "This week was typed by hand.", week: out.week, weekEnding: out.weekEnding });
+    }
+    res.json({ ok: true, week: out.week, weekEnding: out.weekEnding });
+  }
+);
 
 auditKpiRouter.post(
   "/project/:projectId/trend",
@@ -624,8 +753,8 @@ auditKpiRouter.post(
     };
     const row = await prisma.kpiTrendWeek.upsert({
       where: { projectId_weekEnding: { projectId, weekEnding } },
-      create: { projectId, weekEnding, sortOrder: count + 1, ...data },
-      update: data,
+      create: { projectId, weekEnding, sortOrder: count + 1, source: "manual", ...data },
+      update: { ...data, source: "manual" },
     });
     res.status(201).json(row);
   }
@@ -654,11 +783,13 @@ auditKpiRouter.patch(
     if (body.kraScore !== undefined) data.kraScore = body.kraScore === "" || body.kraScore == null ? null : asFraction(Number(body.kraScore));
     if (body.comment !== undefined) data.comment = body.comment ? String(body.comment) : null;
     if (body.weekEnding) data.weekEnding = String(body.weekEnding);
+    data.source = "manual";
     const row = await prisma.kpiTrendWeek.update({ where: { id: existing.id }, data });
     res.json(row);
   }
 );
 
+/** @deprecated Prefer PATCH /audits/:auditId. Resolves to the latest open audit. */
 auditKpiRouter.patch(
   "/project/:projectId/header",
   requireRoles(...editors),
@@ -683,84 +814,86 @@ auditKpiRouter.patch(
       if (body[k] !== undefined) data[k] = body[k] === "" ? null : String(body[k]);
     }
     if (body.plannedDate !== undefined) data.plannedDate = body.plannedDate ? new Date(String(body.plannedDate)) : null;
-    const existing = await prisma.siteAudit.findFirst({ where: { projectId }, orderBy: { createdAt: "asc" } });
+    if (body.auditDate !== undefined) data.auditDate = body.auditDate ? new Date(String(body.auditDate)) : null;
+    const existing = await resolveAudit(projectId, req.query.auditId ? String(req.query.auditId) : body.auditId ? String(body.auditId) : null);
+    if (data.status === "Closed") {
+      const targetId = existing?.id;
+      if (targetId) {
+        const unlinked = await countUnlinkedLowScores(targetId);
+        if (unlinked > 0) {
+          return res.status(400).json({ error: `${unlinked} scores below 2 have no finding` });
+        }
+      }
+      data.closedAt = new Date();
+    }
     const title = data.title ? String(data.title) : "Site document audit";
     delete data.title;
-    const row = existing
-      ? await prisma.siteAudit.update({ where: { id: existing.id }, data: { ...data, ...(body.title !== undefined ? { title } : {}) } })
-      : await prisma.siteAudit.create({
-          data: {
-            id: `${projectId}-audit-demo`,
-            projectId,
-            title,
-            status: "Planned",
-            ...data,
-          },
-        });
+    if (existing) {
+      const row = await prisma.siteAudit.update({
+        where: { id: existing.id },
+        data: { ...data, ...(body.title !== undefined ? { title } : {}) },
+      });
+      return res.json(row);
+    }
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+    const row = await prisma.siteAudit.create({
+      data: {
+        projectId,
+        title,
+        auditRef: await nextAuditRef(projectId, project?.code || "PROJECT"),
+        status: "Planned",
+        ...data,
+      },
+    });
+    res.json(row);
+  }
+);
+
+auditKpiRouter.patch(
+  "/audits/:auditId",
+  requireRoles(...editors),
+  async (req: AuthedRequest, res) => {
+    const existing = await prisma.siteAudit.findUnique({ where: { id: req.params.auditId } });
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    req.params.projectId = existing.projectId;
+    req.body = { ...(req.body || {}), auditId: existing.id };
+    req.query.auditId = existing.id;
+    // Reuse the project header writer by calling the same updates here.
+    const body = req.body || {};
+    const data: Record<string, unknown> = {};
+    for (const k of [
+      "title",
+      "auditRef",
+      "status",
+      "leadAuditor",
+      "documentController",
+      "projectManager",
+      "independentOfProject",
+      "areasWalked",
+      "accompaniedBy",
+      "interviewee",
+      "intervieweeRole",
+      "scopeNotes",
+    ] as const) {
+      if (body[k] !== undefined) data[k] = body[k] === "" ? null : String(body[k]);
+    }
+    if (body.plannedDate !== undefined) data.plannedDate = body.plannedDate ? new Date(String(body.plannedDate)) : null;
+    if (body.auditDate !== undefined) data.auditDate = body.auditDate ? new Date(String(body.auditDate)) : null;
+    if (data.status === "Closed") {
+      const unlinked = await countUnlinkedLowScores(existing.id);
+      if (unlinked > 0) return res.status(400).json({ error: `${unlinked} scores below 2 have no finding` });
+      data.closedAt = new Date();
+    }
+    if (body.title !== undefined) data.title = body.title ? String(body.title) : existing.title;
+    const row = await prisma.siteAudit.update({ where: { id: existing.id }, data });
     res.json(row);
   }
 );
 
 auditKpiRouter.get("/project/:projectId/drive-suggestions", async (req, res) => {
-  const projectId = req.params.projectId;
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
-  if (!project) return res.status(404).json({ error: "Project not found" });
-  const items = await prisma.auditChecklistItem.findMany({
-    where: { projectId, section: "FolderSample" },
-    select: { detailJson: true, locationChecked: true, notes: true, response: true, prompt: true },
-  });
-  const acceptedFolders = new Set<string>();
-  const acceptedFiles = new Set<string>();
-  for (const item of items) {
-    const detail = parseDetail(item.detailJson);
-    for (const key of [detail.folder, detail.path, item.locationChecked]) {
-      if (key) acceptedFolders.add(key.toLowerCase());
-    }
-    const blob = `${detail.sampled || ""} ${detail.recordsInLog || ""} ${item.notes || ""} ${item.response || ""}`.toLowerCase();
-    for (const part of blob.split(/[;\n,]/)) {
-      const name = part.trim();
-      if (name) acceptedFiles.add(name);
-    }
-  }
-
-  const suggestions: Array<{
-    kind: "folder" | "file";
-    area: string;
-    folder: string;
-    path: string;
-    name: string;
-    fileCount?: number;
-    accepted: boolean;
-  }> = [];
-  const roots = mockOneDrive.listChildren(project.code, "").filter((n) => n.type === "folder" && /^\d{2}_/.test(n.name));
-  for (const area of roots) {
-    for (const kid of mockOneDrive.listChildren(project.code, area.path)) {
-      if (kid.type !== "folder") continue;
-      const files = mockOneDrive.listChildren(project.code, kid.path).filter((f) => f.type === "file");
-      if (!files.length) continue;
-      const accepted = acceptedFolders.has(kid.name.toLowerCase()) || acceptedFolders.has(kid.path.toLowerCase());
-      suggestions.push({
-        kind: "folder",
-        area: area.name,
-        folder: kid.name,
-        path: kid.path,
-        name: kid.name,
-        fileCount: files.length,
-        accepted,
-      });
-      for (const file of files.slice(0, 12)) {
-        suggestions.push({
-          kind: "file",
-          area: area.name,
-          folder: kid.name,
-          path: file.path,
-          name: file.name,
-          accepted: acceptedFiles.has(file.name.toLowerCase()),
-        });
-      }
-    }
-  }
-  res.json({ suggestions: suggestions.slice(0, 300) });
+  const out = await listDriveSuggestions(req.params.projectId, { refresh: req.query.refresh === "1" });
+  if (!out) return res.status(404).json({ error: "Project not found" });
+  res.json(out);
 });
 
 auditKpiRouter.post(
@@ -798,11 +931,12 @@ auditKpiRouter.post(
     if (match && kind === "folder") return res.json(presentChecklist(match));
 
     const maxNo = rows.reduce((m, r) => Math.max(m, r.itemNo), 0);
-    const siteAudit = await prisma.siteAudit.findFirst({ where: { projectId }, select: { id: true } });
+    const siteAudit = await resolveAudit(projectId, req.query.auditId ? String(req.query.auditId) : null);
+    if (!siteAudit) return res.status(400).json({ error: "Create an audit before adding checklist items." });
     const row = await prisma.auditChecklistItem.create({
       data: {
         projectId,
-        siteAuditId: siteAudit?.id || null,
+        siteAuditId: siteAudit.id,
         section: "FolderSample",
         itemNo: maxNo + 1,
         prompt: kind === "file" ? name : folder || name,
@@ -890,8 +1024,9 @@ auditKpiRouter.get("/project/:projectId/download/:sheet.csv", async (req, res) =
   } else if (sheet === "site-walk" || sheet === "dc-interview" || sheet === "folder-sample") {
     const section =
       sheet === "site-walk" ? "SiteWalk" : sheet === "dc-interview" ? "DcInterview" : "FolderSample";
+    const audit = await resolveAudit(projectId, req.query.auditId ? String(req.query.auditId) : null);
     const rows = await prisma.auditChecklistItem.findMany({
-      where: { projectId, section },
+      where: { projectId, section, ...(audit ? { siteAuditId: audit.id } : {}) },
       orderBy: { itemNo: "asc" },
     });
     csv = toCsv(
@@ -971,14 +1106,49 @@ auditKpiRouter.get("/project/:projectId/download/:sheet.xlsx", async (req, res) 
     filename = `MASTER_KPI_SUBJECTS-${project.code}.xlsx`;
   } else if (sheetKey === "role-kra") {
     const src = await prisma.kpiRoleKra.findMany({ where: { projectId }, orderBy: [{ roleKey: "asc" }, { kraNo: "asc" }] });
-    title = "Master KPI — Role KRA Templates";
-    headers = ["Role", "KRA #", "Description", "Consequence", "Evidence hint", "KPI code", "Target", "Red", "Amber", "Green"];
-    rows = src.map((r) => [r.roleKey, r.kraNo, r.description, r.consequence, r.evidenceHint, r.kpiCode, r.target, r.redCount, r.amberCount, r.greenCount]);
+    const byRole = new Map<string, typeof src>();
+    for (const row of src) {
+      const list = byRole.get(row.roleKey) || [];
+      list.push(row);
+      byRole.set(row.roleKey, list);
+    }
+    const outcome = new Map<string, ReturnType<typeof roleKraResult>>();
+    for (const [key, lines] of byRole) {
+      outcome.set(
+        key,
+        roleKraResult(
+          lines
+            .filter((row) => row.lineKind === "kra")
+            .map((row) => (/^[1-5]$/.test(row.reviewerScore || "") ? Number(row.reviewerScore) : null))
+        )
+      );
+    }
+    title = "Master KPI - Role KRA Templates";
+    headers = ["Role", "KRA #", "Description", "Target", "Self", "Reviewer", "Score", "Actual", "RAG", "KRA average", "Result"];
+    rows = src.map((row) => {
+      const result = outcome.get(row.roleKey);
+      const auto = row.lineKind === "kpi" ? kpiRag(row.target, row.actual) : null;
+      const score = row.lineKind === "kra" && /^[1-5]$/.test(row.reviewerScore || "") ? row.reviewerScore : "";
+      return [
+        row.roleKey,
+        row.kraNo,
+        row.description,
+        row.target || row.consequence,
+        row.selfScore,
+        row.reviewerScore,
+        score,
+        row.actual,
+        auto ?? row.periodRag,
+        result?.kraAverage ?? "",
+        result?.result ?? "",
+      ];
+    });
     filename = `MASTER_KPI_ROLE_KRA-${project.code}.xlsx`;
   } else if (sheetKey === "site-walk" || sheetKey === "dc-interview" || sheetKey === "folder-sample") {
     const section = sheetKey === "site-walk" ? "SiteWalk" : sheetKey === "dc-interview" ? "DcInterview" : "FolderSample";
+    const audit = await resolveAudit(projectId, req.query.auditId ? String(req.query.auditId) : null);
     const src = await prisma.auditChecklistItem.findMany({
-      where: { projectId, section },
+      where: { projectId, section, ...(audit ? { siteAuditId: audit.id } : {}) },
       orderBy: { itemNo: "asc" },
     });
     title = `Site Audit — ${section.replace(/([A-Z])/g, " $1").trim()}`;
@@ -998,126 +1168,20 @@ auditKpiRouter.get("/project/:projectId/download/:sheet.xlsx", async (req, res) 
   res.send(buf);
 });
 
-/**
- * Cross-module KRA refresh — pulls **live** counts from the portal (RFIs, NCRs, drawings
- * overdue, checklist submissions) and rolls them into KpiSubject rows.  Any subject whose
- * `workbookFileName` matches one of the module keys below is auto-computed.  All other
- * subjects keep whatever was seeded from the KPI pack.
- *
- * Mapping (case-insensitive, prefix match on workbookFileName or name):
- *   RFI / Request for information        → open Rfi (kind RequestForInformation)
- *   NCR                                   → RFIs where rfiKind='QualityIR' with open status (proxy)
- *   Drawing register / GFC / Approval     → Drawing revisions where dueDate < now and not superseded
- *   Site Execution / Progress checklists  → ChecklistSubmission open/closed
- *   Safety                                → RFIs where rfiKind IN ('SafetyIR','SafetyChecklist')
- *   Cost / RA / COP                       → RaBill status counts
- */
+/** Fills mapped subjects from their own portal register. Unmapped subjects stay typed. */
 auditKpiRouter.post(
   "/project/:projectId/refresh",
-  requireRoles("admin", "office"),
+  requireRoles(...editors),
   async (req: AuthedRequest, res) => {
     const projectId = req.params.projectId;
-    const subjects = await prisma.kpiSubject.findMany({ where: { projectId } });
-    if (!subjects.length) return res.json({ ok: true, subjects: 0, updated: 0 });
-
-    const [rfis, drawings, drawingsOverdue, safetyRfis, raBills, subs] = await Promise.all([
-      prisma.rfi.findMany({ where: { projectId, rfiKind: { in: ["RequestForInformation", "Manual", "ClientConcern"] } }, select: { status: true, closedAt: true, createdAt: true, dueDate: true } }),
-      prisma.drawing.findMany({ where: { projectId }, select: { id: true } }),
-      prisma.drawingRevision.findMany({
-        where: { drawing: { projectId } },
-        select: {
-          plannedDate: true,
-          actualDate: true,
-          issuedToClientAt: true,
-          receivedDate: true,
-          published: true,
-        },
-      }),
-      prisma.rfi.findMany({ where: { projectId, rfiKind: { in: ["SafetyIR", "SafetyChecklist"] } }, select: { status: true, closedAt: true, createdAt: true, dueDate: true } }),
-      prisma.raBill.findMany({ where: { projectId }, select: { status: true, createdAt: true, invoiceDate: true } }),
-      prisma.checklistSubmission.findMany({
-        where: { assignment: { projectId } },
-        select: { status: true, createdAt: true, reviewedAt: true, assignment: { select: { template: { select: { checklistType: true } } } } },
-      }),
-    ]);
-
-    const now = Date.now();
-    const rollupRfi = (list: typeof rfis) => {
-      const open = list.filter((r) => r.status !== "Closed").length;
-      const closed = list.filter((r) => r.status === "Closed").length;
-      const overdue = list.filter((r) => r.status !== "Closed" && r.dueDate && new Date(r.dueDate).getTime() < now).length;
-      const oldest = list
-        .filter((r) => r.status !== "Closed")
-        .reduce((max, r) => Math.max(max, Math.round((now - new Date(r.createdAt).getTime()) / 86400000)), 0);
-      return { records: list.length, open, closed, overdue, oldest };
-    };
-    const rollupDrawings = () => {
-      const overdue = drawingsOverdue.filter(
-        (d) => d.plannedDate && !d.actualDate && new Date(d.plannedDate).getTime() < now
-      ).length;
-      const open = drawingsOverdue.filter((d) => !d.published).length;
-      const closed = drawingsOverdue.length - open;
-      const oldest = drawingsOverdue
-        .filter((d) => !d.published && d.plannedDate)
-        .reduce(
-          (max, d) =>
-            Math.max(max, Math.round((now - new Date(d.plannedDate as Date).getTime()) / 86400000)),
-          0
-        );
-      return { records: drawings.length, open, closed, overdue, oldest };
-    };
-    const rollupCost = () => {
-      const open = raBills.filter((r) => r.status !== "Paid" && r.status !== "Certified").length;
-      const closed = raBills.length - open;
-      return { records: raBills.length, open, closed, overdue: 0, oldest: 0 };
-    };
-    const rollupSubs = (kinds: string[]) => {
-      const list = subs.filter((s) => kinds.includes(s.assignment?.template?.checklistType || ""));
-      const open = list.filter((s) => s.status !== "Submitted" && s.status !== "Approved").length;
-      const closed = list.length - open;
-      return { records: list.length, open, closed, overdue: 0, oldest: 0 };
-    };
-
-    const rfiRoll = rollupRfi(rfis);
-    const safetyRoll = rollupRfi(safetyRfis);
-    const drawingRoll = rollupDrawings();
-    const costRoll = rollupCost();
-    const qcRoll = rollupSubs(["QualityInspection"]);
-    const seRoll = rollupSubs(["SiteExecution", "ActivityInspection"]);
-
-    function mapSubject(subjectName: string) {
-      const n = subjectName.toLowerCase();
-      if (n.includes("rfi") || n.includes("request for information")) return rfiRoll;
-      if (n.includes("safety") || n.includes("hse")) return safetyRoll;
-      if (n.includes("drawing") || n.includes("gfc") || n.includes("approval")) return drawingRoll;
-      if (n.includes("ra bill") || n.includes("cop") || n.includes("payment") || n.includes("cash")) return costRoll;
-      if (n.includes("quality") || n.includes("ncr") || n.includes("inspection")) return qcRoll;
-      if (n.includes("progress") || n.includes("dpr") || n.includes("wpr") || n.includes("site execution")) return seRoll;
-      return null;
-    }
-    let updated = 0;
-    const now2 = new Date();
-    for (const s of subjects) {
-      const roll = mapSubject(`${s.workbookFileName || ""} ${s.name}`);
-      if (!roll) continue;
-      const figures = subjectFigures(
-        {
-          recordsCount: roll.records,
-          openCount: roll.open,
-          closedCount: roll.closed,
-          overdueCount: roll.overdue,
-          oldestOpenDays: roll.oldest,
-        },
-        s
-      );
-      await prisma.kpiSubject.update({
-        where: { id: s.id },
-        data: { ...figures, lastRefreshedAt: now2 },
-      });
-      updated++;
-    }
-    await audit("audit_kpi.refresh", { userId: req.user!.id, entity: "KpiSubject", entityId: projectId, meta: { updated, total: subjects.length } });
-    res.json({ ok: true, subjects: subjects.length, updated, refreshedAt: now2 });
+    const out = await refreshProjectSubjects(projectId);
+    await audit("audit_kpi.refresh", {
+      userId: req.user!.id,
+      entity: "KpiSubject",
+      entityId: projectId,
+      meta: { updated: out.updated, total: out.subjects },
+    });
+    res.json({ ok: true, ...out });
   }
 );
 

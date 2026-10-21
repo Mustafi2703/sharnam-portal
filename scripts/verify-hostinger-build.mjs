@@ -10,6 +10,8 @@ const required = [
   "apps/web/dist/index.html",
   "apps/api/dist/index.js",
   "packages/shared/dist/index.js",
+  "docs/SITE_AUDIT_Pack.xlsx",
+  "docs/MASTER_KPI_DASHBOARD.xlsx",
 ];
 
 const missing = required.filter((rel) => !fs.existsSync(path.join(root, rel)));

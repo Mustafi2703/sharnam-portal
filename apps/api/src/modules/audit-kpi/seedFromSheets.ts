@@ -1,11 +1,11 @@
 import fs from "fs";
-import path from "path";
 import * as XLSX from "xlsx";
 import type { PrismaClient } from "@prisma/client";
-import { mergeDetail, type DetailMap } from "./scoring.js";
+import type { DetailMap } from "./scoring.js";
+import { auditKpiTemplatePaths } from "./templatePaths.js";
 
-const AUDIT_PACK = path.join(process.cwd(), "docs/SITE_AUDIT_Pack.xlsx");
-const KPI_PACK = path.join(process.cwd(), "docs/MASTER_KPI_DASHBOARD.xlsx");
+const AUDIT_PACK = auditKpiTemplatePaths().auditPack;
+const KPI_PACK = auditKpiTemplatePaths().kpiPack;
 
 function cell(v: unknown): string {
   if (v == null) return "";
@@ -35,6 +35,8 @@ function rowsOf(wb: XLSX.WorkBook, sheet: string): unknown[][] {
 export type AuditKpiImportOpts = {
   auditBuffer?: Buffer;
   kpiBuffer?: Buffer;
+  /** Add rows that are not there yet. Never rewrite scores or typed figures. */
+  missingOnly?: boolean;
 };
 
 type ChecklistDraft = {
@@ -174,6 +176,63 @@ function planRows(rows: unknown[][]): ChecklistDraft[] {
   return out;
 }
 
+async function ensureOpenAudit(prisma: PrismaClient, projectId: string) {
+  const open = await prisma.siteAudit.findFirst({
+    where: { projectId, NOT: { status: "Closed" } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (open) return open;
+  const any = await prisma.siteAudit.findFirst({ where: { projectId }, orderBy: { createdAt: "desc" } });
+  if (any) return any;
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
+  const code = project?.code || "PROJECT";
+  return prisma.siteAudit.create({
+    data: {
+      projectId,
+      title: "Site document audit",
+      auditRef: `SA/${code}/01`,
+      status: "Planned",
+    },
+  });
+}
+
+/** Copy plan, interview, walk and folder prompts onto one audit. Scores are not written. */
+export async function seedChecklistForAudit(
+  prisma: PrismaClient,
+  projectId: string,
+  siteAuditId: string,
+  auditBuffer?: Buffer
+) {
+  const buf = auditBuffer ?? (fs.existsSync(AUDIT_PACK) ? fs.readFileSync(AUDIT_PACK) : undefined);
+  if (!buf) return { checklistAdded: 0 };
+  const awb = XLSX.read(buf, { type: "buffer" });
+  const drafts = [
+    ...walkRows(rowsOf(awb, "SITE_WALK")),
+    ...interviewRows(rowsOf(awb, "DC_INTERVIEW")),
+    ...folderRows(rowsOf(awb, "FOLDER_SAMPLE")),
+    ...planRows(rowsOf(awb, "PLAN")),
+  ];
+  let checklistAdded = 0;
+  for (const it of drafts) {
+    const existing = await prisma.auditChecklistItem.findFirst({
+      where: { siteAuditId, section: it.section, itemNo: it.itemNo },
+    });
+    if (existing) continue;
+    await prisma.auditChecklistItem.create({
+      data: {
+        projectId,
+        siteAuditId,
+        section: it.section,
+        itemNo: it.itemNo,
+        prompt: it.prompt,
+        detailJson: JSON.stringify(it.detail),
+      },
+    });
+    checklistAdded++;
+  }
+  return { checklistAdded };
+}
+
 export async function seedAuditKpiFromSheets(
   prisma: PrismaClient,
   projectId: string,
@@ -184,64 +243,25 @@ export async function seedAuditKpiFromSheets(
   const kpiBuf = opts?.kpiBuffer ?? (fs.existsSync(KPI_PACK) ? fs.readFileSync(KPI_PACK) : undefined);
 
   if (!auditBuf && !kpiBuf) {
-    console.warn("Audit/KPI packs missing — skip import");
-    return { findings: 0, checklist: 0, subjects: 0, kras: 0 };
+    console.warn("Audit/KPI packs missing - skip import");
+    return { findings: 0, checklist: 0, checklistAdded: 0, subjects: 0, subjectsAdded: 0, kras: 0, krasAdded: 0 };
   }
 
   let findingCount = 0;
   let checklistCount = 0;
+  let checklistAdded = 0;
   let subjectCount = 0;
+  let subjectsAdded = 0;
   let kraCount = 0;
+  let krasAdded = 0;
 
-  const audit = await prisma.siteAudit.upsert({
-    where: { id: `${projectId}-audit-demo` },
-    create: {
-      id: `${projectId}-audit-demo`,
-      projectId,
-      title: "Site document audit",
-      auditRef: "AUD-IMPORT",
-      status: "InProgress",
-      leadAuditor: "Document Controller",
-      plannedDate: new Date(),
-      scopeNotes: "Imported from SITE_AUDIT_Pack.xlsx",
-    },
-    update: {},
-  });
+  const audit = await ensureOpenAudit(prisma, projectId);
 
   if (auditBuf) {
+    const seeded = await seedChecklistForAudit(prisma, projectId, audit.id, auditBuf);
+    checklistAdded = seeded.checklistAdded;
+    checklistCount = seeded.checklistAdded;
     const awb = XLSX.read(auditBuf, { type: "buffer" });
-    const drafts = [
-      ...walkRows(rowsOf(awb, "SITE_WALK")),
-      ...interviewRows(rowsOf(awb, "DC_INTERVIEW")),
-      ...folderRows(rowsOf(awb, "FOLDER_SAMPLE")),
-      ...planRows(rowsOf(awb, "PLAN")),
-    ];
-    for (const it of drafts) {
-      const where = { projectId_section_itemNo: { projectId, section: it.section, itemNo: it.itemNo } };
-      const existing = await prisma.auditChecklistItem.findUnique({ where });
-      if (!existing) {
-        await prisma.auditChecklistItem.create({
-          data: {
-            projectId,
-            siteAuditId: audit.id,
-            section: it.section,
-            itemNo: it.itemNo,
-            prompt: it.prompt,
-            detailJson: JSON.stringify(it.detail),
-          },
-        });
-      } else {
-        await prisma.auditChecklistItem.update({
-          where,
-          data: {
-            prompt: it.prompt,
-            detailJson: mergeDetail(existing.detailJson, it.detail),
-          },
-        });
-      }
-      checklistCount++;
-    }
-
     const findingRows = rowsOf(awb, "FINDINGS");
     for (const row of findingRows) {
       const sr = num(row[0]);
@@ -319,17 +339,10 @@ export async function seedAuditKpiFromSheets(
             oldestOpenDays: counted.oldestOpenDays,
             kraScore: counted.kraScore,
             rag: "UNUSED",
+            dataSource: "manual",
           },
         });
-      } else {
-        const figures: Record<string, number | null> = {};
-        for (const [key, value] of Object.entries(counted)) {
-          if (value != null) figures[key] = value;
-        }
-        await prisma.kpiSubject.update({
-          where,
-          data: { ...template, ...figures },
-        });
+        subjectsAdded++;
       }
       subjectCount++;
     }
@@ -342,19 +355,19 @@ export async function seedAuditKpiFromSheets(
       if (!col0 || col0.startsWith("ROLE KRA") || col0.startsWith("Key result") || col0.startsWith("Project:")) continue;
       if (col0 === "#" || col0 === "Owns") {
         if (col0 === "Owns" && roleKey) {
-          await upsertKra(prisma, projectId, {
+          if (await upsertKra(prisma, projectId, {
             roleKey,
             kraNo: "OWNS",
             lineKind: "owns",
             description: col1,
             holder,
-          });
+          })) krasAdded++;
           kraCount++;
         }
         continue;
       }
       if (/^KRA\d+/i.test(col0)) {
-        await upsertKra(prisma, projectId, {
+        if (await upsertKra(prisma, projectId, {
           roleKey,
           kraNo: col0,
           lineKind: "kra",
@@ -362,19 +375,19 @@ export async function seedAuditKpiFromSheets(
           consequence: cell(row[2]),
           evidenceHint: cell(row[3]),
           holder,
-        });
+        })) krasAdded++;
         kraCount++;
         continue;
       }
       if (/^K\d+$/i.test(col0)) {
-        await upsertKra(prisma, projectId, {
+        if (await upsertKra(prisma, projectId, {
           roleKey,
           kraNo: col0,
           lineKind: "kpi",
           description: col1,
           target: cell(row[2]),
           holder,
-        });
+        })) krasAdded++;
         kraCount++;
         continue;
       }
@@ -384,7 +397,7 @@ export async function seedAuditKpiFromSheets(
     }
   }
 
-  return { findings: findingCount, checklist: checklistCount, subjects: subjectCount, kras: kraCount };
+  return { findings: findingCount, checklist: checklistCount, checklistAdded, subjects: subjectCount, subjectsAdded, kras: kraCount, krasAdded };
 }
 
 async function upsertKra(
@@ -401,7 +414,7 @@ async function upsertKra(
     holder?: string;
   }
 ) {
-  if (!row.roleKey) return;
+  if (!row.roleKey) return false;
   const existing = await prisma.kpiRoleKra.findFirst({
     where: { projectId, roleKey: row.roleKey, kraNo: row.kraNo },
   });
@@ -413,20 +426,9 @@ async function upsertKra(
     lineKind: row.lineKind,
     holder: row.holder || null,
   };
-  if (!existing) {
-    await prisma.kpiRoleKra.create({
-      data: { projectId, roleKey: row.roleKey, kraNo: row.kraNo, ...data },
-    });
-  } else {
-    await prisma.kpiRoleKra.update({
-      where: { id: existing.id },
-      data: {
-        description: data.description,
-        consequence: data.consequence ?? existing.consequence,
-        evidenceHint: data.evidenceHint || existing.evidenceHint,
-        target: data.target || existing.target,
-        lineKind: data.lineKind,
-      },
-    });
-  }
+  if (existing) return false;
+  await prisma.kpiRoleKra.create({
+    data: { projectId, roleKey: row.roleKey, kraNo: row.kraNo, ...data },
+  });
+  return true;
 }

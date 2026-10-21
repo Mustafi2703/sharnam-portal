@@ -112,8 +112,8 @@ async function purgeProjectTransactionalData(tx: Db, projectId: string, opts?: P
     await tx.purchaseOrder.deleteMany({ where });
   }
   if (auditIds.length) {
+    await tx.auditChecklistItem.deleteMany({ where: { siteAuditId: { in: auditIds } } });
     await tx.auditFinding.updateMany({ where: { siteAuditId: { in: auditIds } }, data: { siteAuditId: null } });
-    await tx.auditChecklistItem.updateMany({ where: { siteAuditId: { in: auditIds } }, data: { siteAuditId: null } });
     await tx.siteAudit.deleteMany({ where });
   }
 

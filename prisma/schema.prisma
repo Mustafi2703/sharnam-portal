@@ -2861,6 +2861,9 @@ model SiteAudit {
   accompaniedBy        String?
   interviewee          String?
   intervieweeRole      String?
+  /// Date the audit was carried out. plannedDate stays the date it was booked.
+  auditDate   DateTime?
+  closedAt    DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -2909,7 +2912,7 @@ model AuditFinding {
 model AuditChecklistItem {
   id              String   @id @default(cuid())
   projectId       String
-  siteAuditId     String?
+  siteAuditId     String
   section         String
   itemNo          Int
   prompt          String   @db.Text
@@ -2926,10 +2929,11 @@ model AuditChecklistItem {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  siteAudit SiteAudit? @relation(fields: [siteAuditId], references: [id], onDelete: SetNull)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  siteAudit SiteAudit @relation(fields: [siteAuditId], references: [id], onDelete: Cascade)
 
-  @@unique([projectId, section, itemNo])
+  @@unique([siteAuditId, section, itemNo])
+  @@index([projectId, section])
 }
 
 /**
@@ -2955,6 +2959,8 @@ model KpiSubject {
   kraScore         Float?
   rag              String    @default("UNUSED")
   lastRefreshedAt  DateTime?
+  /// "portal:<model>" when refresh fills the figures, "manual" when they are typed.
+  dataSource       String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -3012,6 +3018,10 @@ model KpiTrendWeek {
   notYetUsed      Int?
   comment         String?  @db.Text
   sortOrder       Int      @default(0)
+  /// Set when Capture this week or the Friday job wrote the row.
+  snapshotAt      DateTime?
+  /// auto | manual. A manual row is not overwritten by the Friday snapshot.
+  source          String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

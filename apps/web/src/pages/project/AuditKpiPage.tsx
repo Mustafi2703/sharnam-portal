@@ -6,6 +6,7 @@ import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../
 import { ReferenceSheetToolbar } from "../../components/ReferenceSheetToolbar";
 import { RegisterEntryModal } from "../../components/RegisterEntryModal";
 import { RegisterEmptyRow, RegisterSheetFrame } from "../../components/RegisterSheetFrame";
+import { LineChart } from "../../components/ColumnChart";
 import { PieChart } from "../../components/PieChart";
 import { UploadModal } from "../../components/UploadModal";
 import { downloadAuthFile } from "../../lib/downloadReport";
@@ -76,8 +77,21 @@ function sectionForTab(tab: Tab) {
   return "";
 }
 
+const CRITICAL_WALK = new Set([2, 6, 11, 12, 17]);
+
+function sourceLabel(dataSource: string | null | undefined) {
+  if (dataSource?.startsWith("portal:")) return `Portal - ${dataSource.slice("portal:".length)}`;
+  return "Typed";
+}
+
+function defaultFindingSeverity(section: string, itemNo: number, score: number) {
+  if (section === "SiteWalk" && score === 0 && CRITICAL_WALK.has(itemNo)) return "Critical";
+  if (score === 0) return "Major";
+  return "Minor";
+}
+
 function pct(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "-";
   const fraction = value > 1 ? value / 100 : value;
   return `${Math.round(fraction * 1000) / 10}%`;
 }
@@ -109,12 +123,21 @@ export default function AuditKpiPage() {
   const { token, user } = useAuth();
   const tabRaw = searchParams.get("tab");
   const tab: Tab = TABS.some((t) => t.key === tabRaw) ? (tabRaw as Tab) : "dashboard";
+  const selectedAuditId = searchParams.get("audit") || "";
+  const unlinkedOnly = searchParams.get("unlinked") === "1";
   const [data, setData] = useState<any>(null);
+  const [audits, setAudits] = useState<any[]>([]);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [kras, setKras] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [weeks, setWeeks] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [driveNotice, setDriveNotice] = useState("");
+  const [allFindings, setAllFindings] = useState<any[]>([]);
+  const [kraFilter, setKraFilter] = useState("");
+  const [findingAuditFilter, setFindingAuditFilter] = useState("");
+  const [linkChecklistId, setLinkChecklistId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const canEdit = user?.role === "admin" || user?.role === "office" || user?.role === "employee";
@@ -157,40 +180,54 @@ export default function AuditKpiPage() {
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [evidenceError, setEvidenceError] = useState("");
 
+  const auditQuery = selectedAuditId ? `auditId=${encodeURIComponent(selectedAuditId)}` : "";
+
   const load = async () => {
-    const dash = await api(`/api/audit-kpi/project/${id}/dashboard`, { token });
+    const dashQ = auditQuery ? `?${auditQuery}` : "";
+    const [dash, auditList] = await Promise.all([
+      api(`/api/audit-kpi/project/${id}/dashboard${dashQ}`, { token }),
+      api<{ audits: any[] }>(`/api/audit-kpi/project/${id}/audits`, { token }),
+    ]);
     setData(dash);
+    setAudits(auditList.audits || []);
     if (tab === "subjects" || tab === "kpi-dashboard" || tab === "iso-map" || tab === "role-kra") {
       const s = await api<{ subjects: any[] }>(`/api/audit-kpi/project/${id}/subjects`, { token });
       setSubjects(s.subjects || []);
     }
     if (tab === "role-kra") {
-      const k = await api<{ kras: any[] }>(`/api/audit-kpi/project/${id}/role-kra`, { token });
+      const k = await api<{ kras: any[]; roles: any[] }>(`/api/audit-kpi/project/${id}/role-kra`, { token });
       setKras(k.kras || []);
+      setRoles(k.roles || []);
     }
     if (tab === "trend") {
       const t = await api<{ weeks: any[] }>(`/api/audit-kpi/project/${id}/trend`, { token });
       setWeeks(t.weeks || []);
     }
+    if (tab === "findings" || tab === "site-walk" || tab === "folder-sample") {
+      const f = await api<{ findings: any[] }>(`/api/audit-kpi/project/${id}/findings`, { token });
+      setAllFindings(f.findings || []);
+    }
     if (tab === "plan") {
-      const c = await api<{ items: any[] }>(`/api/audit-kpi/project/${id}/checklist`, { token });
+      const c = await api<{ items: any[] }>(`/api/audit-kpi/project/${id}/checklist${dashQ}`, { token });
       setChecklist((c.items || []).filter((row) => String(row.section).startsWith("Plan")));
     }
     const sec = sectionForTab(tab);
     if (sec) {
-      const c = await api<{ items: any[] }>(`/api/audit-kpi/project/${id}/checklist?section=${sec}`, { token });
+      const q = [auditQuery, `section=${sec}`].filter(Boolean).join("&");
+      const c = await api<{ items: any[] }>(`/api/audit-kpi/project/${id}/checklist?${q}`, { token });
       setChecklist(c.items || []);
     }
     if (tab === "folder-sample") {
-      const sug = await api<{ suggestions: any[] }>(`/api/audit-kpi/project/${id}/drive-suggestions`, { token });
+      const sug = await api<{ suggestions: any[]; notice?: string | null }>(`/api/audit-kpi/project/${id}/drive-suggestions`, { token });
       setSuggestions(sug.suggestions || []);
+      setDriveNotice(sug.notice || "");
     }
   };
 
   useEffect(() => {
     if (!id || !token) return;
     void load().catch((e) => setMsg(String(e.message || e)));
-  }, [id, token, tab]);
+  }, [id, token, tab, selectedAuditId]);
 
   const ragPie = useMemo(() => {
     const c = data?.totals?.ragCounts || {};
@@ -218,7 +255,8 @@ export default function AuditKpiPage() {
 
   const dl = (ext: "csv" | "xlsx", sheet: string) => {
     if (!id || !token) return;
-    void downloadAuthFile(`/api/audit-kpi/project/${id}/download/${sheet}.${ext}`, token, `Sharnam-${sheet}.${ext}`);
+    const q = auditQuery ? `?${auditQuery}` : "";
+    void downloadAuthFile(`/api/audit-kpi/project/${id}/download/${sheet}.${ext}${q}`, token, `Sharnam-${sheet}.${ext}`);
   };
 
   const uploadPack = tab === "subjects" || tab === "role-kra" || tab === "kpi-dashboard" || tab === "iso-map" || tab === "trend" ? "kpi" : "site-audit";
@@ -235,7 +273,7 @@ export default function AuditKpiPage() {
         method: "POST",
         body: fd,
       });
-      setMsg(`Imported — ${out.stats.findings ?? 0} findings · ${out.stats.subjects ?? 0} subjects · ${out.stats.checklist ?? 0} checklist rows`);
+      setMsg(`Imported. ${out.stats.findings ?? 0} findings, ${out.stats.subjects ?? 0} subjects, ${out.stats.checklist ?? 0} checklist rows.`);
       await load();
     } catch (e: any) {
       setMsg(e.message || "Upload failed");
@@ -249,7 +287,7 @@ export default function AuditKpiPage() {
     setMsg("");
     try {
       const out = await api<{ stats: Record<string, number> }>(`/api/audit-kpi/project/${id}/resync`, { token, method: "POST" });
-      setMsg(`Sheet rows loaded — ${out.stats.checklist ?? 0} checklist lines · ${out.stats.subjects ?? 0} subjects. Scores already entered were kept.`);
+      setMsg(`Added ${out.stats.checklistAdded ?? out.stats.checklist ?? 0} checklist rows, ${out.stats.subjectsAdded ?? 0} subjects, ${out.stats.krasAdded ?? 0} role lines. Existing scores were left as they are.`);
       await load();
     } catch (e: any) {
       setMsg(e.message || "Could not load sheet rows");
@@ -260,11 +298,31 @@ export default function AuditKpiPage() {
 
   const saveHeader = async (patch: Record<string, string>) => {
     if (!canEdit) return;
-    await api(`/api/audit-kpi/project/${id}/header`, { token, method: "PATCH", body: JSON.stringify(patch) });
+    const auditId = selectedAuditId || data?.audit?.id || "";
+    const q = auditId ? `?auditId=${encodeURIComponent(auditId)}` : "";
+    await api(`/api/audit-kpi/project/${id}/header${q}`, { token, method: "PATCH", body: JSON.stringify({ ...patch, auditId }) });
     await load();
   };
 
+  const openRaise = (row: any, score: number) => {
+    const section = String(row.section || (tab === "folder-sample" ? "FolderSample" : "SiteWalk"));
+    const refNo = section === "FolderSample" ? `F-${String(row.itemNo).padStart(2, "0")}` : `W-${String(row.itemNo).padStart(2, "0")}`;
+    setLinkChecklistId(row.id);
+    setFindingEditId(null);
+    setFindingForm({
+      ...FINDING_BLANK,
+      description: row.observed || row.detail?.defects || row.prompt || "",
+      severity: defaultFindingSeverity(section, Number(row.itemNo), score),
+      source: section === "FolderSample" ? "Folder sample" : "Site walk",
+      folderLocation: row.locationChecked || row.detail?.folder || "",
+      refNo,
+      photoRef: row.photoRef || "",
+    });
+    setFindingModalOpen(true);
+  };
+
   const openFinding = (row?: any) => {
+    setLinkChecklistId(null);
     if (!row) {
       setFindingEditId(null);
       setFindingForm({ ...FINDING_BLANK });
@@ -294,12 +352,26 @@ export default function AuditKpiPage() {
   const saveFinding = async () => {
     setBusy(true);
     try {
+      const auditId = selectedAuditId || data?.audit?.id || "";
+      let saved: { findingNo?: string } | null = null;
       if (findingEditId) {
         await api(`/api/audit-kpi/findings/${findingEditId}`, { token, method: "PATCH", body: JSON.stringify(findingForm) });
       } else {
-        await api(`/api/audit-kpi/project/${id}/findings`, { token, method: "POST", body: JSON.stringify(findingForm) });
+        saved = await api<{ findingNo: string }>(`/api/audit-kpi/project/${id}/findings`, {
+          token,
+          method: "POST",
+          body: JSON.stringify({ ...findingForm, siteAuditId: auditId }),
+        });
+      }
+      if (linkChecklistId && saved?.findingNo) {
+        await api(`/api/audit-kpi/checklist/${linkChecklistId}`, {
+          token,
+          method: "PATCH",
+          body: JSON.stringify({ detail: { findingRef: saved.findingNo } }),
+        });
       }
       setFindingModalOpen(false);
+      setLinkChecklistId(null);
       await load();
       setMsg(findingEditId ? "Finding updated." : "Finding added.");
     } catch (err: any) {
@@ -431,6 +503,55 @@ export default function AuditKpiPage() {
   const kpi = data?.kpi;
   const auditHeader = data?.audit;
 
+  const scoresLocked = String(data?.audit?.status || "").toLowerCase() === "closed";
+  const activeAuditId = selectedAuditId || data?.audit?.id || "";
+  const auditFindings = (allFindings.length ? allFindings : data?.findings || []).filter(
+    (row: any) => !activeAuditId || row.siteAuditId === activeAuditId || row.siteAudit?.id === activeAuditId
+  );
+  const visibleChecklist = unlinkedOnly
+    ? checklist.filter((row) => (row.score === 0 || row.score === 1) && !row.detail?.findingRef)
+    : checklist;
+
+  const pickAudit = (auditId: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (auditId) next.set("audit", auditId);
+    else next.delete("audit");
+    setSearchParams(next, { replace: true });
+  };
+
+  const createAudit = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const out = await api<{ audit: { id: string; auditRef?: string }; checklistAdded: number }>(`/api/audit-kpi/project/${id}/audits`, {
+        token,
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      pickAudit(out.audit.id);
+      setMsg(`Audit ${out.audit.auditRef || ""} created with ${out.checklistAdded} template rows.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const captureWeek = async (force = false) => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const q = force ? "?force=1" : "";
+      await api(`/api/audit-kpi/project/${id}/trend/snapshot${q}`, { token, method: "POST" });
+      setMsg(force ? "This week was overwritten from the dashboard." : "This week was captured from the dashboard.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const cell = (value: string, onSave: (v: string) => void, opts?: { type?: string }) =>
     canEdit ? (
       <input
@@ -442,8 +563,55 @@ export default function AuditKpiPage() {
         }}
       />
     ) : (
-      value || "—"
+      value || "-"
     );
+
+  const scoreControl = (row: any, section: "SiteWalk" | "FolderSample") =>
+    canEdit && !scoresLocked ? (
+      <Select
+        value={row.score == null ? "" : String(row.score)}
+        onChange={(e) => {
+          const value = e.target.value;
+          void saveChecklist(row.id, { score: value }).then(() => {
+            const n = Number(value);
+            if ((n === 0 || n === 1) && !row.detail?.findingRef) openRaise({ ...row, section }, n);
+          });
+        }}
+      >
+        <option value="">Blank</option>
+        <option value="2">2</option>
+        <option value="1">1</option>
+        <option value="0">0</option>
+        <option value="N/A">N/A</option>
+      </Select>
+    ) : (
+      row.score ?? "-"
+    );
+
+  const findingRefControl = (row: any, section: "SiteWalk" | "FolderSample") => (
+    <div>
+      {canEdit && !scoresLocked ? (
+        <Select
+          value={row.detail?.findingRef || ""}
+          onChange={(e) => {
+            if (e.target.value === "__new") openRaise({ ...row, section }, Number(row.score ?? 0));
+            else void saveChecklist(row.id, { detail: { findingRef: e.target.value } });
+          }}
+        >
+          <option value="">Blank</option>
+          <option value="__new">Raise new</option>
+          {auditFindings.map((finding: any) => (
+            <option key={finding.id} value={finding.findingNo}>{finding.findingNo}</option>
+          ))}
+        </Select>
+      ) : (
+        row.detail?.findingRef || "-"
+      )}
+      {row.score != null && row.score >= 2 && row.detail?.findingRef && (
+        <div className="text-xs text-steel-muted mt-1">Score now met - review and close</div>
+      )}
+    </div>
+  );
 
   return (
     <div className={tab !== "dashboard" && tab !== "kpi-dashboard" ? "page-stack--register flex flex-col flex-1 min-h-0 overflow-hidden gap-2 pb-2" : "page-stack"}>
@@ -452,12 +620,15 @@ export default function AuditKpiPage() {
           title="Audit & KPI"
           subtitle="Fill the site audit pack and the master KPI dashboard for this project. Scores and RAG come from the registers."
         />
-        {(tab === "dashboard" || tab === "kpi-dashboard") && canEdit && (
+        {canEdit && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void loadTemplates()}>
-              Load workbook rows
+              Reload missing template rows
             </Button>
-            {tab === "kpi-dashboard" && (
+            <Button type="button" variant="secondary" disabled={busy} onClick={() => void createAudit()}>
+              New audit
+            </Button>
+            {(tab === "kpi-dashboard" || tab === "subjects") && (
               <Button
                 type="button"
                 variant="secondary"
@@ -466,8 +637,8 @@ export default function AuditKpiPage() {
                   setBusy(true);
                   setMsg("");
                   try {
-                    const r = await api<{ updated: number; subjects: number }>(`/api/audit-kpi/project/${id}/refresh`, { method: "POST", token });
-                    setMsg(`Portal counts copied into ${r.updated} of ${r.subjects} subjects. KRA score was not invented.`);
+                    const r = await api<{ updated: number; subjects: number; manual: number }>(`/api/audit-kpi/project/${id}/refresh`, { method: "POST", token });
+                    setMsg(`Updated ${r.updated} of ${r.subjects} subjects from portal records. ${r.manual} are typed by hand.`);
                     await load();
                   } catch (err) {
                     setMsg(err instanceof Error ? err.message : String(err));
@@ -476,12 +647,36 @@ export default function AuditKpiPage() {
                   }
                 }}
               >
-                Copy portal counts into matching subjects
+                Refresh from portal records
+              </Button>
+            )}
+            {tab === "trend" && (
+              <Button type="button" variant="secondary" disabled={busy} onClick={() => void captureWeek(false)}>
+                Capture this week
               </Button>
             )}
             {msg && <span className="text-xs text-steel-muted">{msg}</span>}
           </div>
         )}
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="block text-sm">
+            <span className="text-xs text-steel-muted">Audit</span>
+            <Select className="mt-1 min-w-[16rem]" value={activeAuditId} onChange={(e) => pickAudit(e.target.value)}>
+              {!audits.length && <option value="">No audit yet</option>}
+              {audits.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {row.auditRef || row.title} · {row.status} · {pct(row.overall)} · {row.verdict}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {data?.audit && (
+            <p className="text-xs text-steel-muted pb-2">
+              {data.audit.auditRef || "Audit"} · {dateInput(data.audit.auditDate || data.audit.plannedDate) || "No date"} · {data.audit.status}
+              {scoresLocked ? " · scores are read-only" : ""}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4 shrink-0">
@@ -544,6 +739,19 @@ export default function AuditKpiPage() {
                   </label>
                 ))}
                 <label className="block text-sm">
+                  <span className="text-xs text-steel-muted">{formatUiText("Status")}</span>
+                  <Select
+                    className="mt-1"
+                    value={auditHeader.status || "Planned"}
+                    disabled={!canEdit}
+                    onChange={(e) => void saveHeader({ status: e.target.value })}
+                  >
+                    {["Planned", "In progress", "Closed"].map((status) => (
+                      <option key={status}>{status}</option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="block text-sm">
                   <span className="text-xs text-steel-muted">{formatUiText("Date")}</span>
                   <Input
                     className="mt-1"
@@ -578,12 +786,56 @@ export default function AuditKpiPage() {
               </tbody>
             </table>
           </RegisterSheetFrame>
+          {score.unlinkedLow > 0 && (
+            <Card className="p-4 mb-6">
+              <button
+                type="button"
+                className="text-sm text-left"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("tab", "site-walk");
+                  next.set("unlinked", "1");
+                  setSearchParams(next, { replace: true });
+                }}
+              >
+                {score.unlinkedLow} scores below 2 have no finding
+              </button>
+            </Card>
+          )}
+          <RegisterSheetFrame title="Audit history" sheetLabel="DASHBOARD" rowCount={audits.length} className="mt-6">
+            <table className="sheet-register__table min-w-[48rem]">
+              <thead>
+                <tr>
+                  {["Date", "Auditor", "Overall score", "Critical findings", "Verdict", "Open findings"].map((h) => (
+                    <th key={h}>{formatUiText(h)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {audits.map((row) => (
+                  <tr key={row.id}>
+                    <td>{dateInput(row.auditDate || row.plannedDate) || "-"}</td>
+                    <td>{row.leadAuditor || "-"}</td>
+                    <td>{pct(row.overall)}</td>
+                    <td>{row.critical}</td>
+                    <td><Badge tone={ragTone(row.verdict)}>{row.verdict}</Badge></td>
+                    <td>{row.openFindings}</td>
+                  </tr>
+                ))}
+                {!audits.length && <RegisterEmptyRow colSpan={6} />}
+              </tbody>
+            </table>
+          </RegisterSheetFrame>
           {findingPie.length > 0 && (
             <Card className="p-4 mt-6 max-w-md">
               <PieChart title="Findings status" items={findingPie} size={180} />
             </Card>
           )}
         </>
+      )}
+
+      {tab === "dashboard" && !score && (
+        <p className="text-sm text-steel-muted">No rows. Click Reload missing template rows.</p>
       )}
 
       {tab === "kpi-dashboard" && kpi && (
@@ -595,7 +847,7 @@ export default function AuditKpiPage() {
               ["Open", kpi.open],
               ["Closed", kpi.closed],
               ["% closed", pct(kpi.pctClosed)],
-              ["Avg KRA score", pct(kpi.avgKra)],
+              ["Avg KRA score", kpi.kraScored ? `${pct(kpi.avgKra)} (${kpi.kraScored} of ${kpi.subjects} scored)` : "Not scored"],
               ["Overdue items", kpi.overdueItems],
               ["Subjects red", kpi.red],
               ["Subjects amber", kpi.amber],
@@ -668,10 +920,10 @@ export default function AuditKpiPage() {
           <Card className="p-4 mt-6">
             <h3 className="font-medium mb-2">{formatUiText("How the figures update")}</h3>
             <p className="text-sm text-steel-muted">
-              Type records, open, closed, overdue, oldest open days, and KRA score on Subject data. Percent closed and RAG calculate from those figures. A subject with no records stays unused. Any overdue item, or an item open more than 30 days, is red. More than 14 days open, or a KRA score under 75%, is amber.
+              Type records, open, closed, overdue, oldest open days, and KRA score on Subject data. Percent closed and RAG calculate from those figures. A subject with no records stays unused. Any overdue item, or an item open more than 30 days, is red. More than 14 days open is amber. A KRA score under 75% is amber only when a score has been entered. A blank KRA is not scored.
             </p>
             <p className="text-sm text-steel-muted mt-2">
-              The Excel refresh that reads all 127 subject workbooks is not run from the portal. Use Copy portal counts only where this project already tracks the same records. That step does not write a KRA score.
+              Subjects marked Portal are counted from this project's records on every refresh. All other subjects are typed on Subject data.
             </p>
           </Card>
         </>
@@ -727,19 +979,28 @@ export default function AuditKpiPage() {
 
       {tab === "findings" && (
         <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
-          <RegisterSheetFrame title="Audit findings register" sheetLabel={currentSheet} rowCount={data?.findings?.length ?? 0} className="flex-1 min-h-0">
+          <div className="shrink-0 mb-2">
+            <Select value={findingAuditFilter} onChange={(e) => setFindingAuditFilter(e.target.value)}>
+              <option value="">All audits</option>
+              {audits.map((row) => (
+                <option key={row.id} value={row.id}>{row.auditRef || row.id}</option>
+              ))}
+            </Select>
+          </div>
+          <RegisterSheetFrame title="Audit findings register" sheetLabel={currentSheet} rowCount={allFindings.length} className="flex-1 min-h-0">
             <table className="sheet-register__table min-w-[72rem]">
               <thead>
                 <tr>
-                  {["#", "Ref", "Source", "Location", "Finding", "Severity", "Status", "Owner", "Target", "Days open", "Overdue", ""].map((h) => (
+                  {["#", "Audit ref", "Ref", "Source", "Location", "Finding", "Severity", "Status", "Owner", "Target", "Days open", "Overdue", ""].map((h) => (
                     <th key={h || "edit"}>{h ? formatUiText(h) : ""}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {(data?.findings || []).map((f: any) => (
+                {allFindings.filter((f) => !findingAuditFilter || f.siteAuditId === findingAuditFilter).map((f: any) => (
                   <tr key={f.id}>
                     <td>{f.srNo}</td>
+                    <td>{f.siteAudit?.auditRef || "-"}</td>
                     <td>{f.findingNo}</td>
                     <td>{f.source}</td>
                     <td className="wrap">{f.folderLocation}</td>
@@ -748,12 +1009,12 @@ export default function AuditKpiPage() {
                     <td>{f.status}</td>
                     <td>{f.owner}</td>
                     <td>{dateInput(f.dueDate)}</td>
-                    <td>{f.daysOpen ?? "—"}</td>
-                    <td>{f.overdue || "—"}</td>
+                    <td>{f.daysOpen ?? "-"}</td>
+                    <td>{f.overdue || "-"}</td>
                     <td>{canEdit && <Button type="button" variant="secondary" onClick={() => openFinding(f)}>Edit</Button>}</td>
                   </tr>
                 ))}
-                {!(data?.findings || []).length && <RegisterEmptyRow colSpan={12} />}
+                {!allFindings.length && <RegisterEmptyRow colSpan={13} />}
               </tbody>
             </table>
           </RegisterSheetFrame>
@@ -772,7 +1033,7 @@ export default function AuditKpiPage() {
                 </tr>
               </thead>
               <tbody>
-                {checklist.map((row) => (
+                {visibleChecklist.map((row) => (
                   <tr key={`${row.id}-${row.updatedAt}`}>
                     <td>{row.itemNo}</td>
                     <td className="wrap">
@@ -781,21 +1042,9 @@ export default function AuditKpiPage() {
                     </td>
                     <td>{cell(row.locationChecked || "", (v) => saveChecklist(row.id, { locationChecked: v }))}</td>
                     <td>{cell(row.observed || "", (v) => saveChecklist(row.id, { observed: v }))}</td>
-                    <td>
-                      {canEdit ? (
-                        <Select value={row.score == null ? "" : String(row.score)} onChange={(e) => void saveChecklist(row.id, { score: e.target.value })}>
-                          <option value="">—</option>
-                          <option value="2">2</option>
-                          <option value="1">1</option>
-                          <option value="0">0</option>
-                          <option value="N/A">N/A</option>
-                        </Select>
-                      ) : (
-                        row.score ?? "—"
-                      )}
-                    </td>
-                    <td>{row.photoRef || "—"}</td>
-                    <td>{cell(row.detail?.findingRef || "", (v) => saveChecklist(row.id, { detail: { findingRef: v } }))}</td>
+                    <td>{scoreControl(row, "SiteWalk")}</td>
+                    <td>{row.photoRef || "-"}</td>
+                    <td>{findingRefControl(row, "SiteWalk")}</td>
                     <td>
                       {row.evidenceUrl && (
                         <a className="text-brand text-xs mr-2" href={row.evidenceUrl} target="_blank" rel="noreferrer">
@@ -820,28 +1069,57 @@ export default function AuditKpiPage() {
       {tab === "folder-sample" && (
         <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden gap-3">
           <Card className="p-4 shrink-0">
-            <h3 className="font-medium mb-2">{formatUiText("Folders and files already on this project")}</h3>
-            <p className="text-xs text-steel-muted mb-3">Accept a folder or file into the sample register. Nothing is scored until you enter 2, 1, 0, or N/A.</p>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="font-medium">{formatUiText("Folders and files on this project")}</h3>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const sug = await api<{ suggestions: any[]; notice?: string | null }>(`/api/audit-kpi/project/${id}/drive-suggestions?refresh=1`, { token });
+                    setSuggestions(sug.suggestions || []);
+                    setDriveNotice(sug.notice || "");
+                  } catch (err) {
+                    setMsg(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Refresh from SharePoint
+              </Button>
+            </div>
+            {driveNotice && <p className="text-sm text-steel-muted mb-2">{driveNotice}</p>}
+            <p className="text-xs text-steel-muted mb-3">Accept a folder or file into the sample register. A sampled folder with no files is flagged. Nothing is scored until you enter 2, 1, 0, or N/A.</p>
             <div className="max-h-48 overflow-auto">
               <table className="sheet-register__table min-w-[40rem]">
                 <thead>
                   <tr>
-                    {["Kind", "Area", "Name", "Files", ""].map((h) => (
+                    {["Kind", "Area", "Name", "Files", "Newest", "Sample", ""].map((h) => (
                       <th key={h || "act"}>{h ? formatUiText(h) : ""}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {suggestions.filter((s) => !s.accepted).slice(0, 40).map((s) => (
+                  {suggestions.filter((s) => s.kind === "folder" || s.emptyInSharePoint || !s.accepted).slice(0, 60).map((s) => (
                     <tr key={`${s.kind}-${s.path}`}>
                       <td>{s.kind}</td>
                       <td className="wrap">{s.area}</td>
-                      <td className="wrap">{s.name}</td>
-                      <td>{s.fileCount ?? "—"}</td>
+                      <td className="wrap">
+                        {s.kind === "file" && s.url ? (
+                          <a className="text-brand" href={s.url} target="_blank" rel="noreferrer">{s.name}</a>
+                        ) : s.name}
+                        {s.emptyInSharePoint ? <div className="text-xs text-steel-muted">Empty in SharePoint</div> : null}
+                      </td>
+                      <td>{s.fileCount ?? "-"}</td>
+                      <td>{s.newestAt ? dateInput(s.newestAt) : "-"}</td>
+                      <td>{s.sampleMatch ? "Sampled" : "-"}</td>
                       <td>{canEdit && <Button type="button" variant="secondary" disabled={busy} onClick={() => void acceptSuggestion(s)}>Accept</Button>}</td>
                     </tr>
                   ))}
-                  {!suggestions.filter((s) => !s.accepted).length && <RegisterEmptyRow colSpan={5} />}
+                  {!suggestions.length && <RegisterEmptyRow colSpan={7} />}
                 </tbody>
               </table>
             </div>
@@ -856,7 +1134,7 @@ export default function AuditKpiPage() {
                 </tr>
               </thead>
               <tbody>
-                {checklist.map((row) => (
+                {visibleChecklist.map((row) => (
                   <tr key={`${row.id}-${row.updatedAt}`}>
                     <td>{row.itemNo}</td>
                     <td>{row.detail?.area || row.detail?.areaName}</td>
@@ -866,20 +1144,8 @@ export default function AuditKpiPage() {
                     <td className="wrap">{row.detail?.sampleToTake}</td>
                     <td>{cell(row.detail?.sampled || "", (v) => saveChecklist(row.id, { detail: { sampled: v } }))}</td>
                     <td>{cell(row.detail?.defects || "", (v) => saveChecklist(row.id, { detail: { defects: v } }))}</td>
-                    <td>
-                      {canEdit ? (
-                        <Select value={row.score == null ? "" : String(row.score)} onChange={(e) => void saveChecklist(row.id, { score: e.target.value })}>
-                          <option value="">—</option>
-                          <option value="2">2</option>
-                          <option value="1">1</option>
-                          <option value="0">0</option>
-                          <option value="N/A">N/A</option>
-                        </Select>
-                      ) : (
-                        row.score ?? "—"
-                      )}
-                    </td>
-                    <td>{cell(row.detail?.findingRef || "", (v) => saveChecklist(row.id, { detail: { findingRef: v } }))}</td>
+                    <td>{scoreControl(row, "FolderSample")}</td>
+                    <td>{findingRefControl(row, "FolderSample")}</td>
                   </tr>
                 ))}
                 {!checklist.length && <RegisterEmptyRow colSpan={10} />}
@@ -985,34 +1251,50 @@ export default function AuditKpiPage() {
 
       {tab === "subjects" && (
         <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="shrink-0 mb-2">
+            <Select value={kraFilter} onChange={(e) => setKraFilter(e.target.value)}>
+              <option value="">All KRA</option>
+              <option value="unscored">KRA not scored</option>
+            </Select>
+          </div>
+          {!subjects.length && <p className="text-sm text-steel-muted mb-2">No rows. Click Reload missing template rows.</p>}
           <RegisterSheetFrame title="KPI subject data" sheetLabel={currentSheet} rowCount={subjects.length} className="flex-1 min-h-0">
-            <table className="sheet-register__table min-w-[72rem]">
+            <table className="sheet-register__table min-w-[80rem]">
               <thead>
                 <tr>
-                  {["#", "ISO area", "Folder", "Subject", "Custodian", "Records", "Open", "Closed", "Overdue", "Oldest open", "KRA %", "% closed", "RAG"].map((h) => (
+                  {["#", "ISO area", "Folder", "Subject", "Custodian", "Source", "Records", "Open", "Closed", "Overdue", "Oldest open", "KRA %", "% closed", "RAG"].map((h) => (
                     <th key={h}>{formatUiText(h)}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {subjects.map((s) => (
+                {subjects.filter((s) => kraFilter !== "unscored" || s.kraScore == null).map((s) => {
+                  const portal = String(s.dataSource || "").startsWith("portal:");
+                  const figure = (value: string, onSave: (v: string) => void) =>
+                    portal || !canEdit ? <span>{value || "0"}</span> : cell(value, onSave, { type: "number" });
+                  return (
                   <tr key={`${s.id}-${s.updatedAt}`}>
                     <td>{s.srNo}</td>
                     <td className="wrap">{s.isoArea}</td>
                     <td className="wrap">{s.folder}</td>
                     <td className="wrap">{s.name}</td>
                     <td>{s.custodian}</td>
-                    <td>{cell(String(s.recordsCount ?? 0), (v) => patchSubject(s.id, { recordsCount: v }), { type: "number" })}</td>
-                    <td>{cell(String(s.openCount ?? 0), (v) => patchSubject(s.id, { openCount: v }), { type: "number" })}</td>
-                    <td>{cell(String(s.closedCount ?? 0), (v) => patchSubject(s.id, { closedCount: v }), { type: "number" })}</td>
-                    <td>{cell(String(s.overdueCount ?? 0), (v) => patchSubject(s.id, { overdueCount: v }), { type: "number" })}</td>
-                    <td>{cell(s.oldestOpenDays == null ? "" : String(s.oldestOpenDays), (v) => patchSubject(s.id, { oldestOpenDays: v }), { type: "number" })}</td>
-                    <td>{cell(kraInput(s.kraScore), (v) => patchSubject(s.id, { kraScore: v }))}</td>
+                    <td>{sourceLabel(s.dataSource)}</td>
+                    <td>{figure(String(s.recordsCount ?? 0), (v) => patchSubject(s.id, { recordsCount: v }))}</td>
+                    <td>{figure(String(s.openCount ?? 0), (v) => patchSubject(s.id, { openCount: v }))}</td>
+                    <td>{figure(String(s.closedCount ?? 0), (v) => patchSubject(s.id, { closedCount: v }))}</td>
+                    <td>{figure(String(s.overdueCount ?? 0), (v) => patchSubject(s.id, { overdueCount: v }))}</td>
+                    <td>{figure(s.oldestOpenDays == null ? "" : String(s.oldestOpenDays), (v) => patchSubject(s.id, { oldestOpenDays: v }))}</td>
+                    <td>
+                      {s.kraScore == null && <div className="text-xs text-steel-muted">Not scored</div>}
+                      {canEdit ? cell(kraInput(s.kraScore), (v) => patchSubject(s.id, { kraScore: v })) : kraInput(s.kraScore) || "Not scored"}
+                    </td>
                     <td>{pct(s.pctClosed)}</td>
                     <td><Badge tone={ragTone(s.rag)}>{s.rag}</Badge></td>
                   </tr>
-                ))}
-                {!subjects.length && <RegisterEmptyRow colSpan={13} />}
+                  );
+                })}
+                {!subjects.length && <RegisterEmptyRow colSpan={14} />}
               </tbody>
             </table>
           </RegisterSheetFrame>
@@ -1049,12 +1331,27 @@ export default function AuditKpiPage() {
       )}
 
       {tab === "trend" && (
-        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden gap-3">
+          <Card className="p-4 shrink-0">
+            <LineChart
+              title="Overdue and percent closed"
+              items={weeks.map((w) => ({
+                label: String(w.weekEnding || "").slice(5),
+                overdue: w.overdueCount || 0,
+                pctClosed: Math.round((Number(w.pctClosed) || 0) * (Number(w.pctClosed) > 1 ? 1 : 100)),
+              }))}
+              series={[
+                { key: "overdue", label: "Overdue", color: "#C0352B" },
+                { key: "pctClosed", label: "% closed", color: "#0F766E" },
+              ]}
+              emptyText="Capture this week to start the trend."
+            />
+          </Card>
           <RegisterSheetFrame title="Weekly trend log" sheetLabel={currentSheet} rowCount={weeks.length} className="flex-1 min-h-0">
             <table className="sheet-register__table min-w-[64rem]">
               <thead>
                 <tr>
-                  {["Week ending", "Records", "Open", "Closed", "% closed", "Overdue", "Subjects red", "KRA score", "Oldest open", "Not yet used", "Movement in overdue", "Comment"].map((h) => (
+                  {["Week ending", "Source", "Records", "Open", "Closed", "% closed", "Overdue", "Subjects red", "KRA score", "Oldest open", "Not yet used", "Movement in overdue", "Comment"].map((h) => (
                     <th key={h}>{formatUiText(h)}</th>
                   ))}
                 </tr>
@@ -1063,20 +1360,21 @@ export default function AuditKpiPage() {
                 {weeks.map((w) => (
                   <tr key={w.id}>
                     <td>{w.weekEnding}</td>
-                    <td>{w.recordsCount ?? "—"}</td>
-                    <td>{w.openCount ?? "—"}</td>
-                    <td>{w.closedCount ?? "—"}</td>
+                    <td>{w.source === "auto" ? "Auto" : "Typed"}</td>
+                    <td>{w.recordsCount ?? "-"}</td>
+                    <td>{w.openCount ?? "-"}</td>
+                    <td>{w.closedCount ?? "-"}</td>
                     <td>{pct(w.pctClosed)}</td>
-                    <td>{w.overdueCount ?? "—"}</td>
-                    <td>{w.subjectsRed ?? "—"}</td>
-                    <td>{pct(w.kraScore)}</td>
-                    <td>{w.oldestOpenDays ?? "—"}</td>
-                    <td>{w.notYetUsed ?? "—"}</td>
-                    <td>{w.movement ?? "—"}</td>
+                    <td>{w.overdueCount ?? "-"}</td>
+                    <td>{w.subjectsRed ?? "-"}</td>
+                    <td>{w.kraScore == null ? "Not scored" : pct(w.kraScore)}</td>
+                    <td>{w.oldestOpenDays ?? "-"}</td>
+                    <td>{w.notYetUsed ?? "-"}</td>
+                    <td>{w.movement ?? "-"}</td>
                     <td className="wrap">{w.comment}</td>
                   </tr>
                 ))}
-                {!weeks.length && <RegisterEmptyRow colSpan={12} />}
+                {!weeks.length && <RegisterEmptyRow colSpan={13} />}
               </tbody>
             </table>
           </RegisterSheetFrame>
@@ -1084,7 +1382,23 @@ export default function AuditKpiPage() {
       )}
 
       {tab === "role-kra" && (
-        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="register-page-fill flex flex-col flex-1 min-h-0 overflow-hidden gap-3">
+          {!kras.length && <p className="text-sm text-steel-muted">No rows. Click Reload missing template rows.</p>}
+          <p className="text-sm text-steel-muted shrink-0">Score each KRA 1 to 5; the role passes at an average of 3.5.</p>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 shrink-0">
+            {roles.map((role) => (
+              <Card key={role.roleKey} className="p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{role.roleKey}</p>
+                  <Badge tone={ragTone(role.result)}>{role.result}</Badge>
+                </div>
+                <p className="text-xs text-steel-muted mt-2">Holder: {role.holder || "-"}</p>
+                <p className="text-xs text-steel-muted">Subjects owned: {role.subjectCount}. Red-rated: {role.redCount}.</p>
+                <p className="text-xs text-steel-muted">Avg KRA (subjects): {role.subjectKraScored ? pct(role.avgKra) : "Not scored"}</p>
+                <p className="text-sm mt-1">KRA average (1-5): {role.kraAverage == null ? "Not scored" : Math.round(role.kraAverage * 10) / 10} ({role.kraScored} of {role.kraLines})</p>
+              </Card>
+            ))}
+          </div>
           <RegisterSheetFrame title="Role KRA matrix" sheetLabel={currentSheet} rowCount={kras.length} className="flex-1 min-h-0">
             <table className="sheet-register__table min-w-[64rem]">
               <thead>
@@ -1102,19 +1416,31 @@ export default function AuditKpiPage() {
                     <td className="wrap">{k.description}</td>
                     <td className="wrap">{k.target || k.consequence}</td>
                     <td>{k.lineKind === "owns" ? cell(k.holder || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ holder: v }) }).then(() => load())) : k.holder}</td>
-                    <td>{k.lineKind === "kra" ? cell(k.selfScore || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ selfScore: v }) }).then(() => load())) : "—"}</td>
-                    <td>{k.lineKind === "kra" ? cell(k.reviewerScore || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ reviewerScore: v }) }).then(() => load())) : "—"}</td>
+                    <td>{k.lineKind === "kra" && canEdit ? (
+                      <Select value={k.selfScore || ""} onChange={(e) => void api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ selfScore: e.target.value }) }).then(() => load())}>
+                        <option value="">Blank</option>
+                        {["1", "2", "3", "4", "5"].map((n) => <option key={n}>{n}</option>)}
+                      </Select>
+                    ) : k.lineKind === "kra" ? (k.selfScore || "-") : "-"}</td>
+                    <td>{k.lineKind === "kra" && canEdit ? (
+                      <Select value={k.reviewerScore || ""} onChange={(e) => void api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ reviewerScore: e.target.value }) }).then(() => load())}>
+                        <option value="">Blank</option>
+                        {["1", "2", "3", "4", "5"].map((n) => <option key={n}>{n}</option>)}
+                      </Select>
+                    ) : k.lineKind === "kra" ? (k.reviewerScore || "-") : "-"}</td>
                     <td>
                       {k.lineKind === "kra"
-                        ? cell(k.actual || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ actual: v }) }).then(() => load()))
+                        ? (k.score || "-")
                         : k.lineKind === "kpi"
                           ? cell(k.actual || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ actual: v }) }).then(() => load()))
-                          : pct(k.avgKra)}
+                          : (k.subjectKraScored ? pct(k.avgKra) : "Not scored")}
                     </td>
                     <td>
-                      {k.lineKind === "kpi"
-                        ? cell(k.periodRag || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ periodRag: v }) }).then(() => load()))
-                        : "—"}
+                      {k.lineKind === "kpi" && k.ragAutomatic
+                        ? <Badge tone={ragTone(k.periodRag)}>{k.periodRag}</Badge>
+                        : k.lineKind === "kpi"
+                          ? cell(k.periodRag || "", (v) => api(`/api/audit-kpi/role-kra/${k.id}`, { token, method: "PATCH", body: JSON.stringify({ periodRag: v }) }).then(() => load()))
+                          : "-"}
                     </td>
                     <td>{k.subjectCount}</td>
                     <td>{k.redCount}</td>
@@ -1127,7 +1453,7 @@ export default function AuditKpiPage() {
         </div>
       )}
 
-      <RegisterEntryModal open={findingModalOpen} title={findingEditId ? "Edit finding" : "Add finding"} onClose={() => setFindingModalOpen(false)} onSave={saveFinding} saving={busy} size="xl">
+      <RegisterEntryModal open={findingModalOpen} title={linkChecklistId ? "Raise finding" : findingEditId ? "Edit finding" : "Add finding"} onClose={() => { setFindingModalOpen(false); setLinkChecklistId(null); }} onSave={saveFinding} saving={busy} size="xl">
         <label className="block">
           <span className="text-xs text-steel-muted">{formatUiText("Finding")}</span>
           <TextArea value={findingForm.description} onChange={(e) => setFindingForm({ ...findingForm, description: e.target.value })} required />

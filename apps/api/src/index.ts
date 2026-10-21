@@ -330,12 +330,16 @@ app.use((err: Error, req: express.Request, res: express.Response, _next: express
 });
 
 async function start() {
+  const { assertAuditKpiTemplates } = await import("./modules/audit-kpi/templatePaths.js");
+  assertAuditKpiTemplates();
   await ensureDbConnected();
   void Promise.all([ensureHrCompanyTree(), ensureCrmLibraryTree()])
     .then(() => console.log("SharePoint global directories ready: SPDC_HRMS, SPDC_CRM"))
     .catch((err) => console.warn("SPDC library folders:", err instanceof Error ? err.message : err));
   const { startSharePointDayClose } = await import("./services/sharePointReconcile.js");
   startSharePointDayClose();
+  const { startAuditKpiSchedule } = await import("./modules/audit-kpi/schedule.js");
+  startAuditKpiSchedule();
   const { startSelfieRotation } = await import("./services/attendanceGeo.js");
   startSelfieRotation();
   void loadMailSwitch();

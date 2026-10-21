@@ -42,6 +42,10 @@ function ensureDir(p: string) {
   fs.mkdirSync(p, { recursive: true });
 }
 
+export function sharePointLive() {
+  return liveSharePoint();
+}
+
 function liveSharePoint() {
   const cfg = graphConfig();
   return cfg.configured && !cfg.mock;
@@ -155,7 +159,7 @@ export class MockOneDriveService {
     });
   }
 
-  async listChildrenLive(projectCode: string, relPath = ""): Promise<DriveNode[]> {
+  async listChildrenLive(projectCode: string, relPath = "", opts?: { liveOnly?: boolean }): Promise<DriveNode[]> {
     if (!liveSharePoint()) return this.listChildren(projectCode, relPath);
     try {
       const listed = await listProjectLibrary(projectCode, relPath);
@@ -174,6 +178,7 @@ export class MockOneDriveService {
         size: i.size,
         modifiedAt: i.lastModifiedDateTime,
       }));
+      if (opts?.liveOnly) return live;
       const local = this.listChildren(projectCode, relPath);
       if (!local.length) return live;
       const byName = new Map<string, DriveNode>(live.map((n) => [n.name, n]));

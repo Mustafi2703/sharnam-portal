@@ -77,16 +77,114 @@ export type SubjectFigures = {
 /**
  * 03_SUBJECT_DATA column P:
  * IF(records=0,"UNUSED", IF(overdue>0,"RED", IF(oldest>30,"RED", IF(OR(oldest>14, kra<0.75),"AMBER","GREEN"))))
- * A blank KRA score compares as 0, matching Excel.
+ * Excel compares a blank KRA as 0, which forces AMBER. The portal leaves KRA blank until
+ * someone scores it (refresh does not write a KRA), so a blank KRA is "not scored" and is skipped.
  */
 export function subjectRag(s: SubjectFigures): "UNUSED" | "RED" | "AMBER" | "GREEN" {
   if (!s.recordsCount) return "UNUSED";
   if (s.overdueCount > 0) return "RED";
   const oldest = s.oldestOpenDays ?? 0;
   if (oldest > 30) return "RED";
-  const kra = asFraction(s.kraScore) ?? 0;
-  if (oldest > 14 || kra < 0.75) return "AMBER";
+  if (oldest > 14) return "AMBER";
+  const kra = asFraction(s.kraScore);
+  if (kra != null && kra < 0.75) return "AMBER";
   return "GREEN";
+}
+
+/** Site walk rows the sheet treats as critical on their own when scored 0. */
+export const CRITICAL_WALK_ITEMS = new Set([2, 6, 11, 12, 17]);
+
+export type RoleKraOutcome = {
+  kraAverage: number | null;
+  kraScored: number;
+  kraLines: number;
+  result: "PASS" | "FAIL" | "INCOMPLETE";
+};
+
+/**
+ * 06_ROLE_KRA footer: score each KRA 1 to 5; the role passes at an average of 3.5.
+ * The reviewer score is the one that counts. Incomplete until every KRA line has one.
+ */
+export function roleKraResult(scores: Array<number | null | undefined>): RoleKraOutcome {
+  const kraLines = scores.length;
+  const set = scores.filter((n): n is number => n != null && Number.isFinite(n));
+  const kraScored = set.length;
+  const kraAverage = kraScored ? set.reduce((a, n) => a + n, 0) / kraScored : null;
+  let result: RoleKraOutcome["result"] = "INCOMPLETE";
+  if (kraLines > 0 && kraScored === kraLines && kraAverage != null) {
+    result = kraAverage >= 3.5 ? "PASS" : "FAIL";
+  }
+  return { kraAverage, kraScored, kraLines, result };
+}
+
+/** Targets on 06_ROLE_KRA that stay typed. Compared case-insensitively. */
+const TYPED_KPI_TARGETS = new Set([
+  "falling",
+  "rising then stable",
+  "within contingency",
+  "weekly",
+  "divergence < 5%",
+]);
+
+function percentPoints(raw: string): number | null {
+  const hasPct = raw.includes("%");
+  const n = Number(raw.replace(/%/g, "").trim());
+  if (!Number.isFinite(n)) return null;
+  if (hasPct || (n > 0 && n <= 1)) return hasPct ? n : n * 100;
+  return n;
+}
+
+/**
+ * RAG for a KPI line from its Target string and Actual this period.
+ * Returns null when the target is qualitative (keep the typed RAG) or actual is blank.
+ * Bands follow the sheet targets in MASTER_KPI_DASHBOARD.xlsx 06_ROLE_KRA:
+ *   ">= 95%" (and ">= 80%", ">= 90%", ">= 100%") -> GREEN at the threshold, AMBER within 10 points, else RED
+ *   "100%" -> GREEN only at 100, AMBER from 90, else RED
+ *   "0" -> GREEN at 0, else RED
+ *   "<= 14" -> GREEN at or under the limit, AMBER up to limit + 7, else RED
+ */
+export function kpiRag(
+  target: string | null | undefined,
+  actual: string | null | undefined
+): "GREEN" | "AMBER" | "RED" | null {
+  const t = (target || "").trim();
+  if (!t || TYPED_KPI_TARGETS.has(t.toLowerCase())) return null;
+  const actualRaw = (actual || "").trim();
+  if (!actualRaw) return null;
+
+  const gte = t.match(/^>=\s*(\d+(?:\.\d+)?)\s*%$/);
+  if (gte) {
+    const n = Number(gte[1]);
+    const a = percentPoints(actualRaw);
+    if (a == null) return null;
+    if (a >= n) return "GREEN";
+    if (a >= n - 10) return "AMBER";
+    return "RED";
+  }
+  const exactPct = t.match(/^(\d+(?:\.\d+)?)\s*%$/);
+  if (exactPct) {
+    const n = Number(exactPct[1]);
+    const a = percentPoints(actualRaw);
+    if (a == null) return null;
+    if (a >= n) return "GREEN";
+    if (n === 100 ? a >= 90 : a >= n - 10) return "AMBER";
+    return "RED";
+  }
+  if (t === "0") {
+    const a = Number(actualRaw.replace(/%/g, "").trim());
+    if (!Number.isFinite(a)) return null;
+    return a === 0 ? "GREEN" : "RED";
+  }
+  const lte = t.match(/^<=\s*(\d+(?:\.\d+)?)$/);
+  if (lte) {
+    const n = Number(lte[1]);
+    const a = Number(actualRaw.replace(/%/g, "").trim());
+    if (!Number.isFinite(a)) return null;
+    if (a <= n) return "GREEN";
+    if (a <= n + 7) return "AMBER";
+    return "RED";
+  }
+  return null;
 }
 
 /** Column M: IFERROR(closed/records, blank). */
