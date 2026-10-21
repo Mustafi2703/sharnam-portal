@@ -168,6 +168,7 @@ model Project {
   auditChecklistItems     AuditChecklistItem[]
   kpiSubjects             KpiSubject[]
   kpiRoleKras             KpiRoleKra[]
+  kpiTrendWeeks           KpiTrendWeek[]
   expenseVouchers         ExpenseVoucher[]
   driveAccessRequests     DriveAccessRequest[]
 }
@@ -2852,6 +2853,14 @@ model SiteAudit {
   status      String    @default("Planned")
   leadAuditor String?
   scopeNotes  String?   @db.Text
+  /// PLAN / walk / interview header fields from SITE_AUDIT_Pack (not scores).
+  documentController   String?
+  projectManager       String?
+  independentOfProject String?
+  areasWalked          String?
+  accompaniedBy        String?
+  interviewee          String?
+  intervieweeRole      String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -2878,7 +2887,9 @@ model AuditFinding {
   status           String    @default("Open")
   rootCause        String?   @db.Text
   correctiveAction String?   @db.Text
+  preventiveAction String?   @db.Text
   owner            String?
+  verifiedBy       String?
   dueDate          DateTime?
   closedAt         DateTime?
   isoArea          String?
@@ -2908,6 +2919,10 @@ model AuditChecklistItem {
   photoRef        String?
   response        String?  @db.Text
   notes           String?  @db.Text
+  /// Workbook columns that are not the score (folder, sample, answer, done). Scores stay in `score`.
+  detailJson      String?  @db.Text
+  evidenceUrl     String?  @db.Text
+  evidenceName    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -2961,6 +2976,13 @@ model KpiRoleKra {
   evidenceHint String?
   kpiCode      String?
   target       String?
+  /// kra | kpi | owns — 06_ROLE_KRA line kind
+  lineKind     String?
+  holder       String?
+  selfScore    String?
+  reviewerScore String?
+  actual       String?
+  periodRag    String?
   subjectCount Int?
   redCount     Int      @default(0)
   amberCount   Int      @default(0)
@@ -2969,6 +2991,33 @@ model KpiRoleKra {
   updatedAt    DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/**
+ * Friday snapshot pasted from the KPI dashboard (04_TREND).
+ * Movement in overdue is calculated: this week's overdue minus the previous row.
+ */
+model KpiTrendWeek {
+  id              String   @id @default(cuid())
+  projectId       String
+  weekEnding      String
+  recordsCount    Int?
+  openCount       Int?
+  closedCount     Int?
+  pctClosed       Float?
+  overdueCount    Int?
+  subjectsRed     Int?
+  kraScore        Float?
+  oldestOpenDays  Int?
+  notYetUsed      Int?
+  comment         String?  @db.Text
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, weekEnding])
 }
 
 /**

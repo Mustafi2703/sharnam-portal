@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import type { PrismaClient } from "@prisma/client";
+import { mergeDetail, type DetailMap } from "./scoring.js";
 
 const AUDIT_PACK = path.join(process.cwd(), "docs/SITE_AUDIT_Pack.xlsx");
 const KPI_PACK = path.join(process.cwd(), "docs/MASTER_KPI_DASHBOARD.xlsx");
@@ -11,29 +12,167 @@ function cell(v: unknown): string {
   return String(v).trim();
 }
 
+function dateCell(v: unknown): Date | null {
+  const s = cell(v);
+  if (!s || s.startsWith("=")) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function num(v: unknown): number | null {
   if (v === "" || v == null) return null;
+  if (typeof v === "string" && v.startsWith("=")) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
-function parseChecklistSection(rows: unknown[][], promptCol = 1): { itemNo: number; prompt: string }[] {
-  const out: { itemNo: number; prompt: string }[] = [];
-  for (const row of rows) {
-    const first = row[0];
-    const n = num(first);
-    if (n == null || n <= 0) continue;
-    const prompt = cell(row[promptCol]);
-    if (!prompt) continue;
-    out.push({ itemNo: Math.trunc(n), prompt });
-  }
-  return out;
+function rowsOf(wb: XLSX.WorkBook, sheet: string): unknown[][] {
+  const ws = wb.Sheets[sheet];
+  if (!ws) return [];
+  return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
 }
 
 export type AuditKpiImportOpts = {
   auditBuffer?: Buffer;
   kpiBuffer?: Buffer;
 };
+
+type ChecklistDraft = {
+  section: string;
+  itemNo: number;
+  prompt: string;
+  detail: DetailMap;
+};
+
+function walkRows(rows: unknown[][]): ChecklistDraft[] {
+  const out: ChecklistDraft[] = [];
+  let walkSection = "";
+  for (const row of rows) {
+    const n = num(row[0]);
+    if (n == null || n <= 0) {
+      const header = cell(row[0]);
+      if (header && !header.startsWith("SITE WALK") && !header.startsWith("Physical") && !header.startsWith("Project:")) {
+        walkSection = header;
+      }
+      continue;
+    }
+    const prompt = cell(row[1]);
+    if (!prompt) continue;
+    out.push({
+      section: "SiteWalk",
+      itemNo: Math.trunc(n),
+      prompt,
+      detail: walkSection ? { walkSection } : {},
+    });
+  }
+  return out;
+}
+
+function interviewRows(rows: unknown[][]): ChecklistDraft[] {
+  const out: ChecklistDraft[] = [];
+  let questionGroup = "";
+  for (const row of rows) {
+    const n = num(row[0]);
+    if (n == null || n <= 0) {
+      const header = cell(row[0]);
+      if (
+        header &&
+        !header.startsWith("DOCUMENT") &&
+        !header.startsWith("Ask these") &&
+        !header.startsWith("Interviewee") &&
+        header !== "#"
+      ) {
+        questionGroup = header;
+      }
+      continue;
+    }
+    const prompt = cell(row[1]);
+    if (!prompt) continue;
+    out.push({
+      section: "DcInterview",
+      itemNo: Math.trunc(n),
+      prompt,
+      detail: questionGroup ? { questionGroup } : {},
+    });
+  }
+  return out;
+}
+
+function folderRows(rows: unknown[][]): ChecklistDraft[] {
+  const out: ChecklistDraft[] = [];
+  let areaName = "";
+  for (const row of rows) {
+    const n = num(row[0]);
+    if (n == null || n <= 0) {
+      const header = cell(row[0]);
+      if (/^\d{2}_/.test(header)) areaName = header;
+      continue;
+    }
+    const subject = cell(row[4]);
+    const folder = cell(row[2]);
+    if (!subject && !folder) continue;
+    out.push({
+      section: "FolderSample",
+      itemNo: Math.trunc(n),
+      prompt: subject || folder,
+      detail: {
+        areaName,
+        area: cell(row[1]),
+        folder,
+        custodian: cell(row[3]),
+        subject,
+        sampleToTake: cell(row[5]),
+        mustBeTrue: cell(row[6]),
+      },
+    });
+  }
+  return out;
+}
+
+function planRows(rows: unknown[][]): ChecklistDraft[] {
+  const out: ChecklistDraft[] = [];
+  let block: "PlanDesk" | "PlanDay" | "PlanAfter" | "" = "";
+  const counters = { PlanDesk: 0, PlanDay: 0, PlanAfter: 0 };
+  for (const row of rows) {
+    const a = cell(row[0]);
+    const b = cell(row[1]);
+    if (a.startsWith("BEFORE YOU GO")) {
+      block = "PlanDesk";
+      continue;
+    }
+    if (a.startsWith("THE DAY")) {
+      block = "PlanDay";
+      continue;
+    }
+    if (a.startsWith("AFTER THE AUDIT")) {
+      block = "PlanAfter";
+      continue;
+    }
+    if (a.startsWith("WHAT TO TAKE") || a.startsWith("RULES")) {
+      block = "";
+      continue;
+    }
+    if (!block) continue;
+    if (a === "When" || a === "Time" || a === "•" || !b) continue;
+    counters[block] += 1;
+    if (block === "PlanDay") {
+      out.push({
+        section: block,
+        itemNo: counters[block],
+        prompt: b,
+        detail: { when: a, testing: cell(row[2]), sheetRef: cell(row[3]) },
+      });
+    } else {
+      out.push({
+        section: block,
+        itemNo: counters[block],
+        prompt: b,
+        detail: { when: a, why: cell(row[2]) },
+      });
+    }
+  }
+  return out;
+}
 
 export async function seedAuditKpiFromSheets(
   prisma: PrismaClient,
@@ -66,45 +205,55 @@ export async function seedAuditKpiFromSheets(
       plannedDate: new Date(),
       scopeNotes: "Imported from SITE_AUDIT_Pack.xlsx",
     },
-    update: { scopeNotes: "Imported from SITE_AUDIT_Pack.xlsx", updatedAt: new Date() },
+    update: {},
   });
 
   if (auditBuf) {
     const awb = XLSX.read(auditBuf, { type: "buffer" });
-    for (const [sheet, section] of [
-      ["SITE_WALK", "SiteWalk"],
-      ["DC_INTERVIEW", "DcInterview"],
-      ["FOLDER_SAMPLE", "FolderSample"],
-    ] as const) {
-      const ws = awb.Sheets[sheet];
-      if (!ws) continue;
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as unknown[][];
-      for (const it of parseChecklistSection(rows)) {
-        await prisma.auditChecklistItem.upsert({
-          where: { projectId_section_itemNo: { projectId, section, itemNo: it.itemNo } },
-          create: {
+    const drafts = [
+      ...walkRows(rowsOf(awb, "SITE_WALK")),
+      ...interviewRows(rowsOf(awb, "DC_INTERVIEW")),
+      ...folderRows(rowsOf(awb, "FOLDER_SAMPLE")),
+      ...planRows(rowsOf(awb, "PLAN")),
+    ];
+    for (const it of drafts) {
+      const where = { projectId_section_itemNo: { projectId, section: it.section, itemNo: it.itemNo } };
+      const existing = await prisma.auditChecklistItem.findUnique({ where });
+      if (!existing) {
+        await prisma.auditChecklistItem.create({
+          data: {
             projectId,
             siteAuditId: audit.id,
-            section,
+            section: it.section,
             itemNo: it.itemNo,
             prompt: it.prompt,
+            detailJson: JSON.stringify(it.detail),
           },
-          update: { prompt: it.prompt },
         });
-        checklistCount++;
+      } else {
+        await prisma.auditChecklistItem.update({
+          where,
+          data: {
+            prompt: it.prompt,
+            detailJson: mergeDetail(existing.detailJson, it.detail),
+          },
+        });
       }
+      checklistCount++;
     }
 
-    const findingsWs = awb.Sheets.FINDINGS;
-    if (findingsWs) {
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(findingsWs, { header: 1, defval: "" }) as unknown[][];
-      for (const row of rows) {
-        const sr = num(row[0]);
-        const findingNo = cell(row[1]);
-        if (sr == null || !findingNo) continue;
-        await prisma.auditFinding.upsert({
-          where: { projectId_findingNo: { projectId, findingNo } },
-          create: {
+    const findingRows = rowsOf(awb, "FINDINGS");
+    for (const row of findingRows) {
+      const sr = num(row[0]);
+      const findingNo = cell(row[1]);
+      if (sr == null || !findingNo || findingNo.startsWith("=")) continue;
+      const description = cell(row[5]) || findingNo;
+      const existing = await prisma.auditFinding.findUnique({
+        where: { projectId_findingNo: { projectId, findingNo } },
+      });
+      if (!existing) {
+        await prisma.auditFinding.create({
+          data: {
             projectId,
             siteAuditId: audit.id,
             srNo: Math.trunc(sr),
@@ -112,132 +261,172 @@ export async function seedAuditKpiFromSheets(
             source: cell(row[2]) || null,
             refNo: cell(row[3]) || null,
             folderLocation: cell(row[4]) || null,
-            description: cell(row[5]) || findingNo,
+            description,
             photoRef: cell(row[6]) || null,
             severity: cell(row[7]) || "Minor",
-            status: "Open",
-          },
-          update: {
-            description: cell(row[5]) || findingNo,
-            severity: cell(row[7]) || "Minor",
+            rootCause: cell(row[8]) || null,
+            correctiveAction: cell(row[9]) || null,
+            preventiveAction: cell(row[10]) || null,
+            owner: cell(row[11]) || null,
+            dueDate: dateCell(row[12]),
+            closedAt: dateCell(row[13]),
+            verifiedBy: cell(row[16]) || null,
+            status: cell(row[17]) || "Open",
           },
         });
-        findingCount++;
       }
+      findingCount++;
     }
   }
 
   if (kpiBuf) {
     const kwb = XLSX.read(kpiBuf, { type: "buffer" });
-    const subjectWs = kwb.Sheets["03_SUBJECT_DATA"];
-    if (subjectWs) {
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(subjectWs, { header: 1, defval: "" }) as unknown[][];
-      for (const row of rows) {
-        const sr = num(row[0]);
-        const isoArea = cell(row[1]);
-        const name = cell(row[4]);
-        if (sr == null || !isoArea || !name) continue;
-        await prisma.kpiSubject.upsert({
-          where: { projectId_srNo: { projectId, srNo: Math.trunc(sr) } },
-          create: {
+    for (const row of rowsOf(kwb, "03_SUBJECT_DATA")) {
+      const sr = num(row[0]);
+      const isoArea = cell(row[1]);
+      const name = cell(row[4]);
+      if (sr == null || !isoArea || !name || isoArea.startsWith("=")) continue;
+      const srNo = Math.trunc(sr);
+      const where = { projectId_srNo: { projectId, srNo } };
+      const existing = await prisma.kpiSubject.findUnique({ where });
+      const template = {
+        isoArea,
+        folder: cell(row[2]) || isoArea,
+        isoClause: cell(row[3]) || null,
+        name,
+        custodian: cell(row[5]) || "HO",
+        relativePath: cell(row[6]) || null,
+        workbookFileName: cell(row[7]) || null,
+      };
+      const counted = {
+        recordsCount: num(row[8]),
+        openCount: num(row[9]),
+        closedCount: num(row[10]),
+        overdueCount: num(row[11]),
+        oldestOpenDays: num(row[13]),
+        kraScore: num(row[14]),
+      };
+      if (!existing) {
+        await prisma.kpiSubject.create({
+          data: {
             projectId,
-            srNo: Math.trunc(sr),
-            isoArea,
-            folder: cell(row[2]) || isoArea,
-            isoClause: cell(row[3]) || null,
-            name,
-            custodian: cell(row[5]) || "HO",
-            relativePath: cell(row[6]) || null,
-            workbookFileName: cell(row[7]) || null,
-            recordsCount: num(row[8]) ?? 0,
-            openCount: num(row[9]) ?? 0,
-            closedCount: num(row[10]) ?? 0,
-            overdueCount: num(row[11]) ?? 0,
-            pctClosed: (() => {
-              const raw = num(row[12]);
-              if (raw == null) return null;
-              return raw > 1 ? raw / 100 : raw;
-            })(),
-            oldestOpenDays: num(row[13]),
-            kraScore: num(row[14]),
-            rag: cell(row[15]) || "UNUSED",
-            lastRefreshedAt: new Date(),
-          },
-          update: {
-            name,
-            openCount: num(row[9]) ?? 0,
-            closedCount: num(row[10]) ?? 0,
-            overdueCount: num(row[11]) ?? 0,
-            pctClosed: (() => {
-              const raw = num(row[12]);
-              if (raw == null) return null;
-              return raw > 1 ? raw / 100 : raw;
-            })(),
-            rag: cell(row[15]) || "UNUSED",
-            lastRefreshedAt: new Date(),
+            srNo,
+            ...template,
+            recordsCount: counted.recordsCount ?? 0,
+            openCount: counted.openCount ?? 0,
+            closedCount: counted.closedCount ?? 0,
+            overdueCount: counted.overdueCount ?? 0,
+            oldestOpenDays: counted.oldestOpenDays,
+            kraScore: counted.kraScore,
+            rag: "UNUSED",
           },
         });
-        subjectCount++;
+      } else {
+        const figures: Record<string, number | null> = {};
+        for (const [key, value] of Object.entries(counted)) {
+          if (value != null) figures[key] = value;
+        }
+        await prisma.kpiSubject.update({
+          where,
+          data: { ...template, ...figures },
+        });
       }
+      subjectCount++;
     }
 
-    await prisma.kpiRoleKra.deleteMany({ where: { projectId } });
-    const kraWs = kwb.Sheets["06_ROLE_KRA"];
-    if (kraWs) {
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(kraWs, { header: 1, defval: "" }) as unknown[][];
-      let roleKey = "";
-      for (const row of rows) {
-        const col0 = cell(row[0]);
-        if (
-          col0 &&
-          !col0.startsWith("Owns") &&
-          col0.length > 2 &&
-          !col0.includes("ROLE KRA") &&
-          !col0.includes("Project:") &&
-          col0 !== "Holder:"
-        ) {
-          roleKey = col0.replace(/\s+$/, "");
-        }
-        if (col0.startsWith("Owns") && roleKey) {
-          await prisma.kpiRoleKra.create({
-            data: {
-              projectId,
-              roleKey,
-              kraNo: "KRA1",
-              description: col0,
-              subjectCount: num(row[4]) ?? 127,
-              redCount: num(row[5]) ?? 0,
-              amberCount: num(row[6]) ?? 0,
-              greenCount: num(row[7]) ?? 0,
-            },
+    let roleKey = "";
+    let holder = "";
+    for (const row of rowsOf(kwb, "06_ROLE_KRA")) {
+      const col0 = cell(row[0]);
+      const col1 = cell(row[1]);
+      if (!col0 || col0.startsWith("ROLE KRA") || col0.startsWith("Key result") || col0.startsWith("Project:")) continue;
+      if (col0 === "#" || col0 === "Owns") {
+        if (col0 === "Owns" && roleKey) {
+          await upsertKra(prisma, projectId, {
+            roleKey,
+            kraNo: "OWNS",
+            lineKind: "owns",
+            description: col1,
+            holder,
           });
           kraCount++;
         }
+        continue;
       }
-    }
-
-    if (kraCount === 0) {
-      await prisma.kpiRoleKra.createMany({
-        data: [
-          {
-            projectId,
-            roleKey: "Project Manager",
-            kraNo: "KRA1",
-            description: "Owns all ISO areas — closure ≥ 90%",
-            subjectCount: 127,
-          },
-          {
-            projectId,
-            roleKey: "Document Controller",
-            kraNo: "KRA1",
-            description: "Drawing register + folder sampling",
-            subjectCount: 24,
-          },
-        ],
-      });
-      kraCount = 2;
+      if (/^KRA\d+/i.test(col0)) {
+        await upsertKra(prisma, projectId, {
+          roleKey,
+          kraNo: col0,
+          lineKind: "kra",
+          description: col1,
+          consequence: cell(row[2]),
+          evidenceHint: cell(row[3]),
+          holder,
+        });
+        kraCount++;
+        continue;
+      }
+      if (/^K\d+$/i.test(col0)) {
+        await upsertKra(prisma, projectId, {
+          roleKey,
+          kraNo: col0,
+          lineKind: "kpi",
+          description: col1,
+          target: cell(row[2]),
+          holder,
+        });
+        kraCount++;
+        continue;
+      }
+      if (col1) continue;
+      roleKey = col0;
+      holder = "";
     }
   }
 
   return { findings: findingCount, checklist: checklistCount, subjects: subjectCount, kras: kraCount };
+}
+
+async function upsertKra(
+  prisma: PrismaClient,
+  projectId: string,
+  row: {
+    roleKey: string;
+    kraNo: string;
+    lineKind: string;
+    description?: string;
+    consequence?: string;
+    evidenceHint?: string;
+    target?: string;
+    holder?: string;
+  }
+) {
+  if (!row.roleKey) return;
+  const existing = await prisma.kpiRoleKra.findFirst({
+    where: { projectId, roleKey: row.roleKey, kraNo: row.kraNo },
+  });
+  const data = {
+    description: row.description || null,
+    consequence: row.consequence || null,
+    evidenceHint: row.evidenceHint || null,
+    target: row.target || null,
+    lineKind: row.lineKind,
+    holder: row.holder || null,
+  };
+  if (!existing) {
+    await prisma.kpiRoleKra.create({
+      data: { projectId, roleKey: row.roleKey, kraNo: row.kraNo, ...data },
+    });
+  } else {
+    await prisma.kpiRoleKra.update({
+      where: { id: existing.id },
+      data: {
+        description: data.description,
+        consequence: data.consequence ?? existing.consequence,
+        evidenceHint: data.evidenceHint || existing.evidenceHint,
+        target: data.target || existing.target,
+        lineKind: data.lineKind,
+      },
+    });
+  }
 }
