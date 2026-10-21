@@ -81,6 +81,21 @@ function locate(url: string, projectCode: string): { local: string | null; sp: s
   return { local, sp, code, rel };
 }
 
+/** Portal copy of an uploaded markup, else the SharePoint file. */
+export async function readStoredUpload(url: string, projectCode: string, sharePointPath?: string | null): Promise<Buffer | null> {
+  const loc = locate(url, projectCode);
+  if (loc.local && fs.existsSync(loc.local) && fs.statSync(loc.local).isFile()) return fs.readFileSync(loc.local);
+  const paths = [sharePointPath, loc.sp].filter((p): p is string => Boolean(p));
+  for (const sp of paths) {
+    try {
+      return await downloadDriveFile(sp);
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
 export async function readRevisionPdf(rev: RevLike, projectCode: string): Promise<{ buffer: Buffer; name: string } | null> {
   const url = revisionPdfUrl(rev);
   if (!url) return null;

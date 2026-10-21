@@ -13,6 +13,7 @@ import {
 } from "../../lib/drawingPreview";
 import { Badge, Button, Card, Input, PageHeader, Select, TextArea } from "../../components/ui";
 import { StatusNote } from "../../components/StatusNote";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
 
@@ -43,6 +44,9 @@ export function CoordinationPage() {
   const [filter, setFilter] = useState("All");
   const [msg, setMsg] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
+  const [logBusy, setLogBusy] = useState(false);
+  const [markupDraft, setMarkupDraft] = useState<File | null>(null);
+  const [markupModal, setMarkupModal] = useState(false);
   const docRef = useRef<HTMLInputElement>(null);
   // New issues start on the project's first discipline once its pick-list has loaded.
   useEffect(() => {
@@ -108,6 +112,16 @@ export function CoordinationPage() {
     linkedDrawing && linkedRevision ? revisionPreviewFromRecord(linkedDrawing, linkedRevision) : null;
 
   const drawingsWithFiles = useMemo(() => drawings.filter((d) => drawingHasPreviewFile(d)), [drawings]);
+  const gfcOptions = useMemo(
+    () =>
+      drawings.map((d) => ({
+        value: d.id as string,
+        label: `${d.drawingNumber} · ${d.currentRev || "—"} — ${d.title}`,
+        sublabel: [d.discipline, drawingHasPreviewFile(d) ? "PDF on file" : "No PDF yet"].filter(Boolean).join(" · "),
+        keywords: `${d.drawingNumber || ""} ${d.title || ""} ${d.discipline || ""}`,
+      })),
+    [drawings],
+  );
 
   const [linkDrawingId, setLinkDrawingId] = useState("");
   useEffect(() => {
@@ -327,8 +341,10 @@ export function CoordinationPage() {
             </Link>{" "}
             ({drawingsWithFiles.length} of {drawings.length} drawings have a PDF/DWG).
           </li>
-          <li>Select the issue, the drawing type, then the drawing, and assign a vendor, consultant, or SPDC person from the communication matrix.</li>
-          <li>Logging the issue emails the assignee and the matrix To and Cc.</li>
+          <li>Pick the sheet from the GFC register. That link is what the issue is raised against.</li>
+          <li>Upload a marked-up drawing if you already have one. It is filed in that issue’s folder, separate from the GFC sheet.</li>
+          <li>After the issue is logged, use Mark up filed PDF to mark that uploaded PDF, or Mark up GFC PDF when the register sheet has a PDF.</li>
+          <li>Assign a vendor, consultant, or SPDC person from the communication matrix. Logging the issue emails them.</li>
           <li>Use <strong>Send follow-up</strong> on the logged issue. It goes to the assignee.</li>
           <li>
             <strong>Close</strong> when resolved. Use <strong>Escalate to RFI</strong> at any time — or after the fifth follow-up with no action.
@@ -343,29 +359,56 @@ export function CoordinationPage() {
             className="grid sm:grid-cols-2 gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (logBusy) return;
+              if (!form.linkedDrawingId) {
+                setMsg("Pick the drawing from the GFC register.");
+                return;
+              }
               if (!form.assignedToEmail) {
                 setMsg("Select an assignee from the communication matrix.");
                 return;
               }
-              const created = await api<any>(`/api/directory/project/${id}/coordination`, {
-                method: "POST",
-                token,
-                body: JSON.stringify(form),
-              });
-              setForm({
-                title: "",
-                description: "",
-                discipline: "MEP",
-                location: "",
-                priority: "Medium",
-                assignedToName: "",
-                assignedToEmail: "",
-                dueDate: "",
-                linkedDrawingId: "",
-                ballInCourt: "Assignee",
-              });
-              await load();
-              if (created?.id) setSelectedId(created.id);
+              setLogBusy(true);
+              setMsg("");
+              try {
+                const created = await api<any>(`/api/directory/project/${id}/coordination`, {
+                  method: "POST",
+                  token,
+                  body: JSON.stringify(form),
+                });
+                if (markupDraft && created?.id) {
+                  const fd = new FormData();
+                  fd.append("file", markupDraft);
+                  fd.append("targetType", "coordination");
+                  fd.append("targetId", created.id);
+                  fd.append("drawingId", form.linkedDrawingId);
+                  await api(`/api/drawings/project/${id}/markups/upload`, { method: "POST", token, body: fd, timeoutMs: 180_000 });
+                }
+                setMarkupDraft(null);
+                setForm({
+                  title: "",
+                  description: "",
+                  discipline: form.discipline,
+                  location: "",
+                  priority: "Medium",
+                  assignedToName: "",
+                  assignedToEmail: "",
+                  dueDate: "",
+                  linkedDrawingId: focusDrawingId || "",
+                  ballInCourt: "Assignee",
+                });
+                await load();
+                if (created?.id) setSelectedId(created.id);
+                setMsg(
+                  markupDraft
+                    ? "Issue logged. The marked-up drawing is in the issue folder. Open the issue and use Mark up filed PDF to mark that PDF."
+                    : "Issue logged and linked to the GFC drawing.",
+                );
+              } catch (err) {
+                setMsg(err instanceof Error ? err.message : "Could not log the issue");
+              } finally {
+                setLogBusy(false);
+              }
             }}
           >
             <label className="block sm:col-span-2">
@@ -374,18 +417,52 @@ export function CoordinationPage() {
             </label>
             <label className="block">
               <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Drawing type</span>
-            <Select value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value, linkedDrawingId: "" })}>
-              {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </Select>
+              <Select
+                value={form.discipline}
+                onChange={(e) => setForm({ ...form, discipline: e.target.value })}
+              >
+                {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </Select>
             </label>
-            <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-              {withCurrent(picklists.lists.coordinationPriorities, form.priority).map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </Select>
-            <Input placeholder="Location / grid" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            <label className="block">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Priority</span>
+              <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+                {withCurrent(picklists.lists.coordinationPriorities, form.priority).map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </Select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Location / grid</span>
+              <Input placeholder="Grid or area" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">GFC drawing</span>
+              <SearchableSelect
+                required
+                options={gfcOptions}
+                value={form.linkedDrawingId}
+                placeholder="Search the GFC register"
+                searchPlaceholder="Drawing number or title"
+                onChange={(value) => {
+                  const sheet = drawings.find((d) => d.id === value);
+                  setForm({
+                    ...form,
+                    linkedDrawingId: value,
+                    discipline: sheet?.discipline || form.discipline,
+                  });
+                }}
+              />
+              {!drawings.length ? (
+                <p className="text-xs text-amber-800 mt-1">
+                  The GFC register is empty. Add sheets on the GFC register first.
+                </p>
+              ) : (
+                <p className="text-xs text-steel-muted mt-1">Every sheet on the GFC register. The issue stays linked to the one you pick.</p>
+              )}
+            </label>
             <label className="block sm:col-span-2">
               <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
                 Assign from communication matrix
@@ -422,58 +499,68 @@ export function CoordinationPage() {
                 <p className="text-xs text-amber-800 mt-1">Upload the communication matrix so vendors, consultants, and SPDC staff can be selected.</p>
               )}
             </label>
-            <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-            <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
-                Drawing
-              </span>
-              <Select value={form.linkedDrawingId} onChange={(e) => setForm({ ...form, linkedDrawingId: e.target.value })}>
-                <option value="">— Select a {form.discipline || "GFC"} drawing —</option>
-                {(() => {
-                  const want = form.discipline.toLowerCase();
-                  const matched = drawings.filter((d) => {
-                    const disc = String(d.discipline || "").toLowerCase();
-                    if (!want) return true;
-                    if (disc === want) return true;
-                    if (want.startsWith("arch") && disc.startsWith("arch")) return true;
-                    return disc.includes(want) || want.includes(disc);
-                  });
-                  const options = matched.length ? matched : drawings;
-                  if (!options.length) return null;
-                  return (
-                    <optgroup label={matched.length ? `${form.discipline} drawings` : "All GFC sheets"}>
-                      {options.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
-                          {drawingHasPreviewFile(d) ? "" : " (no PDF yet)"}
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })()}
+            <label className="block">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Due date</span>
+              <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Ball in court</span>
+              <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
+                {["Assignee", "Creator", "Consultant", "Contractor", "PMC"].map((b) => (
+                  <option key={b}>{b}</option>
+                ))}
               </Select>
             </label>
-            <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
-              {["Assignee", "Creator", "Consultant", "Contractor", "PMC"].map((b) => (
-                <option key={b}>{b}</option>
-              ))}
-            </Select>
-            <TextArea
-              className="sm:col-span-2"
-              rows={2}
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">Description</span>
+              <TextArea
+                rows={2}
+                placeholder="What is clashing, and what should change"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </label>
+            <div className="sm:col-span-2 rounded-lg border border-line p-3 space-y-2">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">Marked-up drawing</div>
+              <p className="text-xs text-steel-muted">
+                Separate from the GFC sheet. A PDF, image, or DWG already marked up is filed in this issue’s folder when you log it. You can then mark that PDF from the issue.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="secondary" className="!text-xs" onClick={() => setMarkupModal(true)}>
+                  {markupDraft ? "Change marked-up file" : "Upload marked-up drawing"}
+                </Button>
+                {markupDraft ? <span className="text-xs text-ink">{markupDraft.name}</span> : null}
+                {markupDraft ? (
+                  <button type="button" className="text-xs text-steel-muted underline" onClick={() => setMarkupDraft(null)}>
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            </div>
             <div className="sm:col-span-2 space-y-2">
               <p className="text-xs text-steel-muted">
                 Logging sends email to the assignee and copies the communication-matrix To and Cc.
               </p>
-              <Button type="submit" className="!bg-sky-600 !font-medium">
-                Log issue
+              <Button type="submit" disabled={logBusy} className="!bg-sky-600 !font-medium">
+                {logBusy ? "Logging…" : "Log issue"}
               </Button>
             </div>
           </form>
+          <UploadModal
+            open={markupModal}
+            title="Upload marked-up drawing"
+            context="Filed in the issue folder under Design Coordination when you log the issue. This does not replace the GFC sheet."
+            file={markupDraft}
+            onFile={setMarkupDraft}
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,application/pdf,image/*"
+            fields={[]}
+            primaryLabel="Attach to this issue"
+            onClose={() => setMarkupModal(false)}
+            onSubmit={(e) => {
+              e.preventDefault();
+              setMarkupModal(false);
+            }}
+          />
         </Card>
       )}
 
@@ -678,16 +765,15 @@ export function CoordinationPage() {
                 <div className="mt-4 pt-4 border-t border-line grid sm:grid-cols-[1fr_auto] gap-2 items-end">
                   <label className="block">
                     <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">
-                      Link / change GFC drawing
+                      Linked GFC drawing
                     </span>
-                    <Select value={linkDrawingId} onChange={(e) => setLinkDrawingId(e.target.value)}>
-                      <option value="">No linked drawing</option>
-                      {drawingsWithFiles.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.drawingNumber} · {d.currentRev || "—"} — {d.title}
-                        </option>
-                      ))}
-                    </Select>
+                    <SearchableSelect
+                      options={gfcOptions}
+                      value={linkDrawingId}
+                      placeholder="Search the GFC register"
+                      searchPlaceholder="Drawing number or title"
+                      onChange={setLinkDrawingId}
+                    />
                   </label>
                   <Button
                     type="button"

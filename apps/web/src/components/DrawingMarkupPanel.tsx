@@ -48,6 +48,7 @@ export function DrawingMarkupPanel({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
+  const [editorSource, setEditorSource] = useState<"gfc" | "filed">("gfc");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
 
@@ -67,17 +68,15 @@ export function DrawingMarkupPanel({
     void load();
   }, [load]);
 
-  async function startMarkup() {
-    if (!state?.revision) return;
+  async function openEditor(url: string, name: string, source: "gfc" | "filed") {
     setBusy("open");
     setMsg("Opening the drawing PDF…");
     try {
-      const res = await fetch(`${apiBase()}/api/drawings/revision/${state.revision.id}/pdf`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `Could not open the PDF (${res.status})`);
       const blob = await res.blob();
-      setPdf(new File([blob], `${state.drawing?.drawingNumber || "drawing"}.pdf`, { type: "application/pdf" }));
+      setPdf(new File([blob], name, { type: "application/pdf" }));
+      setEditorSource(source);
       setNote("");
       setOpen(true);
       setMsg("");
@@ -86,6 +85,19 @@ export function DrawingMarkupPanel({
     } finally {
       setBusy("");
     }
+  }
+
+  function startGfcMarkup() {
+    if (!state?.revision) return;
+    void openEditor(
+      `${apiBase()}/api/drawings/revision/${state.revision.id}/pdf`,
+      `${state.drawing?.drawingNumber || "drawing"}.pdf`,
+      "gfc",
+    );
+  }
+
+  function startFiledMarkup(markupId: string, fileName: string) {
+    void openEditor(`${apiBase()}/api/drawings/project/${projectId}/markups/${markupId}/file`, fileName, "filed");
   }
 
   async function openInSharePoint() {
@@ -117,7 +129,7 @@ export function DrawingMarkupPanel({
       fd.append("targetType", targetType);
       fd.append("targetId", targetId);
       if (state?.drawing) fd.append("drawingId", state.drawing.id);
-      if (state?.revision) fd.append("revisionId", state.revision.id);
+      if (editorSource === "gfc" && state?.revision) fd.append("revisionId", state.revision.id);
       fd.append("note", note);
       const out = await api<{ sharePointError?: string | null }>(`/api/drawings/project/${projectId}/markups`, {
         method: "POST",
@@ -180,6 +192,7 @@ export function DrawingMarkupPanel({
   }
 
   if (!state) return <div className="text-xs text-steel-muted">Loading drawing markup…</div>;
+  const filedPdf = state.markups.find((m) => /\.pdf$/i.test(m.fileName || ""));
 
   return (
     <div className="rounded-xl border border-line bg-white p-3 space-y-2">
@@ -192,21 +205,24 @@ export function DrawingMarkupPanel({
         ) : null}
         <div className="ml-auto flex flex-wrap gap-2">
           {canMarkup ? (
-            <Button type="button" variant="secondary" className="!text-xs" disabled={Boolean(busy)} onClick={() => { setMsg(""); setUploadOpen(true); }}>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={Boolean(busy)} onClick={() => { setMsg(""); setUploadError(""); setUploadOpen(true); }}>
               Upload marked-up drawing
             </Button>
           ) : null}
+          {canMarkup && filedPdf ? (
+            <Button type="button" className="!text-xs" disabled={Boolean(busy)} onClick={() => startFiledMarkup(filedPdf.id, filedPdf.fileName)}>
+              {busy === "open" ? "Opening…" : "Mark up filed PDF"}
+            </Button>
+          ) : null}
+          {state.revision && canMarkup ? (
+            <Button type="button" variant="secondary" className="!text-xs" disabled={Boolean(busy)} onClick={() => startGfcMarkup()}>
+              {busy === "open" ? "Opening…" : "Mark up GFC PDF"}
+            </Button>
+          ) : null}
           {state.revision ? (
-            <>
-              {canMarkup ? (
-                <Button type="button" className="!text-xs" disabled={Boolean(busy)} onClick={() => void startMarkup()}>
-                  {busy === "open" ? "Opening…" : "Mark up drawing"}
-                </Button>
-              ) : null}
-              <Button type="button" variant="secondary" className="!text-xs" disabled={Boolean(busy)} onClick={() => void openInSharePoint()}>
-                {busy === "sp" ? "Opening…" : "Open drawing in SharePoint"}
-              </Button>
-            </>
+            <Button type="button" variant="secondary" className="!text-xs" disabled={Boolean(busy)} onClick={() => void openInSharePoint()}>
+              {busy === "sp" ? "Opening…" : "Open drawing in SharePoint"}
+            </Button>
           ) : null}
         </div>
       </div>
@@ -282,7 +298,7 @@ export function DrawingMarkupPanel({
               <div className="bg-paper rounded-xl shadow-xl w-full max-w-[1700px] flex flex-col overflow-hidden">
                 <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-line bg-white">
                   <div className="font-semibold text-sm">
-                    Mark up {state.drawing?.drawingNumber} · {state.revision?.revisionNumber}
+                    Mark up {editorSource === "filed" ? filedPdf?.fileName || "filed PDF" : `${state.drawing?.drawingNumber || "drawing"} · ${state.revision?.revisionNumber || ""}`}
                   </div>
                   <span className="text-xs text-steel-muted">Box, Cloud, Arrow, Circle, Line, Pen and Text — your drawing is kept as you move between pages.</span>
                 </div>
