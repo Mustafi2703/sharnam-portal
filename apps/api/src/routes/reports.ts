@@ -3601,9 +3601,11 @@ async function letterFromMasters(
   });
 }
 
-function letterIssueResponse(kind: string, data: Record<string, unknown>, employeeName: string, effectiveDate: unknown) {
+function letterIssueResponse(kind: string, data: Record<string, unknown>, employeeName: string, effectiveDate: unknown, issueDate?: unknown) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const issues = hrLetterIssues(kind, { ...data, employeeName, effectiveDate, designation: data.designation }, today);
+  const raw = String(issueDate || "").slice(0, 10);
+  const letterDate = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : today;
+  const issues = hrLetterIssues(kind, { ...data, employeeName, effectiveDate, designation: data.designation }, letterDate);
   return issues.length ? issues.join(" ") : "";
 }
 
@@ -3621,7 +3623,7 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
   }
-  const blocked = letterIssueResponse(kindRaw, mastered.data, employeeName, req.body.effectiveDate);
+  const blocked = letterIssueResponse(kindRaw, mastered.data, employeeName, req.body.effectiveDate, req.body.issueDate);
   if (blocked) return res.status(400).json({ error: blocked });
   const { previewHrmsLetterDraft } = await import("../services/hrmsLetter.js");
   try {
@@ -3633,6 +3635,7 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
       designation: mastered.designation,
       department: mastered.department,
       effectiveDate: req.body.effectiveDate || null,
+      issueDate: req.body.issueDate || null,
       data: mastered.data,
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -3656,7 +3659,7 @@ hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedReques
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
   }
-  const blocked = letterIssueResponse(kindRaw, mastered.data, employeeName, req.body.effectiveDate);
+  const blocked = letterIssueResponse(kindRaw, mastered.data, employeeName, req.body.effectiveDate, req.body.issueDate);
   if (blocked) return res.status(400).json({ error: blocked });
   const { buildHrmsLetterDraftDocx } = await import("../services/hrmsLetter.js");
   try {
@@ -3668,6 +3671,7 @@ hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedReques
       designation: mastered.designation,
       department: mastered.department,
       effectiveDate: req.body.effectiveDate || null,
+      issueDate: req.body.issueDate || null,
       data: mastered.data,
     });
     const safeName = `${kindRaw}-${employeeName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40)}.docx`;
@@ -3721,6 +3725,9 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
   if (req.body.effectiveDate && Number.isNaN(new Date(req.body.effectiveDate).getTime())) {
     return res.status(400).json({ error: "Effective date is not a valid date" });
   }
+  if (req.body.issueDate && Number.isNaN(new Date(req.body.issueDate).getTime())) {
+    return res.status(400).json({ error: "Letter date is not a valid date" });
+  }
 
   const refNo = String(req.body.refNo || hrmsDocRefNo(kind));
   let mastered: Awaited<ReturnType<typeof letterFromMasters>>;
@@ -3729,7 +3736,7 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
   }
-  const blocked = letterIssueResponse(kind, mastered.data, employeeName, req.body.effectiveDate);
+  const blocked = letterIssueResponse(kind, mastered.data, employeeName, req.body.effectiveDate, req.body.issueDate);
   if (blocked) return res.status(400).json({ error: blocked });
   const dataJson = JSON.stringify(mastered.data);
 
@@ -3743,6 +3750,7 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
       designation: mastered.designation,
       department: mastered.department,
       effectiveDate: req.body.effectiveDate ? new Date(req.body.effectiveDate) : null,
+      ...(req.body.issueDate ? { issueDate: new Date(req.body.issueDate) } : {}),
       dataJson,
       status: "Draft",
       createdById: req.user!.id,
@@ -3774,6 +3782,7 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
   const row = await prisma.hrmsDocument.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
 
+  let missingDocuments: string[] = [];
   if (row.kind === "Offer") {
     const filed = new Set<string>();
     if (row.employeeUserId) {
@@ -3791,11 +3800,12 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
       });
       for (const doc of candidate?.documents || []) filed.add(doc.category);
     }
-    const missing = OFFER_REQUIRED_DOCUMENTS.filter((name) => !filed.has(name));
-    if (missing.length) {
+    missingDocuments = OFFER_REQUIRED_DOCUMENTS.filter((name) => !filed.has(name));
+    // Existing staff are already on the books. File the letter and let HR upload scans on the same screen.
+    if (missingDocuments.length && !row.employeeUserId) {
       return res.status(400).json({
-        error: `Upload these documents before the offer letter: ${missing.join(", ")}.`,
-        missing,
+        error: `Upload these documents before the offer letter: ${missingDocuments.join(", ")}.`,
+        missing: missingDocuments,
       });
     }
   }
@@ -3856,7 +3866,7 @@ hrmRouter.post("/hrms-documents/:id/generate", hrmDesk, async (req: AuthedReques
   }
   await syncStaffRecordFromLetter(updated);
   await audit("hrm.docs.generate", { userId: req.user!.id, entity: "HrmsDocument", entityId: row.id, meta: { kind: row.kind, refNo: row.refNo } });
-  res.json(updated);
+  res.json({ ...updated, missingDocuments });
 });
 
 async function syncStaffRecordFromLetter(row: {
@@ -3999,6 +4009,11 @@ hrmRouter.patch("/hrms-documents/:id", hrmDesk, async (req: AuthedRequest, res) 
     const effective = req.body.effectiveDate ? new Date(req.body.effectiveDate) : null;
     if (effective && Number.isNaN(effective.getTime())) return res.status(400).json({ error: "Effective date is not a valid date" });
     data.effectiveDate = effective;
+  }
+  if (req.body.issueDate !== undefined && req.body.issueDate) {
+    const issued = new Date(req.body.issueDate);
+    if (Number.isNaN(issued.getTime())) return res.status(400).json({ error: "Letter date is not a valid date" });
+    data.issueDate = issued;
   }
   if (req.body.designation != null || (req.body.data && typeof req.body.data === "object")) {
     try {

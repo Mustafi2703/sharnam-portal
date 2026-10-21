@@ -129,6 +129,8 @@ export type LetterFormState = {
   mobile: string;
   projectName: string;
   signatoryName: string;
+  /** Date printed in the letter header. Existing staff use their original date, not today. */
+  issueDate: string;
   issueInBrief: string;
   impact: string;
   correctiveAction: string;
@@ -160,6 +162,7 @@ export function emptyLetterForm(kind: DocKind = "Appointment"): LetterFormState 
     mobile: "",
     projectName: "",
     signatoryName: "Nirav Parekh",
+    issueDate: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
     issueInBrief: "",
     impact: "",
     correctiveAction: "",
@@ -234,6 +237,8 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
   const project = emp.memberships?.[0]?.project?.name || form.projectName;
   const joined = emp.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : "";
   const leaving = isLeavingLetter(form.kind);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const printed = joined && joined < today ? joined : form.issueDate || today;
   return {
     ...form,
     employeeUserId: emp.id,
@@ -252,6 +257,7 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
     address: emp.profile?.addressCurrent || emp.profile?.addressPermanent || form.address,
     mobile: emp.phone || emp.profile?.personalPhone || form.mobile,
     projectName: project,
+    issueDate: form.kind === "Confirmation" ? form.issueDate || today : printed,
     sheet: {
       ...(leaving && joined && !form.sheet.joinDate ? { ...form.sheet, joinDate: joined } : form.sheet),
       officialEmail: form.sheet.officialEmail || emp.email || "",
@@ -425,8 +431,30 @@ export function createBodyFromForm(form: LetterFormState) {
     department: form.department,
     candidateEmail: form.candidateEmail,
     effectiveDate: form.effectiveDate || null,
+    issueDate: form.issueDate || null,
     data: letterDataPayload(form),
   };
+}
+
+/** Fills offer and appointment dates from the joining date so an existing employee can be filed in one pass. */
+export function prepareExistingStaffPack(form: LetterFormState): LetterFormState {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const joining = form.effectiveDate;
+  const printed = form.issueDate || (joining && joining < today ? joining : today);
+  const stamp = joining && joining <= printed ? joining : printed;
+  const sheet = { ...form.sheet };
+  if (!sheet.offerDate && stamp) sheet.offerDate = stamp;
+  if (!sheet.applicationDate && stamp) sheet.applicationDate = stamp;
+  if (!sheet.interviewDates && stamp) sheet.interviewDates = stamp;
+  if (!sheet.acceptanceDate && stamp) sheet.acceptanceDate = stamp;
+  if (!sheet.appointmentDate && stamp) sheet.appointmentDate = stamp;
+  if (!sheet.probationEndDate && joining) {
+    const end = new Date(`${joining}T12:00:00+05:30`);
+    end.setMonth(end.getMonth() + 6);
+    const endKey = end.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    if (endKey <= today) sheet.probationEndDate = endKey;
+  }
+  return { ...form, issueDate: printed, sheet };
 }
 
 /** Reload register row fields into the composer (edit before preview / regenerate). */
@@ -450,6 +478,7 @@ export function hydrateLetterFormFromDoc(row: DocRow, form: LetterFormState): Le
     designation: row.designation || form.designation,
     department: row.department || form.department,
     effectiveDate: row.effectiveDate ? String(row.effectiveDate).slice(0, 10) : form.effectiveDate,
+    issueDate: row.issueDate ? String(row.issueDate).slice(0, 10) : form.issueDate,
     ctcAnnual: str("fixedCtcAnnual", str("ctcAnnual", form.ctcAnnual)),
     previousCtc: str("previousCtc", form.previousCtc),
     previousDesignation: str("previousDesignation", str("newDesignation", form.previousDesignation)),
@@ -573,7 +602,7 @@ export function missingLetterFields(form: LetterFormState): string[] {
 }
 
 export function letterContentProblems(form: LetterFormState): string[] {
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const letterDate = form.issueDate || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   return hrLetterIssues(
     form.kind,
     {
@@ -583,7 +612,7 @@ export function letterContentProblems(form: LetterFormState): string[] {
       effectiveDate: form.effectiveDate,
       signatoryName: form.signatoryName,
     },
-    today,
+    letterDate,
   );
 }
 

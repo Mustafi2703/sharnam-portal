@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../../api";
 import { useAuth } from "../../auth";
+import { OFFER_REQUIRED_DOCUMENTS } from "@sharnam/shared";
 import { Badge, Button, Card, Input, Select, TextArea } from "../../components/ui";
 import { canManageHrms } from "../../lib/portalAccounts";
 import { rolesForDepartment, useHrmOrg } from "../../lib/hrmOrg";
@@ -12,6 +13,7 @@ import LetterTableEditor from "./LetterTableEditor";
 import {
   KIND_OPTIONS,
   LETTER_STAGES,
+  type LetterFormState,
   type LetterStage,
   ONBOARDING_LETTER_PACK,
   type DocKind,
@@ -28,6 +30,7 @@ import {
   emptyLetterForm,
   isLeavingLetter,
   letterContentProblems,
+  prepareExistingStaffPack,
   subjectKeyFromForm,
   applyPriorLetters,
   hydrateLetterFormFromDoc,
@@ -83,6 +86,8 @@ export default function HrmsDocumentsPage() {
   }, [org.loaded, org.designations, form.designation, form.department]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [registerScope, setRegisterScope] = useState<"all" | "person">("all");
+  const [kycFiled, setKycFiled] = useState<Set<string>>(new Set());
+  const [kycBusy, setKycBusy] = useState("");
   const formPanelRef = useRef<HTMLDivElement | null>(null);
 
   const subjectKey = subjectKeyFromForm(form);
@@ -106,6 +111,24 @@ export default function HrmsDocumentsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!form.employeeUserId) {
+      setKycFiled(new Set());
+      return;
+    }
+    let cancelled = false;
+    api<{ category: string }[]>(`/api/hrm/employee-files?userId=${encodeURIComponent(form.employeeUserId)}`, { token })
+      .then((list) => {
+        if (!cancelled) setKycFiled(new Set(list.map((row) => row.category)));
+      })
+      .catch(() => {
+        if (!cancelled) setKycFiled(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.employeeUserId, token]);
 
   useEffect(() => {
     const offerId = searchParams.get("offerId");
@@ -188,10 +211,11 @@ export default function HrmsDocumentsPage() {
     return res.blob();
   }
 
-  async function upsertLetterRow(kind: DocKind, rowSource?: DocRow[]): Promise<string> {
+  async function upsertLetterRow(kind: DocKind, rowSource?: DocRow[], snapshot?: LetterFormState): Promise<string> {
+    const source = snapshot ?? form;
     const pool = rowSource ?? rows;
-    const payload = createBodyFromForm({ ...form, kind });
-    if (editingId) {
+    const payload = createBodyFromForm({ ...source, kind });
+    if (editingId && !snapshot) {
       await api(`/api/hrm/hrms-documents/${editingId}`, {
         method: "PATCH",
         token,
@@ -202,13 +226,14 @@ export default function HrmsDocumentsPage() {
           designation: payload.designation,
           department: payload.department,
           effectiveDate: payload.effectiveDate,
+          issueDate: payload.issueDate,
           data: payload.data,
         }),
       });
       return editingId;
     }
     const existing = pool
-      .filter((r) => docMatchesSubject(r, form))
+      .filter((r) => docMatchesSubject(r, source))
       .find((r) => r.kind === kind && r.status !== "Cancelled");
     if (existing) {
       await api(`/api/hrm/hrms-documents/${existing.id}`, {
@@ -220,6 +245,7 @@ export default function HrmsDocumentsPage() {
           designation: payload.designation,
           department: payload.department,
           effectiveDate: payload.effectiveDate,
+          issueDate: payload.issueDate,
           data: payload.data,
         }),
       });
@@ -273,7 +299,7 @@ export default function HrmsDocumentsPage() {
     setGenerateBusy(true);
     try {
       const id = await upsertLetterRow(kind);
-      const updated = await api<DocRow>(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
+      const updated = await api<DocRow & { missingDocuments?: string[] }>(`/api/hrm/hrms-documents/${id}/generate`, { method: "POST", token });
       let sp = letterSharePointLink(updated);
       if (!sp) {
         try {
@@ -284,12 +310,85 @@ export default function HrmsDocumentsPage() {
       }
       setFiledSharePoint(sp || "");
       const label = letterKindLabel(kind);
-      setMsg(sp ? `${label} is filed on SharePoint. Open it from the full screen preview or the register.` : `${label} was generated. The SharePoint link is not ready yet — use Open in SharePoint on the register.`);
+      const scans = updated.missingDocuments?.length ? ` Still to upload: ${updated.missingDocuments.join(", ")}.` : "";
+      setMsg(sp ? `${label} is filed on SharePoint. Open it from the full screen preview or the register.${scans}` : `${label} was generated. The SharePoint link is not ready yet — use Open in SharePoint on the register.${scans}`);
       setEditingId(null);
       await load();
       await openPreview(id, `${label} · ${form.employeeName}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Generate failed");
+    } finally {
+      setGenerateBusy(false);
+    }
+  }
+
+  async function uploadKyc(category: string, file: File) {
+    if (!form.employeeUserId) return;
+    setKycBusy(category);
+    try {
+      const fd = new FormData();
+      fd.append("userId", form.employeeUserId);
+      fd.append("category", category);
+      fd.append("files", file);
+      await api("/api/hrm/employee-files", { method: "POST", token, body: fd });
+      setKycFiled((prev) => new Set([...prev, category]));
+      setMsg(`${category} is on the employee file.`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setKycBusy("");
+    }
+  }
+
+  async function fileOnboardingSet() {
+    if (!form.employeeUserId) {
+      setMsg("Pick the existing employee, then file the joining letters.");
+      return;
+    }
+    const prepared = prepareExistingStaffPack(form);
+    setForm(prepared);
+    setGenerateBusy(true);
+    setMsg("");
+    const notes: string[] = [];
+    let pool = [...rows];
+    let appointmentRef = prepared.sheet.appointmentRefNo || "";
+    try {
+      for (const kind of ONBOARDING_LETTER_PACK) {
+        let probe: LetterFormState = { ...prepared, kind };
+        if (kind === "NdaJoining" && appointmentRef) {
+          probe = {
+            ...probe,
+            sheet: {
+              ...probe.sheet,
+              appointmentRefNo: probe.sheet.appointmentRefNo || appointmentRef,
+              appointmentDate: probe.sheet.appointmentDate || probe.effectiveDate,
+            },
+          };
+        }
+        if (kind === "Confirmation" && probe.sheet.probationEndDate) {
+          probe = { ...probe, issueDate: probe.sheet.probationEndDate };
+        }
+        const missing = missingLetterFields(probe);
+        const problems = letterContentProblems(probe);
+        if (missing.length || problems.length) {
+          notes.push(`${letterKindLabel(kind)} still needs ${[...missing, ...problems].join("; ")}.`);
+          continue;
+        }
+        const id = await upsertLetterRow(kind, pool, probe);
+        const updated = await api<DocRow & { missingDocuments?: string[] }>(`/api/hrm/hrms-documents/${id}/generate`, {
+          method: "POST",
+          token,
+        });
+        if (!pool.some((row) => row.id === id)) pool = [...pool, { ...updated, id, kind }];
+        if (kind === "Appointment" && updated.refNo) appointmentRef = updated.refNo;
+        const scans = updated.missingDocuments?.length ? ` Upload still open: ${updated.missingDocuments.join(", ")}.` : "";
+        notes.push(`${letterKindLabel(kind)} is filed.${scans}`);
+      }
+      setMsg(notes.join(" "));
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setMsg([err instanceof Error ? err.message : "Generate failed", ...notes].filter(Boolean).join(" "));
     } finally {
       setGenerateBusy(false);
     }
@@ -468,7 +567,7 @@ export default function HrmsDocumentsPage() {
           <div className="px-4 py-3 border-b border-line bg-sand/40">
             <div className="font-semibold text-sm">Letter composer</div>
             <p className="text-[11px] text-steel-muted mt-0.5">
-              One employee · all template variables · Generate & file to SharePoint.
+              Pick the person, set the original dates, upload scans if you have them, then file one letter or the joining set.
             </p>
             {editingId ? (
               <p className="text-xs text-brand mt-2">
@@ -491,6 +590,32 @@ export default function HrmsDocumentsPage() {
                 ))}
               </Select>
             </label>
+
+            {form.employeeUserId ? (
+              <div className="rounded border border-line p-3 space-y-2">
+                <p className="text-xs text-steel-muted">
+                  Upload PAN, Aadhaar, and the other scans here. Existing staff can file letters before every scan is in.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {OFFER_REQUIRED_DOCUMENTS.map((name) => (
+                    <label key={name} className="text-[11px] px-2 py-1 rounded border border-line cursor-pointer">
+                      {kycBusy === name ? "Uploading…" : kycFiled.has(name) ? "On file · " : "Upload · "}
+                      {name}
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={kycBusy !== ""}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadKyc(name, file);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {!subjectKey && !editingId ? (
               <p className="text-sm text-steel-muted">Select a person to fill letter variables and generate documents.</p>
@@ -578,6 +703,17 @@ export default function HrmsDocumentsPage() {
                       >
                         {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>
+                      {form.employeeUserId ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!py-1 !text-xs"
+                          disabled={generateBusy || previewBusy}
+                          onClick={() => void fileOnboardingSet()}
+                        >
+                          File joining letters
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -678,7 +814,7 @@ export default function HrmsDocumentsPage() {
                       </label>
                       <label className="space-y-1">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">
-                          {isLeavingLetter(form.kind) ? "Last working date" : form.kind === "Confirmation" ? "Letter date" : form.kind === "Promotion" || form.kind === "Warning" ? "Effective date" : "Joining date"}
+                          {isLeavingLetter(form.kind) ? "Last working date" : form.kind === "Promotion" || form.kind === "Warning" ? "Effective date" : "Joining date"}
                         </span>
                         <Input
                           type="date"
@@ -690,6 +826,10 @@ export default function HrmsDocumentsPage() {
                             } else setForm({ ...form, effectiveDate: value });
                           }}
                         />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Date printed on the letter</span>
+                        <Input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} />
                       </label>
                       <label className="space-y-1 sm:col-span-3">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">Address (as per records)</span>

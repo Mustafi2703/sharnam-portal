@@ -741,9 +741,11 @@ function draftRowFromInput(input: {
   designation?: string | null;
   department?: string | null;
   effectiveDate?: Date | string | null;
+  issueDate?: Date | string | null;
   data?: Record<string, unknown>;
 }): HrmsDocument {
   const dataJson = JSON.stringify(input.data && typeof input.data === "object" ? input.data : {});
+  const issued = input.issueDate ? new Date(input.issueDate) : new Date();
   return {
     id: "preview",
     kind: input.kind,
@@ -754,7 +756,7 @@ function draftRowFromInput(input: {
     designation: input.designation || null,
     department: input.department || null,
     effectiveDate: input.effectiveDate ? new Date(input.effectiveDate) : null,
-    issueDate: new Date(),
+    issueDate: Number.isNaN(issued.getTime()) ? new Date() : issued,
     dataJson,
     status: "Draft",
     createdAt: new Date(),
@@ -805,6 +807,7 @@ export async function buildHrmsLetterDraftDocx(input: {
   designation?: string | null;
   department?: string | null;
   effectiveDate?: Date | string | null;
+  issueDate?: Date | string | null;
   data?: Record<string, unknown>;
 }): Promise<Buffer> {
   const row = draftRowFromInput(input);
@@ -820,6 +823,7 @@ export async function previewHrmsLetterDraft(input: {
   designation?: string | null;
   department?: string | null;
   effectiveDate?: Date | string | null;
+  issueDate?: Date | string | null;
   data?: Record<string, unknown>;
 }): Promise<string> {
   const row = draftRowFromInput(input);
