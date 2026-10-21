@@ -1,6 +1,6 @@
 /** Shared HR letter desk — one person picker, pack generate, preview payload. */
 
-import { HR_LETTER_TABLES, SPDC_OFFICE_ADDRESS, parseHrLetterTable, type HrLetterTable } from "@sharnam/shared";
+import { HR_LETTER_TABLES, SPDC_OFFICE_ADDRESS, hrLetterIssues, parseHrLetterTable, type HrLetterTable } from "@sharnam/shared";
 
 export const DEFAULT_LOCATION = SPDC_OFFICE_ADDRESS;
 
@@ -86,7 +86,7 @@ export const LETTER_STAGES: { key: LetterStage; label: string; hint: string; acc
 /** Ordered by when HR issues them — the letter list is grouped by stage. */
 export const KIND_OPTIONS: { key: DocKind; label: string; hint: string; stage: LetterStage }[] = [
   { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date", stage: "Pre-joining" },
-  { key: "Appointment", label: "Appointment letter", hint: "17-clause SPDC letter of appointment + Annexures I–III", stage: "Joining" },
+  { key: "Appointment", label: "Appointment letter", hint: "SPDC letter of appointment and Schedules I–VII", stage: "Joining" },
   { key: "NdaJoining", label: "NDA at joining", hint: "Confidentiality undertaking signed on appointment", stage: "Joining" },
   { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services", stage: "During employment" },
   { key: "Promotion", label: "Letter of promotion", hint: "SPDC branded promotion with revised CTC", stage: "During employment" },
@@ -128,6 +128,7 @@ export type LetterFormState = {
   address: string;
   mobile: string;
   projectName: string;
+  signatoryName: string;
   issueInBrief: string;
   impact: string;
   correctiveAction: string;
@@ -158,6 +159,7 @@ export function emptyLetterForm(kind: DocKind = "Appointment"): LetterFormState 
     address: "",
     mobile: "",
     projectName: "",
+    signatoryName: "Nirav Parekh",
     issueInBrief: "",
     impact: "",
     correctiveAction: "",
@@ -242,16 +244,29 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
     department: emp.profile?.department || form.department,
     ctcAnnual: emp.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.ctcAnnual,
     previousCtc: emp.profile?.ctcAnnual ? String(emp.profile.ctcAnnual) : form.previousCtc,
-    effectiveDate: !leaving && joined ? joined : form.effectiveDate,
-    sheet: leaving && joined && !form.sheet.joinDate ? { ...form.sheet, joinDate: joined } : form.sheet,
+    effectiveDate: !leaving && form.kind !== "Confirmation" && joined ? joined : form.effectiveDate,
     reportingManager: mgr,
     empCode: emp.profile?.empCode || form.empCode,
     pan: emp.profile?.panNumber || form.pan,
-    gender: emp.profile?.gender || form.gender,
+    gender: normalGender(emp.profile?.gender || form.gender),
     address: emp.profile?.addressCurrent || emp.profile?.addressPermanent || form.address,
     mobile: emp.phone || emp.profile?.personalPhone || form.mobile,
     projectName: project,
+    sheet: {
+      ...(leaving && joined && !form.sheet.joinDate ? { ...form.sheet, joinDate: joined } : form.sheet),
+      officialEmail: form.sheet.officialEmail || emp.email || "",
+      clientProject: form.sheet.clientProject || project,
+      personalEmail: form.sheet.personalEmail || emp.profile?.personalEmail || emp.email || "",
+      joinDate: form.sheet.joinDate || joined,
+    },
   };
+}
+
+function normalGender(value: string): string {
+  const g = value.trim().toLowerCase();
+  if (g.startsWith("f")) return "Female";
+  if (g.startsWith("m")) return "Male";
+  return value;
 }
 
 /** Exit-stage letters: the effective date is the leaving date, so joining is its own field. */
@@ -286,6 +301,9 @@ export function letterDataPayload(form: LetterFormState) {
     mobile: form.mobile,
     projectName: form.projectName,
     project: form.projectName,
+    clientProject: form.sheet.clientProject || form.projectName,
+    signatoryName: form.signatoryName,
+    separationBasis: form.sheet.separationBasis || "",
     issueInBrief: form.issueInBrief || form.reason,
     impact: form.impact,
     correctiveAction: form.correctiveAction,
@@ -333,7 +351,8 @@ function seedTableRows(form: LetterFormState, spec: HrLetterTable): string[][] {
       return rows;
     }
     case "projectRows": {
-      const rows = [[s.project1 || form.projectName, form.location, s.period || ""]];
+      const site = /samanvay|corporate office/i.test(form.location) ? s.projectLocation || "" : s.projectLocation || form.location;
+      const rows = [[s.project1 || form.projectName, site, s.period || ""]];
       if (s.project2) rows.push([s.project2, "", ""]);
       return rows;
     }
@@ -541,7 +560,7 @@ export function missingLetterFields(form: LetterFormState): string[] {
     missing.push("Fixed CTC");
   }
   for (const field of LETTER_VARIABLES[form.kind] || []) {
-    if (field.default) continue;
+    if (field.default || field.optional) continue;
     const value = (form.sheet[field.key] || "").trim();
     if (!value) missing.push(field.label);
   }
@@ -551,6 +570,21 @@ export function missingLetterFields(form: LetterFormState): string[] {
     if (!form.correctiveAction.trim()) missing.push("Corrective action required");
   }
   return missing;
+}
+
+export function letterContentProblems(form: LetterFormState): string[] {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return hrLetterIssues(
+    form.kind,
+    {
+      ...letterDataPayload(form),
+      employeeName: form.employeeName,
+      designation: form.designation,
+      effectiveDate: form.effectiveDate,
+      signatoryName: form.signatoryName,
+    },
+    today,
+  );
 }
 
 export function letterFormUsesWarningExtras(kind: DocKind): boolean {
@@ -570,9 +604,11 @@ export type LetterVar = {
   key: string;
   label: string;
   hint?: string;
-  type?: "text" | "date" | "textarea" | "role";
+  type?: "text" | "date" | "textarea" | "role" | "select";
+  options?: string[];
   wide?: boolean;
   default?: string;
+  optional?: boolean;
 };
 
 const TERMS: LetterVar[] = [
@@ -590,7 +626,7 @@ const TERMS: LetterVar[] = [
 export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
   Offer: [
     { key: "applicationDate", label: "Application date", type: "date" },
-    { key: "interviewDates", label: "Interview dates" },
+    { key: "interviewDates", label: "Interview date", type: "date" },
     ...TERMS,
     { key: "reportingTime", label: "Reporting time", default: "9:30 AM" },
     { key: "reportingAddress", label: "Reporting address", wide: true },
@@ -605,7 +641,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "lateMarks", label: "Late marks allowed", default: "3" },
     { key: "payDay", label: "Pay day", default: "7th" },
     { key: "retirementAge", label: "Retirement age", default: "58" },
-    { key: "noOfCheques", label: "Number of security cheques" },
+    { key: "noOfCheques", label: "Number of security cheques", hint: "0 if none are taken" },
     { key: "kraNote", label: "Role KRAs", default: "KRAs as per SPDC role master for this designation", type: "textarea", wide: true },
   ],
   Confirmation: [
@@ -623,7 +659,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "submissionDate", label: "Submission date", type: "date" },
     { key: "reason", label: "Reason for return", default: "your separation", wide: true },
     { key: "otherItem", label: "Other item" },
-    { key: "officialEmail", label: "Official email" },
+    { key: "officialEmail", label: "Official email", optional: true },
     { key: "forwardTo", label: "Forward to", default: "HR & Admin" },
     { key: "recoveryAmount", label: "Recovery amount", default: "Nil" },
     { key: "inspectionDays", label: "Inspection days", default: "7" },
@@ -635,14 +671,14 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "exitLetterRef", label: "Exit letter reference" },
     { key: "noticeServed", label: "Notice served" },
     { key: "noticeRequired", label: "Notice required", default: "60" },
-    { key: "waiverRef", label: "Waiver reference" },
+    { key: "waiverRef", label: "Waiver reference", optional: true, hint: "Required only when days were waived" },
     { key: "successorName", label: "Successor name" },
     { key: "assetLetterRef", label: "Asset letter reference" },
     { key: "fnfStatus", label: "Full and final status", default: "Pending clearance", wide: true },
   ],
   Exit: [
-    { key: "resignationDate", label: "Resignation date", type: "date" },
-    { key: "lastWorkingDate", label: "Last working date", type: "date" },
+    { key: "separationBasis", label: "Separation basis", type: "select", options: ["Resignation", "Termination", "Termination during probation", "Fixed-term completion", "Abandonment", "Retirement"] },
+    { key: "resignationDate", label: "Resignation date", type: "date", optional: true },
     { key: "noticeRequired", label: "Notice required", default: "60" },
     { key: "noticeServed", label: "Notice served" },
     { key: "shortfall", label: "Notice shortfall", default: "Nil" },
@@ -654,7 +690,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "clientName", label: "Client name" },
     { key: "postExitAddress", label: "Address after exit", wide: true },
     { key: "personalEmail", label: "Personal email" },
-    { key: "newEmployer", label: "New employer" },
+    { key: "newEmployer", label: "New employer (optional)", optional: true },
   ],
   Promotion: [
     { key: "achievement", label: "Achievement", wide: true },
@@ -671,8 +707,8 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "newLimit", label: "New authority limit" },
   ],
   Warning: [
-    { key: "letterType", label: "Letter type", default: "Concern" },
-    { key: "severity", label: "Severity", default: "minor" },
+    { key: "letterType", label: "Letter type", type: "select", options: ["Concern", "First warning", "Final warning", "Show-cause notice"], default: "Concern" },
+    { key: "severity", label: "Severity", type: "select", options: ["minor", "major", "gross"], default: "minor" },
     { key: "clausePolicy", label: "Clause / policy", default: "Clause 14 of your Appointment Letter", wide: true },
     { key: "previousWarnings", label: "Previous warnings", default: "None", wide: true },
     { key: "replyHours", label: "Reply within (hours)", default: "72" },
@@ -682,6 +718,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
   ],
   Experience: [
     { key: "joinDate", label: "Joining date", type: "date" },
+    { key: "projectLocation", label: "Project location", hint: "Site, not the head office", optional: true },
     { key: "natureOfWork", label: "Nature of work", default: "site supervision, planning, quality control and billing verification", type: "textarea", wide: true },
     { key: "exitMode", label: "Issued", default: "on resignation" },
   ],
@@ -691,7 +728,7 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "permanentAddress", label: "Permanent address", type: "textarea", wide: true },
     { key: "appointmentRefNo", label: "Appointment reference no." },
     { key: "appointmentDate", label: "Appointment date", type: "date" },
-    { key: "clientProject", label: "Client / project", wide: true },
+    { key: "clientProject", label: "Client / project", wide: true, optional: true },
   ],
   NdaPostEmployment: [
     { key: "fatherOrSpouseName", label: "Father or spouse name" },
@@ -701,7 +738,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "appointmentRefNo", label: "Appointment reference no." },
     { key: "ndaJoiningRef", label: "Joining NDA reference" },
     { key: "ndaJoiningDate", label: "Joining NDA date", type: "date" },
-    { key: "lastWorkingDate", label: "Last working date", type: "date" },
     { key: "separationReason", label: "Separation", default: "resignation" },
     { key: "assetLetterRef", label: "Asset letter reference" },
     { key: "exitLetterRef", label: "Exit letter reference" },
@@ -710,6 +746,6 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "confidentialItems", label: "Confidential items", default: "drawings, BOQ, rates, RA bills, claims", wide: true },
     { key: "postExitAddress", label: "Address after exit", wide: true },
     { key: "personalEmail", label: "Personal email" },
-    { key: "newEmployer", label: "New employer" },
+    { key: "newEmployer", label: "New employer (optional)", optional: true },
   ],
 };

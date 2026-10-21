@@ -20,7 +20,7 @@ import {
   buildDprPack,
   buildWprPack,
 } from "../services/reportPacks.js";
-import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS, attendanceSiteMinutes, haversineMeters, countLeaveWorkingDays } from "@sharnam/shared";
+import { formatIstTimeHHMM, formatIstDateKey, istStartOfDay, IST_TIMEZONE, ACTIVE_CANDIDATE_STAGES, OFFER_REQUIRED_DOCUMENTS, attendanceSiteMinutes, haversineMeters, countLeaveWorkingDays, hrLetterIssues } from "@sharnam/shared";
 import { ctcMonthlyEarnings } from "../services/ctcAnnexure.js";
 import { isHrDeskOnly } from "../services/hrDesk.js";
 
@@ -3250,7 +3250,28 @@ hrmRouter.get("/holidays", async (req, res) => {
   const year = Number(req.query.year || new Date().getFullYear());
   const from = new Date(year, 0, 1);
   const to = new Date(year + 1, 0, 1);
-  const rows = await prisma.holiday.findMany({ where: { date: { gte: from, lt: to } }, orderBy: { date: "asc" } });
+  let rows = await prisma.holiday.findMany({ where: { date: { gte: from, lt: to } }, orderBy: { date: "asc" } });
+  if (!rows.length) {
+    const fixed = [
+      [`${year}-01-26`, "Republic Day"],
+      [`${year}-08-15`, "Independence Day"],
+      [`${year}-10-02`, "Gandhi Jayanti"],
+      [`${year}-12-25`, "Christmas"],
+    ];
+    try {
+      for (const [iso, name] of fixed) {
+        const date = new Date(`${iso}T12:00:00+05:30`);
+        await prisma.holiday.upsert({
+          where: { date_name: { date, name } },
+          create: { date, name, region: "India", isOptional: false },
+          update: {},
+        });
+      }
+      rows = await prisma.holiday.findMany({ where: { date: { gte: from, lt: to } }, orderBy: { date: "asc" } });
+    } catch {
+      rows = [];
+    }
+  }
   res.json(rows);
 });
 
@@ -3550,14 +3571,14 @@ function hrmsDocRefNo(kind: HrmsDocKind) {
   const nx = String(yy + 1).slice(-2);
   const seq = String(Date.now()).slice(-4);
   const codeMap: Record<HrmsDocKind, string> = {
-    Appointment: "OL",
-    Offer: "OF",
+    Appointment: "AL",
+    Offer: "OL",
     Relieving: "RL",
-    Exit: "EX",
-    AssetReturn: "AR",
-    Confirmation: "CF",
-    Promotion: "PR",
-    Warning: "WR",
+    Exit: "EL",
+    AssetReturn: "AS",
+    Confirmation: "CL",
+    Promotion: "PL",
+    Warning: "WL",
     Experience: "EC",
     NdaJoining: "NJ",
     NdaPostEmployment: "NP",
@@ -3580,6 +3601,12 @@ async function letterFromMasters(
   });
 }
 
+function letterIssueResponse(kind: string, data: Record<string, unknown>, employeeName: string, effectiveDate: unknown) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const issues = hrLetterIssues(kind, { ...data, employeeName, effectiveDate, designation: data.designation }, today);
+  return issues.length ? issues.join(" ") : "";
+}
+
 /** Live HTML preview from form fields — does not create a register row. */
 hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, res) => {
   const kindRaw = String(req.body.kind || "");
@@ -3594,6 +3621,8 @@ hrmRouter.post("/hrms-documents/preview", hrmDesk, async (req: AuthedRequest, re
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
   }
+  const blocked = letterIssueResponse(kindRaw, mastered.data, employeeName, req.body.effectiveDate);
+  if (blocked) return res.status(400).json({ error: blocked });
   const { previewHrmsLetterDraft } = await import("../services/hrmsLetter.js");
   try {
     const html = await previewHrmsLetterDraft({
@@ -3627,6 +3656,8 @@ hrmRouter.post("/hrms-documents/preview.docx", hrmDesk, async (req: AuthedReques
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
   }
+  const blocked = letterIssueResponse(kindRaw, mastered.data, employeeName, req.body.effectiveDate);
+  if (blocked) return res.status(400).json({ error: blocked });
   const { buildHrmsLetterDraftDocx } = await import("../services/hrmsLetter.js");
   try {
     const buf = await buildHrmsLetterDraftDocx({
@@ -3698,6 +3729,8 @@ hrmRouter.post("/hrms-documents", hrmDesk, async (req: AuthedRequest, res) => {
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Choose a role from the role master" });
   }
+  const blocked = letterIssueResponse(kind, mastered.data, employeeName, req.body.effectiveDate);
+  if (blocked) return res.status(400).json({ error: blocked });
   const dataJson = JSON.stringify(mastered.data);
 
   const row = await prisma.hrmsDocument.create({

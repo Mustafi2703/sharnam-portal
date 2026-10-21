@@ -26,6 +26,8 @@ import {
   editableDocxUrl,
   letterSharePointLink,
   emptyLetterForm,
+  isLeavingLetter,
+  letterContentProblems,
   subjectKeyFromForm,
   applyPriorLetters,
   hydrateLetterFormFromDoc,
@@ -160,8 +162,8 @@ export default function HrmsDocumentsPage() {
     if (editingId && rows.find((r) => r.id === editingId)?.kind !== kind) setEditingId(null);
     setForm((f) => {
       const next = { ...f, kind };
-      if (existing) return hydrateLetterFormFromDoc(existing, next);
-      return applyPriorLetters(next, rows);
+      const built = existing ? hydrateLetterFormFromDoc(existing, next) : applyPriorLetters(next, rows);
+      return { ...built, gender: f.gender || built.gender, signatoryName: f.signatoryName || built.signatoryName };
     });
     window.setTimeout(() => {
       formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -238,8 +240,9 @@ export default function HrmsDocumentsPage() {
 
   async function previewFullScreen() {
     const missing = missingLetterFields(form);
-    if (missing.length) {
-      setMsg(`Fill these before the full screen preview: ${missing.join(", ")}.`);
+    const problems = letterContentProblems(form);
+    if (missing.length || problems.length) {
+      setMsg([...missing.map((m) => `Fill ${m}`), ...problems].join(" "));
       return;
     }
     setMsg("");
@@ -261,8 +264,9 @@ export default function HrmsDocumentsPage() {
 
   async function generateKind(kind: DocKind) {
     const missing = missingLetterFields(form);
-    if (missing.length) {
-      setMsg(`Fill these before filing the letter: ${missing.join(", ")}.`);
+    const problems = letterContentProblems(form);
+    if (missing.length || problems.length) {
+      setMsg([...missing.map((m) => `Fill ${m}`), ...problems].join(" "));
       return;
     }
     setMsg("");
@@ -657,6 +661,10 @@ export default function HrmsDocumentsPage() {
                         <Input value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} />
                       </label>
                       <label className="space-y-1">
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">Company signatory</span>
+                        <Input value={form.signatoryName} onChange={(e) => setForm({ ...form, signatoryName: e.target.value })} />
+                      </label>
+                      <label className="space-y-1">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">Gender</span>
                         <Select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
                           <option value="">Mr. / Ms.</option>
@@ -669,8 +677,19 @@ export default function HrmsDocumentsPage() {
                         <Input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Effective / joining date</span>
-                        <Input type="date" value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
+                        <span className="text-[11px] text-steel-muted uppercase font-mono">
+                          {isLeavingLetter(form.kind) ? "Last working date" : form.kind === "Confirmation" ? "Letter date" : form.kind === "Promotion" || form.kind === "Warning" ? "Effective date" : "Joining date"}
+                        </span>
+                        <Input
+                          type="date"
+                          value={form.effectiveDate}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (isLeavingLetter(form.kind)) {
+                              setForm({ ...form, effectiveDate: value, sheet: { ...form.sheet, lastWorkingDate: value } });
+                            } else setForm({ ...form, effectiveDate: value });
+                          }}
+                        />
                       </label>
                       <label className="space-y-1 sm:col-span-3">
                         <span className="text-[11px] text-steel-muted uppercase font-mono">Address (as per records)</span>
@@ -754,7 +773,16 @@ export default function HrmsDocumentsPage() {
                             return (
                               <label key={field.key} className={`space-y-1 ${field.wide ? "sm:col-span-3" : ""}`}>
                                 <span className="text-[11px] text-steel-muted uppercase font-mono">{field.label}</span>
-                                {field.type === "role" ? (
+                                {field.type === "select" ? (
+                                  <Select value={value} onChange={(e) => onChange(e.target.value)}>
+                                    <option value="">Select…</option>
+                                    {(field.options || []).map((opt) => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                ) : field.type === "role" ? (
                                   <Select value={roleTitles.includes(value) ? value : ""} onChange={(e) => onChange(e.target.value)}>
                                     <option value="">Role…</option>
                                     {roleTitles.map((title) => (
@@ -855,7 +883,7 @@ export default function HrmsDocumentsPage() {
                   <td>{letterKindLabel(r.kind)}</td>
                   <td>{r.employeeName}</td>
                   <td>{[r.designation, r.department].filter(Boolean).join(" · ") || "—"}</td>
-                  <td>{r.effectiveDate ? new Date(r.effectiveDate).toLocaleDateString("en-IN") : "—"}</td>
+                  <td>{r.effectiveDate ? new Date(r.effectiveDate).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }) : "—"}</td>
                   <td>
                     <Badge tone={r.status === "Signed" ? "ok" : r.status === "Cancelled" ? "danger" : "brand"}>{r.status}</Badge>
                   </td>

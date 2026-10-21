@@ -1603,7 +1603,7 @@ hrmRecruitmentRouter.post("/offers/:id/appointment-letter", requireRoles("admin"
   }
   const employeeName = offer.candidate.fullName;
   const { hrLetterRefNo, loadOffer, offerLetterContext } = await import("../services/offerLetters.js");
-  const refNo = hrLetterRefNo("OL");
+  const refNo = hrLetterRefNo("AL");
   const full = await loadOffer(offer.id);
   const offerLetter = offer.offerLetterDocId ? await prisma.hrmsDocument.findUnique({ where: { id: offer.offerLetterDocId } }) : null;
   const letter = await prisma.hrmsDocument.create({

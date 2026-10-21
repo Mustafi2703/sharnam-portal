@@ -447,6 +447,7 @@ export {
 } from "./cubeStrength.js";
 export { QAP_PICKERS, QAP_LEGENDS, type QapPickerKey } from "./qapPickers.js";
 export { HR_LETTER_TABLES, parseHrLetterTable, hrLetterTableHasData, type HrLetterTable } from "./hrLetterTables.js";
+export { hrLetterIssues } from "./hrLetterIssues.js";
 export {
   MATRIX_SECTION_ORDER,
   buildMatrixBlocks,

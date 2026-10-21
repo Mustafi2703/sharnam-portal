@@ -87,7 +87,7 @@ export function ctcInputsFrom(raw: unknown, fallback: { candidateName: string; d
   };
 }
 
-export function hrLetterRefNo(code: "OF" | "OL"): string {
+export function hrLetterRefNo(code: "OL" | "AL"): string {
   const yy = new Date().getFullYear();
   return `SPDC/HR/${code}/${String(yy).slice(-2)}-${String(yy + 1).slice(-2)}/${String(Date.now()).slice(-4)}`;
 }
@@ -163,7 +163,7 @@ export function offerLetterContext(offer: OfferFull, extra: Record<string, unkno
 export async function generateOfferLetter(offerId: string, userId: string) {
   const offer = await loadOffer(offerId);
   if (!offer) throw Object.assign(new Error("Offer not found"), { status: 404 });
-  const refNo = hrLetterRefNo("OF");
+  const refNo = hrLetterRefNo("OL");
   const data = offerLetterContext(offer, { offerDate: fmt(new Date()), offerRefNo: refNo });
   const letter = await prisma.hrmsDocument.create({
     data: {

@@ -232,7 +232,7 @@ export default function HrmsFilesPage() {
                   </td>
                   <td className="px-4 py-2.5">{f.title}</td>
                   <td className="px-4 py-2.5 text-xs text-steel-muted">
-                    {new Date(f.issuedOn || f.createdAt).toLocaleDateString("en-IN")}
+                    {new Date(f.issuedOn || f.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric", timeZone: "Asia/Kolkata" })}
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">

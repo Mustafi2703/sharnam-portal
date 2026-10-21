@@ -38,6 +38,28 @@ export default function HrmsDocxPreview({ blob, className, layout = "panel" }: P
         renderEndnotes: true,
         renderAltChunks: true,
       });
+      const host = hostRef.current;
+      if (!host) return;
+      const pages = host.querySelectorAll("section.docx");
+      const total = pages.length || 1;
+      pages.forEach((page, index) => {
+        page.querySelectorAll("footer").forEach((footer) => {
+          const nodes: Text[] = [];
+          const walker = document.createTreeWalker(footer, NodeFilter.SHOW_TEXT);
+          let node: Node | null = walker.nextNode();
+          while (node) {
+            nodes.push(node as Text);
+            node = walker.nextNode();
+          }
+          const joined = nodes.map((n) => n.data).join("");
+          if (!/Page\s+\d+\s+of\s+\d+/.test(joined)) return;
+          const next = joined.replace(/Page\s+\d+\s+of\s+\d+/, `Page ${index + 1} of ${total}`);
+          if (nodes[0]) nodes[0].data = next;
+          nodes.slice(1).forEach((n) => {
+            n.data = "";
+          });
+        });
+      });
     })().catch(() => {
       if (hostRef.current) {
         hostRef.current.innerHTML =

@@ -770,6 +770,11 @@ async function mergedContextForRow(row: HrmsDocument): Promise<Record<string, un
     ctx = {};
   }
   ctx = await enrichHrmsLetterDataFromProfile(row, ctx);
+  const types = await prisma.leaveType.findMany({ where: { code: { in: ["CL", "SL"] } }, select: { code: true, daysPerYear: true } });
+  const cl = types.find((t) => t.code === "CL");
+  const sl = types.find((t) => t.code === "SL");
+  if (cl && (ctx.clDays == null || ctx.clDays === "" || ctx.clDays === "12")) ctx.clDays = String(cl.daysPerYear);
+  if (sl && (ctx.slDays == null || ctx.slDays === "" || ctx.slDays === "6")) ctx.slDays = String(sl.daysPerYear);
   return letterMergeContext(row, ctx);
 }
 
