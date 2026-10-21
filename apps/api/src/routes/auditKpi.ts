@@ -327,6 +327,11 @@ auditKpiRouter.post(
     const section = String(body.section || "").trim();
     const prompt = String(body.prompt || "").trim();
     if (!section || !prompt) return res.status(400).json({ error: "section and prompt required" });
+    if (section === "FolderSample" && body.locationChecked) {
+      const detail = body.detail && typeof body.detail === "object" ? { ...body.detail } : {};
+      if (!detail.folder) detail.folder = String(body.locationChecked);
+      body.detail = detail;
+    }
     const projectId = req.params.projectId;
     const requestedNo = body.itemNo != null && body.itemNo !== "" ? Number(body.itemNo) : null;
     if (requestedNo != null) {
@@ -679,13 +684,16 @@ auditKpiRouter.patch(
     }
     if (body.plannedDate !== undefined) data.plannedDate = body.plannedDate ? new Date(String(body.plannedDate)) : null;
     const existing = await prisma.siteAudit.findFirst({ where: { projectId }, orderBy: { createdAt: "asc" } });
+    const title = data.title ? String(data.title) : "Site document audit";
+    delete data.title;
     const row = existing
-      ? await prisma.siteAudit.update({ where: { id: existing.id }, data })
+      ? await prisma.siteAudit.update({ where: { id: existing.id }, data: { ...data, ...(body.title !== undefined ? { title } : {}) } })
       : await prisma.siteAudit.create({
           data: {
             id: `${projectId}-audit-demo`,
             projectId,
-            title: String(body.title || "Site document audit"),
+            title,
+            status: "Planned",
             ...data,
           },
         });
@@ -1150,71 +1158,3 @@ auditKpiRouter.post(
     res.json({ ok: true, stats });
   }
 );
-
-/** XLSX export matching client column layout */
-auditKpiRouter.get("/project/:projectId/download/:sheet.xlsx", async (req, res) => {
-  const projectId = req.params.projectId;
-  const sheet = req.params.sheet;
-  const wb = XLSX.utils.book_new();
-
-  if (sheet === "findings") {
-    const rows = await prisma.auditFinding.findMany({ where: { projectId }, orderBy: { srNo: "asc" } });
-    const data = [
-      ["SITE AUDIT FINDINGS AND CORRECTIVE ACTION"],
-      [],
-      ["#", "Finding ref.", "Source", "Ref. no.", "Folder / location", "Finding — what was actually found", "Photo ref.", "Severity", "Status"],
-      ...rows.map((r) => [r.srNo, r.findingNo, r.source, r.refNo, r.folderLocation, r.description, r.photoRef, r.severity, r.status]),
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "FINDINGS");
-  } else if (sheet === "subjects") {
-    const rows = await prisma.kpiSubject.findMany({ where: { projectId }, orderBy: { srNo: "asc" } });
-    const data = [
-      ["SUBJECT DATA — populated by the refresh"],
-      [],
-      [
-        "#",
-        "ISO area",
-        "Folder",
-        "ISO clause",
-        "Subject",
-        "Custodian",
-        "Relative path",
-        "Workbook file name",
-        "Records",
-        "Open",
-        "Closed",
-        "Overdue",
-        "% Closed",
-        "Oldest open (d)",
-        "KRA score",
-        "RAG",
-      ],
-      ...rows.map((r) => [
-        r.srNo,
-        r.isoArea,
-        r.folder,
-        r.isoClause,
-        r.name,
-        r.custodian,
-        r.relativePath,
-        r.workbookFileName,
-        r.recordsCount,
-        r.openCount,
-        r.closedCount,
-        r.overdueCount,
-        r.pctClosed,
-        r.oldestOpenDays,
-        r.kraScore,
-        r.rag,
-      ]),
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "03_SUBJECT_DATA");
-  } else {
-    return res.status(404).json({ error: "Unknown sheet export" });
-  }
-
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="Sharnam-${sheet}.xlsx"`);
-  res.send(buf);
-});

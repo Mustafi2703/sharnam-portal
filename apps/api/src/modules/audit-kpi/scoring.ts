@@ -142,13 +142,6 @@ export function rollupAreas(
     areas.push({ isoArea, folders, subjects: rows.length, records, open, closed, overdue, pctClosed, kraScore, red, rag });
   }
 
-  const known = new Set<string>(ISO_AREAS);
-  for (const s of subjects) {
-    if (!known.has(s.isoArea)) {
-      known.add(s.isoArea);
-    }
-  }
-
   const records = subjects.reduce((a, r) => a + (r.recordsCount || 0), 0);
   const closed = subjects.reduce((a, r) => a + (r.closedCount || 0), 0);
   const kraValues = subjects.map((r) => asFraction(r.kraScore)).filter((n): n is number => n != null);
