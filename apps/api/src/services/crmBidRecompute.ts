@@ -12,6 +12,7 @@ import {
   type ComparativeSummary,
 } from "./comparativeStatement.js";
 import { loadMonitoringBoqTemplate } from "./monitoringBoqTemplate.js";
+import { buildPackageComparative, comparativeWorkbook, type BoqLine } from "./boqCompare.js";
 
 function numCell(cell?: SheetCell): number {
   const n = Number(cell?.computed ?? cell?.raw ?? 0);
@@ -324,7 +325,68 @@ export async function recomputeBidPackageComparative(
   return { summary, filledSlots, totalSlots: pkg.vendorBoqs.length };
 }
 
+export async function rebuildPackageBoqComparative(prisma: PrismaClient, pkgId: string) {
+  const pkg = await prisma.crmBidPackage.findUnique({
+    where: { id: pkgId },
+    include: {
+      project: { select: { code: true } },
+      vendorBoqs: true,
+    },
+  });
+  if (!pkg?.boqLinesJson) return null;
+  const blank = JSON.parse(pkg.boqLinesJson) as BoqLine[];
+  const quotes = pkg.vendorBoqs
+    .filter((slot) => slot.rateLinesJson)
+    .map((slot) => ({ vendor: slot.vendorLabel, lines: JSON.parse(slot.rateLinesJson!) as BoqLine[] }));
+  const comparative = buildPackageComparative(blank, quotes);
+  let sharePointUrl = pkg.comparativeSharePointUrl;
+  if (pkg.project?.code && quotes.length) {
+    const { CRM_SHAREPOINT, syncBufferToProjectSharePoint } = await import("./crmSharePoint.js");
+    const fileName = `${pkg.title.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 60)}-Comparative.xlsx`;
+    const buffer = await comparativeWorkbook(pkg.title, comparative);
+    const saved = await syncBufferToProjectSharePoint(pkg.project.code, CRM_SHAREPOINT.comparative, fileName, buffer, {
+      replace: true,
+    });
+    sharePointUrl = saved.sharePointUrl || sharePointUrl;
+    if (saved.sharePointDone) {
+      void saved.sharePointDone
+        .then(async (sp) => {
+          if ("sharePointUrl" in sp && sp.sharePointUrl) {
+            await prisma.crmBidPackage.update({
+              where: { id: pkg.id },
+              data: { comparativeSharePointUrl: sp.sharePointUrl },
+            });
+          }
+        })
+        .catch(() => undefined);
+    }
+  }
+  await prisma.crmBidPackage.update({
+    where: { id: pkg.id },
+    data: {
+      comparativeJson: JSON.stringify(comparative),
+      comparativeSharePointUrl: sharePointUrl,
+    },
+  });
+  const summary = {
+    vendorLabels: comparative.vendors,
+    sectionTotals: comparative.sectionTotals,
+    grandTotals: comparative.grandTotals,
+    lowestVendor: comparative.lowestVendor,
+  };
+  return {
+    summary,
+    filledSlots: pkg.vendorBoqs.filter((slot) => slot.fileName || slot.uploadedAt).length,
+    totalSlots: pkg.vendorBoqs.length,
+  };
+}
+
 export async function recomputeAndSyncBidPackage(prisma: PrismaClient, pkgId: string) {
+  const head = await prisma.crmBidPackage.findUnique({ where: { id: pkgId }, select: { boqLinesJson: true } });
+  if (head?.boqLinesJson) {
+    const built = await rebuildPackageBoqComparative(prisma, pkgId);
+    if (built) return built;
+  }
   const result = await recomputeBidPackageComparative(prisma, pkgId);
   try {
     const { syncBidPackageToSharePoint } = await import("./crmBidSharePointSync.js");

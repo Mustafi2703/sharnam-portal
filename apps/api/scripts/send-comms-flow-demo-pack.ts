@@ -30,7 +30,7 @@ const TEAM = [
   "hello@twinoxis.com",
   "admin@twinoxis.com",
   "nirav@spdc.in",
-  "operations@spdc.in",
+  "saurabh@spdc.in",
 ];
 
 function sleep(ms: number) {
@@ -179,7 +179,7 @@ export function buildCommsFlowDemoMails(): MailJob[] {
     plainMail(`[${projectCode}] UAT 2/15 — Communication matrix published`, [
       "Technical communication matrix is live on the portal.",
       "",
-      "Contacts: baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, operations@spdc.in",
+      "Contacts: baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, saurabh@spdc.in",
       "",
       commsUrl,
     ].join("\n"), { href: commsUrl, label: "View matrix" }),

@@ -66,8 +66,7 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
         </thead>
         {blocks.map((block) => {
           const rows = matrixBlockRows(block);
-          const extras = block.people.length ? block.placeholders : [];
-          const span = rows.length + extras.length;
+          const span = Math.max(rows.length, 1);
           const merged = (value: string, extra = "") => (
             <td rowSpan={span} className={`${CELL} ${extra} whitespace-pre-line`} data-preserve-case>
               {value || ""}
@@ -79,9 +78,6 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
                 <td className={`${CELL} text-center`}>{block.letter}</td>
                 <td className={`${CELL} uppercase`} colSpan={HEADERS.length - 1} data-preserve-case>
                   {block.company}
-                  {canEdit && !block.spocIsSet ? (
-                    <span className="ml-3 text-[10px] font-normal normal-case text-amber-700">{formatUiText("spoc not set · showing to people")}</span>
-                  ) : null}
                 </td>
                 {canEdit ? (
                   <td className="border border-line px-2 py-1.5 align-middle">
@@ -124,27 +120,6 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
                           </Button>
                         </div>
                       ) : null}
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-              {extras.map((r) => (
-                <tr key={r.id} className="bg-sand/30 text-steel-muted">
-                  <td className={`${CELL} text-center font-normal`}>—</td>
-                  <td className={`${CELL} font-normal italic text-steel-muted`} colSpan={2}>
-                    {formatUiText("company-only row — not printed")}
-                  </td>
-                  <td className={CELL} colSpan={3} />
-                  {canEdit ? (
-                    <td className="border border-line px-2 py-1.5 align-middle">
-                      <div className="flex flex-wrap gap-1">
-                        <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onEditPerson(r)}>
-                          Edit
-                        </Button>
-                        <Button type="button" variant="secondary" className="!text-[11px] !py-1 !px-2" disabled={busy} onClick={() => onDeleteRow(r.id, `${block.company} (company-only row)`)}>
-                          Delete
-                        </Button>
-                      </div>
                     </td>
                   ) : null}
                 </tr>

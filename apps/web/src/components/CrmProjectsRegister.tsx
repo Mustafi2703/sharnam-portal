@@ -59,20 +59,27 @@ function projectDetailLines(p: CrmProjectRow, proposal?: CrmProjectProposalLink 
     { label: "GST", value: p.clientGst || "—", mono: true },
     { label: "Site location", value: p.location || "—" },
     { label: "Design consultant", value: p.designConsultant || "—" },
-    { label: "PMC / SPDC", value: p.pmcName || "—" },
+    { label: "Project management consultant", value: p.pmcName || "—" },
     { label: "Contractors", value: contractorLabel(p) || "—" },
   ];
 }
 
-function contractorLabel(p: CrmProjectRow) {
+function contractorNames(p: CrmProjectRow) {
   const linked = (p.vendors || [])
     .map((row) => row.vendor)
     .filter((vendor) => vendor && (vendor.partyType === "Contractor" || vendor.partyType === "Vendor"))
     .map((vendor) => (vendor?.name || "").trim())
     .filter(Boolean);
   const names = [...new Set(linked)];
-  if (names.length) return names.join(", ");
-  return (p.contractorName || "").trim();
+  if (names.length) return names;
+  return (p.contractorName || "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function contractorLabel(p: CrmProjectRow) {
+  return contractorNames(p).join(", ");
 }
 
 function filterProjects(rows: CrmProjectRow[], q: string, status: string) {
@@ -163,10 +170,10 @@ export function CrmProjectsRegister({
                   <td className="font-medium max-w-[200px]">
                     <div className="line-clamp-2">{p.name}</div>
                   </td>
-                  <td className="text-xs max-w-[140px]">
-                    <div className="line-clamp-1">{p.clientName || "—"}</div>
+                  <td className="text-xs min-w-[160px]">
+                    <div className="whitespace-normal break-words" data-preserve-case>{p.clientName || "—"}</div>
                     {p.clientContactName && (
-                      <div className="text-[10px] text-steel-muted line-clamp-1">{p.clientContactName}</div>
+                      <div className="text-[10px] text-steel-muted whitespace-normal break-words" data-preserve-case>{p.clientContactName}</div>
                     )}
                   </td>
                   <td className="text-xs max-w-[120px]">
@@ -175,8 +182,18 @@ export function CrmProjectsRegister({
                   <td className="text-xs max-w-[120px]">
                     <span className="line-clamp-2">{p.designConsultant || "—"}</span>
                   </td>
-                  <td className="text-xs max-w-[120px]">
-                    <span className="line-clamp-3 whitespace-pre-wrap break-words">{contractorLabel(p) || "—"}</span>
+                  <td className="text-xs min-w-[140px]">
+                    {contractorNames(p).length ? (
+                      <ul className="space-y-0.5">
+                        {contractorNames(p).map((name) => (
+                          <li key={name} className="whitespace-normal break-words" data-preserve-case>
+                            {name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="text-xs max-w-[180px]">
                     <span className="line-clamp-3 whitespace-pre-wrap break-words">{p.status && p.status !== "Planning" ? p.status : "—"}</span>

@@ -42,7 +42,7 @@ export async function seedUatLiveProject(db: PrismaClient = prisma, opts?: { upl
       location: "Ahmedabad, Gujarat",
       status: "In Progress",
       enabledModules,
-      notificationEmails: "nirav@spdc.in,operations@spdc.in,hello@twinoxis.com",
+      notificationEmails: "nirav@spdc.in,saurabh@spdc.in,hello@twinoxis.com",
       emailEnabled: true,
       emailFromName: "शरणम् Portal",
     },

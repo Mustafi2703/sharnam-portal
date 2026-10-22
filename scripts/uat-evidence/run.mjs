@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { BASE, OUT, call, evidence, finish, open, step } from "./lib.mjs";
 
-const OFFICE = "operations@spdc.in";
+const OFFICE = "saurabh@spdc.in";
 const SITE = "hitesh.rajput@spdc.in";
 const PLANNING = "planning.estimation@spdc.in";
 const VENDOR = "site@bhavanainfra.demo";

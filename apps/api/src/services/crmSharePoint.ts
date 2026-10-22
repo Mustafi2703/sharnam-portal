@@ -21,6 +21,8 @@ export const CRM_SHAREPOINT = {
   /** Vendor × discipline — one XLSX per slot (05.05 bid receipt). */
   vendorBoqFolder: (vendorLabel: string, disciplineKey: string) =>
     `${CRM_SHAREPOINT.vendorBoqVendorRoot(vendorLabel)}/${sanitizeSegment(disciplineKey)}`,
+  /** Unpriced package BOQ issued to contractors. */
+  packageBoq: "05_PROCUREMENT_AND_CONTRACTS/05.03_Tender_Documents_Issue/Package_BOQ",
   comparative: "05_PROCUREMENT_AND_CONTRACTS/05.06_Bid_Evaluation_Recommendation/Comparative_Statement",
 } as const;
 

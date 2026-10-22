@@ -9,12 +9,11 @@ import { SetupPartyMultiPick, setupPartyKind } from "../../components/SetupParty
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectClientRepresentativesPanel, type ProjectClientRep } from "../../components/ProjectClientRepresentativesPanel";
-import { ProjectManageActions } from "../../components/ProjectManageActions";
 import { projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { useClientLogo } from "../../lib/useClientLogo";
 import { uiCopy } from "../../lib/formatUiText";
-import { isSpdcStaffMember, isSpdcStaffUser } from "../../lib/spdcStaff";
+import { isSpdcStaffUser } from "../../lib/spdcStaff";
 import { suggestedProjectMemberRole } from "@sharnam/shared";
 import { parseWorkPackagesField, sanitizeProjectWorkPackages } from "../../lib/workPackages";
 import { StatusNote } from "../../components/StatusNote";
@@ -244,7 +243,13 @@ export default function CrmProjectSetupPage() {
       return clientRow?.vendorId || "";
     });
     setStaffIds(
-      s.members.filter((m) => isSpdcStaffMember(m)).map((m) => m.userId).filter(Boolean)
+      s.members
+        .filter((m) => {
+          const email = (m.email || "").trim().toLowerCase();
+          return email === "nirav@spdc.in" || email === "saurabh@spdc.in";
+        })
+        .map((m) => m.userId)
+        .filter(Boolean),
     );
     void api<{ workPackages?: string | string[] }>(`/api/projects/${projectId}`, { token })
       .then((p) => {
@@ -559,20 +564,9 @@ export default function CrmProjectSetupPage() {
             <span className="text-sm text-ink max-w-md whitespace-pre-wrap break-words">
               {summary.project.status && summary.project.status !== "Planning" ? summary.project.status : "No status note yet"}
             </span>
-            <ProjectManageActions
-              project={summary.project}
-              token={token}
-              showEdit={false}
-              onChanged={() => void loadLists()}
-            />
             <Link to="/crm/projects">
               <Button type="button" variant="secondary">
-                Projects register
-              </Button>
-            </Link>
-            <Link to={`/projects/${summary.project.id}`}>
-              <Button type="button" variant="secondary">
-                Open project desk
+                Back to Project Register
               </Button>
             </Link>
           </div>
@@ -634,7 +628,7 @@ export default function CrmProjectSetupPage() {
               />
               <Input
                 required
-                placeholder="Site / city"
+                placeholder="Location"
                 value={projectId ? details.location : createForm.location}
                 onChange={(e) =>
                   projectId
@@ -693,11 +687,6 @@ export default function CrmProjectSetupPage() {
               <div className="sm:col-span-2 space-y-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-steel-muted">Client (from Client directory)</span>
-                  {canManage ? (
-                    <Link to="/crm/directory/clients" className="text-[11px] font-semibold text-brand">
-                      Add new client →
-                    </Link>
-                  ) : null}
                 </div>
                 <SearchableSelect
                   options={clientOptions.map((c) => ({
@@ -820,13 +809,13 @@ export default function CrmProjectSetupPage() {
                 />
                 <SetupPartyMultiPick
                   token={token}
-                  title="PMC"
+                  title="Project management consultant"
                   kind="PMC"
                   vendors={vendors}
                   selectedIds={pmcIds}
                   onChange={setPmcIds}
                   directoryHref="/crm/directory/stakeholders"
-                  directoryLabel="Add PMC on Consultants →"
+                  directoryLabel="Add on Consultants →"
                 />
                 <SetupPartyMultiPick
                   token={token}
@@ -857,7 +846,7 @@ export default function CrmProjectSetupPage() {
                   {projectId ? (isLaunched ? "Save card & SPDC team" : "Save project card") : "Create project"}
                 </Button>
                 <Button type="button" variant="secondary" disabled={busy} onClick={() => navigate("/crm/projects")}>
-                  Back to register
+                  Back to Project Register
                 </Button>
                 {projectId ? (
                   <Link to={`/crm/setup?projectId=${projectId}&step=matrix`} className="text-[11px] font-semibold text-steel-muted">
@@ -897,22 +886,23 @@ export default function CrmProjectSetupPage() {
                   </span>
                 </p>
                 <p className="text-xs">
-                  <span className="font-medium">PMC </span>
+                  <span className="font-medium">Project management consultant </span>
                   <span data-preserve-case>
                     {vendors.filter((v) => pmcIds.includes(v.id)).map((v) => v.name).join(", ") || "None selected"}
                   </span>
                 </p>
                 {summary.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
                 <p className="text-[11px] text-steel-muted leading-relaxed">
-                  {projectStatusHint(summary.project.status)} {summary.members.filter((m) => isSpdcStaffMember(m)).length} SPDC team ·{" "}
+                  {projectStatusHint(summary.project.status)}{" "}
+                  {
+                    summary.members.filter((m) => {
+                      const email = (m.email || "").trim().toLowerCase();
+                      return email === "nirav@spdc.in" || email === "saurabh@spdc.in";
+                    }).length
+                  }{" "}
+                  SPDC team ·{" "}
                   {summary.vendors.length} companies.
                 </p>
-                <ProjectManageActions
-                  project={summary.project}
-                  token={token}
-                  showEdit={false}
-                  onChanged={() => void loadLists()}
-                />
               </div>
             )}
             <ul className="space-y-1.5">
@@ -988,11 +978,8 @@ export default function CrmProjectSetupPage() {
             </Button>
             <Link to="/crm/projects">
               <Button type="button" variant="secondary">
-                Back to projects register
+                Back to Project Register
               </Button>
-            </Link>
-            <Link to={`/projects/${projectId}`}>
-              <Button type="button">Open project desk</Button>
             </Link>
           </div>
         </Card>
@@ -1057,6 +1044,15 @@ function ClientLogoUpload({
 
   async function onFile(file: File | undefined) {
     if (!file) return;
+    const okType = file.type === "image/png" || file.type === "image/jpeg" || /\.(png|jpe?g)$/i.test(file.name);
+    if (!okType) {
+      setErr("Use a PNG or JPG logo.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setErr("Logo must be 2 MB or smaller.");
+      return;
+    }
     setBusy(true);
     setErr("");
     try {
@@ -1083,9 +1079,9 @@ function ClientLogoUpload({
         onChange={(e) => void onFile(e.target.files?.[0])}
       />
       <Button type="button" variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
-        {busy ? "Uploading…" : logoUrl ? "Replace client logo" : "Upload client logo"}
+        {busy ? "Uploading…" : logoUrl ? "Replace Client Logo" : "Upload Client Logo On The Project Card"}
       </Button>
-      <span className="text-[11px] text-steel-muted">Optional. Add it now or later — the matrix and registers use it when it is there.</span>
+      <span className="text-[11px] text-steel-muted">PNG or JPG. Up to 2 MB. A wide mark about 400 by 160 pixels stays sharp on the matrix.</span>
       {err ? <span className="text-[11px] text-danger">{err}</span> : null}
     </div>
   );

@@ -91,11 +91,9 @@ export function isMatrixPlaceholder(row: MatrixRowLike): boolean {
   return !person || person === matrixCompanyKey(row.company || row.orgName);
 }
 
-/** Rows to print for a block: its people, else its company-only rows, else one blank row. */
-export function matrixBlockRows<R extends MatrixRowLike>(block: MatrixBlock<R>): (R | null)[] {
-  if (block.people.length) return block.people;
-  if (block.placeholders.length) return block.placeholders;
-  return [null];
+/** Person rows only. A company with nobody added prints no blank lines. */
+export function matrixBlockRows<R extends MatrixRowLike>(block: MatrixBlock<R>): R[] {
+  return block.people;
 }
 
 function blockKey(section: string, company: string) {
@@ -144,7 +142,13 @@ export function buildMatrixBlocks<R extends MatrixRowLike>(rows: R[], opts: { ke
     b.headerIds.push(h.id);
     if (b.headerId) continue;
     b.headerId = h.id;
-    if (text(h.orgName)) b.company = text(h.orgName);
+    const headerName = text(h.orgName);
+    const genericHeader = !headerName || headerName.toLowerCase() === section.toLowerCase();
+    if (headerName && !genericHeader) b.company = headerName;
+    else if (!text(b.company) || text(b.company).toLowerCase() === section.toLowerCase()) {
+      const fromPeople = text(b.people.find((p) => text(p.company) && text(p.company).toLowerCase() !== section.toLowerCase())?.company);
+      if (fromPeople) b.company = fromPeople;
+    }
     if (text(h.spoc)) {
       b.spoc = text(h.spoc);
       b.spocIsSet = true;
@@ -159,16 +163,7 @@ export function buildMatrixBlocks<R extends MatrixRowLike>(rows: R[], opts: { ke
   );
 
   return ordered.map(({ firstSort: _firstSort, ...b }, i) => {
-    const lead = b.people[0];
-    const leadSpoc = text(lead?.spoc);
-    if (!b.spoc && leadSpoc && ![matrixCompanyKey(lead?.personName), matrixCompanyKey(b.company)].includes(matrixCompanyKey(leadSpoc))) {
-      b.spoc = leadSpoc;
-    }
-    if (!b.spoc) {
-      const to = b.people.filter((p) => text(p.mailRole).toUpperCase() === "TO").map((p) => text(p.personName));
-      b.spoc = [...new Set(to.filter(Boolean))].join("\n") || text(b.people[0]?.personName);
-    }
-    if (!b.spocIsSet && matrixCompanyKey(b.spoc) === matrixCompanyKey(b.company)) b.spoc = "";
+    if (!b.spocIsSet) b.spoc = "";
     if (!b.officeAddress) b.officeAddress = text(b.people.find((p) => text(p.officeAddress))?.officeAddress) || text(b.placeholders.find((p) => text(p.officeAddress))?.officeAddress);
     return { ...b, letter: letterFor(i) };
   });

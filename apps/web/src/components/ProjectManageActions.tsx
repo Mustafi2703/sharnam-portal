@@ -28,8 +28,6 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
   const navigate = useNavigate();
   const [edit, setEdit] = useState<ManageableProject | null>(null);
   const [del, setDel] = useState(false);
-  const [purge, setPurge] = useState(false);
-  const [purgeQuality, setPurgeQuality] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -47,30 +45,6 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
             Edit
           </Button>
         ) : null}
-        <Button
-          type="button"
-          variant="secondary"
-          className="!text-xs !py-1.5 !px-3"
-          onClick={() => {
-            setPurge(true);
-            setCode("");
-            setErr("");
-          }}
-        >
-          Clear module data
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="!text-xs !py-1.5 !px-3"
-          onClick={() => {
-            setPurgeQuality(true);
-            setCode("");
-            setErr("");
-          }}
-        >
-          Clear Quality · Safety
-        </Button>
         <Button
           type="button"
           className="!text-xs !py-1.5 !px-3 !bg-danger !border-danger"
@@ -119,7 +93,7 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
                 onChange={(e) => setEdit({ ...edit, designConsultant: e.target.value })}
                 placeholder="Design consultant"
               />
-              <Input value={edit.pmcName || ""} onChange={(e) => setEdit({ ...edit, pmcName: e.target.value })} placeholder="PMC / SPDC" />
+              <Input value={edit.pmcName || ""} onChange={(e) => setEdit({ ...edit, pmcName: e.target.value })} placeholder="Project management consultant" />
               <Input
                 value={edit.contractorName || ""}
                 onChange={(e) => setEdit({ ...edit, contractorName: e.target.value })}
@@ -143,92 +117,6 @@ export function ProjectManageActions({ project, token, onChanged, showEdit = tru
                 </Button>
               </div>
             </form>
-          </Card>
-          </div>
-        </div>
-      )}
-
-      {purge && token && (
-        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => setPurge(false)}>
-          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-          <Card className="space-y-3">
-            <h3 className="font-display text-xl">Clear module data for {project.code}?</h3>
-            <p className="text-sm text-steel-muted">
-              Removes drawings, drawing register, fills, progress, cost, DPR/WPR, CRM bids, and other module registers. Keeps the project card, directory, vendors, and communication matrix. Registers stay empty until you manually load a template. Type <strong>{project.code}</strong> to confirm.
-            </p>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={project.code} />
-            {err ? <p className="text-sm text-danger">{err}</p> : null}
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                disabled={code.trim().toUpperCase() !== project.code.toUpperCase() || busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setErr("");
-                  try {
-                    await api(`/api/projects/${project.id}/purge-modules`, {
-                      method: "POST",
-                      token,
-                      body: JSON.stringify({ confirmCode: code.trim() }),
-                    });
-                    setPurge(false);
-                    await onChanged();
-                  } catch (e) {
-                    setErr(e instanceof Error ? e.message : "Clear failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Clear module data
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setPurge(false)}>
-                Cancel
-              </Button>
-            </div>
-          </Card>
-          </div>
-        </div>
-      )}
-
-      {purgeQuality && token && (
-        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={() => setPurgeQuality(false)}>
-          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-          <Card className="space-y-3">
-            <h3 className="font-display text-xl">Clear Quality &amp; Safety for {project.code}?</h3>
-            <p className="text-sm text-steel-muted">
-              Removes QAP, cube register, IR/RFI, NCRs, quality checklist fills, safety observations, and related SharePoint quality/safety packs. Keeps drawings, progress, cost, and project setup. Type <strong>{project.code}</strong> to confirm.
-            </p>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder={project.code} />
-            {err ? <p className="text-sm text-danger">{err}</p> : null}
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                disabled={code.trim().toUpperCase() !== project.code.toUpperCase() || busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setErr("");
-                  try {
-                    await api(`/api/projects/${project.id}/purge-quality-safety`, {
-                      method: "POST",
-                      token,
-                      body: JSON.stringify({ confirmCode: code.trim() }),
-                    });
-                    setPurgeQuality(false);
-                    await onChanged();
-                  } catch (e) {
-                    setErr(e instanceof Error ? e.message : "Clear failed");
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Clear Quality · Safety
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setPurgeQuality(false)}>
-                Cancel
-              </Button>
-            </div>
           </Card>
           </div>
         </div>

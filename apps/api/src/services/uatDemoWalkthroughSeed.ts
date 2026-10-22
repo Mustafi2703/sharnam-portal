@@ -121,7 +121,7 @@ async function assignProjectParties(db: PrismaClient, projectId: string, userIds
 
   const site = await db.user.findFirst({ where: { email: "site@sharnam.demo" } });
   const office =
-    (await db.user.findFirst({ where: { email: "operations@spdc.in" } })) ||
+    (await db.user.findFirst({ where: { email: "saurabh@spdc.in" } })) ||
     (await db.user.findFirst({ where: { email: "office@sharnam.demo" } }));
   if (site) {
     await db.projectMember.upsert({
@@ -283,7 +283,7 @@ export async function seedUatDemoWalkthrough(db: PrismaClient) {
   if (!project) throw new Error(`Project ${UAT_LIVE_CODE} not found — run uatLiveProject seed first`);
 
   const office =
-    (await db.user.findFirst({ where: { email: "operations@spdc.in" } })) ||
+    (await db.user.findFirst({ where: { email: "saurabh@spdc.in" } })) ||
     (await db.user.findFirst({ where: { role: "office" } }));
   if (!office) throw new Error("No office user");
 

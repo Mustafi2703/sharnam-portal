@@ -5,7 +5,7 @@
  * Nothing is imported from client spreadsheets: every register line, RFI, fill, NCR, DPR and WPR is
  * created through the same API the portal screens use, by the login that would do it on a real job:
  *
- *   office      operations@spdc.in                     Sharnam office (PMC desk)
+ *   office      saurabh@spdc.in                     Sharnam office (PMC desk)
  *   site        jaideep.parmar@spdc.in                 site engineer on the Voltamp team
  *   planning    planning.estimation@spdc.in            planning / estimation
  *   vendor      sanjaythakor.reeca@gmail.com           Reeca Infrastructure (contractor) — fills checklists, answers NCRs, raises bills
@@ -79,7 +79,7 @@ const LOGO = path.resolve("apps/api/assets/logo-transparent.png");
 const REAL_GFC_PDF = path.resolve("scripts/uat-assets/sample-gfc-drawing.pdf");
 
 const USERS = {
-  office: { email: "operations@spdc.in", portal: "office" },
+  office: { email: "saurabh@spdc.in", portal: "office" },
   site: { email: "jaideep.parmar@spdc.in", portal: "site" },
   planning: { email: "planning.estimation@spdc.in", portal: "site" },
   vendor: { email: "sanjaythakor.reeca@gmail.com", portal: "vendor" },

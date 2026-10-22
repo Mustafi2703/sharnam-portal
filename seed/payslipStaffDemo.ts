@@ -16,7 +16,6 @@ const WORKING_DAYS = 30;
 const ROLE_UPDATES: { email: string; role: RoleKey; fullName: string }[] = [
   { email: "nirav@spdc.in", role: "admin", fullName: "Nirav Parekh" },
   { email: "saurabh@spdc.in", role: "admin", fullName: "Saurabh Prajapati" },
-  { email: "operations@spdc.in", role: "office", fullName: "Saurabh Prajapati" },
   { email: "anushka.jha@spdc.in", role: "hr", fullName: "Anushka Jha (HR Head)" },
 ];
 

@@ -66,7 +66,7 @@ export const BPCL_TECHNICAL_ROWS: BpclRow[] = [
     designation: "Project Co-ordinator",
     company: "Sharnam Project Development Consultants & Co.",
     mobile: "9106945294",
-    email: "operations@spdc.in",
+    email: "saurabh@spdc.in",
     mailRole: "TO",
   },
   {

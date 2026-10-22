@@ -1,8 +1,8 @@
 /**
  * Logins the client asked to keep. Everyone else can be removed from Access / HRMS.
- * Saurabh has two logins: saurabh@spdc.in (admin) and operations@spdc.in (office).
+ * SPDC admins are Nirav and Saurabh only.
  */
-export const KEEP_PORTAL_EMAILS = ["nirav@spdc.in", "saurabh@spdc.in", "operations@spdc.in"];
+export const KEEP_PORTAL_EMAILS = ["nirav@spdc.in", "saurabh@spdc.in"];
 
 /** Twinoxis UAT / duplicate test logins — safe to remove when cleaning the portal. */
 export const TWINOXIS_TEST_EMAIL_SUFFIXES = ["@twinoxis.com", "@twinoxis1.com"] as const;

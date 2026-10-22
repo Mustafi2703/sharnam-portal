@@ -41,6 +41,7 @@ import {
   buildMasterCompareSheet,
 } from "../services/crmBidRecompute.js";
 import { loadMonitoringBoqTemplate } from "../services/monitoringBoqTemplate.js";
+import { blankBoqWorkbook, parseBoqBuffer } from "../services/boqCompare.js";
 import { evaluateAllRows, migrateRows, type SheetCell } from "@sharnam/shared";
 
 export const crmComparativeRouter = Router();
@@ -180,8 +181,9 @@ crmComparativeRouter.get("/bid-packages", requireRoles("admin", "office"), async
     },
   });
   res.json(
-    rows.map((r) => ({
+    rows.map(({ boqLinesJson, comparativeJson: _comparativeJson, ...r }) => ({
       ...r,
+      blankBoq: Boolean(boqLinesJson),
       vendorNames: parseVendorNames(r.vendorNamesJson),
       uploadProgress: {
         done: r.vendorBoqs.filter((b) => b.fileName || b.uploadedAt).length,
@@ -204,9 +206,45 @@ crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), a
       summary = parseR2SummarySheet(headers, rows);
     }
   }
+  let comparative: unknown = null;
+  if (row.comparativeJson) {
+    try {
+      comparative = JSON.parse(row.comparativeJson);
+    } catch {
+      comparative = null;
+    }
+  }
+  if (!summary && comparative && typeof comparative === "object") {
+    const built = comparative as {
+      vendors?: string[];
+      sectionTotals?: { section: string; title: string; totals: Record<string, number> }[];
+      grandTotals?: Record<string, number>;
+      lowestVendor?: string;
+    };
+    summary = {
+      vendorLabels: built.vendors || [],
+      sectionTotals: built.sectionTotals || [],
+      grandTotals: built.grandTotals || {},
+      lowestVendor: built.lowestVendor,
+    };
+  }
+  const { boqLinesJson, comparativeJson: _comparativeJson, vendorBoqs, ...rest } = row;
+  let lineCount = 0;
+  if (boqLinesJson) {
+    try {
+      const lines = JSON.parse(boqLinesJson);
+      lineCount = Array.isArray(lines) ? lines.length : 0;
+    } catch {
+      lineCount = 0;
+    }
+  }
 
   res.json({
-    ...row,
+    ...rest,
+    vendorBoqs: vendorBoqs.map(({ rateLinesJson: _rates, ...slot }) => slot),
+    blankBoq: Boolean(boqLinesJson),
+    lineCount,
+    comparative,
     vendorNames: parseVendorNames(row.vendorNamesJson),
     disciplines: packageDisciplines(row),
     summary,
@@ -216,6 +254,80 @@ crmComparativeRouter.get("/bid-packages/:id", requireRoles("admin", "office"), a
     },
   });
 });
+
+/** Package bid: one unpriced BOQ. Contractors fill Rate and Amount on a copy of this file. */
+crmComparativeRouter.post(
+  "/bid-packages/from-boq",
+  requireRoles("admin", "office"),
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    try {
+      const title = String(req.body.title || "").trim();
+      const projectId = String(req.body.projectId || "").trim();
+      if (!title) return res.status(400).json({ error: "Package name is required" });
+      if (!projectId) return res.status(400).json({ error: "Project is required" });
+      if (!req.file) return res.status(400).json({ error: "Upload the BOQ without rates" });
+      const lines = parseBoqBuffer(req.file.buffer);
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, code: true, name: true },
+      });
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      const blank = await blankBoqWorkbook(title, lines);
+      const safe = title.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 60) || "Package";
+      const fileName = `${safe}-BOQ.xlsx`;
+      const saved = await syncBufferToProjectSharePoint(project.code, CRM_SHAREPOINT.packageBoq, fileName, blank, {
+        replace: true,
+      });
+      const due = req.body.dueDate ? new Date(String(req.body.dueDate)) : null;
+      const pkg = await prisma.crmBidPackage.create({
+        data: {
+          title,
+          projectId: project.id,
+          status: "Draft",
+          revisionLabel: "Package",
+          vendorNamesJson: "[]",
+          disciplinesJson: JSON.stringify([{ key: "BOQ", label: "BOQ", sheetName: "BOQ" }]),
+          dueDate: due && !Number.isNaN(due.getTime()) ? due : null,
+          notes: req.body.notes ? String(req.body.notes).slice(0, 2000) : null,
+          blankBoqFileName: fileName,
+          blankBoqPath: saved.path,
+          blankBoqSharePointUrl: saved.sharePointUrl || null,
+          boqLinesJson: JSON.stringify(lines),
+        },
+      });
+      if (saved.sharePointDone) {
+        void saved.sharePointDone
+          .then(async (sp) => {
+            if ("sharePointUrl" in sp && sp.sharePointUrl) {
+              await prisma.crmBidPackage.update({
+                where: { id: pkg.id },
+                data: { blankBoqSharePointUrl: sp.sharePointUrl },
+              });
+            }
+          })
+          .catch(() => undefined);
+      }
+      await audit("crm.comparative.from_boq", {
+        userId: req.user!.id,
+        entity: "CrmBidPackage",
+        entityId: pkg.id,
+        meta: { projectId: project.id, lineCount: lines.length, fileName },
+      });
+      res.json({
+        id: pkg.id,
+        lineCount: lines.length,
+        sharePointUrl: saved.sharePointUrl || null,
+        status: pkg.status,
+      });
+    } catch (err) {
+      console.error("Package BOQ create failed:", err instanceof Error ? err.message : err);
+      if (!res.headersSent) {
+        res.status(400).json({ error: err instanceof Error ? err.message : "Could not create the package BOQ" });
+      }
+    }
+  },
+);
 
 crmComparativeRouter.post("/bid-packages", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
   try {
@@ -551,13 +663,15 @@ crmComparativeRouter.post("/bid-packages/:id/vendors", requireRoles("admin", "of
     skipDuplicates: true,
   });
 
-  await ensureVendorBoqTemplateSheets(
-    prisma,
-    pkg.id,
-    toAdd.map((v) => v.name),
-    disciplines,
-    req.user!.id
-  );
+  if (!pkg.boqLinesJson) {
+    await ensureVendorBoqTemplateSheets(
+      prisma,
+      pkg.id,
+      toAdd.map((v) => v.name),
+      disciplines,
+      req.user!.id
+    );
+  }
 
   let notify = null;
   let draftLogins: { vendor: string; email: string; tempPassword?: string }[] = [];
@@ -642,6 +756,49 @@ crmComparativeRouter.post(
       }
     } else if (!isOffice) {
       return res.status(403).json({ error: "Office access required" });
+    }
+
+    if (pkg.boqLinesJson) {
+      const priced = parseBoqBuffer(req.file.buffer);
+      const safeName = `${slot.vendorLabel.replace(/[^a-zA-Z0-9._-]/g, "_")}-BOQ-${Date.now()}.xlsx`;
+      const projectCode = pkg.project?.code || "GLOBAL";
+      const relFolder = pkg.project?.code
+        ? CRM_SHAREPOINT.vendorBoqFolder(slot.vendorLabel, "BOQ")
+        : "CRM/BidPackages";
+      const saved = await syncBufferToProjectSharePoint(projectCode, relFolder, safeName, req.file.buffer);
+      const updated = await prisma.crmVendorBoq.update({
+        where: { id: slot.id },
+        data: {
+          fileName: req.file.originalname,
+          storagePath: saved.path,
+          sharePointUrl: saved.sharePointUrl || null,
+          rateLinesJson: JSON.stringify(priced),
+          uploadedById: req.user!.id,
+          uploadedAt: new Date(),
+        },
+      });
+      await audit("crm.vendor_boq.upload", {
+        userId: req.user!.id,
+        entity: "CrmVendorBoq",
+        entityId: slot.id,
+        meta: {
+          bidPackageId: pkg.id,
+          vendorLabel: slot.vendorLabel,
+          discipline: "BOQ",
+          fileName: req.file.originalname,
+          lines: priced.length,
+        },
+      });
+      const recomputed = await recomputeAndSyncBidPackage(prisma, pkg.id);
+      return res.json({
+        slot: updated,
+        discipline: "BOQ",
+        storagePath: saved.path,
+        sharePointUrl: saved.sharePointUrl,
+        projectCode: pkg.project?.code || null,
+        summary: recomputed.summary,
+        uploadProgress: { done: recomputed.filledSlots, total: recomputed.totalSlots },
+      });
     }
 
     const pkgDisciplines = packageDisciplines(pkg);
@@ -746,6 +903,7 @@ crmComparativeRouter.delete("/bid-packages/:id/vendor-boq/:slotId", async (req: 
       storagePath: null,
       sharePointUrl: null,
       sheetId: null,
+      rateLinesJson: null,
       uploadedById: null,
       uploadedAt: null,
     },
@@ -1178,6 +1336,24 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
       summary = parseR2SummarySheet(headers, rows);
     }
   }
+  if (!summary && pkg.comparativeJson) {
+    try {
+      const built = JSON.parse(pkg.comparativeJson) as {
+        vendors?: string[];
+        sectionTotals?: { section: string; title: string; totals: Record<string, number> }[];
+        grandTotals?: Record<string, number>;
+        lowestVendor?: string;
+      };
+      summary = {
+        vendorLabels: built.vendors || [],
+        sectionTotals: built.sectionTotals || [],
+        grandTotals: built.grandTotals || {},
+        lowestVendor: built.lowestVendor,
+      };
+    } catch {
+      summary = null;
+    }
+  }
 
   const mySlots =
     vendorId && vendorName
@@ -1274,6 +1450,15 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
       if (!ownsSlot) return res.status(403).json({ error: "Forbidden" });
     } else if (!isOffice && req.user!.role !== "employee") {
       return res.status(403).json({ error: "Forbidden" });
+    }
+
+    if (pkg.boqLinesJson) {
+      const lines = JSON.parse(pkg.boqLinesJson) as Parameters<typeof blankBoqWorkbook>[1];
+      const buffer = await blankBoqWorkbook(pkg.title, lines);
+      const safeVendor = slot.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="BOQ-${safeVendor}.xlsx"`);
+      return res.send(buffer);
     }
 
     const disciplines = packageDisciplines(pkg);

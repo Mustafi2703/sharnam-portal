@@ -55,6 +55,8 @@ export type SyncCommsResult = {
 };
 
 export async function syncCommsContactsFromDirectory(projectId: string): Promise<SyncCommsResult> {
+  const { retireOperationsMailbox } = await import("./pruneDemoUsers.js");
+  await retireOperationsMailbox(prisma);
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) throw new Error("Project not found");
 
@@ -91,38 +93,27 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
   };
 
   const people: Person[] = [];
+  const linkedClient = projectVendors.find((pv) => pv.vendor.partyType === "Client")?.vendor;
+  const clientCompany = (project.clientName || linkedClient?.name || "").trim();
 
-  if (project.clientContactName || project.clientEmail) {
+  if (clientCompany && (project.clientContactName || project.clientEmail)) {
     people.push({
       orgSection: "Client",
-      orgName: project.clientName || "Client",
-      personName: project.clientContactName || project.clientName || "Client contact",
+      orgName: clientCompany,
+      personName: project.clientContactName || clientCompany,
       designation: "",
-      company: project.clientName || "Client",
-      mobile: project.clientPhone || "",
+      company: clientCompany,
+      mobile: project.clientPhone || linkedClient?.businessPhone || "",
       email: project.clientEmail || "",
       mailRole: "TO",
-      officeAddress: project.clientAddress || "",
-    });
-  }
-
-  if (project.clientName && !project.clientContactName && !project.clientEmail) {
-    people.push({
-      orgSection: "Client",
-      orgName: project.clientName,
-      personName: project.clientName,
-      designation: "",
-      company: project.clientName,
-      mobile: project.clientPhone || "",
-      email: "",
-      mailRole: "TO",
-      officeAddress: project.clientAddress || "",
+      officeAddress: project.clientAddress || [linkedClient?.address, linkedClient?.city].filter(Boolean).join(", "),
     });
   }
 
   for (const m of members) {
+    if (m.user.email.trim().toLowerCase() === "operations@spdc.in") continue;
     const orgSection = memberToSection(m.role, m.user.role);
-    const orgName = orgSection === "PMC" ? pmcOrgName(project) : orgSection === "Client" ? project.clientName || "Client" : m.user.fullName;
+    const orgName = orgSection === "PMC" ? pmcOrgName(project) : orgSection === "Client" ? clientCompany || m.user.fullName : m.user.fullName;
     const companyRole = companyRoleByUser.get(m.userId) || "";
     people.push({
       orgSection,
@@ -181,40 +172,27 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
     }
   }
 
-  const clientVendorIds = projectVendors.filter((pv) => pv.vendor.partyType === "Client").map((pv) => pv.vendorId);
-  if (clientVendorIds.length) {
+  const directoryVendorIds = projectVendors.map((pv) => pv.vendorId);
+  if (directoryVendorIds.length) {
     const reps = await prisma.vendorContact.findMany({
-      where: { vendorId: { in: clientVendorIds } },
-      include: { vendor: { select: { name: true, address: true, city: true, state: true } } },
+      where: { vendorId: { in: directoryVendorIds } },
+      include: { vendor: { select: { name: true, partyType: true, address: true, city: true, state: true } } },
     });
     for (const rep of reps) {
+      const orgSection = partyToSection(rep.vendor.partyType);
+      if (!rep.fullName?.trim() && !rep.email?.trim()) continue;
       people.push({
-        orgSection: "Client",
+        orgSection,
         orgName: rep.vendor.name,
         personName: rep.fullName || rep.email,
         designation: rep.role?.trim() || "",
         company: rep.vendor.name,
         mobile: "",
         email: rep.email,
-        mailRole: "TO",
+        mailRole: orgSection === "Client" ? "TO" : "CC",
         officeAddress: [rep.vendor.address, rep.vendor.city, rep.vendor.state].filter(Boolean).join(", "),
       });
     }
-  }
-
-  const hasName = (section: OrgSection, name?: string | null) => {
-    const n = String(name || "").trim().toLowerCase();
-    if (!n) return true;
-    return [...people, ...companyOnly].some((p) => p.orgSection === section && p.company.trim().toLowerCase() === n);
-  };
-  if (project.designConsultant && !hasName("Consultant", project.designConsultant)) {
-    companyOnly.push({ orgSection: "Consultant", company: project.designConsultant, officeAddress: "" });
-  }
-  for (const name of String(project.contractorName || "").split(",").map((n) => n.trim()).filter(Boolean)) {
-    if (!hasName("Contractor", name)) companyOnly.push({ orgSection: "Contractor", company: name, officeAddress: "" });
-  }
-  if (!people.some((p) => p.orgSection === "PMC")) {
-    companyOnly.push({ orgSection: "PMC", company: pmcOrgName(project), officeAddress: "" });
   }
 
   const seenPeople = new Set<string>();
@@ -235,27 +213,51 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       existing.filter((r) => !r.isSectionHeader).map((r) => contactKey(r.email, r.personName, r.orgSection))
     );
 
-    let offset = 0;
+    const nextSort = new Map<string, number>();
+    const sortFor = (section: OrgSection) => {
+      if (!nextSort.has(section)) {
+        const max = existing
+          .filter((r) => (r.orgSection || "Other") === section)
+          .reduce((m, r) => Math.max(m, r.sortOrder ?? 0), sectionBase(section));
+        nextSort.set(section, max);
+      }
+      const n = (nextSort.get(section) || 0) + 1;
+      nextSort.set(section, n);
+      return n;
+    };
     for (const person of uniquePeople) {
       const key = contactKey(person.email, person.personName, person.orgSection);
       if (existingKeys.has(key)) {
-        if (person.orgSection === "PMC" && person.designation) {
-          const row = existing.find(
-            (r) => !r.isSectionHeader && contactKey(r.email, r.personName, r.orgSection) === key,
-          );
-          const current = (row?.designation || "").trim().toLowerCase();
-          const generic = ["", "member", "team member", "site engineer", "quality lead", "viewer", "project manager"].includes(current);
-          if (row && generic && current !== person.designation.trim().toLowerCase()) {
-            await prisma.communicationContact.update({
-              where: { id: row.id },
-              data: { designation: person.designation },
-            });
+        const row = existing.find(
+          (r) => !r.isSectionHeader && contactKey(r.email, r.personName, r.orgSection) === key,
+        );
+        if (row) {
+          const patch: { designation?: string; mobile?: string; company?: string; orgName?: string } = {};
+          if (person.orgSection === "PMC" && person.designation) {
+            const current = (row.designation || "").trim().toLowerCase();
+            const generic = ["", "member", "team member", "site engineer", "quality lead", "viewer", "project manager"].includes(current);
+            if (generic && current !== person.designation.trim().toLowerCase()) patch.designation = person.designation;
+          }
+          const seededMobiles = new Set(["8160757201", "9106945294", "+919876543210", "9876543210"]);
+          const digits = (value: string) => value.replace(/[^\d]/g, "");
+          const rowDigits = digits(row.mobile || "");
+          const nextDigits = digits(person.mobile || "");
+          if (nextDigits && rowDigits !== nextDigits && (!rowDigits || seededMobiles.has(rowDigits))) {
+            patch.mobile = person.mobile;
+          }
+          const companyNow = (row.company || "").trim().toLowerCase();
+          const sectionWord = person.orgSection.toLowerCase();
+          if (person.company && person.company.toLowerCase() !== sectionWord && (companyNow === sectionWord || !companyNow)) {
+            patch.company = person.company;
+            patch.orgName = person.orgName;
+          }
+          if (Object.keys(patch).length) {
+            await prisma.communicationContact.update({ where: { id: row.id }, data: patch });
           }
         }
         result.skipped += 1;
         continue;
       }
-      offset += 1;
       await prisma.communicationContact.create({
         data: {
           projectId,
@@ -263,11 +265,11 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
           orgSection: person.orgSection,
           orgName: person.orgName,
           isSectionHeader: false,
-          sortOrder: sectionBase(person.orgSection) + offset,
+          sortOrder: sortFor(person.orgSection),
           personName: person.personName,
           designation: person.designation,
           company: person.company,
-          spoc: person.personName,
+          spoc: null,
           mobile: person.mobile || null,
           email: person.email || null,
           mailRole: person.mailRole,
@@ -513,7 +515,7 @@ export async function addSetupMatrixContact(projectId: string, body: SetupMatrix
     .toLowerCase();
   const designation = String(body.designation || "").trim();
   const company = String(body.company || orgName).trim();
-  const spoc = String(body.spoc || personName).trim();
+  const spoc = String(body.spoc || "").trim();
   const mobile = String(body.mobile || "").trim();
   const mailRole = body.mailRole === "TO" ? "TO" : "CC";
   const officeAddress = String(body.officeAddress || "").trim();

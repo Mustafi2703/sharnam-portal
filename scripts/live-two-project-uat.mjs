@@ -6,7 +6,7 @@
  * C) HRMS onboarding smoke
  */
 const BASE = process.env.PORTAL_URL || "https://portal.spdc.in";
-const EMAIL = process.env.UAT_EMAIL || "operations@spdc.in";
+const EMAIL = process.env.UAT_EMAIL || "saurabh@spdc.in";
 const PASS = process.env.UAT_PASS || "Demo@1234";
 
 const PACKAGES = [

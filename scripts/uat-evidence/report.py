@@ -28,7 +28,7 @@ SECTIONS = [
 CADENCE = {"A3": "Daily", "A3b": "Daily", "B4": "Daily", "B5": "Daily", "D2": "Daily", "D3": "Daily", "E1": "Daily", "F1": "Daily",
            "B6": "Weekly", "C7": "Weekly", "D1": "Weekly", "D8": "Weekly", "E6": "Weekly", "F2": "Weekly", "F5": "Weekly"}
 LOGIN = {
-    "operations@spdc.in": "Office",
+    "saurabh@spdc.in": "Office",
     "hitesh.rajput@spdc.in": "Site",
     "planning.estimation@spdc.in": "Planning",
     "site@bhavanainfra.demo": "Contractor",

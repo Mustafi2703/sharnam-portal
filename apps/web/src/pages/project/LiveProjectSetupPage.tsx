@@ -227,12 +227,12 @@ export default function LiveProjectSetupPage() {
             />
             <Input
               required
-              placeholder="Site / city"
+              placeholder="Location"
               value={card.location || ""}
               onChange={(e) => setCard({ ...card, location: e.target.value })}
             />
             <Input
-              placeholder="PMC / SPDC"
+              placeholder="Project management consultant"
               value={card.pmcName || ""}
               onChange={(e) => setCard({ ...card, pmcName: e.target.value })}
             />

@@ -95,9 +95,9 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
     { key: "name", label: "Project", placeholder: "Project name" },
     { key: "clientName", label: "Client", highlight: true, placeholder: "Client / employer" },
     { key: "designConsultant", label: "Design Consultant", placeholder: "Architect / designer" },
-    { key: "pmcName", label: "PM Consultant", placeholder: "PMC / SPDC" },
+    { key: "pmcName", label: "Project management consultant", placeholder: "Project management consultant" },
     { key: "contractorName", label: "Contractor", placeholder: "Main contractor" },
-    { key: "location", label: "Location", placeholder: "Site / city" },
+    { key: "location", label: "Location", placeholder: "Location" },
   ];
 
   return (

@@ -22,7 +22,7 @@ const TEAM = [
     "hello@twinoxis.com",
     "admin@twinoxis.com",
     "nirav@spdc.in",
-    "operations@spdc.in",
+    "saurabh@spdc.in",
 ];
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -163,7 +163,7 @@ export function buildCommsFlowDemoMails() {
             bodyText: [
                 "Technical communication matrix is live on the portal.",
                 "",
-                "Contacts: baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, operations@spdc.in",
+                "Contacts: baibhabmustafi@gmail.com, hello@twinoxis.com, admin@twinoxis.com, nirav@spdc.in, saurabh@spdc.in",
                 "",
                 commsUrl,
             ].join("\n"),

@@ -83,7 +83,7 @@ export const SPDC_RFI_RESPONSIBLE = [
 ];
 
 
-export const TEST_RFI_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, operations@spdc.in";
+export const TEST_RFI_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, saurabh@spdc.in";
 
 export type DrawingRfiRow = {
   id: string;

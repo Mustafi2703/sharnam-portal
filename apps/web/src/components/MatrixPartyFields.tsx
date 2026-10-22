@@ -86,6 +86,10 @@ type Props = {
   onMsg: (msg: string) => void;
   onDirectoryChange?: () => Promise<void> | void;
   allowCreateCompany?: boolean;
+  /** Party is already chosen from the company row. Do not show the party dropdown. */
+  lockSection?: boolean;
+  /** Project setup fills name and company from the directory pick. */
+  hideManualFields?: boolean;
 };
 
 export function partyForSection(section: string) {
@@ -196,7 +200,6 @@ function fillFromVendor(form: MatrixFormState, v: MatrixVendor): MatrixFormState
     mobile: v.businessPhone || form.mobile,
     designation: form.designation,
     officeAddress: [v.address, v.city].filter(Boolean).join(", ") || form.officeAddress,
-    spoc: v.primaryContactName || person || form.spoc,
     createDirectory: "none",
     vendorPartyType: v.partyType || partyForSection(section),
     userRole: roleForSection(section),
@@ -214,7 +217,6 @@ function fillFromProjectCard(form: MatrixFormState, project: Props["project"]): 
       email: project.clientEmail || form.email,
       mobile: project.clientPhone || form.mobile,
       officeAddress: project.clientAddress || form.officeAddress,
-      spoc: project.clientContactName || form.spoc,
       mailRole: "TO",
     };
   }
@@ -240,7 +242,6 @@ function fillFromUser(form: MatrixFormState, u: MatrixUser): MatrixFormState {
     email: u.email,
     mobile: u.phone || form.mobile,
     designation: u.designation || u.profile?.designation || "",
-    spoc: form.spoc || u.fullName,
     userRole: u.role === "client" || u.role === "vendor" || u.role === "office" || u.role === "employee" ? u.role : "site_employee",
   };
 }
@@ -287,6 +288,8 @@ export function MatrixPartyFields({
   onMsg,
   onDirectoryChange,
   allowCreateCompany = true,
+  lockSection = false,
+  hideManualFields = false,
 }: Props) {
   const { types: consultantTypes } = useConsultantTypes(token);
   const [pickVendorId, setPickVendorId] = useState("");
@@ -307,17 +310,18 @@ export function MatrixPartyFields({
   );
 
   const peopleVendors = useMemo(() => {
-    if (form.orgSection !== "Client") return sectionVendors;
-    const picked =
+    const named =
       sectionVendors.find((v) => v.id === pickVendorId) ||
       sectionVendors.find((v) => nameLooksLike(v.name, form.company));
-    if (picked) return [picked];
-    const onProject = new Set(
-      assignedVendors
-        .filter((a) => a.partyType === "Client")
-        .map((a) => a.vendorId),
-    );
-    return sectionVendors.filter((v) => onProject.has(v.id));
+    if (named) return [named];
+    if (form.orgSection === "Client") {
+      const onProject = new Set(
+        assignedVendors.filter((a) => a.partyType === "Client").map((a) => a.vendorId),
+      );
+      const linked = sectionVendors.filter((v) => onProject.has(v.id));
+      if (linked.length) return linked;
+    }
+    return sectionVendors;
   }, [form.orgSection, form.company, pickVendorId, sectionVendors, assignedVendors]);
 
   const peopleOptions = useMemo(() => {
@@ -350,8 +354,13 @@ export function MatrixPartyFields({
         );
       }
     }
+    const spdcTeam = new Set(["nirav@spdc.in", "saurabh@spdc.in"]);
     for (const u of sectionUsers) {
-      if (form.orgSection === "Client" && (!u.vendorId || !allowedIds.has(u.vendorId))) continue;
+      if (form.orgSection !== "PMC") {
+        if (!u.vendorId || !allowedIds.has(u.vendorId)) continue;
+      } else if (!spdcTeam.has(u.email.trim().toLowerCase())) {
+        continue;
+      }
       const company = u.vendorId ? vendors.find((v) => v.id === u.vendorId)?.name : "";
       add(
         `user:${u.id}`,
@@ -364,7 +373,7 @@ export function MatrixPartyFields({
   }, [sectionUsers, peopleVendors, vendors, form.orgSection]);
 
   useEffect(() => {
-    if (editing) return;
+    if (editing || lockSection) return;
     const hit = preferredVendor(form.orgSection, vendors, assignedVendors, project);
     const key = hit
       ? `${form.orgSection}:${hit.id}`
@@ -381,7 +390,7 @@ export function MatrixPartyFields({
     onChange(person ? fillFromUser(next, person) : next);
     if (person) setPickUserId(`user:${person.id}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when section / directory identity changes
-  }, [form.orgSection, vendors, assignedVendors, project, editing]);
+  }, [form.orgSection, vendors, assignedVendors, project, editing, lockSection]);
 
   useEffect(() => {
     if (!editing) return;
@@ -441,7 +450,6 @@ export function MatrixPartyFields({
       personName: c.fullName || c.email,
       email: c.email || form.email,
       designation: c.role || form.designation,
-      spoc: c.fullName || v.primaryContactName || form.spoc,
     });
   }
 
@@ -511,16 +519,24 @@ export function MatrixPartyFields({
   return (
     <div className="space-y-3">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {lockSection ? (
+          <p className="sm:col-span-2 lg:col-span-3 text-xs text-steel-muted">
+            Adding a person under <strong className="text-ink" data-preserve-case>{form.company || form.orgSection}</strong>
+            {" · "}
+            {form.orgSection === "PMC" ? "Project management consultant" : form.orgSection}
+          </p>
+        ) : (
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Party</span>
           <Select value={form.orgSection} onChange={(e) => changeSection(e.target.value)}>
             {MATRIX_ORG_SECTIONS.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {s === "PMC" ? "Project management consultant" : s}
               </option>
             ))}
           </Select>
         </label>
+        )}
         <label className="block space-y-1 sm:col-span-1 lg:col-span-2">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company · search {noun}s</span>
           <SearchableSelect
@@ -562,10 +578,12 @@ export function MatrixPartyFields({
             searchPlaceholder="Search name, email, phone…"
           />
         </label>
+        {!hideManualFields ? (
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Name (editable)</span>
           <Input placeholder="Name" value={form.personName} onChange={(e) => onChange({ ...form, personName: e.target.value })} />
         </label>
+        ) : null}
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Designation</span>
           <SearchableSelect
@@ -579,10 +597,12 @@ export function MatrixPartyFields({
             searchPlaceholder="Search or type a new designation…"
           />
         </label>
+        {!hideManualFields ? (
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company (editable)</span>
           <Input placeholder="Company" value={form.company} onChange={(e) => onChange({ ...form, company: e.target.value, orgName: e.target.value })} />
         </label>
+        ) : null}
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Mobile</span>
           <Input placeholder="Mobile" value={form.mobile} onChange={(e) => onChange({ ...form, mobile: e.target.value })} />

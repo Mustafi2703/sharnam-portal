@@ -40,6 +40,7 @@ export function bidInviteEmailHtml(opts: {
   vendorName: string;
   disciplineLabels: string[];
   dueDate?: Date | null;
+  packageBoq?: boolean;
   uploadUrl: string;
   loginUrl?: string;
   portalEmail?: string;
@@ -67,19 +68,27 @@ export function bidInviteEmailHtml(opts: {
       <h1 style="margin:0 0 12px;font-size:20px;color:#1a1d26;">${escapeHtml(opts.packageTitle)}</h1>
       <p style="margin:0 0 16px;color:#5c6578;font-size:14px;line-height:1.5;">
         Dear ${escapeHtml(opts.vendorName)},<br/><br/>
-        Sharnam PMC has opened a discipline-wise BOQ bid for <strong>${escapeHtml(opts.projectCode)}</strong> — ${escapeHtml(opts.projectName)}.
-        Please fill or upload your BOQ sheets (Comparative Statement R2 format) for the disciplines assigned to you.
+        Sharnam PMC has opened a bid for <strong>${escapeHtml(opts.projectCode)}</strong> — ${escapeHtml(opts.projectName)}.
+        ${
+          opts.packageBoq
+            ? "Download the BOQ for this package, fill Rate and Amount, and upload the same file through the portal."
+            : "Please fill or upload your BOQ sheets (Comparative Statement R2 format) for the disciplines assigned to you."
+        }
       </p>
       <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px;">
         <tr><td style="padding:6px 0;color:#5c6578;width:120px;">Project</td><td style="padding:6px 0;font-weight:600;">${escapeHtml(opts.projectCode)}</td></tr>
-        <tr><td style="padding:6px 0;color:#5c6578;">Revision</td><td style="padding:6px 0;">${escapeHtml(opts.revisionLabel)}</td></tr>
+        ${opts.packageBoq ? "" : `<tr><td style="padding:6px 0;color:#5c6578;">Revision</td><td style="padding:6px 0;">${escapeHtml(opts.revisionLabel)}</td></tr>`}
         ${opts.dueDate ? `<tr><td style="padding:6px 0;color:#5c6578;">Due date</td><td style="padding:6px 0;">${fmtEmailDate(opts.dueDate)}</td></tr>` : ""}
       </table>
-      <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#1a1d26;">Your discipline BOQ sheets</p>
+      <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#1a1d26;">${opts.packageBoq ? "Your BOQ" : "Your discipline BOQ sheets"}</p>
       <ul style="margin:0 0 20px;padding-left:18px;color:#374151;font-size:13px;">${discList}</ul>
       ${loginBlock}
       <a href="${escapeHtml(opts.uploadUrl)}" style="display:inline-block;background:#0b6a78;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Open bid portal → upload BOQs</a>
-      <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;">You can also fill BOQs online in the portal or upload Excel matching the R2 template tabs.</p>
+      <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;">${
+        opts.packageBoq
+          ? "Download the BOQ, fill Rate and Amount, then upload that file. Leave the item numbers and descriptions as issued."
+          : "You can also fill BOQs online in the portal or upload Excel matching the R2 template tabs."
+      }</p>
     </div>
     <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:16px;">— Sharnam Project Development Consultants · Portal notification</p>
   </div></body></html>`;
@@ -175,6 +184,7 @@ export async function notifyBidPackageOpened(opts: {
       projectName: pkg.project.name,
       packageTitle: pkg.title,
       revisionLabel: pkg.revisionLabel,
+      packageBoq: Boolean(pkg.boqLinesJson),
       vendorName,
       disciplineLabels: [...info.disciplines],
       dueDate: opts.dueDate ?? pkg.dueDate,

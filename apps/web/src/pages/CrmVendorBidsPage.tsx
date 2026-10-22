@@ -100,6 +100,7 @@ function VendorPackageCard({
     );
   }
   const head = pkgSlots[0];
+  const packageBoq = head?.revisionLabel === "Package" || pkgSlots.every((s) => s.discipline === "BOQ");
   const done = pkgSlots.filter((s) => s.fileName || s.uploadedAt).length;
   const isOpen = head?.bidPackageStatus === "Open";
   const isAwarded = head?.bidPackageStatus === "Awarded";
@@ -156,7 +157,7 @@ function VendorPackageCard({
               rel="noopener noreferrer"
               className="text-[11px] text-brand font-semibold"
             >
-              Comparative Statement R2 (SharePoint) →
+              Comparative statement (SharePoint) →
             </a>
           )}
         </div>
@@ -166,14 +167,14 @@ function VendorPackageCard({
       {summary?.summary?.grandTotals && Object.keys(summary.summary.grandTotals).length > 0 && !vendorView && (
         <div className="mb-4">
           <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">
-            Comparative statement (R2 summary — all bidders)
+            Comparative statement (section totals)
           </h4>
           <CrmComparativeRegister summary={summary.summary} revisionLabel={head?.revisionLabel || "R2"} />
         </div>
       )}
 
       <h4 className="text-xs font-mono uppercase text-steel-muted mb-2">
-        Your discipline BOQs — one file per work package (separate from other contractors)
+        {packageBoq ? "Your BOQ" : "Your discipline BOQs, one file per work package"}
       </h4>
       <ul className="divide-y border border-line rounded-xl overflow-hidden">
         {pkgSlots.map((s) => (
@@ -205,12 +206,14 @@ function VendorPackageCard({
                   className="!text-xs !py-1"
                   onClick={() => void downloadSlotTemplate(s)}
                 >
-                  Download SPDC BOQ
+                  {packageBoq ? "Download BOQ" : "Download SPDC BOQ"}
                 </Button>
               ) : null}
+              {!packageBoq && (
               <Button type="button" variant="primary" className="!text-xs !py-1" onClick={() => onUpload(s, "online")}>
                 {s.fileName ? "Edit BOQ" : "Fill BOQ online"}
               </Button>
+              )}
               <Button type="button" variant="secondary" className="!text-xs !py-1" onClick={() => onUpload(s, "excel")}>
                 {s.fileName ? "Replace Excel" : "Upload Excel"}
               </Button>
@@ -475,17 +478,23 @@ export default function CrmVendorBidsPage() {
       {desk === "bids" && (
       <>
       <Card className="!p-4 border-brand/25 bg-white">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-2">R2 bid workflow</p>
-        <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
-          <li>PMC opens the bid and selects your company on <strong className="text-ink">CRM → Bid management</strong>.</li>
-          <li>
-            For each work package below, click <strong className="text-ink">Download SPDC BOQ</strong> — your own contractor file
-            (Qty + Rate columns only; not shared with other bidders).
-          </li>
-          <li>Fill Qty and Rate in Excel, or use <strong className="text-ink">Fill BOQ online</strong> — office sees updates immediately.</li>
-          <li>Upload the filled .xlsx while the package status is <strong className="text-ink">Open for bids</strong>.</li>
-          <li>PMC refreshes the comparative and awards L1 — your totals stay on this desk after award.</li>
-        </ol>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-brand mb-2">Bid workflow</p>
+        {slots.length > 0 && slots.every((s) => s.revisionLabel === "Package") ? (
+          <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
+            <li>PMC opens the bid and selects your company.</li>
+            <li>Download the BOQ for the package. It is your copy. Other contractors do not see your rates.</li>
+            <li>Fill Rate and Amount, then upload the same file while the package is open for bids.</li>
+            <li>PMC sees the comparative once the priced copies are in.</li>
+          </ol>
+        ) : (
+          <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
+            <li>PMC opens the bid and selects your company on CRM, Bid management.</li>
+            <li>Download the BOQ for each work package. Qty and Rate stay on your file.</li>
+            <li>Fill the sheet in Excel, or use Fill BOQ online.</li>
+            <li>Upload the filled file while the package status is Open for bids.</li>
+            <li>PMC refreshes the comparative and awards the lowest total.</li>
+          </ol>
+        )}
       </Card>
       <Card className="!p-3 text-xs text-steel-muted">
         Office staff use the full Comparative Statement R2 on <strong className="text-ink">CRM → Bid management</strong>. Vendors
@@ -708,7 +717,9 @@ export default function CrmVendorBidsPage() {
             <div className={`register-modal__panel register-modal__panel--2xl`} onClick={(e) => e.stopPropagation()}>
               <div className="register-modal__head">
                 <div>
-                  <div className="text-[10px] font-mono uppercase text-steel-muted">R2 bid BOQ</div>
+                  <div className="text-[10px] font-mono uppercase text-steel-muted">
+                    {uploadSlot.revisionLabel === "Package" ? "Package BOQ" : "Bid BOQ"}
+                  </div>
                   <h3 className="font-semibold text-base sm:text-lg">
                     {uploadSlot.disciplineLabel}
                     {uploadSlot.projectCode ? ` · ${uploadSlot.projectCode}` : ""}
@@ -751,10 +762,12 @@ export default function CrmVendorBidsPage() {
                 ) : (
                   <form className="space-y-3" onSubmit={uploadBoq}>
                     <p className="text-xs text-steel-muted">
-                      Use the matching discipline sheet from Comparative Statement R2 ({uploadSlot.disciplineLabel}).
+                      {uploadSlot.revisionLabel === "Package"
+                        ? "Upload the BOQ you downloaded, with Rate and Amount filled. Keep the item numbers and descriptions."
+                        : `Use the matching discipline sheet (${uploadSlot.disciplineLabel}).`}
                     </p>
                     <FilePickButton accept=".xlsx,.xls,.csv" onPick={(files) => setUploadFile(files[0] || null)}>
-                      {uploadFile ? uploadFile.name : "Choose Excel from R2 workbook"}
+                      {uploadFile ? uploadFile.name : "Choose the filled BOQ"}
                     </FilePickButton>
                     <div className="flex gap-2">
                       <Button type="submit" disabled={!uploadFile || busy}>

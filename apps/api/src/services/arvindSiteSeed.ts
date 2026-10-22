@@ -207,7 +207,6 @@ export async function seedArvindSitePack(db: PrismaClient, opts: { skipInviteEma
           "admin@twinoxis.com",
           "hello@twinoxis.com",
           "nirav@spdc.in",
-          "operations@spdc.in",
           "saurabh@spdc.in",
           "akshay.lad@spdc.in",
           "nitin.vankar@spdc.in",

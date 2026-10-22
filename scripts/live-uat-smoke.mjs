@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Live smoke test — portal.spdc.in CRM / bids / HRMS */
 const BASE = process.env.PORTAL_URL || "https://portal.spdc.in";
-const EMAIL = process.env.UAT_EMAIL || "operations@spdc.in";
+const EMAIL = process.env.UAT_EMAIL || "saurabh@spdc.in";
 const PASS = process.env.UAT_PASS || "Demo@1234";
 
 async function req(path, opts = {}) {

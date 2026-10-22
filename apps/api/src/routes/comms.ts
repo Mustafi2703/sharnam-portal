@@ -485,7 +485,7 @@ commsRouter.post("/contacts/:projectId/seed-demo", requireRoles("admin", "office
       designation: "Project Co-ordinator",
       company: "Sharnam PDC",
       mobile: "9106945294",
-      email: "operations@spdc.in",
+      email: "saurabh@spdc.in",
       mailRole: "TO",
     },
     { projectId, matrixKind: kind, orgSection: "Consultant", orgName: project?.designConsultant || "Design consultant", isSectionHeader: true, sortOrder: 20 },

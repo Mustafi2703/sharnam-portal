@@ -246,11 +246,11 @@ export function ConsultantRoleSelect({
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        {role}
+        {role === "PMC" ? "Project management consultant" : "Consultant"}
       </button>
       <ChoiceModal
-        title="Consultant or PMC"
-        hint="Choose the role here. The consultant type is the list below, including when this company is a PMC."
+        title="Consultant or project management consultant"
+        hint="Choose the role here. The consultant type is the list below, including when this company is a project management consultant."
         open={open}
         onClose={() => setOpen(false)}
       >
@@ -266,11 +266,11 @@ export function ConsultantRoleSelect({
               setOpen(false);
             }}
           >
-            {option}
+            {option === "PMC" ? "Project management consultant" : "Consultant"}
             <span className="block text-xs font-normal text-steel-muted mt-0.5">
               {option === "PMC"
-                ? "Shows on the project card under PMC."
-                : "Shows on the project card under Consultants (under PMC when the type is project management)."}
+                ? "Shows on the project card under Project management consultant."
+                : "Shows on the project card under Consultants."}
             </span>
           </button>
         ))}

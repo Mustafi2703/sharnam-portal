@@ -55,7 +55,7 @@ const ONLY = (process.env.UAT_ONLY || "").split(",").map((s) => s.trim()).filter
 const want = (k) => !ONLY.length || ONLY.includes(k);
 
 const USERS = {
-  office: { email: "operations@spdc.in", portal: "office" },
+  office: { email: "saurabh@spdc.in", portal: "office" },
   site: { email: "jaideep.parmar@spdc.in", portal: "site" },
   planning: { email: "planning.estimation@spdc.in", portal: "site" },
   vendor: { email: "sanjaythakor.reeca@gmail.com", portal: "vendor" },

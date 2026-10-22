@@ -253,7 +253,7 @@ export function CompanyRepresentativesPanel({
                 <Input
                   className="sm:col-span-2"
                   autoComplete="organization-title"
-                  placeholder="Role (e.g. Estimator, Director)"
+                  placeholder="Their role in this company"
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                 />
@@ -327,7 +327,7 @@ export function CompanyRepresentativesPanel({
             <Input
               className="sm:col-span-2"
               autoComplete="organization-title"
-              placeholder="Role (e.g. Estimator, Director)"
+              placeholder="Their role in this company"
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
             />

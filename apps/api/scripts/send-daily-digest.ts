@@ -3,7 +3,7 @@
  *
  *   npx tsx apps/api/scripts/send-daily-digest.ts preview
  *   npx tsx apps/api/scripts/send-daily-digest.ts send
- *   npx tsx apps/api/scripts/send-daily-digest.ts send operations@spdc.in,nirav@spdc.in
+ *   npx tsx apps/api/scripts/send-daily-digest.ts send nirav@spdc.in,saurabh@spdc.in
  */
 import dotenv from "dotenv";
 import path from "path";

@@ -74,7 +74,7 @@ export default function ProjectsPage() {
             <Input placeholder="Client" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
             <Input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             <Input placeholder="Design consultant" value={form.designConsultant} onChange={(e) => setForm({ ...form, designConsultant: e.target.value })} />
-            <Input placeholder="PMC / SPDC" value={form.pmcName} onChange={(e) => setForm({ ...form, pmcName: e.target.value })} />
+            <Input placeholder="Project management consultant" value={form.pmcName} onChange={(e) => setForm({ ...form, pmcName: e.target.value })} />
             <Input placeholder="Contractor" value={form.contractorName} onChange={(e) => setForm({ ...form, contractorName: e.target.value })} />
             <Button type="submit">Create project</Button>
           </form>

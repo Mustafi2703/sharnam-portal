@@ -1,4 +1,4 @@
-import { Fragment, type CSSProperties, type MouseEvent } from "react";
+import { Fragment, useEffect, type CSSProperties, type MouseEvent } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth";
 import { Button } from "../../components/ui";
@@ -43,6 +43,13 @@ export default function CrmLayout() {
     : CRM_TOOLS.find((t) =>
         toolActive(loc.pathname, t.to, t.to === "leads" || t.to === "projects" || t.to === "setup" || t.to === "packages")
       );
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.querySelectorAll(".app-frame__scroll").forEach((node) => {
+      node.scrollTop = 0;
+    });
+  }, [loc.pathname]);
 
   const onBids = loc.pathname.startsWith("/crm/bids");
   const onSetup = loc.pathname.startsWith("/crm/setup");

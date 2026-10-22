@@ -28,14 +28,20 @@ export function CrmComparativeRegister({
   revisionLabel = "R2",
   title = "Comparative statement",
 }: Props) {
+  const packageBoq = revisionLabel === "Package";
+  const sheetLabel = packageBoq ? "Comparative statement · package BOQ" : `Comparative Statement · ${revisionLabel} · summary tab`;
   if (!summary?.vendorLabels?.length) {
     return (
-      <RegisterSheetFrame title={title} sheetLabel={`Comparative Statement · ${revisionLabel} · summary tab`} rowCount={0}>
+      <RegisterSheetFrame title={title} sheetLabel={sheetLabel} rowCount={0}>
         <table className="sheet-register__table min-w-[640px]">
           <tbody>
             <RegisterEmptyRow
               colSpan={4}
-              message="Upload vendor BOQs and click Refresh comparative — section totals appear here like the R2 summary sheet."
+              message={
+                packageBoq
+                  ? "Add contractors, open the bid, and wait for their priced BOQ. Section totals appear here."
+                  : "Upload vendor BOQs and click Refresh comparative. Section totals appear here."
+              }
             />
           </tbody>
         </table>
@@ -50,7 +56,7 @@ export function CrmComparativeRegister({
       <div className="flex flex-wrap gap-3 text-xs">
         {summarySheetId && (
           <Link to={`/custom-sheets/${summarySheetId}`} className="font-semibold text-brand">
-            Open summary sheet (R2 tab) →
+            Open summary sheet →
           </Link>
         )}
         {masterSheetId && (
@@ -68,7 +74,7 @@ export function CrmComparativeRegister({
 
       <RegisterSheetFrame
         title={title}
-        sheetLabel={`Comparative Statement - ${revisionLabel}.xlsx · summary`}
+        sheetLabel={packageBoq ? "Comparative statement · section totals" : `Comparative Statement - ${revisionLabel}.xlsx · summary`}
         rowCount={summary.sectionTotals.length + 1}
         className="min-h-[200px]"
       >

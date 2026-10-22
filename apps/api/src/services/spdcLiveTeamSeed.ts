@@ -13,7 +13,6 @@ const PASSWORD = process.env.SEED_PASSWORD || "Demo@1234";
 export const LIVE_TEAM: { email: string; fullName: string; role: RoleKey; org: string }[] = [
   { email: "baibhabmustafi@gmail.com", fullName: "Baibhab Kumar Mustafi", role: "admin", org: "Twinoxis / SPDC UAT" },
   { email: "nirav@spdc.in", fullName: "Nirav Parekh", role: "admin", org: "SPDC" },
-  { email: "operations@spdc.in", fullName: "Saurabh Prajapati", role: "admin", org: "SPDC Operations" },
   { email: "saurabh@spdc.in", fullName: "Saurabh Prajapati", role: "admin", org: "SPDC" },
   { email: "akshay.lad@spdc.in", fullName: "Akshay Lad", role: "site_employee", org: "SPDC" },
   { email: "nitin.vankar@spdc.in", fullName: "Nitin Vankar", role: "site_employee", org: "SPDC" },
@@ -27,9 +26,11 @@ export const LIVE_TEAM: { email: string; fullName: string; role: RoleKey; org: s
   { email: "pratik.solanki@spdc.in", fullName: "Pratik Solanki", role: "site_employee", org: "SPDC" },
 ];
 
-const ALL_NOTIFY = "nirav@spdc.in, saurabh@spdc.in, operations@spdc.in";
+const ALL_NOTIFY = "nirav@spdc.in, saurabh@spdc.in";
 
 async function ensureUsers(db: PrismaClient) {
+  const { retireOperationsMailbox } = await import("./pruneDemoUsers.js");
+  await retireOperationsMailbox(db);
   const hash = await bcrypt.hash(PASSWORD, 10);
   const out: Record<string, string> = {};
   // Only the office admins. Other staff, clients, and vendors are added later from HRMS or CRM.

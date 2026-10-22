@@ -14,7 +14,7 @@ import {
   type RfiEmailContext,
 } from "./rfiEmailFormat.js";
 
-export const RFI_TEST_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, operations@spdc.in";
+export const RFI_TEST_NOTIFY_EMAILS = "hello@twinoxis.com, nirav@spdc.in, saurabh@spdc.in";
 
 function splitEmails(raw?: string | null) {
   return (raw || "")

@@ -28,7 +28,13 @@ function directoryVendorsQuery(tab: string) {
   return "";
 }
 
-type VendorRow = VendorFormState & { id: string; isActive?: boolean; portalLoginActive?: boolean; _count?: { projects: number } };
+type VendorRow = VendorFormState & {
+  id: string;
+  isActive?: boolean;
+  portalLoginActive?: boolean;
+  _count?: { projects: number };
+  contacts?: { id: string; fullName?: string | null; email: string; role?: string | null }[];
+};
 
 const TAB_META: Record<
   string,
@@ -125,6 +131,7 @@ export function DirectoryCompaniesPanel({
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const formPanelRef = useRef<HTMLDivElement>(null);
+  const keepSelection = useRef<string | null>(null);
   const { types: consultantTypes } = useConsultantTypes(token);
 
   const load = useCallback(async () => {
@@ -142,28 +149,21 @@ export function DirectoryCompaniesPanel({
     void load();
   }, [load]);
 
-  useEffect(() => {
-    setRows([]);
-    setSelectedId(null);
-    setCreatingNew(false);
-    setForm({ ...EMPTY_VENDOR_FORM, partyType: meta.defaultParty });
-    setMsg("");
-    setListSearch("");
-    setTypeFilter("");
-  }, [tab, meta.defaultParty]);
-
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) || null, [rows, selectedId]);
 
   useEffect(() => {
-    if (selectedId && !rows.some((r) => r.id === selectedId)) setSelectedId(null);
-  }, [rows, selectedId]);
+    if (!loaded || !selectedId) return;
+    if (keepSelection.current === selectedId) return;
+    if (!rows.some((r) => r.id === selectedId)) setSelectedId(null);
+  }, [rows, selectedId, loaded]);
 
   const visibleRows = useMemo(() => {
     const needle = listSearch.trim().toLowerCase();
     return rows.filter((r) => {
       if (tab === "stakeholders" && typeFilter && (r.trade || "") !== typeFilter) return false;
       if (!needle) return true;
-      return [r.name, r.trade, r.email, r.partyType, r.city].filter(Boolean).join(" ").toLowerCase().includes(needle);
+      const people = (r.contacts || []).map((c) => `${c.fullName || ""} ${c.email || ""} ${c.role || ""}`).join(" ");
+      return [r.name, r.trade, r.email, r.partyType, r.city, people].filter(Boolean).join(" ").toLowerCase().includes(needle);
     });
   }, [rows, listSearch, tab, typeFilter]);
 
@@ -257,6 +257,7 @@ export function DirectoryCompaniesPanel({
           },
         );
         setCreatingNew(false);
+        keepSelection.current = created.id;
         setSelectedId(created.id);
         setMsg(
           created.loginError
@@ -265,7 +266,10 @@ export function DirectoryCompaniesPanel({
         );
       }
       await load();
+      keepSelection.current = null;
+      window.setTimeout(() => document.getElementById("company-people")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     } catch (err) {
+      keepSelection.current = null;
       setMsg(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
@@ -333,7 +337,7 @@ export function DirectoryCompaniesPanel({
                 <div className="text-xs text-steel-muted mt-0.5 flex flex-wrap items-center gap-1.5">
                   {tab === "stakeholders" ? (
                     <>
-                      <span>{r.partyType === "PMC" ? "PMC" : "Consultant"}</span>
+                      <span>{r.partyType === "PMC" ? "Project management consultant" : "Consultant"}</span>
                       {r.trade ? (
                         <span data-preserve-case>
                           {" · "}
@@ -348,6 +352,11 @@ export function DirectoryCompaniesPanel({
                     <span data-preserve-case>
                       {" · "}
                       {r.email}
+                    </span>
+                  ) : null}
+                  {r.contacts?.length ? (
+                    <span className="basis-full" data-preserve-case>
+                      {r.contacts.map((c) => c.fullName || c.email).filter(Boolean).join(", ")}
                     </span>
                   ) : null}
                   {r._count?.projects ? ` · ${r._count.projects} project(s)` : ""}
@@ -521,6 +530,7 @@ export function DirectoryCompaniesPanel({
           <StatusNote msg={msg} compact />
         </form>
         {tab === "clients" && selected ? (
+          <div id="company-people">
           <CompanyRepresentativesPanel
             desk="client"
             vendorId={selected.id}
@@ -528,8 +538,10 @@ export function DirectoryCompaniesPanel({
             token={token}
             canEdit={canEdit}
           />
+          </div>
         ) : null}
         {tab === "vendors" && selected ? (
+          <div id="company-people">
           <CompanyRepresentativesPanel
             desk="vendor"
             vendorId={selected.id}
@@ -537,8 +549,10 @@ export function DirectoryCompaniesPanel({
             token={token}
             canEdit={canEdit}
           />
+          </div>
         ) : null}
         {tab === "stakeholders" && selected ? (
+          <div id="company-people">
           <CompanyRepresentativesPanel
             desk="consultant"
             vendorId={selected.id}
@@ -546,6 +560,7 @@ export function DirectoryCompaniesPanel({
             token={token}
             canEdit={canEdit}
           />
+          </div>
         ) : null}
         <p className="text-[11px] text-steel-muted mt-4 border-t border-line pt-3">
           {tab === "vendors" ? (

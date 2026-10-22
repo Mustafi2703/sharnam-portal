@@ -6,7 +6,7 @@ import { prisma } from "../prisma.js";
 import { graphConfig } from "./graph.js";
 import { sendGraphHtmlMail } from "./graphHtmlMail.js";
 
-const DEFAULT_RECIPIENTS = ["operations@spdc.in", "nirav@spdc.in"];
+const DEFAULT_RECIPIENTS = ["nirav@spdc.in", "saurabh@spdc.in"];
 
 function portalBase() {
   return (process.env.WEB_ORIGIN || process.env.PUBLIC_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
@@ -100,7 +100,7 @@ export async function buildDailyDigestHtml(opts?: { projectCode?: string }) {
   }
 
   sections.push(
-    `<p style="font-family:Segoe UI,sans-serif;font-size:12px;color:#888;margin-top:24px">— शरणम् Portal · automated digest · reply to operations@spdc.in if anything looks wrong</p>`,
+    `<p style="font-family:Segoe UI,sans-serif;font-size:12px;color:#888;margin-top:24px">— शरणम् Portal · automated digest · reply to saurabh@spdc.in if anything looks wrong</p>`,
   );
 
   return sections.join("\n");

@@ -287,6 +287,10 @@ export function paintMatrixSheet(wb: ExcelJS.Workbook, bundle: MatrixBundle, log
     }
 
     const people = matrixBlockRows(block);
+    if (!people.length) {
+      lastDataRow = head.number;
+      continue;
+    }
     const first = sheet.rowCount + 1;
     const heights: number[] = [];
     people.forEach((p, i) => {

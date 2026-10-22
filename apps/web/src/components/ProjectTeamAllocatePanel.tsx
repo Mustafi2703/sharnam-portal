@@ -3,8 +3,6 @@ import { SPDC_COMPANY_ROLES, suggestedProjectMemberRole } from "@sharnam/shared"
 import { api } from "../api";
 import { Badge, Button, Card, Input, Select } from "./ui";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
-import { isSpdcStaffMember, isSpdcStaffUser } from "../lib/spdcStaff";
-import { isHiddenPortalListUser } from "../lib/portalUserLists";
 
 export type AllocateUser = {
   id: string;
@@ -49,10 +47,6 @@ type Props = {
   onChanged?: () => void;
 };
 
-function isSpdcStaff(u: AllocateUser) {
-  return isSpdcStaffUser(u);
-}
-
 /** Assign SPDC team and mark company roles on the project card. */
 export function ProjectTeamAllocatePanel({
   projectId,
@@ -74,7 +68,11 @@ export function ProjectTeamAllocatePanel({
     (userId && localRoles[userId]) || fallback || "";
 
   const staff = useMemo(
-    () => users.filter((u) => isSpdcStaff(u) && !isHiddenPortalListUser(u.email)),
+    () =>
+      users.filter((u) => {
+        const email = u.email.trim().toLowerCase();
+        return email === "nirav@spdc.in" || email === "saurabh@spdc.in";
+      }),
     [users],
   );
   const staffItems = useMemo(
@@ -161,7 +159,14 @@ export function ProjectTeamAllocatePanel({
     }
   }
 
-  const staffMembers = useMemo(() => members.filter((m) => isSpdcStaffMember(m)), [members]);
+  const staffMembers = useMemo(
+    () =>
+      members.filter((m) => {
+        const email = (m.email || "").trim().toLowerCase();
+        return email === "nirav@spdc.in" || email === "saurabh@spdc.in";
+      }),
+    [members],
+  );
   const assigned = staffMembers.filter((m) =>
     `${m.fullName} ${m.email} ${roleFor(m.userId, m.designation)} ${m.department || ""}`
       .toLowerCase()

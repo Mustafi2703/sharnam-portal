@@ -66,9 +66,11 @@ export function ProjectSetupMatrixDesk({
   const [busy, setBusy] = useState(false);
   const clientLogoSrc = useClientLogo(projectId, project?.clientLogoUrl, token);
   const [companyBlock, setCompanyBlock] = useState<MatrixBlock<MatrixContact & { id: string }> | null>(null);
+  const [lockedSection, setLockedSection] = useState(false);
 
   function addPersonTo(block: MatrixBlock) {
     setEditingId(null);
+    setLockedSection(true);
     setForm({
       ...EMPTY_MATRIX_FORM,
       bothMatrices: form.bothMatrices,
@@ -95,6 +97,21 @@ export function ProjectSetupMatrixDesk({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancel = false;
+    void (async () => {
+      try {
+        await api(`/api/comms/contacts/${projectId}/sync-from-directory`, { method: "POST", token });
+        if (!cancel) await load();
+      } catch {
+        /* Opening the matrix still shows the rows already saved. */
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [projectId, token, load]);
 
   async function submitRow(e: FormEvent) {
     e.preventDefault();
@@ -123,6 +140,7 @@ export function ProjectSetupMatrixDesk({
         .join(" · ");
       onMsg(extra ? `Added to comms matrix and ${extra}.` : `Added to ${matrixKind === "COMMERCIAL" ? "commercial" : "technical"} matrix.`);
       await onDirectoryChange?.();
+      setLockedSection(false);
       setForm({
         ...EMPTY_MATRIX_FORM,
         orgSection: form.orgSection,
@@ -250,7 +268,7 @@ export function ProjectSetupMatrixDesk({
       );
       if (!res.ok) throw new Error("Preview failed");
       const html = await res.text();
-      setPreviewTitle(kind === "TECHNICAL" ? "Technical matrix" : "Commercial matrix");
+      setPreviewTitle(kind === "TECHNICAL" ? "TECHNICAL COMMUNICATION MATRIX" : "COMMERCIAL COMMUNICATION MATRIX");
       setPreviewHtml(html);
       onMsg(`${kind === "TECHNICAL" ? "Technical" : "Commercial"} matrix preview opened.`);
     } catch (err) {
@@ -382,6 +400,8 @@ export function ProjectSetupMatrixDesk({
               onMsg={onMsg}
               onDirectoryChange={onDirectoryChange}
               allowCreateCompany={false}
+              lockSection={lockedSection}
+              hideManualFields
             />
             <label className="flex items-center gap-2 text-xs text-steel-muted">
               <input type="checkbox" checked={form.bothMatrices} onChange={(e) => setForm({ ...form, bothMatrices: e.target.checked })} />
@@ -421,6 +441,7 @@ export function ProjectSetupMatrixDesk({
                 onMsg={onMsg}
                 onDirectoryChange={onDirectoryChange}
                 allowCreateCompany={false}
+                hideManualFields
               />
               <div className="flex gap-2">
                 <Button type="submit" disabled={busy}>
@@ -439,7 +460,7 @@ export function ProjectSetupMatrixDesk({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
           <div className="text-center flex-1 min-w-[180px]">
-            <div className="font-display text-lg text-ink">{matrixKind} Communication Matrix</div>
+            <div className="font-display text-lg text-ink uppercase tracking-wide">{matrixKind} Communication Matrix</div>
             <div className="text-xs text-steel-muted mt-1">
               <span data-preserve-case>{matrixSubtitle(project)}</span>
             </div>
@@ -447,7 +468,7 @@ export function ProjectSetupMatrixDesk({
           {clientLogoSrc ? (
             <img src={clientLogoSrc} alt="Client" className="h-12 w-auto max-w-[140px] object-contain" />
           ) : (
-            <span className="text-[11px] text-steel-muted w-[140px] text-right">Upload client logo on the project card</span>
+            <span className="text-[11px] text-steel-muted w-[140px] text-right">{formatUiText("Upload client logo on the project card")}</span>
           )}
         </div>
       </Card>

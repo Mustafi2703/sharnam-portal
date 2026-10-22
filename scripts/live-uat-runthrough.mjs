@@ -5,7 +5,7 @@
  *   node scripts/live-uat-runthrough.mjs
  */
 const BASE = process.env.PORTAL_URL || "https://portal.spdc.in";
-const EMAIL = process.env.UAT_EMAIL || "operations@spdc.in";
+const EMAIL = process.env.UAT_EMAIL || "saurabh@spdc.in";
 const PASS = process.env.UAT_PASS || "Demo@1234";
 const VOLTAMP_CODE = "SHAR/SNT/26-27/Voltamp Transformers Ltd.";
 

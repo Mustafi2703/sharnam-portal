@@ -77,9 +77,11 @@ export function CommsMatrixPanel({
   const [vendors, setVendors] = useState<MatrixVendor[]>([]);
   const [assignedVendors, setAssignedVendors] = useState<AssignedVendor[]>([]);
   const [companyBlock, setCompanyBlock] = useState<MatrixBlock<MatrixContact & { id: string }> | null>(null);
+  const [lockedSection, setLockedSection] = useState(false);
 
   function addPersonTo(block: MatrixBlock) {
     setEditingId(null);
+    setLockedSection(true);
     setForm({
       ...EMPTY_MATRIX_FORM,
       bothMatrices: false,
@@ -142,6 +144,7 @@ export function CommsMatrixPanel({
           body: JSON.stringify({ ...form, matrixKind, company: form.company || form.orgName }),
         });
       }
+      setLockedSection(false);
       setForm({ ...EMPTY_MATRIX_FORM, orgSection: form.orgSection, bothMatrices: false, vendorPartyType: partyForSection(form.orgSection), userRole: roleForSection(form.orgSection) });
       await onReload();
     } catch (err) {
@@ -233,6 +236,8 @@ export function CommsMatrixPanel({
       onMsg={onMsg}
       onDirectoryChange={allowCreateCompany ? loadDirectory : undefined}
       allowCreateCompany={allowCreateCompany}
+      lockSection={lockedSection && !editingId}
+      hideManualFields
     />
   );
 
@@ -314,7 +319,7 @@ export function CommsMatrixPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
           <div className="text-center flex-1 min-w-[180px]">
-            <div className="font-display text-lg text-ink">{matrixKind} Communication Matrix</div>
+            <div className="font-display text-lg text-ink uppercase tracking-wide">{matrixKind} Communication Matrix</div>
             <div className="text-xs text-steel-muted mt-1">
               <span data-preserve-case>{matrixSubtitle(project)}</span>
             </div>
@@ -322,7 +327,7 @@ export function CommsMatrixPanel({
           {clientLogoSrc ? (
             <img src={clientLogoSrc} alt="Client" className="h-12 w-auto max-w-[140px] object-contain" />
           ) : (
-            <span className="text-[11px] text-steel-muted w-[140px] text-right">Client logo on project card</span>
+            <span className="text-[11px] text-steel-muted w-[140px] text-right">{formatUiText("Upload client logo on the project card")}</span>
           )}
         </div>
       </Card>

@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode } from "react";
+import { FormEvent, Fragment, type ReactNode } from "react";
 import { Badge, Button, Card, Input } from "./ui";
 import { FilePickButton } from "./FilePickButton";
 import { CrmComparativeRegister } from "./CrmComparativeRegister";
@@ -10,6 +10,10 @@ import { downloadAuthFile } from "../lib/downloadReport";
 import { IconClipboard } from "./icons";
 
 const BID_FLOW_STEPS = ["Project", "Bid package", "Open & invite", "Vendor BOQs", "Comparative", "Award"] as const;
+
+function money(n: number) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n || 0);
+}
 
 type Discipline = { key: string; label: string; sheetName: string };
 
@@ -45,6 +49,23 @@ type BidPackage = {
   leadId?: string | null;
   vendorBoqs?: VendorBoqSlot[];
   disciplines?: Discipline[];
+  blankBoq?: boolean;
+  lineCount?: number;
+  blankBoqSharePointUrl?: string | null;
+  comparative?: {
+    vendors: string[];
+    lowestVendor?: string;
+    lines: {
+      key: string;
+      itemNo: string;
+      description: string;
+      qty: number | null;
+      qtyText: string;
+      unit: string;
+      section: string;
+      quotes: { vendor: string; rate: number | null; amount: number | null }[];
+    }[];
+  } | null;
 };
 
 export type CrmBidDeskProps = {
@@ -347,6 +368,18 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
             <div className="crm-bid-tab-panel">
               {mainTab === "overview" && (
                 <div className="space-y-4">
+                  {detail.blankBoq && (
+                    <Card className="!p-4">
+                      <p className="text-sm">
+                        Package BOQ with {detail.lineCount || 0} lines. Add the contractors, then open the bid. Each contractor downloads this BOQ, fills Rate and Amount, and uploads it. The comparative uses their names.
+                      </p>
+                      {detail.blankBoqSharePointUrl && (
+                        <a href={detail.blankBoqSharePointUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand font-semibold mt-2 inline-block">
+                          Unpriced BOQ in SharePoint
+                        </a>
+                      )}
+                    </Card>
+                  )}
                   {detail.status === "Draft" && (
                     <Card className="!p-4 border-amber-300 bg-amber-50/70">
                       <p className="text-sm text-ink">
@@ -423,6 +456,72 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
                       )}
                     </p>
                   )}
+                  {detail.comparative?.lines?.length ? (
+                    <div className="overflow-x-auto mb-4 border border-line rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead className="bg-sand text-left">
+                          <tr>
+                            <th className="p-2">Sr</th>
+                            <th className="p-2 min-w-[220px]">Description</th>
+                            <th className="p-2">Qty</th>
+                            <th className="p-2">Unit</th>
+                            {detail.comparative.vendors.map((vendor) => (
+                              <th key={vendor} className="p-2 text-right" colSpan={2}>
+                                {vendor}
+                              </th>
+                            ))}
+                          </tr>
+                          <tr className="text-[10px] uppercase text-steel-muted">
+                            <th />
+                            <th />
+                            <th />
+                            <th />
+                            {detail.comparative.vendors.map((vendor) => (
+                              <th key={`${vendor}-h`} className="px-2 pb-2 text-right" colSpan={2}>
+                                Rate / Amount
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detail.comparative.lines.map((line, index) => {
+                            const prev = detail.comparative?.lines[index - 1];
+                            const amounts = line.quotes.map((q) => q.amount).filter((n): n is number => n != null && n > 0);
+                            const lowest = amounts.length ? Math.min(...amounts) : null;
+                            return (
+                              <Fragment key={line.key}>
+                                {line.section && line.section !== prev?.section ? (
+                                  <tr className="bg-sand">
+                                    <td className="p-2 font-semibold" colSpan={4 + detail.comparative!.vendors.length * 2}>
+                                      {line.section}
+                                    </td>
+                                  </tr>
+                                ) : null}
+                                <tr className="border-t border-line">
+                                  <td className="p-2 font-mono">{line.itemNo}</td>
+                                  <td className="p-2">{line.description}</td>
+                                  <td className="p-2">{line.qtyText || line.qty || ""}</td>
+                                  <td className="p-2">{line.unit}</td>
+                                  {detail.comparative!.vendors.map((vendor) => {
+                                    const quote = line.quotes.find((q) => q.vendor === vendor);
+                                    const low = lowest != null && quote?.amount === lowest;
+                                    return (
+                                      <td key={vendor} className={`p-2 text-right ${low ? "text-ok font-semibold" : ""}`} colSpan={2}>
+                                        {quote?.rate != null ? money(quote.rate) : ""}
+                                        <span className="block text-[10px] text-steel-muted">
+                                          {quote?.amount != null ? money(quote.amount) : ""}
+                                        </span>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              </Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
                   <CrmComparativeRegister
                     summary={detail.summary}
                     summarySheetId={detail.summarySheetId}
