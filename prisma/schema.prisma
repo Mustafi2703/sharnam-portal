@@ -157,6 +157,7 @@ model Project {
   qualityNcrs             QualityNcr[]
   qualitySiteRecords      QualitySiteRecord[]
   purchaseOrders          PurchaseOrder[]
+  financeSapDocuments     FinanceSapDocument[]
   raBills                 RaBill[]
   certificates            CertificateOfPayment[]
   financeMaterialInvoices FinanceMaterialInvoice[]
@@ -2571,6 +2572,28 @@ model PurchaseOrder {
   certificates CertificateOfPayment[]
 
   @@unique([projectId, poNumber])
+}
+
+/** SAP-style tax invoice or purchase order raised from Finance and filed in the ISO folder. */
+model FinanceSapDocument {
+  id            String    @id @default(cuid())
+  projectId     String
+  kind          String
+  number        String
+  docDate       DateTime?
+  partyName     String
+  formJson      String    @db.LongText
+  fileUrl       String?
+  sharePointUrl String?
+  storagePath   String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, kind, number])
+  @@index([projectId, kind])
 }
 
 /**

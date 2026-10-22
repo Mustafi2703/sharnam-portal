@@ -1955,3 +1955,152 @@ financeRouter.post("/:projectId/payment-summary/import", requireRoles("admin", "
   const out = await importPaymentSummaryWorkbook(req.params.projectId, req.file.buffer, req.body.replace === "1", s(req.body.discipline) || undefined);
   res.json(out);
 });
+
+/* ─────────────────────────────────────────  SAP TAX INVOICE & PO  ───────────────────────────────────────── */
+
+function parseSapBody(body: Record<string, unknown>) {
+  const kind = s(body.kind) === "PURCHASE_ORDER" ? "PURCHASE_ORDER" : s(body.kind) === "TAX_INVOICE" ? "TAX_INVOICE" : "";
+  const number = s(body.number);
+  const partyName = s(body.partyName);
+  const lines = Array.isArray(body.lines) ? body.lines : [];
+  if (!kind) return { error: "Choose a tax invoice or a purchase order." };
+  if (!number) return { error: "Document number is required." };
+  if (!partyName) return { error: "Party name is required." };
+  const parsedLines = lines
+    .map((raw) => {
+      const line = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      return {
+        code: s(line.code) || undefined,
+        description: s(line.description) || undefined,
+        detail: s(line.detail) || undefined,
+        qty: num(line.qty),
+        unit: s(line.unit) || undefined,
+        rate: num(line.rate),
+        discountPct: num(line.discountPct),
+        cgstPct: num(line.cgstPct),
+        sgstPct: num(line.sgstPct),
+        hsn: s(line.hsn) || undefined,
+        deliveryDate: s(line.deliveryDate) || undefined,
+      };
+    })
+    .filter((line) => line.description || line.code);
+  if (!parsedLines.length) return { error: "Add at least one line with a description." };
+  const form = {
+    kind: kind as "TAX_INVOICE" | "PURCHASE_ORDER",
+    number,
+    docDate: s(body.docDate) || undefined,
+    partyName,
+    partyAddress: s(body.partyAddress) || undefined,
+    partyGstin: s(body.partyGstin) || undefined,
+    partyPan: s(body.partyPan) || undefined,
+    partyAttn: s(body.partyAttn) || undefined,
+    partyRef: s(body.partyRef) || undefined,
+    reference: s(body.reference) || undefined,
+    projectSite: s(body.projectSite) || undefined,
+    siteAddress: s(body.siteAddress) || undefined,
+    placeOfSupply: s(body.placeOfSupply) || undefined,
+    contactName: s(body.contactName) || undefined,
+    contactPhone: s(body.contactPhone) || undefined,
+    contactEmail: s(body.contactEmail) || undefined,
+    paymentTerms: s(body.paymentTerms) || undefined,
+    dueOrIncoterms: s(body.dueOrIncoterms) || undefined,
+    billingType: s(body.billingType) || undefined,
+    period: s(body.period) || undefined,
+    reverseCharge: s(body.reverseCharge) || undefined,
+    lines: parsedLines,
+    preparedBy: s(body.preparedBy) || undefined,
+    checkedBy: s(body.checkedBy) || undefined,
+    signatory: s(body.signatory) || undefined,
+    bankName: s(body.bankName) || undefined,
+    accountNo: s(body.accountNo) || undefined,
+    ifsc: s(body.ifsc) || undefined,
+    spdcGstin: s(body.spdcGstin) || undefined,
+    spdcPan: s(body.spdcPan) || undefined,
+    officeAddress: s(body.officeAddress) || undefined,
+  };
+  return { form };
+}
+
+async function fileSapPdf(projectCode: string, form: import("../modules/finance/sapCommercial.js").SapForm) {
+  const { buildSapPdf, sapFolder, sapKindLabel } = await import("../modules/finance/sapCommercial.js");
+  const pdf = await buildSapPdf(form);
+  const fileName = `${sapKindLabel(form.kind).replace(/ /g, "-")}-${form.number.replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf`;
+  const saved = await mockOneDrive.upload(projectCode, sapFolder(form.kind), fileName, pdf, "application/pdf", { raw: true });
+  return { pdf, saved, fileName };
+}
+
+financeRouter.get("/:projectId/sap-docs", async (req, res) => {
+  const kind = s(req.query.kind);
+  const rows = await prisma.financeSapDocument.findMany({
+    where: { projectId: req.params.projectId, ...(kind === "TAX_INVOICE" || kind === "PURCHASE_ORDER" ? { kind } : {}) },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(rows);
+});
+
+financeRouter.post("/:projectId/sap-docs", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const parsed = parseSapBody(req.body || {});
+  if ("error" in parsed && parsed.error) return res.status(400).json({ error: parsed.error });
+  const form = parsed.form!;
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true, code: true, name: true } });
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  if (!form.projectSite) form.projectSite = project.name;
+  const existing = await prisma.financeSapDocument.findUnique({
+    where: { projectId_kind_number: { projectId: project.id, kind: form.kind, number: form.number } },
+  });
+  if (existing) return res.status(409).json({ error: `${form.number} already exists. Use a new number.` });
+  try {
+    const { saved } = await fileSapPdf(project.code, form);
+    const row = await prisma.financeSapDocument.create({
+      data: {
+        projectId: project.id,
+        kind: form.kind,
+        number: form.number,
+        docDate: form.docDate ? new Date(form.docDate) : null,
+        partyName: form.partyName,
+        formJson: JSON.stringify(form),
+        fileUrl: saved.url || saved.path,
+        sharePointUrl: saved.sharePointUrl || saved.url || null,
+        storagePath: saved.sharePointPath || saved.path,
+        createdById: req.user!.id,
+      },
+    });
+    await audit("finance.sap.create", { userId: req.user!.id, entity: "FinanceSapDocument", entityId: row.id, meta: { kind: form.kind, number: form.number, folder: saved.path } });
+    res.status(201).json({ ...row, sharePointError: saved.sharePointError || null });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not create the document" });
+  }
+});
+
+financeRouter.get("/:projectId/sap-docs/:docId/download.pdf", async (req, res) => {
+  const row = await prisma.financeSapDocument.findFirst({
+    where: { id: req.params.docId, projectId: req.params.projectId },
+  });
+  if (!row) return res.status(404).json({ error: "Document not found" });
+  const { buildSapPdf, sapKindLabel } = await import("../modules/finance/sapCommercial.js");
+  const form = JSON.parse(row.formJson);
+  const pdf = await buildSapPdf(form);
+  const name = `${sapKindLabel(form.kind).replace(/ /g, "-")}-${row.number.replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf`;
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.send(pdf);
+});
+
+financeRouter.post("/:projectId/sap-docs/:docId/file", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const row = await prisma.financeSapDocument.findFirst({
+    where: { id: req.params.docId, projectId: req.params.projectId },
+    include: { project: { select: { code: true } } },
+  });
+  if (!row) return res.status(404).json({ error: "Document not found" });
+  const form = JSON.parse(row.formJson);
+  const { saved } = await fileSapPdf(row.project.code, form);
+  const updated = await prisma.financeSapDocument.update({
+    where: { id: row.id },
+    data: {
+      fileUrl: saved.url || saved.path,
+      sharePointUrl: saved.sharePointUrl || saved.url || null,
+      storagePath: saved.sharePointPath || saved.path,
+    },
+  });
+  res.json({ ...updated, sharePointError: saved.sharePointError || null });
+});

@@ -10,6 +10,7 @@ import {
   resolveFinancePackage,
 } from "@sharnam/finance/disciplines";
 import { FinanceBillRegister } from "../components/FinanceBillRegister";
+import { SapDocumentsPanel } from "../components/SapDocumentsPanel";
 import { FinanceDisciplineStrip } from "../components/FinanceDisciplineStrip";
 import { RaBillWorkbookSlots } from "../components/RaBillWorkbookSlots";
 import { CopDocumentSlots } from "../components/CopDocumentSlots";
@@ -34,6 +35,7 @@ const TOOLS = [
   { id: "ra", label: "RA Bill Tracker" },
   { id: "cop", label: "COP (Certificate of Payment)" },
   { id: "invoices", label: "Material / Tax invoices" },
+  { id: "sap", label: "Tax invoice & PO" },
   { id: "summary", label: "Payment Summary" },
   { id: "audit", label: "Audit sheets → drive" },
 ] as const;
@@ -113,8 +115,11 @@ export default function FinancePage() {
         actions={
           isToolWindow() ? undefined : (
           <div className="flex flex-wrap gap-2">
+            <ToolLink to={`/projects/${id}/finance?tab=sap`}>
+              <Button type="button">Tax invoice & PO</Button>
+            </ToolLink>
             <ToolLink to={`/projects/${id}/finance?tab=bills${disciplineKey !== "all" ? `&discipline=${disciplineKey}` : ""}`}>
-              <Button type="button">Bill registers</Button>
+              <Button type="button" variant="secondary">Bill registers</Button>
             </ToolLink>
             <Link to={`/projects/${id}/hub/finance`}>
               <Button type="button" variant="secondary">Finance hub</Button>
@@ -232,6 +237,16 @@ export default function FinancePage() {
           token={token || ""}
           activePkg={activePkg}
           disciplineKey={disciplineKey}
+        />
+      )}
+
+      {active.id === "sap" && id && (
+        <SapDocumentsPanel
+          projectId={id}
+          token={token || ""}
+          canWrite={canWrite}
+          projectName={summary?.project?.name}
+          setMsg={setMsg}
         />
       )}
 
