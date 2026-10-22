@@ -7,12 +7,13 @@ import {
   type DisciplineDef,
   type ImportedSheet,
   disciplineCatalogEntry,
+  loadSampleBoqSheet,
   parseDisciplinesJson,
   parseR2SummarySheet,
   type ComparativeSummary,
 } from "./comparativeStatement.js";
 import { loadMonitoringBoqTemplate } from "./monitoringBoqTemplate.js";
-import { buildPackageComparative, comparativeWorkbook, type BoqLine } from "./boqCompare.js";
+import { buildPackageComparative, comparativeWorkbook, linesFromSheetCells, type BoqLine } from "./boqCompare.js";
 
 function numCell(cell?: SheetCell): number {
   const n = Number(cell?.computed ?? cell?.raw ?? 0);
@@ -207,16 +208,20 @@ export async function ensureVendorBoqTemplateSheets(
   for (const slot of slots) {
     if (slot.sheetId) continue;
     const disc = disciplineCatalogEntry(slot.discipline, disciplines);
-    const fromMonitoring = pkg.projectId
-      ? await loadMonitoringBoqTemplate(prisma, pkg.projectId, slot.discipline, disciplines)
-      : null;
-    const parsed = fromMonitoring?.rows?.length
-      ? fromMonitoring
-      : {
-          headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
-          rows: [] as SheetCell[][],
-          sheetName: disc?.sheetName || slot.discipline,
-        };
+    const sample = loadSampleBoqSheet(slot.discipline, disciplines);
+    const fromMonitoring =
+      !sample?.rows.length && pkg.projectId
+        ? await loadMonitoringBoqTemplate(prisma, pkg.projectId, slot.discipline, disciplines)
+        : null;
+    const parsed = sample?.rows.length
+      ? sample
+      : fromMonitoring?.rows?.length
+        ? fromMonitoring
+        : {
+            headers: ["Sr. No.", "Description", "QTY.", "UNIT", "RATE", "AMOUNT"],
+            rows: [] as SheetCell[][],
+            sheetName: disc?.sheetName || slot.discipline,
+          };
 
     const boqSheet = await prisma.customSheet.create({
       data: {
@@ -224,9 +229,11 @@ export async function ensureVendorBoqTemplateSheets(
         category: "CRM Vendor BOQ",
         headersJson: JSON.stringify(parsed.headers),
         rowsJson: JSON.stringify(parsed.rows),
-        sourceFile: fromMonitoring?.rows?.length
-          ? "Project budget monitoring (SPDC Budget)"
-          : "Empty BOQ — vendor upload or online fill",
+        sourceFile: sample?.rows.length
+          ? "Comparative statement sample BOQ"
+          : fromMonitoring?.rows?.length
+            ? "Project budget monitoring (SPDC Budget)"
+            : "Empty BOQ — vendor upload or online fill",
         createdById,
       },
     });
@@ -261,6 +268,7 @@ export async function recomputeBidPackageComparative(
   for (const d of disciplines) totalsByDiscipline[d.key] = {};
 
   let filledSlots = 0;
+  const quoteLines = new Map<string, BoqLine[]>();
   for (const slot of pkg.vendorBoqs) {
     if (!slot.sheetId) continue;
     const sheet = await prisma.customSheet.findUnique({ where: { id: slot.sheetId } });
@@ -270,6 +278,16 @@ export async function recomputeBidPackageComparative(
 
     const headers = JSON.parse(sheet.headersJson || "[]") as string[];
     const rows = parseRowsJson(sheet.rowsJson);
+    const discLabel = disciplines.find((d) => d.key === slot.discipline)?.label || slot.discipline;
+    const parsedLines = linesFromSheetCells(headers, rows).map((line) => ({
+      ...line,
+      key: disciplines.length > 1 ? `${slot.discipline}:${line.key}` : line.key,
+      section:
+        disciplines.length > 1
+          ? `${discLabel}${line.section ? ` — ${line.section}` : ""}`
+          : line.section || "BOQ",
+    }));
+    if (parsedLines.length) quoteLines.set(slot.vendorLabel, [...(quoteLines.get(slot.vendorLabel) || []), ...parsedLines]);
     const total = sumBoqSheetTotal(headers, rows);
     if (total > 0 || slotRow.fileName || slotRow.uploadedAt) filledSlots++;
     totalsByDiscipline[slot.discipline] ||= {};
@@ -277,7 +295,6 @@ export async function recomputeBidPackageComparative(
 
     for (const section of extractBoqSectionTotals(headers, rows)) {
       const key = `${slot.discipline}:${section.letter}`;
-      const discLabel = disciplines.find((d) => d.key === slot.discipline)?.label || slot.discipline;
       const title = disciplines.length > 1 ? `${discLabel} — ${section.title}` : section.title;
       const row = sectionMap.get(key) || { letter: section.letter, title, totals: {} };
       if (title.length > row.title.length) row.title = title;
@@ -286,9 +303,51 @@ export async function recomputeBidPackageComparative(
     }
   }
 
-  const sections = [...sectionMap.values()].sort((a, b) => a.title.localeCompare(b.title) || a.letter.localeCompare(b.letter));
-  const summarySheet = buildR2SummarySheet(vendorNames, disciplines, totalsByDiscipline, sections);
-  const masterSheet = buildMasterCompareSheet(vendorNames, disciplines, totalsByDiscipline);
+  const blankByKey = new Map<string, BoqLine>();
+  for (const lines of quoteLines.values()) {
+    for (const line of lines) {
+      if (!blankByKey.has(line.key)) blankByKey.set(line.key, { ...line, rate: null, amount: null });
+    }
+  }
+  const quotedVendors = [
+    ...vendorNames.filter((vendor) => quoteLines.has(vendor)),
+    ...[...quoteLines.keys()].filter((vendor) => !vendorNames.includes(vendor)),
+  ];
+  const lineComparative =
+    blankByKey.size && quotedVendors.length
+      ? buildPackageComparative(
+          [...blankByKey.values()],
+          quotedVendors.map((vendor) => ({ vendor, lines: quoteLines.get(vendor) || [] })),
+        )
+      : null;
+  const sections = lineComparative?.sectionTotals.length
+    ? lineComparative.sectionTotals.map((section, index) => {
+        const letter = section.title.match(/SECTION\s*[-–:]?\s*([A-Z])/i)?.[1] || String.fromCharCode(65 + (index % 26));
+        const title = section.title.replace(/^SECTION\s*[-–:]?\s*[A-Z]\s*/i, "").trim() || section.title;
+        return { letter, title, totals: section.totals };
+      })
+    : [...sectionMap.values()].sort((a, b) => a.title.localeCompare(b.title) || a.letter.localeCompare(b.letter));
+  const summaryVendors = lineComparative?.vendors.length ? lineComparative.vendors : vendorNames;
+  const summarySheet = buildR2SummarySheet(summaryVendors, disciplines, totalsByDiscipline, sections);
+  const masterSheet = lineComparative?.lines.length
+    ? {
+        headers: ["Sr. No.", "Description", "QTY.", "UNIT", ...summaryVendors.flatMap((vendor) => [`${vendor} RATE`, `${vendor} GRAND TOTAL`])],
+        rows: lineComparative.lines.flatMap((line, index, all) => {
+          const previous = all[index - 1];
+          const banner =
+            line.section && line.section !== previous?.section
+              ? [[cell(""), cell(line.section), cell(""), cell(""), ...summaryVendors.flatMap(() => [cell(""), cell("")])]]
+              : [];
+          const values: (string | number)[] = [line.itemNo, line.description, line.qtyText || line.qty || "", line.unit];
+          for (const vendor of summaryVendors) {
+            const quote = line.quotes.find((item) => item.vendor === vendor);
+            values.push(quote?.rate ?? "", quote?.amount ?? "");
+          }
+          return [...banner, values.map((value) => cell(typeof value === "number" ? value : String(value)))];
+        }),
+        sheetName: "BOQ",
+      }
+    : buildMasterCompareSheet(vendorNames, disciplines, totalsByDiscipline);
   const summary = parseR2SummarySheet([], summarySheet.rows);
 
   if (pkg.summarySheetId) {
@@ -318,6 +377,7 @@ export async function recomputeBidPackageComparative(
           : pkg.status === "Draft"
             ? "Draft"
             : "Open",
+      comparativeJson: lineComparative ? JSON.stringify(lineComparative) : pkg.comparativeJson,
       updatedAt: new Date(),
     },
   });

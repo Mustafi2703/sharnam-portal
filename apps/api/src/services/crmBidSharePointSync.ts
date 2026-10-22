@@ -145,7 +145,7 @@ export async function syncComparativeMasterWorkbook(prisma: PrismaClient, pkgId:
     if (s) {
       const rows = parseRowsJson(s.rowsJson);
       const aoa = rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "Summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "summary");
     }
   }
   if (pkg.comparativeSheetId) {
@@ -154,7 +154,7 @@ export async function syncComparativeMasterWorkbook(prisma: PrismaClient, pkgId:
       const headers = JSON.parse(m.headersJson || "[]") as string[];
       const rows = parseRowsJson(m.rowsJson);
       const aoa = [headers, ...rows.map((row) => row.map((c) => c.computed ?? c.raw ?? ""))];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "Master BOQ");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "BOQ");
     }
   }
 

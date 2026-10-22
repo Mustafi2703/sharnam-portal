@@ -73,9 +73,8 @@ function headerIndex(row: unknown[]) {
   };
 }
 
-/** Read a BOQ sheet. Rate and amount may be blank. */
-export function parseBoqBuffer(buffer: Buffer): BoqLine[] {
-  const rows = sheetRows(buffer);
+/** Read BOQ rows. The first matching header row may sit below a title. Rate and amount may be blank. */
+export function parseBoqRows(rows: unknown[][]): BoqLine[] {
   let headerAt = -1;
   let cols = headerIndex([]);
   for (let i = 0; i < Math.min(rows.length, 25); i++) {
@@ -124,6 +123,23 @@ export function parseBoqBuffer(buffer: Buffer): BoqLine[] {
   }
   if (!lines.length) throw new Error("No BOQ lines were found under the header.");
   return lines;
+}
+
+/** Read a BOQ sheet. Rate and amount may be blank. */
+export function parseBoqBuffer(buffer: Buffer): BoqLine[] {
+  return parseBoqRows(sheetRows(buffer));
+}
+
+export function linesFromSheetCells(
+  headers: string[],
+  rows: { raw?: string | null; computed?: string | number | null }[][],
+): BoqLine[] {
+  const grid = [headers, ...rows.map((row) => headers.map((_, i) => row[i]?.computed ?? row[i]?.raw ?? ""))];
+  try {
+    return parseBoqRows(grid);
+  } catch {
+    return [];
+  }
 }
 
 export function quoteByKey(lines: BoqLine[]) {
@@ -206,25 +222,61 @@ export async function blankBoqWorkbook(title: string, lines: BoqLine[]): Promise
 export async function comparativeWorkbook(title: string, comparative: PackageComparative): Promise<Buffer> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Comparative");
-  const head = ["Sr. No.", "Description", "Qty", "Unit"];
-  for (const vendor of comparative.vendors) head.push(`${vendor} rate`, `${vendor} amount`);
-  ws.addRow([title]);
-  ws.addRow(head);
-  ws.getRow(2).font = { bold: true };
+  const summary = wb.addWorksheet("summary");
+  summary.addRow([title]);
+  summary.addRow(["SR NO", "SECTION", "TITLE", ...comparative.vendors]);
+  summary.addRow(["", "", "", ...comparative.vendors.map(() => "GRAND TOTAL")]);
+  comparative.sectionTotals.forEach((section, index) => {
+    const letter = section.title.match(/SECTION\s*[-–:]?\s*([A-Z])/i)?.[1] || String.fromCharCode(65 + (index % 26));
+    const titleText = section.title.replace(/^SECTION\s*[-–:]?\s*[A-Z]\s*/i, "").trim() || section.title;
+    summary.addRow([
+      index + 1,
+      `SECTION : -${letter}`,
+      titleText,
+      ...comparative.vendors.map((vendor) => Math.round((section.totals[vendor] || 0) * 100) / 100),
+    ]);
+  });
+  const total = summary.addRow([
+    "TOTAL AMOUNT OF TENDER ITEMS",
+    "",
+    "",
+    ...comparative.vendors.map((vendor) => Math.round((comparative.grandTotals[vendor] || 0) * 100) / 100),
+  ]);
+  total.font = { bold: true };
+  summary.getRow(2).font = { bold: true };
+  summary.getColumn(3).width = 42;
+
+  const boq = wb.addWorksheet("BOQ");
+  const head = ["Sr. No.", "Description", "QTY.", "UNIT"];
+  const sub = ["", "", "", ""];
+  for (const vendor of comparative.vendors) {
+    head.push(vendor, "");
+    sub.push("RATE", "GRAND TOTAL");
+  }
+  boq.addRow(head);
+  boq.addRow(sub);
+  boq.getRow(1).font = { bold: true };
+  boq.getRow(2).font = { bold: true };
+  let section = "";
   for (const line of comparative.lines) {
+    if (line.section && line.section !== section) {
+      section = line.section;
+      boq.addRow(["", section, "", "", ...comparative.vendors.flatMap(() => ["", ""])]);
+    }
     const row: (string | number)[] = [line.itemNo, line.description, line.qtyText || line.qty || "", line.unit];
     for (const vendor of comparative.vendors) {
-      const quote = line.quotes.find((q) => q.vendor === vendor);
+      const quote = line.quotes.find((item) => item.vendor === vendor);
       row.push(quote?.rate ?? "", quote?.amount ?? "");
     }
-    ws.addRow(row);
+    boq.addRow(row);
   }
-  const total: (string | number)[] = ["", "Total", "", ""];
-  for (const vendor of comparative.vendors) total.push("", Math.round((comparative.grandTotals[vendor] || 0) * 100) / 100);
-  const totalRow = ws.addRow(total);
-  totalRow.font = { bold: true };
-  ws.getColumn(2).width = 62;
+  const grand: (string | number)[] = ["", "TOTAL AMOUNT OF TENDER ITEMS", "", ""];
+  for (const vendor of comparative.vendors) {
+    grand.push("", Math.round((comparative.grandTotals[vendor] || 0) * 100) / 100);
+  }
+  const grandRow = boq.addRow(grand);
+  grandRow.font = { bold: true };
+  boq.getColumn(2).width = 62;
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out);
 }

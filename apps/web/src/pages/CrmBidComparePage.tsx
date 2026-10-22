@@ -71,6 +71,7 @@ export default function CrmBidComparePage() {
 
   const [packages, setPackages] = useState<BidPackage[]>([]);
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
+  const [sampleBoqs, setSampleBoqs] = useState<Discipline[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [projects, setProjects] = useState<{ id: string; code: string; name: string }[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
@@ -317,12 +318,15 @@ export default function CrmBidComparePage() {
 
   useEffect(() => {
     if (!form.projectId || !canManage) return;
-    void api<{ disciplines: Discipline[]; source?: "saved" | "work_packages" | "default" }>(
+    void api<{ disciplines: Discipline[]; catalog?: Discipline[]; source?: "saved" | "work_packages" | "default" }>(
       `/api/projects/${form.projectId}/bid-disciplines`,
       { token }
     )
       .then((r) => {
         setDisciplineSource(r.source || "default");
+        const catalog = r.catalog || [];
+        const listed = new Set((r.disciplines || []).map((d) => d.key));
+        setSampleBoqs(r.source === "default" ? [] : catalog.filter((d) => !listed.has(d.key)));
         if (r.disciplines?.length) {
           setDisciplines(r.disciplines);
           setForm((f) => ({ ...f, disciplineKeys: r.disciplines.map((d) => d.key) }));
@@ -357,6 +361,14 @@ export default function CrmBidComparePage() {
   );
 
   const detailDisciplines = detail?.disciplines || disciplines;
+  const boqChoices = useMemo(() => {
+    const seen = new Set<string>();
+    return [...disciplines, ...sampleBoqs].filter((row) => {
+      if (seen.has(row.key)) return false;
+      seen.add(row.key);
+      return true;
+    });
+  }, [disciplines, sampleBoqs]);
 
   const vendorMatrix = useMemo(() => {
     if (!detail?.vendorBoqs?.length) return [];
@@ -435,8 +447,8 @@ export default function CrmBidComparePage() {
     }
     if (!form.disciplineKeys.length) {
       showActionNeed(
-        "Work package required",
-        "Pick a project with work packages on the project card (Civil, PEB, MEP, etc.). Those packages become the bid disciplines.",
+        "BOQ required",
+        "Tick a sample BOQ or a work package. Contractors fill Rate and Amount on that sheet, or upload the same file.",
       );
       return;
     }
@@ -899,9 +911,14 @@ export default function CrmBidComparePage() {
               </div>
               <div>
                 <p className="text-xs font-semibold text-steel-muted mb-1">
-                  Work packages
+                  {disciplineSource === "default" ? "Sample BOQs" : "Work packages"}
                   {disciplineSource === "work_packages" && <span className="font-normal"> · from project card</span>}
                 </p>
+                {disciplineSource === "default" && (
+                  <p className="text-[11px] text-steel-muted mb-2">
+                    These are the BOQ sheets from the comparative statement. Contractors download a copy, fill Rate and Amount, or upload the same sheet.
+                  </p>
+                )}
                 {!disciplines.length ? (
                   <p className="text-xs text-amber-800 border border-amber-200 rounded-lg p-2 bg-amber-50">
                     Tick packages on{" "}
@@ -931,6 +948,36 @@ export default function CrmBidComparePage() {
                     ))}
                   </div>
                 )}
+                {sampleBoqs.length ? (
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold text-steel-muted mb-1">Sample BOQs</p>
+                    <p className="text-[11px] text-steel-muted mb-2">
+                      From the comparative statement. Contractors fill Rate and Amount, or upload the same sheet.
+                    </p>
+                    <div className="max-h-40 overflow-y-auto border rounded-xl p-2 space-y-1">
+                      {sampleBoqs.map((d) => (
+                        <label key={d.key} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={form.disciplineKeys.includes(d.key)}
+                            onChange={(e) => {
+                              setForm({
+                                ...form,
+                                disciplineKeys: e.target.checked
+                                  ? [...form.disciplineKeys, d.key]
+                                  : form.disciplineKeys.filter((x) => x !== d.key),
+                              });
+                            }}
+                          />
+                          <span>
+                            {d.label}
+                            <span className="block text-[10px] text-steel-muted">{d.sheetName}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <div>
                 <p className="text-xs font-semibold text-steel-muted mb-1">
@@ -993,10 +1040,10 @@ export default function CrmBidComparePage() {
             </Card>
             {!detail?.blankBoq && (
             <Card className="!p-4">
-              <h4 className="font-semibold text-sm mb-1">Add discipline sheets</h4>
-              <p className="text-xs text-steel-muted mb-3">Adds a BOQ column for every vendor on this package.</p>
+              <h4 className="font-semibold text-sm mb-1">Add BOQ sheets</h4>
+              <p className="text-xs text-steel-muted mb-3">Sample BOQs and work packages. Each sheet is one file the contractor fills or uploads.</p>
               <div className="max-h-36 overflow-y-auto border rounded-xl p-2 space-y-1 mb-3">
-                {disciplines.map((d) => (
+                {boqChoices.map((d) => (
                   <label key={d.key} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -1007,7 +1054,12 @@ export default function CrmBidComparePage() {
                         );
                       }}
                     />
-                    {d.label}
+                    <span>
+                      {d.label}
+                      {d.sheetName && d.sheetName !== d.label ? (
+                        <span className="block text-[10px] text-steel-muted">{d.sheetName}</span>
+                      ) : null}
+                    </span>
                   </label>
                 ))}
               </div>

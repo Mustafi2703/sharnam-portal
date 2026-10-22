@@ -226,19 +226,9 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
             value={pkgFilter}
             onChange={(e) => onPkgFilter(e.target.value)}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" className="!text-xs flex-1" onClick={onNewBid}>
-              + New bid
-            </Button>
-            <Button
-              variant="secondary"
-              type="button"
-              className="!text-xs"
-              onClick={() => void downloadAuthFile("/api/crm/template.xlsx", token, "Comparative-Statement-R2.xlsx")}
-            >
-              R2 sample
-            </Button>
-          </div>
+          <Button type="button" className="!text-xs w-full" onClick={onNewBid}>
+            + New bid
+          </Button>
           <p className="text-[10px] text-steel-muted font-mono uppercase tracking-wide">
             {filteredPackages.length} of {packagesForDesk.length} package(s)
           </p>

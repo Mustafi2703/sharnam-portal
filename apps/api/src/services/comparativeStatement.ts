@@ -191,6 +191,59 @@ export function resolveR2TemplatePath(): string {
   throw new Error("Comparative Statement R2 template not found");
 }
 
+function sheetNameKey(name: string) {
+  return name.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** One example BOQ from the comparative statement, with Rate and Amount cleared for the contractor to fill. */
+export function loadSampleBoqSheet(disciplineKey: string, disciplines?: DisciplineDef[]): ImportedSheet | null {
+  const disc =
+    defaultDisciplines().find((d) => d.key === normalizeDisciplineKey(disciplineKey)) ||
+    disciplineCatalogEntry(disciplineKey, disciplines);
+  const catalog = disc ? defaultDisciplines().find((d) => d.key === disc.key) : undefined;
+  if (!catalog) return null;
+  let wb: WorkBook;
+  try {
+    wb = XLSX.readFile(resolveR2TemplatePath());
+  } catch {
+    return null;
+  }
+  const want = sheetNameKey(catalog.sheetName);
+  const name = wb.SheetNames.find((n) => sheetNameKey(n) === want);
+  if (!name) return null;
+  const grid = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: "" }) as unknown[][];
+  let headerAt = -1;
+  for (let i = 0; i < Math.min(grid.length, 20); i++) {
+    const line = grid[i].map((c) => String(c).toLowerCase()).join(" ");
+    if (line.includes("description") && (line.includes("qty") || line.includes("unit"))) {
+      headerAt = i;
+      break;
+    }
+  }
+  if (headerAt < 0) return null;
+  const headers = grid[headerAt].map((c) => String(c ?? "").trim());
+  while (headers.length && !headers[headers.length - 1]) headers.pop();
+  if (headers.length < 4) return null;
+  const moneyCols = headers
+    .map((h, i) => (/rate|amount/i.test(h) ? i : -1))
+    .filter((i) => i >= 0);
+  const rows: SheetCell[][] = [];
+  for (const src of grid.slice(headerAt + 1)) {
+    if (!src.some((c) => String(c ?? "").trim())) continue;
+    rows.push(
+      headers.map((_, i) => {
+        if (moneyCols.includes(i)) return { raw: "" };
+        const value = src[i];
+        if (typeof value === "number" && Number.isFinite(value)) return { raw: String(value), computed: value };
+        const text = String(value ?? "").trim();
+        return text ? { raw: text } : { raw: "" };
+      }),
+    );
+  }
+  if (!rows.length) return null;
+  return { headers, rows, sheetName: catalog.sheetName };
+}
+
 function numCell(cell?: SheetCell): number {
   const n = Number(cell?.computed ?? cell?.raw ?? 0);
   return Number.isFinite(n) ? n : 0;

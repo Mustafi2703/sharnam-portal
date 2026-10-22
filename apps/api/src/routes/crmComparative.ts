@@ -28,6 +28,7 @@ import {
   parseR2SummarySheet,
   pickDisciplineWorksheet,
   resolveDisciplinesForPackage,
+  loadSampleBoqSheet,
   resolveR2TemplatePath,
   buildVendorDisciplineSlots,
   buildVendorBoqTemplateXlsx,
@@ -1466,9 +1467,11 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
     const safeVendor = slot.vendorLabel.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
     const fileName = `SPDC-BOQ-${slot.discipline}-${safeVendor}.xlsx`;
 
-    const monitoringSheet = pkg.project?.id
-      ? await loadMonitoringBoqTemplate(prisma, pkg.project.id, slot.discipline, disciplines)
-      : null;
+    const sample = loadSampleBoqSheet(slot.discipline, disciplines);
+    const monitoringSheet =
+      !sample?.rows.length && pkg.project?.id
+        ? await loadMonitoringBoqTemplate(prisma, pkg.project.id, slot.discipline, disciplines)
+        : null;
 
     const buffer = buildVendorBoqTemplateXlsx({
       disciplineKey: slot.discipline,
@@ -1478,7 +1481,7 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
       pkgTitle: pkg.title,
       revisionLabel: pkg.revisionLabel || "R2",
       disciplines,
-      sheet: monitoringSheet || undefined,
+      sheet: sample?.rows.length ? sample : monitoringSheet || undefined,
     });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
