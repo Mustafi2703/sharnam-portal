@@ -154,6 +154,36 @@ export default function DirectoryPage() {
     });
   }, [overview, activeTool]);
 
+  const projectClientIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of overview?.vendors || []) {
+      const party = row.vendor?.partyType || row.partyType;
+      const vendorId = row.vendorId || row.vendor?.id;
+      if (party === "Client" && vendorId) ids.add(vendorId);
+    }
+    return ids;
+  }, [overview]);
+
+  const assignableUsers = useMemo(() => {
+    if (activeTool.party !== "Client") {
+      return users.filter((u) => !activeTool.roles.length || activeTool.roles.includes(u.role));
+    }
+    if (!projectClientIds.size) return [];
+    const emails = new Set<string>();
+    for (const vendor of allParties) {
+      if (vendor.partyType !== "Client" || !projectClientIds.has(vendor.id)) continue;
+      if (vendor.email) emails.add(String(vendor.email).toLowerCase());
+      for (const contact of vendor.contacts || []) {
+        if (contact.email) emails.add(String(contact.email).toLowerCase());
+      }
+    }
+    return users.filter((u) => {
+      if (u.role !== "client") return false;
+      if (u.vendorId && projectClientIds.has(u.vendorId)) return true;
+      return Boolean(u.email && emails.has(String(u.email).toLowerCase()));
+    });
+  }, [users, activeTool, projectClientIds, allParties]);
+
   const linkableParties = useMemo(() => {
     const want =
       activeTool.party === "Site"
@@ -383,20 +413,25 @@ export default function DirectoryPage() {
             >
               <SearchableSelect
                 className="min-w-[180px] flex-1"
-                options={users
-                  .filter((u) => !activeTool.roles.length || activeTool.roles.includes(u.role))
-                  .map((u) => ({
-                    value: u.id,
-                    label: u.fullName,
-                    sublabel: `${u.role} · ${u.email}`,
-                    keywords: `${u.fullName} ${u.email} ${u.role} ${u.phone || ""}`,
-                  }))}
+                options={assignableUsers.map((u) => ({
+                  value: u.id,
+                  label: u.fullName,
+                  sublabel: u.email,
+                  keywords: `${u.fullName} ${u.email} ${u.role} ${u.phone || ""}`,
+                }))}
                 value={userId}
                 onChange={setUserId}
-                placeholder="Select person"
-                searchPlaceholder="Search employee by name or email…"
+                placeholder={activeTool.party === "Client" ? "Select a person on this client" : "Select person"}
+                searchPlaceholder="Search by name or email…"
                 required
               />
+              {activeTool.party === "Client" ? (
+                <p className="w-full text-xs text-steel-muted">
+                  {projectClientIds.size
+                    ? "Only people added on this project's client company."
+                    : "Link the client company to this project first. The list stays empty until that company has people."}
+                </p>
+              ) : null}
               <Select value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="member">Member</option>
                 <option value="project_manager">Project Manager</option>

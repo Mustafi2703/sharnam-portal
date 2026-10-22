@@ -306,9 +306,24 @@ export function MatrixPartyFields({
     [users, vendors, form.orgSection],
   );
 
+  const peopleVendors = useMemo(() => {
+    if (form.orgSection !== "Client") return sectionVendors;
+    const picked =
+      sectionVendors.find((v) => v.id === pickVendorId) ||
+      sectionVendors.find((v) => nameLooksLike(v.name, form.company));
+    if (picked) return [picked];
+    const onProject = new Set(
+      assignedVendors
+        .filter((a) => a.partyType === "Client")
+        .map((a) => a.vendorId),
+    );
+    return sectionVendors.filter((v) => onProject.has(v.id));
+  }, [form.orgSection, form.company, pickVendorId, sectionVendors, assignedVendors]);
+
   const peopleOptions = useMemo(() => {
     const rows: { value: string; label: string; sublabel: string; keywords: string }[] = [];
     const seen = new Set<string>();
+    const allowedIds = new Set(peopleVendors.map((v) => v.id));
     function add(value: string, label: string, sublabel: string, keywords: string) {
       const name = label.trim();
       if (!name) return;
@@ -317,7 +332,7 @@ export function MatrixPartyFields({
       seen.add(key);
       rows.push({ value, label: name, sublabel, keywords });
     }
-    for (const v of sectionVendors) {
+    for (const v of peopleVendors) {
       for (const c of v.contacts || []) {
         add(
           `contact:${v.id}:${c.id}`,
@@ -336,6 +351,7 @@ export function MatrixPartyFields({
       }
     }
     for (const u of sectionUsers) {
+      if (form.orgSection === "Client" && (!u.vendorId || !allowedIds.has(u.vendorId))) continue;
       const company = u.vendorId ? vendors.find((v) => v.id === u.vendorId)?.name : "";
       add(
         `user:${u.id}`,
@@ -344,14 +360,8 @@ export function MatrixPartyFields({
         `${u.fullName} ${u.email} ${u.phone || ""} ${company || ""} ${u.designation || u.profile?.designation || ""}`,
       );
     }
-    const company = form.company.trim().toLowerCase();
-    if (!company) return rows;
-    return [...rows].sort((a, b) => {
-      const aHit = a.sublabel.toLowerCase().includes(company) ? 0 : 1;
-      const bHit = b.sublabel.toLowerCase().includes(company) ? 0 : 1;
-      return aHit - bHit;
-    });
-  }, [sectionUsers, sectionVendors, vendors, form.company]);
+    return rows;
+  }, [sectionUsers, peopleVendors, vendors, form.orgSection]);
 
   useEffect(() => {
     if (editing) return;
