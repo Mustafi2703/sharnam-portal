@@ -72,6 +72,41 @@ export function sapKindLabel(kind: SapKind) {
   return kind === "PURCHASE_ORDER" ? "Purchase order" : "Tax invoice";
 }
 
+export function sapRegisterFile(kind: SapKind) {
+  return kind === "PURCHASE_ORDER" ? "Purchase_Order_Register.xlsx" : "Tax_Invoice_Register.xlsx";
+}
+
+/** One sheet only. Tax invoices and purchase orders are not mixed on the same register. */
+export async function sapRegisterWorkbook(kind: SapKind, rows: Array<SapForm & { docDate?: string }>): Promise<Buffer> {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const isPo = kind === "PURCHASE_ORDER";
+  const ws = wb.addWorksheet(isPo ? "Purchase order register" : "Tax invoice register");
+  const head = isPo
+    ? ["Date", "PO number", "Vendor", "Vendor no.", "Quotation", "Taxable INR", "CGST", "SGST", "Order value INR"]
+    : ["Date", "Invoice number", "Client", "Customer no.", "Client PO / WO", "Period", "Taxable INR", "CGST", "SGST", "Total INR"];
+  ws.addRow(head);
+  ws.getRow(1).font = { bold: true, color: { argb: "FF08505B" } };
+  for (const form of rows) {
+    const totals = sapTotals(form);
+    const date = fmtDate(form.docDate);
+    ws.addRow(
+      isPo
+        ? [date, form.number, form.partyName, form.partyRef || "", form.reference || "", round2(totals.taxable), round2(totals.cgst), round2(totals.sgst), round2(totals.total)]
+        : [date, form.number, form.partyName, form.partyRef || "", form.reference || "", form.period || "", round2(totals.taxable), round2(totals.cgst), round2(totals.sgst), round2(totals.total)],
+    );
+  }
+  ws.columns.forEach((col) => {
+    col.width = 18;
+  });
+  const out = await wb.xlsx.writeBuffer();
+  return Buffer.from(out);
+}
+
+function round2(v: number) {
+  return Math.round(v * 100) / 100;
+}
+
 const n = (v: unknown) => {
   const x = Number(v);
   return Number.isFinite(x) ? x : 0;
@@ -169,11 +204,14 @@ export function buildSapPdf(form: SapForm): Promise<Buffer> {
     const width = 539;
     let y = 28;
 
-    doc.rect(left, y, width, 36).fill("#0b6a78");
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(11).text(COMPANY, left + 8, y + 6, { width: 340 });
-    doc.font("Helvetica").fontSize(8).text(safe(form.officeAddress) || "Vadodara, Gujarat, India", left + 8, y + 20, { width: 340 });
-    doc.font("Helvetica-Bold").fontSize(12).text(title, left + 300, y + 12, { width: 228, align: "right" });
-    y += 44;
+    doc.rect(left, y, width, 4).fill("#0b6a78");
+    y += 12;
+    doc.fillColor("#0b6a78").font("Helvetica-Bold").fontSize(9).text(COMPANY, left, y, { width: 340 });
+    doc.fillColor("#1d2327").font("Helvetica-Bold").fontSize(16).text(title, left + 300, y - 2, { width: 239, align: "right" });
+    y += 16;
+    doc.fillColor("#5b6770").font("Helvetica").fontSize(8).text(safe(form.officeAddress) || "Vadodara, Gujarat, India", left, y, { width: 340 });
+    doc.fillColor("#08505b").font("Helvetica-Bold").fontSize(11).text(safe(form.number), left + 300, y - 2, { width: 239, align: "right" });
+    y += 18;
 
     doc.fillColor("#1d2327").font("Helvetica").fontSize(8);
     const meta = isPo

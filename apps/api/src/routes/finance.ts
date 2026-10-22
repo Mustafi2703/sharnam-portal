@@ -2029,13 +2029,79 @@ async function fileSapPdf(projectCode: string, form: import("../modules/finance/
   return { pdf, saved, fileName };
 }
 
+function rememberSapSharePoint(docId: string, saved: { sharePointUrl?: string | null; sharePointDone?: Promise<{ sharePointUrl: string | null; sharePointPath: string | null }> }) {
+  if (!saved.sharePointDone || saved.sharePointUrl) return;
+  saved.sharePointDone
+    .then(async (sp) => {
+      if (!sp.sharePointUrl && !sp.sharePointPath) return;
+      await prisma.financeSapDocument.update({
+        where: { id: docId },
+        data: {
+          ...(sp.sharePointUrl ? { sharePointUrl: sp.sharePointUrl, fileUrl: sp.sharePointUrl } : {}),
+          ...(sp.sharePointPath ? { storagePath: sp.sharePointPath } : {}),
+        },
+      });
+    })
+    .catch((err) => console.warn("[finance] sharepoint settle:", err instanceof Error ? err.message : err));
+}
+
+/** Rewrite that document's own register. A tax invoice is not an invoice-processing row, and a purchase order is not a work order. */
+async function fileSapRegister(projectId: string, projectCode: string, kind: "TAX_INVOICE" | "PURCHASE_ORDER") {
+  const { sapFolder, sapRegisterFile, sapRegisterWorkbook } = await import("../modules/finance/sapCommercial.js");
+  const rows = await prisma.financeSapDocument.findMany({ where: { projectId, kind }, orderBy: { docDate: "asc" } });
+  const forms = rows.map((row) => {
+    const form = JSON.parse(row.formJson);
+    form.kind = kind;
+    form.number = row.number;
+    form.docDate = row.docDate ? row.docDate.toISOString() : form.docDate;
+    form.partyName = row.partyName || form.partyName;
+    return form;
+  });
+  const buf = await sapRegisterWorkbook(kind, forms);
+  await mockOneDrive.upload(
+    projectCode,
+    sapFolder(kind),
+    sapRegisterFile(kind),
+    buf,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    { replace: true },
+  );
+  return kind === "PURCHASE_ORDER" ? "Purchase order register" : "Tax invoice register";
+}
+
 financeRouter.get("/:projectId/sap-docs", async (req, res) => {
   const kind = s(req.query.kind);
   const rows = await prisma.financeSapDocument.findMany({
     where: { projectId: req.params.projectId, ...(kind === "TAX_INVOICE" || kind === "PURCHASE_ORDER" ? { kind } : {}) },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ docDate: "desc" }, { createdAt: "desc" }],
   });
-  res.json(rows);
+  const { sapTotals } = await import("../modules/finance/sapCommercial.js");
+  res.json(
+    rows.map((row) => {
+      let taxable = 0;
+      let total = 0;
+      try {
+        const totals = sapTotals(JSON.parse(row.formJson));
+        taxable = totals.taxable;
+        total = totals.total;
+      } catch {
+        taxable = 0;
+        total = 0;
+      }
+      return {
+        id: row.id,
+        kind: row.kind,
+        number: row.number,
+        partyName: row.partyName,
+        docDate: row.docDate,
+        fileUrl: row.fileUrl,
+        sharePointUrl: row.sharePointUrl,
+        storagePath: row.storagePath,
+        taxable,
+        total,
+      };
+    }),
+  );
 });
 
 financeRouter.post("/:projectId/sap-docs", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
@@ -2051,6 +2117,7 @@ financeRouter.post("/:projectId/sap-docs", requireRoles("admin", "office"), asyn
   if (existing) return res.status(409).json({ error: `${form.number} already exists. Use a new number.` });
   try {
     const { saved } = await fileSapPdf(project.code, form);
+    const fileUrl = saved.sharePointUrl || saved.url || null;
     const row = await prisma.financeSapDocument.create({
       data: {
         projectId: project.id,
@@ -2059,14 +2126,19 @@ financeRouter.post("/:projectId/sap-docs", requireRoles("admin", "office"), asyn
         docDate: form.docDate ? new Date(form.docDate) : null,
         partyName: form.partyName,
         formJson: JSON.stringify(form),
-        fileUrl: saved.url || saved.path,
-        sharePointUrl: saved.sharePointUrl || saved.url || null,
+        fileUrl: fileUrl || saved.path,
+        sharePointUrl: fileUrl,
         storagePath: saved.sharePointPath || saved.path,
         createdById: req.user!.id,
       },
     });
-    await audit("finance.sap.create", { userId: req.user!.id, entity: "FinanceSapDocument", entityId: row.id, meta: { kind: form.kind, number: form.number, folder: saved.path } });
-    res.status(201).json({ ...row, sharePointError: saved.sharePointError || null });
+    rememberSapSharePoint(row.id, saved);
+    const register = await fileSapRegister(project.id, project.code, form.kind).catch((err) => {
+      console.warn("[finance] sap register:", err instanceof Error ? err.message : err);
+      return "";
+    });
+    await audit("finance.sap.create", { userId: req.user!.id, entity: "FinanceSapDocument", entityId: row.id, meta: { kind: form.kind, number: form.number, folder: saved.path, register } });
+    res.status(201).json({ ...row, sharePointError: saved.sharePointError || null, sharePointPending: saved.sharePointPending || false, register });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "Could not create the document" });
   }
@@ -2094,13 +2166,16 @@ financeRouter.post("/:projectId/sap-docs/:docId/file", requireRoles("admin", "of
   if (!row) return res.status(404).json({ error: "Document not found" });
   const form = JSON.parse(row.formJson);
   const { saved } = await fileSapPdf(row.project.code, form);
+  const fileUrl = saved.sharePointUrl || saved.url || null;
   const updated = await prisma.financeSapDocument.update({
     where: { id: row.id },
     data: {
-      fileUrl: saved.url || saved.path,
-      sharePointUrl: saved.sharePointUrl || saved.url || null,
+      fileUrl: fileUrl || saved.path,
+      sharePointUrl: fileUrl,
       storagePath: saved.sharePointPath || saved.path,
     },
   });
-  res.json({ ...updated, sharePointError: saved.sharePointError || null });
+  rememberSapSharePoint(updated.id, saved);
+  const register = await fileSapRegister(row.projectId, row.project.code, form.kind).catch(() => "");
+  res.json({ ...updated, sharePointError: saved.sharePointError || null, sharePointPending: saved.sharePointPending || false, register });
 });

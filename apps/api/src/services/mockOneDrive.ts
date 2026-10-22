@@ -206,6 +206,8 @@ export class MockOneDriveService {
     sharePointUrl?: string | null;
     sharePointError?: string;
     sharePointPending?: boolean;
+    /** Resolves when SharePoint finishes, including after the request has already returned the local copy. */
+    sharePointDone?: Promise<{ sharePointUrl: string | null; sharePointPath: string | null; sharePointError?: string }>;
     driveId?: string;
     itemId?: string;
   }> {
@@ -261,14 +263,17 @@ export class MockOneDriveService {
           console.warn("[SharePoint] upload failed, kept local mock:", sharePointError);
           return { ...local, sharePointError };
         });
+      const sharePointDone = work.then((sp) => ({
+        sharePointUrl: "sharePointUrl" in sp ? sp.sharePointUrl || null : null,
+        sharePointPath: sp.sharePointPath || null,
+        sharePointError: "sharePointError" in sp ? sp.sharePointError : undefined,
+      }));
       if (waitMs <= 0) {
-        work.catch(() => undefined);
-        return { ...local, sharePointPending: true };
+        return { ...local, sharePointPending: true, sharePointDone };
       }
       const done = await Promise.race([work, new Promise<null>((r) => setTimeout(() => r(null), waitMs))]);
-      if (done) return done;
-      work.catch(() => undefined);
-      return { ...local, sharePointPending: true };
+      if (done) return { ...done, sharePointDone };
+      return { ...local, sharePointPending: true, sharePointDone };
     }
     return local;
   }

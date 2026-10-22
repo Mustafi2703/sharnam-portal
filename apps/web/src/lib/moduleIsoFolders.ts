@@ -112,7 +112,7 @@ export const MODULE_FILE_CONFIG: Record<ModuleFilesKey, ModuleFileConfig> = {
     title: "Finance & RA files",
     eyebrow: "Finance · ISO 09.01",
     hubPath: "hub/finance",
-    subtitle: "RA workbooks, COP, PR Tracker, invoice processing, and SAP tax invoices. ISO 09.01. Purchase orders file under 05.01 Procurement.",
+    subtitle: "RA workbooks, COP, PR Tracker, and invoice processing. ISO 09.01. SPDC tax invoices file under Tax invoices. Purchase orders file under 05.01.",
     registerExports: [
       {
         label: "PR Tracker (XLSX)",

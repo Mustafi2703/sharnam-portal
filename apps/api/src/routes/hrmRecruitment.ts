@@ -12,11 +12,12 @@ import { isDemoSeedLoginEmail } from "../services/keepPortalUsers.js";
 import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, listDriveFiles, moveDriveItem, SHAREPOINT_SANDBOX_ROOT, uploadToProjectLibrary } from "../services/graph.js";
 import { mimeForFileName, mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
-import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, scorecardRoundId, scorecardWorkbook, scoreInterviewRound } from "../services/interviewScorecard.js";
+import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, buildScorecardPdf, buildSelectionMatrixPdf, compositePercent, scorecardRoundId, scorecardWorkbook, scoreInterviewRound, selectionMatrixWorkbook, type ScorecardResult } from "../services/interviewScorecard.js";
 import {
   candidateRecruitmentFolder,
   employeeLetterFolder,
   HR_DRIVE,
+  interviewRecordFolder,
   kycFolder,
   payslipRecordFolder,
 } from "../services/spdcLibraryFolders.js";
@@ -1255,7 +1256,126 @@ function canonicalInterviewRound(raw: string | null | undefined): "R1" | "R2" | 
 
 function scorecardShareName(fullName: string, round: "R1" | "R2" | "R3") {
   const safe = (fullName || "candidate").replace(/[^a-zA-Z0-9._-]+/g, "_");
-  return `${safe}_${round}_scorecard.xlsx`;
+  return `${safe}_${round}_scorecard`;
+}
+
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/** Filed scorecard is the form sheet plus a PDF. The guide workbook is not uploaded. */
+async function fileInterviewPack(opts: {
+  candidateId: string;
+  fullName: string;
+  round: "R1" | "R2" | "R3";
+  scored: ScorecardResult;
+  interviewDate?: Date | string | null;
+  experienceYears?: number | null;
+  source?: string | null;
+  panelists?: string[];
+  payload: Record<string, unknown>;
+}) {
+  const base = scorecardShareName(opts.fullName, opts.round);
+  const folder = await recruitmentFolderFor(opts.candidateId);
+  const meta = {
+    interviewDate: opts.interviewDate,
+    experienceYears: opts.experienceYears,
+    source: opts.source,
+    panelists: opts.panelists,
+  };
+  const xlsx = await scorecardWorkbook(opts.fullName, opts.scored, meta);
+  const pdf = await buildScorecardPdf(opts.fullName, opts.scored, meta);
+  const [sheet, print] = await Promise.all([
+    mockOneDrive.upload(HR_DRIVE, folder, `${base}.xlsx`, xlsx, XLSX_MIME, { replace: true }),
+    mockOneDrive.upload(HR_DRIVE, folder, `${base}.pdf`, pdf, "application/pdf", { replace: true, raw: true }),
+  ]);
+  const body = {
+    ...opts.payload,
+    result: opts.scored,
+    sharePointUrl: sheet.sharePointUrl || sheet.url || null,
+    pdfUrl: print.sharePointUrl || print.url || null,
+    sharePointPending: Boolean(sheet.sharePointPending || print.sharePointPending),
+  };
+  return {
+    body,
+    settle(roundId: string) {
+      const apply = (kind: "sharePointUrl" | "pdfUrl", saved: typeof sheet) => {
+        if (!saved.sharePointDone || saved.sharePointUrl) return;
+        saved.sharePointDone
+          .then(async (sp) => {
+            if (!sp.sharePointUrl) return;
+            const current = await prisma.interviewRound.findUnique({ where: { id: roundId }, select: { scorecardJson: true } });
+            let parsed: Record<string, unknown> = {};
+            try {
+              parsed = current?.scorecardJson ? JSON.parse(current.scorecardJson) : {};
+            } catch {
+              parsed = {};
+            }
+            parsed[kind] = sp.sharePointUrl;
+            await prisma.interviewRound.update({ where: { id: roundId }, data: { scorecardJson: JSON.stringify(parsed) } });
+          })
+          .catch((err) => console.warn("[HRMS] scorecard sharepoint:", err instanceof Error ? err.message : err));
+      };
+      apply("sharePointUrl", sheet);
+      apply("pdfUrl", print);
+    },
+  };
+}
+
+async function publishSelectionMatrix() {
+  const rounds = await prisma.interviewRound.findMany({
+    where: { scoreOverall: { not: null } },
+    include: { candidate: { select: { id: true, fullName: true } } },
+    orderBy: { scheduledAt: "asc" },
+    take: 500,
+  });
+  const grouped = new Map<string, { name: string; position: string; date: Date | null; scores: { round: string; percent: number }[]; knockout: boolean; grade: string; decision: string }>();
+  for (const row of rounds) {
+    const key = row.candidateId;
+    const current = grouped.get(key) || {
+      name: row.candidate.fullName,
+      position: "",
+      date: row.scheduledAt,
+      scores: [],
+      knockout: false,
+      grade: "",
+      decision: "",
+    };
+    let parsed: { position?: string; result?: { position?: string; grade?: string; decision?: string; knockout?: boolean; percent?: number } } = {};
+    try {
+      parsed = row.scorecardJson ? JSON.parse(row.scorecardJson) : {};
+    } catch {
+      parsed = {};
+    }
+    const round = scorecardRoundId(row.roundType);
+    const percent = parsed.result?.percent ?? row.scoreOverall ?? 0;
+    current.position = parsed.result?.position || parsed.position || current.position;
+    current.scores.push({ round, percent: Number(percent) || 0 });
+    if (parsed.result?.knockout) current.knockout = true;
+    if (parsed.result?.grade) current.grade = parsed.result.grade;
+    if (parsed.result?.decision) current.decision = parsed.result.decision;
+    if (row.scheduledAt && (!current.date || row.scheduledAt < current.date)) current.date = row.scheduledAt;
+    grouped.set(key, current);
+  }
+  const matrix = [...grouped.values()].map((row) => {
+    const pick = (id: string) => row.scores.find((s) => scorecardRoundId(s.round) === id)?.percent ?? null;
+    return {
+      name: row.name,
+      position: row.position,
+      date: row.date,
+      r1: pick("R1"),
+      r2: pick("R2"),
+      r3: pick("R3"),
+      composite: compositePercent(row.scores),
+      knockout: row.knockout,
+      grade: row.grade,
+      decision: row.decision,
+    };
+  });
+  const folder = `${interviewRecordFolder()}/_Registers`;
+  const [xlsx, pdf] = await Promise.all([selectionMatrixWorkbook(matrix), buildSelectionMatrixPdf(matrix)]);
+  await Promise.all([
+    mockOneDrive.upload(HR_DRIVE, folder, "Selection_Matrix.xlsx", xlsx, XLSX_MIME, { replace: true }),
+    mockOneDrive.upload(HR_DRIVE, folder, "Selection_Matrix.pdf", pdf, "application/pdf", { replace: true, raw: true }),
+  ]);
 }
 
 hrmRecruitmentRouter.get("/candidates/:id/interviews", async (req, res) => {
@@ -1367,32 +1487,26 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   }
 
   let scorecardJson: string | null = null;
+  let settleScorecard: ((roundId: string) => void) | null = null;
   try {
     const blank = scoreInterviewRound({
       position: appliedRole,
       round: roundType,
       scores: {},
     });
-    const xlsx = await scorecardWorkbook(candidate.fullName, blank, {
+    const filed = await fileInterviewPack({
+      candidateId: candidate.id,
+      fullName: candidate.fullName,
+      round: roundType,
+      scored: blank,
       interviewDate: s(req.body.scheduledAt) || null,
       experienceYears: candidate.experienceYears,
       source: candidate.sourceChannel,
       panelists: interviewers.map((p) => p.name),
+      payload: { position: blank.position, round: roundType, scores: {} },
     });
-    const filed = await mockOneDrive.upload(
-      HR_DRIVE,
-      await recruitmentFolderFor(candidate.id),
-      scorecardShareName(candidate.fullName, roundType),
-      xlsx,
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      { replace: true },
-    );
-    scorecardJson = JSON.stringify({
-      position: blank.position,
-      round: roundType,
-      scores: {},
-      sharePointUrl: filed.sharePointUrl || null,
-    });
+    scorecardJson = JSON.stringify(filed.body);
+    settleScorecard = filed.settle;
   } catch (err) {
     console.warn("[HRMS] scorecard file:", err instanceof Error ? err.message : err);
   }
@@ -1415,6 +1529,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
   if (!HIRED_STATUSES.has(candidate.status)) {
     await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Interview" } });
   }
+  settleScorecard?.(row.id);
   await audit("hrms.interview.schedule", {
     userId: req.user!.id,
     entity: "InterviewRound",
@@ -1519,27 +1634,22 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
       } catch {
         panelists = [];
       }
-      const xlsx = await scorecardWorkbook(before.candidate.fullName || "candidate", scorecardFile.scored, {
+      const filed = await fileInterviewPack({
+        candidateId: before.candidateId,
+        fullName: before.candidate.fullName || "candidate",
+        round: filedRound,
+        scored: scorecardFile.scored,
         interviewDate: before.scheduledAt,
         experienceYears: before.candidate.experienceYears,
         source: before.candidate.sourceChannel,
         panelists,
+        payload: scorecardFile.payload,
       });
-      const filed = await mockOneDrive.upload(
-        HR_DRIVE,
-        await recruitmentFolderFor(before.candidateId),
-        scorecardShareName(before.candidate.fullName || "candidate", filedRound),
-        xlsx,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        { replace: true },
-      );
-      const withLink = JSON.stringify({
-        ...scorecardFile.payload,
-        result: scorecardFile.scored,
-        sharePointUrl: filed.sharePointUrl || null,
-      });
+      const withLink = JSON.stringify(filed.body);
       await prisma.interviewRound.update({ where: { id: row.id }, data: { scorecardJson: withLink } });
       row.scorecardJson = withLink;
+      filed.settle(row.id);
+      publishSelectionMatrix().catch((err) => console.warn("[HRMS] selection matrix:", err instanceof Error ? err.message : err));
     } catch (err) {
       console.warn("[HRMS] scorecard file:", err instanceof Error ? err.message : err);
     }

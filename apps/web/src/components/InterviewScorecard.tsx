@@ -42,7 +42,7 @@ export function InterviewScorecard({
   token: string;
   positionHint?: string;
   roundHint?: string;
-  saved?: { position?: string; round?: string; scores?: Record<string, number[]> } | null;
+  saved?: { position?: string; round?: string; scores?: Record<string, number[]>; sharePointUrl?: string | null; pdfUrl?: string | null } | null;
   onSave: (scorecard: { position: string; round: string; scores: Record<string, number[]> }) => Promise<void>;
 }) {
   const [framework, setFramework] = useState<Framework | null>(null);
@@ -186,11 +186,19 @@ export function InterviewScorecard({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-steel-muted">
-          Score this round, then Save. Each candidate and each round is its own Excel file on SharePoint. Compare ranks them after they are saved.
+          Save writes the scorecard sheet and a PDF into the candidate folder, and updates the selection matrix with this date.
         </p>
-        <Button type="button" disabled={busy} onClick={save}>
-          {busy ? "Saving…" : "Save scorecard"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          {saved?.pdfUrl ? (
+            <a href={saved.pdfUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Scorecard PDF</a>
+          ) : null}
+          {saved?.sharePointUrl ? (
+            <a href={saved.sharePointUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Scorecard sheet</a>
+          ) : null}
+          <Button type="button" disabled={busy} onClick={save}>
+            {busy ? "Saving…" : "Save scorecard"}
+          </Button>
+        </div>
       </div>
       {err ? <p className="text-xs text-danger">{err}</p> : null}
       {savedNote ? <p className="text-xs font-medium text-brand-dark">{savedNote}</p> : null}

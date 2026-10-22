@@ -53,13 +53,13 @@ export async function reconcileProjectSharePoint(projectId: string) {
   });
   const full = await prisma.project.findUnique({ where: { id: projectId } });
   if (full) {
-    const registerBuf = await buildSpdcRfiXlsxBuffer({ project: full, rfis });
+    const registerBuf = await buildSpdcRfiXlsxBuffer({ project: full, rfis, scope: "register" });
     const liveFolder = `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`;
     const weekFolder = `${liveFolder}/Weekly/${week}`;
-    await mockOneDrive.upload(project.code, liveFolder, "SPDC_RFI_Form_and_Register.xlsx", registerBuf, XLSX_MIME, {
+    await mockOneDrive.upload(project.code, liveFolder, "SPDC_RFI_Register.xlsx", registerBuf, XLSX_MIME, {
       replace: true,
     });
-    await mockOneDrive.upload(project.code, weekFolder, "SPDC_RFI_Form_and_Register.xlsx", registerBuf, XLSX_MIME, {
+    await mockOneDrive.upload(project.code, weekFolder, "SPDC_RFI_Register.xlsx", registerBuf, XLSX_MIME, {
       replace: true,
     });
   }
@@ -80,8 +80,8 @@ export async function reconcileProjectSharePoint(projectId: string) {
       "08.03 Cube register + Weekly/",
       "08.01 Quality Dashboard + Weekly/",
       "08.06 Quality NCR/CAR forms (Drafts/Open/Closed) + _Registers/SPDC_NCR_CAR_Register.xlsx",
-      "03.06/_Registers/SPDC_RFI_Form_and_Register.xlsx",
-      `03.06/_Registers/Weekly/${week}/SPDC_RFI_Form_and_Register.xlsx`,
+      "03.06/_Registers/SPDC_RFI_Register.xlsx",
+      `03.06/_Registers/Weekly/${week}/SPDC_RFI_Register.xlsx`,
     ],
   };
 }

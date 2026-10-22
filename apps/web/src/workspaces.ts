@@ -618,7 +618,8 @@ export const MODULE_TOOLS: Record<WorkspaceKey | "home", ModuleToolItem[]> = {
     { to: "finance", label: "RA Bill Tracker", query: "tab=ra", blurb: "Running account bills." },
     { to: "finance", label: "COP", query: "tab=cop", blurb: "Certificate of payment." },
     { to: "finance", label: "Material invoices", query: "tab=invoices", blurb: "PEB / steel / fire tax invoices." },
-    { to: "finance", label: "Tax invoice & PO", query: "tab=sap", blurb: "Create the SAP tax invoice or purchase order PDF and file it in the ISO folder." },
+    { to: "finance", label: "Tax invoices", query: "tab=tax-invoices", blurb: "SPDC tax invoice PDF, logged on the tax invoice register." },
+    { to: "finance", label: "Purchase orders", query: "tab=purchase-orders", blurb: "Purchase order PDF, logged on the purchase order register." },
     { to: "finance", label: "Payment Summary", query: "tab=summary", blurb: "Payment summary rollup." },
     { to: "finance", label: "Audit Sheets", query: "tab=audit", blurb: "Audit sheets → drive export." },
     {

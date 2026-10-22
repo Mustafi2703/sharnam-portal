@@ -1,8 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES } from "./interviewFramework.js";
-import { detachSharedStyles } from "../lib/excelTemplate.js";
-import { restoreTemplateCharts } from "../lib/xlsxCharts.js";
+import { detachSharedStyles, keepOnlySheets } from "../lib/excelTemplate.js";
 
 export { INTERVIEW_PARAMS, INTERVIEW_ROLES };
 
@@ -154,7 +153,6 @@ export async function scorecardWorkbook(
     return Buffer.from(out);
   }
   const roundKey = scorecardRoundId(result.round);
-  const scored = new Map(result.lines.filter((l) => l.average > 0).map((l) => [l.code, l.average]));
   const name = String(candidateName || "").trim() || "Candidate";
   ws.getCell("C5").value = name;
   ws.getCell("D5").value = name;
@@ -178,20 +176,148 @@ export async function scorecardWorkbook(
   ws.getCell("D10").value = source;
   const panel = (meta?.panelists || []).map((p) => String(p || "").trim()).filter(Boolean).slice(0, 3);
   for (let i = 0; i < panel.length; i++) {
-    const row = 5 + i;
-    ws.getCell(`I${row}`).value = panel[i];
-    ws.getCell(`J${row}`).value = panel[i];
+    ws.getCell(`M${5 + i}`).value = panel[i];
   }
+  const byCode = new Map(result.lines.map((l) => [l.code, l]));
   for (let row = 14; row <= 36; row++) {
     const code = cellText(ws.getCell(`A${row}`).value);
     if (!code || code === "TOTAL") continue;
-    const mark = scored.get(code);
-    ws.getCell(`F${row}`).value = mark ? Math.round(mark * 10) / 10 : null;
+    const line = byCode.get(code);
+    const mark = line && line.average > 0 ? Math.round(line.average * 10) / 10 : null;
+    if (line) ws.getCell(`E${row}`).value = line.weight;
+    ws.getCell(`F${row}`).value = mark;
     ws.getCell(`G${row}`).value = null;
     ws.getCell(`H${row}`).value = null;
+    ws.getCell(`I${row}`).value = mark;
+    ws.getCell(`J${row}`).value = line && line.weighted ? Math.round(line.weighted * 10000) / 10000 : null;
   }
+  ws.getCell("C40").value = result.lines.length;
+  ws.getCell("C41").value = result.lines.filter((l) => l.average > 0).length;
+  ws.getCell("C43").value = result.percent / 100;
+  ws.getCell("C44").value = result.knockout ? 1 : 0;
+  ws.getCell("C47").value = result.grade;
+  ws.getCell("C48").value = result.decision;
+  // Drop lookups into the guide, framework, and rating scale so the filed file is only this scorecard.
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    row.eachCell({ includeEmpty: false }, (cell) => {
+      const v = cell.value;
+      if (v && typeof v === "object" && "formula" in v) cell.value = null;
+    });
+  });
+  keepOnlySheets(wb, ["Scorecard"]);
   const out = await wb.xlsx.writeBuffer();
-  return restoreTemplateCharts(fs.readFileSync(template), Buffer.from(out));
+  return Buffer.from(out);
+}
+
+export type SelectionMatrixRow = {
+  name: string;
+  position: string;
+  date?: Date | string | null;
+  r1?: number | null;
+  r2?: number | null;
+  r3?: number | null;
+  composite?: number | null;
+  knockout?: boolean;
+  grade?: string;
+  decision?: string;
+};
+
+function fmtDay(value?: Date | string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+}
+
+/** One-sheet register. The guide and the blank sample rows are not included. */
+export async function selectionMatrixWorkbook(rows: SelectionMatrixRow[]): Promise<Buffer> {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Selection matrix");
+  ws.addRow(["S.No", "Candidate name", "Position", "Date", "R1 HR %", "R2 Tech %", "R3 Mgmt %", "Composite %", "Knock-out", "Grade", "Decision"]);
+  ws.getRow(1).font = { bold: true };
+  rows.forEach((row, i) => {
+    ws.addRow([
+      i + 1,
+      row.name,
+      row.position,
+      fmtDay(row.date),
+      row.r1 ?? "",
+      row.r2 ?? "",
+      row.r3 ?? "",
+      row.composite ?? "",
+      row.knockout ? "Y" : "N",
+      row.grade || "",
+      row.decision || "",
+    ]);
+  });
+  ws.columns.forEach((col) => {
+    col.width = 18;
+  });
+  const out = await wb.xlsx.writeBuffer();
+  return Buffer.from(out);
+}
+
+async function pdfDoc() {
+  const { createRequire } = await import("node:module");
+  const PDFDocument = createRequire(import.meta.url)("pdfkit") as typeof import("pdfkit");
+  const doc = new PDFDocument({ size: "A4", margin: 36 });
+  const chunks: Buffer[] = [];
+  const done = new Promise<Buffer>((resolve, reject) => {
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+  return { doc, done };
+}
+
+/** Print of one round. Filed beside the scorecard workbook. */
+export async function buildScorecardPdf(
+  candidateName: string,
+  result: ScorecardResult,
+  meta?: { interviewDate?: Date | string | null; panelists?: string[] },
+): Promise<Buffer> {
+  const { doc, done } = await pdfDoc();
+  const name = String(candidateName || "Candidate").replace(/[^\x20-\x7E]/g, " ");
+  doc.font("Helvetica-Bold").fontSize(13).text("Candidate interview scorecard");
+  doc.moveDown(0.4);
+  doc.font("Helvetica").fontSize(9);
+  doc.text(`Candidate: ${name}`);
+  doc.text(`Position: ${result.position}`);
+  doc.text(`Round: ${ROUND_LABEL[scorecardRoundId(result.round)] || result.round}`);
+  doc.text(`Date: ${fmtDay(meta?.interviewDate) || "-"}`);
+  if (meta?.panelists?.length) doc.text(`Panel: ${meta.panelists.join(", ").replace(/[^\x20-\x7E]/g, " ")}`);
+  doc.moveDown(0.6);
+  doc.font("Helvetica");
+  for (const line of result.lines) {
+    if (!line.average) continue;
+    const score = Math.round(line.average * 10) / 10;
+    const weight = Math.round(line.weight * 1000) / 10;
+    doc.text(`${line.parameter.slice(0, 70)}    ${score} / 5    weight ${weight}%`);
+  }
+  doc.moveDown(0.6);
+  doc.font("Helvetica-Bold").text(`Overall score: ${result.percent}%    Grade ${result.grade}`);
+  doc.text(result.knockout ? "Knock-out: Yes" : "Knock-out: No");
+  doc.text(`Decision: ${result.decision}`);
+  doc.end();
+  return done;
+}
+
+export async function buildSelectionMatrixPdf(rows: SelectionMatrixRow[]): Promise<Buffer> {
+  const { doc, done } = await pdfDoc();
+  doc.font("Helvetica-Bold").fontSize(13).text("Candidate selection matrix");
+  doc.moveDown(0.5);
+  doc.font("Helvetica").fontSize(8);
+  if (!rows.length) doc.text("No scored rounds yet.");
+  for (const row of rows) {
+    const scores = [`R1 ${row.r1 ?? "-"}`, `R2 ${row.r2 ?? "-"}`, `R3 ${row.r3 ?? "-"}`, `Composite ${row.composite ?? "-"}`].join("   ");
+    doc.font("Helvetica-Bold").text(`${row.name}  ·  ${row.position}`);
+    doc.font("Helvetica").text(`${fmtDay(row.date) || "No date"}   ${scores}`);
+    doc.text(`${row.knockout ? "Knock-out" : "No knock-out"}   ${row.grade || ""}   ${row.decision || ""}`);
+    doc.moveDown(0.35);
+  }
+  doc.end();
+  return done;
 }
 
 export function compositePercent(rounds: { round: string; percent: number }[]) {

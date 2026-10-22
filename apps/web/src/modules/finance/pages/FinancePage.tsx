@@ -35,7 +35,8 @@ const TOOLS = [
   { id: "ra", label: "RA Bill Tracker" },
   { id: "cop", label: "COP (Certificate of Payment)" },
   { id: "invoices", label: "Material / Tax invoices" },
-  { id: "sap", label: "Tax invoice & PO" },
+  { id: "tax-invoices", label: "Tax invoices" },
+  { id: "purchase-orders", label: "Purchase orders" },
   { id: "summary", label: "Payment Summary" },
   { id: "audit", label: "Audit sheets → drive" },
 ] as const;
@@ -62,7 +63,8 @@ export default function FinancePage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const { token, user } = useAuth();
-  const tab = (searchParams.get("tab") as ToolId) || "overview";
+  const requested = searchParams.get("tab");
+  const tab = ((requested === "sap" ? "tax-invoices" : requested) as ToolId) || "overview";
   const disciplineKey = searchParams.get("discipline") || "all";
   const activePkg = resolveFinancePackage(disciplineKey === "all" ? null : disciplineKey);
   const active = TOOLS.find((t) => t.id === tab) || TOOLS[0];
@@ -115,8 +117,11 @@ export default function FinancePage() {
         actions={
           isToolWindow() ? undefined : (
           <div className="flex flex-wrap gap-2">
-            <ToolLink to={`/projects/${id}/finance?tab=sap`}>
-              <Button type="button">Tax invoice & PO</Button>
+            <ToolLink to={`/projects/${id}/finance?tab=tax-invoices`}>
+              <Button type="button" variant="secondary">Tax invoices</Button>
+            </ToolLink>
+            <ToolLink to={`/projects/${id}/finance?tab=purchase-orders`}>
+              <Button type="button" variant="secondary">Purchase orders</Button>
             </ToolLink>
             <ToolLink to={`/projects/${id}/finance?tab=bills${disciplineKey !== "all" ? `&discipline=${disciplineKey}` : ""}`}>
               <Button type="button" variant="secondary">Bill registers</Button>
@@ -240,12 +245,13 @@ export default function FinancePage() {
         />
       )}
 
-      {active.id === "sap" && id && (
+      {(active.id === "tax-invoices" || active.id === "purchase-orders") && id && (
         <SapDocumentsPanel
           projectId={id}
           token={token || ""}
           canWrite={canWrite}
           projectName={summary?.project?.name}
+          kind={active.id === "purchase-orders" ? "PURCHASE_ORDER" : "TAX_INVOICE"}
           setMsg={setMsg}
         />
       )}
