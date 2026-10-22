@@ -206,7 +206,6 @@ export function CoordinationPage() {
   const revisionPreview =
     linkedDrawing && linkedRevision ? revisionPreviewFromRecord(linkedDrawing, linkedRevision) : null;
 
-  const drawingsWithFiles = useMemo(() => drawings.filter((d) => drawingHasPreviewFile(d)), [drawings]);
   const gfcOptions = useMemo(
     () =>
       drawings.map((d) => ({
@@ -262,7 +261,7 @@ export function CoordinationPage() {
       );
       setMsg(
         (r as { needsRfi?: boolean }).needsRfi || (r.issue.followUpCount ?? 0) >= 5
-          ? `Follow-up ${r.issue.followUpCount}/5 sent to the assignee. That was the last follow-up — escalate to RFI if there is still no action.`
+          ? `Follow-up ${r.issue.followUpCount}/5 sent. Raise to RFI is now available on this issue.`
           : `Follow-up ${r.issue.followUpCount}/5 emailed to the assignee`
       );
       await load();
@@ -314,7 +313,7 @@ export function CoordinationPage() {
         subtitle={
           logView
             ? "Every coordination issue on this project. Select an issue to follow up, reassign, escalate to an RFI or close it."
-            : "Log the issue against a GFC drawing and assign someone from the communication matrix or project directory. They are emailed. Send up to five follow-ups; escalate to an RFI at any point (or after the fifth follow-up). The register is kept on SharePoint."
+            : "Log the issue against a GFC drawing. Send 5 follow-ups, then raise it to an RFI."
         }
         actions={
           <div className="flex flex-wrap gap-2 items-center">
@@ -400,83 +399,6 @@ export function CoordinationPage() {
 
       {!logView && (
       <>
-      <Card className="!p-4 space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-sm">Coordination by drawing</h3>
-            <p className="text-xs text-steel-muted mt-0.5">Open a sheet to log issues against that GFC.</p>
-          </div>
-          {focusDrawingId && (
-            <Button type="button" variant="secondary" className="!text-xs" onClick={() => setSearchParams({})}>
-              All drawings
-            </Button>
-          )}
-        </div>
-        {focusDrawing && (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium">
-              Working on {focusDrawing.drawingNumber} · {focusDrawing.title}
-              {sheetRows.length ? ` - ${sheetRows.length} issue(s)` : " - no issues yet, log the first below"}
-            </p>
-          </div>
-        )}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-          {drawings.map((d) => {
-            const issues = rows.filter((r) => r.linkedDrawingId === d.id);
-            const open = issues.filter((r) => r.status === "Open").length;
-            const on = focusDrawingId === d.id;
-            return (
-              <button
-                key={d.id}
-                type="button"
-                className={`text-left rounded-lg border px-3 py-2 ${
-                  on ? "border-brand bg-brand-soft/40" : "border-line bg-paper hover:bg-sand/40"
-                }`}
-                onClick={() => setSearchParams({ drawingId: d.id })}
-              >
-                <div className="font-mono text-xs font-semibold text-brand">{d.drawingNumber}</div>
-                <div className="text-xs text-ink truncate">{d.title}</div>
-                <div className="text-[11px] text-steel-muted mt-1">
-                  {issues.length
-                    ? `${open} open · ${issues.length} logged`
-                    : "Needs coordination — log first issue"}
-                </div>
-              </button>
-            );
-          })}
-          {!drawings.length && (
-            <p className="text-xs text-steel-muted sm:col-span-3">
-              Add GFC rows first on the{" "}
-              <Link to={`/projects/${id}/drawings`} className="font-semibold text-brand">
-                Approval & GFC Log
-              </Link>
-              .
-            </p>
-          )}
-        </div>
-      </Card>
-
-      <Card className="border-brand/20 bg-gradient-to-r from-brand-soft/40 to-paper">
-        <h3 className="text-sm font-semibold mb-2">How to use this page</h3>
-        <ol className="text-sm text-steel-muted space-y-1.5 list-decimal list-inside">
-          <li>
-            Upload the GFC sheet first on{" "}
-            <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
-              Approval & GFC Log
-            </Link>{" "}
-            ({drawingsWithFiles.length} of {drawings.length} drawings have a PDF/DWG).
-          </li>
-          <li>Pick the sheet from the Approval & GFC Log. That link is what the issue is raised against.</li>
-          <li>Upload a marked-up drawing if you already have one. It is filed in that issue’s folder, separate from the GFC sheet.</li>
-          <li>After the issue is logged, use Mark up filed PDF to mark that uploaded PDF, or Mark up GFC PDF when the register sheet has a PDF.</li>
-          <li>Assign a vendor, consultant, or SPDC person from the communication matrix or project directory. Logging the issue emails them.</li>
-          <li>Use <strong>Send follow-up</strong> on the logged issue. It goes to the assignee.</li>
-          <li>
-            <strong>Close</strong> when resolved. Use <strong>Escalate to RFI</strong> at any time — or after the fifth follow-up with no action.
-          </li>
-        </ol>
-      </Card>
-
       {canEdit && drawingsLoaded && !drawings.length && (
         <Card className="border-amber-300 bg-amber-50">
           <h3 className="font-semibold text-amber-900">{formatUiText("Add a GFC drawing first")}</h3>
@@ -532,11 +454,7 @@ export function CoordinationPage() {
                 });
                 await load();
                 if (created?.id) setSelectedId(created.id);
-                setMsg(
-                  markupDraft
-                    ? "Issue logged. The marked-up drawing is in the issue folder. Open the issue and use Mark up filed PDF to mark that PDF."
-                    : "Issue logged and linked to the GFC drawing.",
-                );
+                setMsg("Issue logged. Send 5 follow-ups, then use Raise to RFI on the issue.");
               } catch (err) {
                 setMsg(err instanceof Error ? err.message : "Could not log the issue");
               } finally {
@@ -798,23 +716,20 @@ export function CoordinationPage() {
                         type="button"
                         variant="primary"
                         className="!text-xs !bg-amber-600 !font-medium"
-                        disabled={followBusy}
-                        onClick={() => {
-                          const n = selected.followUpCount ?? 0;
-                          if (
-                            n < 5 &&
-                            !window.confirm(
-                              `Only ${n} of 5 follow-ups sent. Escalate this issue to an RFI now? The assignee and matrix are notified.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          return escalateToRfiApi(selected.id);
-                        }}
+                        disabled={followBusy || (selected.followUpCount ?? 0) < 5}
+                        title={(selected.followUpCount ?? 0) < 5 ? "Send 5 follow-ups before raising this issue to an RFI" : undefined}
+                        onClick={() => void escalateToRfiApi(selected.id)}
                       >
-                        Escalate to RFI
+                        Raise to RFI
                       </Button>
-                      <Button type="button" variant="ghost" className="!text-xs" onClick={() => escalateToRfiCompose(selected)}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="!text-xs"
+                        disabled={(selected.followUpCount ?? 0) < 5}
+                        title={(selected.followUpCount ?? 0) < 5 ? "Send 5 follow-ups before opening an RFI" : undefined}
+                        onClick={() => escalateToRfiCompose(selected)}
+                      >
                         Open RFI form
                       </Button>
                       <Select

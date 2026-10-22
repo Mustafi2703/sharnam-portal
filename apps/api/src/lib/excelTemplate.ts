@@ -59,5 +59,5 @@ export function keepOnlySheets(wb: ExcelJS.Workbook, names: string[]) {
       });
     });
   }
-  wb.views = [{ activeTab: 0, firstSheet: 0, visibility: "visible" }];
+  wb.views = [{ x: 0, y: 0, width: 0, height: 0, activeTab: 0, firstSheet: 0, visibility: "visible" }];
 }

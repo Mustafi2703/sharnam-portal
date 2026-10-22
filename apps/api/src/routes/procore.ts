@@ -2396,10 +2396,13 @@ directoryRouter.post(
     if (issue.status === "Closed") return res.status(400).json({ error: "Issue is closed" });
     try {
       const { createRfiFromCoordinationIssue, MAX_FOLLOW_UPS } = await import("../services/coordinationEscalation.js");
-      void MAX_FOLLOW_UPS;
-      // Escalation is allowed at any time (before or after 5 follow-ups), but only once.
       if (issue.escalatedRfiId) {
         return res.status(400).json({ error: "Already escalated to an RFI" });
+      }
+      if ((issue.followUpCount ?? 0) < MAX_FOLLOW_UPS) {
+        return res.status(400).json({
+          error: `Send ${MAX_FOLLOW_UPS} follow-ups before raising this issue to an RFI (${issue.followUpCount ?? 0}/${MAX_FOLLOW_UPS} sent).`,
+        });
       }
       const rfi = await createRfiFromCoordinationIssue({
         issueId: issue.id,
