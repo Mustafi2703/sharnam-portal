@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import XLSX from "../lib/xlsx.js";
 import { SPDC_OFFICE_FOOTER, SPDC_PMC_NAME } from "@sharnam/shared";
 import { sharnamLogoPath } from "./brandedExport.js";
-import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { detachSharedStyles, keepOnlySheets } from "../lib/excelTemplate.js";
 
 /** One signature box on an NCR / CAR: who signed, as what, when, and their signature image when the directory has one. */
 export type NcrSign = { label: string; name: string; position?: string; date?: string; image?: Buffer | null };
@@ -426,6 +426,7 @@ export async function buildQualityNcrXlsxFromTemplate(
     }
   });
 
+  keepOnlySheets(wb, [ws.name]);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 

@@ -6,7 +6,7 @@ import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
-import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { detachSharedStyles, freezeSheetFormulas, keepOnlySheets } from "../lib/excelTemplate.js";
 
 const INPUT = "FFFFF2CC";
 const PMC_NAME = "Sharnam Project Development Consultants & Co., Vadodara";
@@ -478,11 +478,6 @@ export function rfiEvidenceFiles(r: SpdcRfiRecord, extra?: RfiEvidenceFile[]): R
   return out;
 }
 
-function dropSheet(wb: ExcelJS.Workbook, name: string) {
-  const ws = sheet(wb, name);
-  if (ws) wb.removeWorksheet(ws.id);
-}
-
 function addEvidenceSheet(wb: ExcelJS.Workbook, files: RfiEvidenceFile[]) {
   if (!files.length) return;
   const ws = wb.addWorksheet("Evidence", { properties: { tabColor: { argb: "FF0B6A78" } } });
@@ -529,30 +524,24 @@ export async function buildSpdcRfiWorkbook(opts: {
     clearRegisterSample(register);
     const filled = opts.rfis.filter((r) => isSpdcRfiRegisterKind(r.rfiKind)).map(fillSpdcRfiRow);
     filled.forEach((row, i) => writeRegisterRow(register, REGISTER_START + i, row));
-    dropSheet(wb, "03_RFI_FORM");
+    freezeSheetFormulas(register);
+    keepOnlySheets(wb, ["04_RFI_REGISTER"]);
     return wb;
   }
 
-  // One row only, hidden, so the form's lookup formulas still resolve in Excel.
+  // Values are written onto the form, then lookups are frozen so the control,
+  // read-me, register, and dashboard sheets are not part of the download.
   clearRegisterSample(register);
   if (selected && isSpdcRfiRegisterKind(selected.rfiKind)) {
     writeRegisterRow(register, REGISTER_START, fillSpdcRfiRow(selected));
   }
-  register.state = "veryHidden";
-  const readme = sheet(wb, "00_READ_ME");
-  if (readme) readme.state = "veryHidden";
-  control.state = "veryHidden";
-  dropSheet(wb, "05_DASHBOARD");
-  const formIndex = wb.worksheets.findIndex((w) => w.name === "03_RFI_FORM");
-  if (formIndex >= 0) {
-    wb.views = [{ activeTab: formIndex, firstSheet: formIndex, visibility: "visible" } as ExcelJS.WorkbookView];
-  }
-
   if (selected) {
     const row = fillSpdcRfiRow(selected);
     if (evidence.length) row.attachments = evidence.map((f) => f.name).join(", ");
     fillFormSheet(formSheet, opts.project, row, selectedForm);
   }
+  freezeSheetFormulas(formSheet);
+  keepOnlySheets(wb, ["03_RFI_FORM"]);
   embedLogo(wb, formSheet);
   addEvidenceSheet(wb, evidence);
   return wb;

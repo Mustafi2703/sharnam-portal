@@ -355,8 +355,7 @@ export function CommsMatrixPanel({
         <Card id="matrix-add-person">
           <h3 className="font-semibold text-sm mb-1">Add contact</h3>
           <p className="text-[11px] text-steel-muted mb-3">
-            Search the matching directory for this party. Missing consultant or vendor? Add them here — you stay on this
-            matrix.
+            Names added on the CRM company (client, consultant, PMC, vendor) are in the name list for that party. Missing a company? Add it here — you stay on this matrix.
           </p>
           <form className="space-y-3" onSubmit={(e) => void addContact(e)}>
             {fields}

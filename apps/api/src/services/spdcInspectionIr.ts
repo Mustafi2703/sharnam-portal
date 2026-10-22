@@ -7,7 +7,7 @@ import ExcelJS from "exceljs";
 import { fileURLToPath } from "url";
 import { renderBrandedReportHtml } from "./brandedExport.js";
 import { sharnamLogoPath } from "./brandedExport.js";
-import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { detachSharedStyles, freezeSheetFormulas, keepOnlySheets } from "../lib/excelTemplate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INPUT = "FFFFF2CC";
@@ -171,6 +171,8 @@ export async function buildInspectionIrXlsx(
     paintInput(ir, 20, 5, form.clearanceResult);
     paintInput(ir, 21, 5, form.actionRequired);
     paintInput(ir, 22, 5, rfi.linkedAssignment?.template?.name || form.checklistRef);
+    freezeSheetFormulas(ir);
+    keepOnlySheets(wb, ["Safety IR Form"]);
     const buf = await wb.xlsx.writeBuffer();
     return Buffer.from(buf as ArrayBuffer);
   }
@@ -260,6 +262,8 @@ export async function buildInspectionIrXlsx(
   paintInput(ws, 45, 4, form.actionTaken || "");
   paintInput(ws, 46, 4, form.closedBy || "");
   paintInput(ws, 46, 10, form.closedAt || "");
+  freezeSheetFormulas(ws);
+  keepOnlySheets(wb, [ws.name]);
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf as ArrayBuffer);
 }

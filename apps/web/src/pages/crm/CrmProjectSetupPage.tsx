@@ -51,6 +51,7 @@ type VendorRow = {
   businessPhone?: string | null;
   address?: string | null;
   gstNumber?: string | null;
+  contacts?: { id: string; fullName?: string | null; email: string; role?: string | null }[];
 };
 
 type SetupSummary = {
@@ -933,8 +934,7 @@ export default function CrmProjectSetupPage() {
         <div className="space-y-4">
           {summary && (
             <p className="text-xs text-steel-muted">
-              Assigned so far: {summary.members.length} people · {summary.vendors.length} companies. Search and auto-fill
-              from those lists. Add a missing consultant or vendor on the matrix — no need to leave this step.
+              Assigned so far: {summary.members.length} people · {summary.vendors.length} companies. Name lists include people added on each CRM company. Add a missing company on the matrix — no need to leave this step.
             </p>
           )}
           <ProjectSetupMatrixDesk

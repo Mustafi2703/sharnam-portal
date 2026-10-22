@@ -366,7 +366,7 @@ export function ProjectSetupMatrixDesk({
         <Card id="matrix-add-person" className="!p-4 space-y-3">
           <h4 className="font-semibold text-sm">Add person to matrix</h4>
           <p className="text-[11px] text-steel-muted">
-            Use this form only to add someone extra. To change an existing row, click Edit on that contact.
+            Pick a party, then choose a person already added on that CRM company (client, consultant, PMC, or vendor). To change an existing row, click Edit on that contact.
           </p>
           <form className="space-y-3" onSubmit={(e) => void submitRow(e)}>
             <MatrixPartyFields

@@ -66,7 +66,10 @@ vendorsRouter.get("/", async (req: AuthedRequest, res) => {
       isActive: true,
       ...partyTypeWhere(partyType),
     },
-    include: { _count: { select: { projects: true } } },
+    include: {
+      _count: { select: { projects: true } },
+      contacts: { select: { id: true, fullName: true, email: true, role: true }, orderBy: { fullName: "asc" } },
+    },
     orderBy: [{ partyType: "asc" }, { name: "asc" }],
   });
   const emails = vendors.map((v) => v.email).filter(Boolean) as string[];

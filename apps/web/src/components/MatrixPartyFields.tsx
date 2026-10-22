@@ -37,7 +37,16 @@ export type MatrixUser = {
   role: string;
   phone?: string | null;
   designation?: string | null;
+  department?: string | null;
+  vendorId?: string | null;
   profile?: { department?: string | null; designation?: string | null } | null;
+};
+
+export type MatrixVendorContact = {
+  id: string;
+  fullName?: string | null;
+  email: string;
+  role?: string | null;
 };
 
 export type MatrixVendor = {
@@ -50,6 +59,7 @@ export type MatrixVendor = {
   businessPhone?: string | null;
   address?: string | null;
   city?: string | null;
+  contacts?: MatrixVendorContact[];
 };
 
 type AssignedVendor = { vendorId: string; partyType?: string; name?: string };
@@ -102,8 +112,10 @@ function vendorMatchesSection(v: MatrixVendor, section: string) {
   return true;
 }
 
-function userMatchesSection(u: MatrixUser, section: string) {
-  const kind = portalAccountKind(u.role, u.profile);
+function userMatchesSection(u: MatrixUser, section: string, vendors: MatrixVendor[]) {
+  const linked = u.vendorId ? vendors.find((v) => v.id === u.vendorId) : undefined;
+  if (linked && section !== "Other" && vendorMatchesSection(linked, section)) return true;
+  const kind = portalAccountKind(u.role, u.profile || { department: u.department }, u.vendorId);
   if (section === "Client") return kind === "client";
   if (section === "Contractor") return kind === "vendor";
   if (section === "Consultant") return kind === "stakeholder";
@@ -290,31 +302,56 @@ export function MatrixPartyFields({
   );
 
   const sectionUsers = useMemo(
-    () => users.filter((u) => userMatchesSection(u, form.orgSection)),
-    [users, form.orgSection],
+    () => users.filter((u) => userMatchesSection(u, form.orgSection, vendors)),
+    [users, vendors, form.orgSection],
   );
 
   const peopleOptions = useMemo(() => {
-    const rows = sectionUsers.map((u) => ({
-      value: `user:${u.id}`,
-      label: u.fullName,
-      sublabel: [u.designation || u.profile?.designation, u.email].filter(Boolean).join(" · "),
-      keywords: `${u.fullName} ${u.email} ${u.phone || ""} ${u.designation || u.profile?.designation || ""}`,
-    }));
-    const picked = sectionVendors.find((v) => v.id === pickVendorId) || sectionVendors.find((v) => v.name === form.company);
-    if (picked?.primaryContactName) {
-      const key = `vendor:${picked.id}`;
-      if (!rows.some((r) => r.label === picked.primaryContactName && r.sublabel?.includes(picked.email || ""))) {
-        rows.unshift({
-          value: key,
-          label: picked.primaryContactName,
-          sublabel: [picked.email, picked.businessPhone].filter(Boolean).join(" · "),
-          keywords: `${picked.primaryContactName} ${picked.email || ""} ${picked.businessPhone || ""} ${picked.name}`,
-        });
+    const rows: { value: string; label: string; sublabel: string; keywords: string }[] = [];
+    const seen = new Set<string>();
+    function add(value: string, label: string, sublabel: string, keywords: string) {
+      const name = label.trim();
+      if (!name) return;
+      const key = `${name.toLowerCase()}|${sublabel.toLowerCase()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({ value, label: name, sublabel, keywords });
+    }
+    for (const v of sectionVendors) {
+      for (const c of v.contacts || []) {
+        add(
+          `contact:${v.id}:${c.id}`,
+          c.fullName || c.email,
+          [c.email, v.name, c.role].filter(Boolean).join(" · "),
+          `${c.fullName || ""} ${c.email} ${c.role || ""} ${v.name} ${v.trade || ""}`,
+        );
+      }
+      if (v.primaryContactName) {
+        add(
+          `vendor:${v.id}`,
+          v.primaryContactName,
+          [v.email, v.name, v.businessPhone].filter(Boolean).join(" · "),
+          `${v.primaryContactName} ${v.email || ""} ${v.businessPhone || ""} ${v.name}`,
+        );
       }
     }
-    return rows;
-  }, [sectionUsers, sectionVendors, pickVendorId, form.company]);
+    for (const u of sectionUsers) {
+      const company = u.vendorId ? vendors.find((v) => v.id === u.vendorId)?.name : "";
+      add(
+        `user:${u.id}`,
+        u.fullName,
+        [u.email, company, u.designation || u.profile?.designation].filter(Boolean).join(" · "),
+        `${u.fullName} ${u.email} ${u.phone || ""} ${company || ""} ${u.designation || u.profile?.designation || ""}`,
+      );
+    }
+    const company = form.company.trim().toLowerCase();
+    if (!company) return rows;
+    return [...rows].sort((a, b) => {
+      const aHit = a.sublabel.toLowerCase().includes(company) ? 0 : 1;
+      const bHit = b.sublabel.toLowerCase().includes(company) ? 0 : 1;
+      return aHit - bHit;
+    });
+  }, [sectionUsers, sectionVendors, vendors, form.company]);
 
   useEffect(() => {
     if (editing) return;
@@ -371,16 +408,49 @@ export function MatrixPartyFields({
     setPickUserId(person ? `user:${person.id}` : v.primaryContactName ? `vendor:${v.id}` : "");
   }
 
+  function applyPortalUser(u: MatrixUser) {
+    const linked = u.vendorId ? vendors.find((v) => v.id === u.vendorId) : undefined;
+    const base = linked ? fillFromVendor(form, linked) : form;
+    if (linked) setPickVendorId(linked.id);
+    onChange({
+      ...fillFromUser(base, u),
+      orgSection: form.orgSection,
+      company: linked?.name || base.company,
+      orgName: linked?.name || base.orgName,
+    });
+  }
+
+  function applyContact(vendorId: string, contactId: string) {
+    const v = vendors.find((x) => x.id === vendorId);
+    const c = v?.contacts?.find((x) => x.id === contactId);
+    if (!v || !c) return;
+    setPickVendorId(v.id);
+    onChange({
+      ...fillFromVendor(form, v),
+      orgSection: form.orgSection,
+      personName: c.fullName || c.email,
+      email: c.email || form.email,
+      designation: c.role || form.designation,
+      spoc: c.fullName || v.primaryContactName || form.spoc,
+    });
+  }
+
   function applyPerson(value: string) {
     setPickUserId(value);
     if (value.startsWith("user:")) {
       const u = users.find((x) => x.id === value.slice(5));
-      if (u) onChange(fillFromUser(form, u));
+      if (u) applyPortalUser(u);
+      return;
+    }
+    if (value.startsWith("contact:")) {
+      const rest = value.slice("contact:".length);
+      const sep = rest.indexOf(":");
+      if (sep > 0) applyContact(rest.slice(0, sep), rest.slice(sep + 1));
       return;
     }
     if (value.startsWith("vendor:")) {
       const v = vendors.find((x) => x.id === value.slice(7));
-      if (v) onChange(fillFromVendor(form, v));
+      if (v) onChange({ ...fillFromVendor(form, v), orgSection: form.orgSection });
     }
   }
 
@@ -510,20 +580,26 @@ export function MatrixPartyFields({
         <label className="block space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">E-mail · search people</span>
           <SearchableSelect
-            options={peopleOptions
-              .map((o) => {
-                const email = o.sublabel?.split(" · ")[0] || "";
-                if (!email || !email.includes("@")) return null;
-                return { value: email, label: email, sublabel: o.label, keywords: `${email} ${o.label}` };
-              })
-              .filter((o): o is { value: string; label: string; sublabel: string; keywords: string } => Boolean(o))}
+            options={(() => {
+              const seen = new Set<string>();
+              return peopleOptions
+                .map((o) => {
+                  const email = o.sublabel.split(" · ").find((part) => part.includes("@")) || "";
+                  const key = email.toLowerCase();
+                  if (!email || seen.has(key)) return null;
+                  seen.add(key);
+                  return { value: email, label: email, sublabel: o.label, keywords: `${email} ${o.label} ${o.keywords}` };
+                })
+                .filter((o): o is { value: string; label: string; sublabel: string; keywords: string } => Boolean(o));
+            })()}
             value={form.email}
             onChange={(email) => {
-              const u = users.find((x) => x.email.toLowerCase() === email.toLowerCase());
-              const v = vendors.find((x) => x.email && x.email.toLowerCase() === email.toLowerCase());
-              if (u) onChange(fillFromUser(form, u));
-              else if (v) applyVendor(v.id, v);
-              else onChange({ ...form, email });
+              const hit = peopleOptions.find((o) => o.sublabel.toLowerCase().includes(email.toLowerCase()));
+              if (hit) {
+                applyPerson(hit.value);
+                return;
+              }
+              onChange({ ...form, email });
             }}
             allowCustom
             placeholder="E-mail"

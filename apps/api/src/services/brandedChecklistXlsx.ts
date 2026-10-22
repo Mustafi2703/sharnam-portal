@@ -2,10 +2,10 @@
  * Branded checklist XLSX — fills real SPDC client forms (ExcelJS), same approach as DPR/WPR.
  *
  * Templates (apps/api/checklist-templates + seed/data):
- *   - SPDC_Activity_Inspection_Checklist_Format.xlsx  → QI / Activity / Drawing / Site
- *   - SPDC_Request_for_Inspection_Form.xlsx           → cover IR sheet for QI
- *   - SPDC_Safety_Inspection_Request_and_Checklists.xlsx → Safety walkthrough + Safety IR
- *   - SPDC_RFI_Form_and_Register.xlsx                 → Drawing / RFI-style fills
+ *   - SPDC_Activity_Inspection_Checklist_Format.xlsx  → activity checklist only
+ *   - SPDC_Request_for_Inspection_Form.xlsx           → inspection request only
+ *   - SPDC_Safety_Inspection_Request_and_Checklists.xlsx → safety checklist only
+ *   - SPDC_RFI_Form_and_Register.xlsx                 → RFI form only
  */
 import fs from "fs";
 import path from "path";
@@ -13,7 +13,7 @@ import ExcelJS from "exceljs";
 import { collectEvidencePhotos } from "./checklistSignoff.js";
 import { checklistLogoPath, collectChecklistSignSlots, type SignSlot } from "./checklistSignoff.js";
 import type { DirectorySignMap } from "./directorySignatures.js";
-import { detachSharedStyles } from "../lib/excelTemplate.js";
+import { detachSharedStyles, freezeSheetFormulas, keepOnlySheets as keepNamedSheets } from "../lib/excelTemplate.js";
 
 type ResponseCell = { answer?: string; remarks?: string; remark?: string; value?: string };
 type Item = {
@@ -93,41 +93,6 @@ type ProjectMeta = {
   contractorName?: string | null;
   location?: string | null;
 };
-
-function copyCellStyle(src: ExcelJS.Cell, dest: ExcelJS.Cell) {
-  dest.value = src.value;
-  const fill = src.fill as ExcelJS.FillPattern | undefined;
-  const argb = fill?.fgColor && "argb" in fill.fgColor ? String(fill.fgColor.argb || "") : "";
-  if (fill?.type === "pattern" && argb) {
-    dest.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
-  }
-  if (src.font) dest.font = { ...src.font };
-  if (src.border) dest.border = JSON.parse(JSON.stringify(src.border));
-  if (src.alignment) dest.alignment = { ...src.alignment };
-  if (src.numFmt) dest.numFmt = src.numFmt;
-}
-
-function copyWorksheet(src: ExcelJS.Worksheet, dest: ExcelJS.Workbook, name: string) {
-  const out = dest.addWorksheet(name);
-  src.columns.forEach((col, idx) => {
-    if (col.width) out.getColumn(idx + 1).width = col.width;
-  });
-  src.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-    const destRow = out.getRow(rowNumber);
-    if (row.height) destRow.height = row.height;
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      copyCellStyle(cell, destRow.getCell(colNumber));
-    });
-  });
-  for (const merge of src.model.merges || []) {
-    try {
-      out.mergeCells(merge);
-    } catch {
-      /* already merged */
-    }
-  }
-  return out;
-}
 
 function writeValue(ws: ExcelJS.Worksheet, row: number, col: number, value: string | number | null | undefined) {
   const cell = ws.getCell(row, col);
@@ -344,10 +309,7 @@ function applySignoff(
 }
 
 function keepOnlySheets(wb: ExcelJS.Workbook, names: string[]) {
-  const keep = new Set(names.map((n) => n.toLowerCase()));
-  for (const ws of [...wb.worksheets]) {
-    if (!keep.has(ws.name.toLowerCase())) wb.removeWorksheet(ws.id);
-  }
+  keepNamedSheets(wb, names);
 }
 
 function sectionBand(ws: ExcelJS.Worksheet, row: number, cols: number[], title: string) {
@@ -582,7 +544,7 @@ async function fillSafetyChecklist(
 
   detachSharedStyles(wb);
   // Keep walkthrough + IR cover; drop activity-specific / register for a clean fill pack.
-  keepOnlySheets(wb, ["Safety Checklist (General)", "Safety IR Form", "Procedure & Legend"]);
+  keepOnlySheets(wb, ["Safety Checklist (General)"]);
 
   const ws = wb.getWorksheet("Safety Checklist (General)") || wb.worksheets[0];
   embedLogo(wb, ws);
@@ -715,22 +677,7 @@ async function fillSafetyChecklist(
 
   r += 1;
   applySignoff(wb, ws, r, submission, [2, 3, 4, 5, 6, 7, 8], dirSigns);
-
-  // Safety IR cover particulars
-  const ir = wb.getWorksheet("Safety IR Form");
-  if (ir) {
-    paintInput(ir, 6, 5, project?.name || project?.code || "");
-    paintInput(ir, 6, 11, inspNo);
-    paintInput(ir, 7, 5, project?.clientName || "");
-    paintInput(ir, 7, 11, fmtDate(submission.createdAt));
-    paintInput(ir, 9, 4, "SPDC");
-    paintInput(ir, 13, 5, template?.name || "");
-    paintInput(ir, 14, 5, drawingLabel(submission));
-    paintInput(ir, 18, 5, submission.submittedBy?.fullName || "");
-    paintInput(ir, 19, 5, submission.remarks || "");
-    embedLogo(wb, ir);
-    applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dirSigns);
-  }
+  freezeSheetFormulas(ws);
 
   return wb;
 }
@@ -859,25 +806,9 @@ async function fillRfiForm(
   if (submission.remarks) paintInput(ws, 31, 2, submission.remarks);
 
   applySignoff(wb, ws, Math.max(ws.rowCount || 40, 40) + 1, submission, [2, 3, 4, 5, 6, 7, 8], dirSigns);
+  freezeSheetFormulas(ws);
 
   return wb;
-}
-
-async function withIrCover(
-  filled: ExcelJS.Workbook,
-  submission: BrandedChecklistSubmission,
-  project?: ProjectMeta
-): Promise<ExcelJS.Workbook> {
-  const file = resolveTemplate("SPDC_Request_for_Inspection_Form.xlsx");
-  if (!file) return filled;
-  const irWb = new ExcelJS.Workbook();
-  await irWb.xlsx.readFile(file);
-  detachSharedStyles(irWb);
-  fillIrParticulars(irWb.worksheets[0], submission, project);
-  const out = new ExcelJS.Workbook();
-  copyWorksheet(irWb.worksheets[0], out, "IR Form");
-  for (const ws of filled.worksheets) copyWorksheet(ws, out, ws.name);
-  return out;
 }
 
 /**
@@ -1169,24 +1100,6 @@ export async function buildBrandedChecklistXlsxBuffer(
     wb = await fillInspectionRequest(submission, project, dirSigns);
   } else {
     wb = await fillActivityChecklist(submission, project, dirSigns);
-    const isDrawingFill = String(type || "").toLowerCase().includes("drawing");
-    if (!isDrawingFill) {
-      try {
-        wb = await withIrCover(wb, submission, project);
-        const act = wb.getWorksheet("Activity Checklist") || wb.worksheets[wb.worksheets.length - 1];
-        if (act) {
-          embedLogo(wb, act);
-          applySignoff(wb, act, Math.max(act.rowCount || 20, 20) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9], dirSigns);
-        }
-        const ir = wb.getWorksheet("IR Form");
-        if (ir) {
-          embedLogo(wb, ir);
-          applySignoff(wb, ir, Math.max(ir.rowCount || 22, 22) + 1, submission, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], dirSigns);
-        }
-      } catch {
-        /* IR cover is best-effort */
-      }
-    }
   }
 
   try {
