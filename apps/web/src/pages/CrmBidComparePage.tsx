@@ -718,20 +718,7 @@ export default function CrmBidComparePage() {
   }
 
   return (
-    <div className="crm-bid-page space-y-3">
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          className="!text-xs"
-          onClick={() => {
-            setPackageError("");
-            setPackageProjectId(setupProjectId);
-            setPackageBoqOpen(true);
-          }}
-        >
-          Upload package BOQ
-        </Button>
-      </div>
+    <div className="crm-bid-page">
       <UploadModal
         open={packageBoqOpen}
         title="Package BOQ"
@@ -814,6 +801,11 @@ export default function CrmBidComparePage() {
           setDetail(null);
           setShowNewBidForm(false);
           if (!id) nav("/crm/bids", { replace: true });
+        }}
+        onUploadPackage={() => {
+          setPackageError("");
+          setPackageProjectId(setupProjectId);
+          setPackageBoqOpen(true);
         }}
         onNewBid={() => {
           if (!setupProjectId) {

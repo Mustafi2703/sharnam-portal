@@ -495,7 +495,7 @@ html.is-standalone-form #root {
 .crm-shell:has(.crm-bid-page) {
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   padding: 0.5rem 0.75rem 0.75rem;
 }
 .crm-bid-page {
@@ -505,12 +505,12 @@ html.is-standalone-form #root {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  overflow: hidden;
 }
 .crm-bid-desk {
   display: flex;
   flex: 1 1 auto;
-  min-height: min(520px, 70vh);
+  min-height: 0;
   min-width: 0;
   width: 100%;
   border: 1px solid var(--color-line);
@@ -528,6 +528,9 @@ html.is-standalone-form #root {
   min-height: 0;
 }
 .crm-bid-desk__rail-head {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
   padding: 0.75rem;
   border-bottom: 1px solid var(--color-line);
   background: var(--color-paper);
@@ -542,9 +545,11 @@ html.is-standalone-form #root {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
-  padding: 0.75rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
 }
 .crm-bid-desk__toolbar {
   display: flex;
@@ -584,39 +589,19 @@ html.is-standalone-form #root {
   overflow: auto !important;
   overscroll-behavior: contain;
 }
-.crm-bid-desk .sheet-register__table--comparative th:first-child,
-.crm-bid-desk .sheet-register__table--comparative td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--color-paper);
-  box-shadow: 1px 0 0 var(--color-line);
-  min-width: 4rem;
-}
 .crm-bid-desk .sheet-register__table--comparative th:nth-child(2),
 .crm-bid-desk .sheet-register__table--comparative td:nth-child(2) {
-  position: sticky;
-  left: 4rem;
-  z-index: 2;
-  background: var(--color-paper);
-  box-shadow: 1px 0 0 var(--color-line);
   min-width: 12rem;
-  max-width: 16rem;
-  white-space: normal;
-}
-.crm-bid-desk .sheet-register__table--comparative thead th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: color-mix(in srgb, var(--color-sand) 70%, var(--color-paper));
-}
-.crm-bid-desk .sheet-register__table--comparative thead th:first-child,
-.crm-bid-desk .sheet-register__table--comparative thead th:nth-child(2) {
-  z-index: 4;
+  max-width: 18rem;
 }
 .crm-bid-desk .sheet-register__table th,
 .crm-bid-desk .sheet-register__table td {
-  white-space: nowrap;
+  position: static;
+  left: auto;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  vertical-align: top;
 }
 .crm-bid-desk__section {
   display: flex;
@@ -654,7 +639,9 @@ html.is-standalone-form #root {
 /* Bid management — workflow + tabbed main panel */
 .crm-bid-flow {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  overflow-x: auto;
   gap: 0.35rem 0.5rem;
   padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--color-line);
@@ -698,6 +685,7 @@ html.is-standalone-form #root {
   color: #fff;
 }
 .crm-bid-hero {
+  flex-shrink: 0;
   padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--color-line);
   background: var(--color-paper);
@@ -747,6 +735,7 @@ html.is-standalone-form #root {
 }
 .crm-bid-tabs {
   display: flex;
+  flex-shrink: 0;
   gap: 0.25rem;
   padding: 0.5rem 0.75rem 0;
   border-bottom: 1px solid var(--color-line);
@@ -777,8 +766,8 @@ html.is-standalone-form #root {
 }
 .crm-bid-tab-panel {
   flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
+  min-height: min(18rem, 42vh);
+  overflow: auto;
   padding: 0.85rem 1rem 1.25rem;
 }
 .crm-bid-rail-item {
@@ -798,13 +787,13 @@ html.is-standalone-form #root {
   box-shadow: inset 3px 0 0 var(--color-brand);
 }
 .crm-bid-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 60;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 1rem;
+  padding: 1.25rem 1rem;
   overflow-y: auto;
 }
 .crm-bid-modal__backdrop {
@@ -815,10 +804,31 @@ html.is-standalone-form #root {
 .crm-bid-modal__panel {
   position: relative;
   z-index: 1;
-  width: min(640px, 100%);
+  width: min(760px, 100%);
   margin-top: 0.5rem;
-  max-height: calc(100% - 1rem);
+  max-height: min(82vh, 760px);
   overflow-y: auto;
+}
+.crm-bid-line-table {
+  max-height: min(26rem, 48vh);
+  overflow: auto;
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+}
+.crm-bid-line-table table {
+  min-width: 720px;
+}
+.crm-bid-line-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--color-sand) 80%, var(--color-paper));
+}
+.crm-bid-line-table td:nth-child(2),
+.crm-bid-line-table th:nth-child(2) {
+  white-space: normal;
+  min-width: 14rem;
+  max-width: 22rem;
 }
 .crm-bid-desk__main {
   position: relative;
@@ -827,9 +837,12 @@ html.is-standalone-form #root {
   display: grid;
   gap: 0.85rem;
 }
+.crm-bid-manage-grid > * {
+  min-width: 0;
+}
 @media (min-width: 768px) {
   .crm-bid-manage-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 .crm-bid-slot-panel {
@@ -2020,6 +2033,43 @@ html.is-standalone-form #root {
   min-height: 240px !important;
   max-height: min(68vh, 560px) !important;
   overflow: auto !important;
+}
+
+/* Bid desk — later and more specific than the CRM register rules so sheets stay inside the tab */
+.crm-module .crm-bid-desk .sheet-register.register-sheet-frame,
+.crm-module .crm-bid-desk .register-panel-fill,
+.crm-module .crm-bid-desk .spdc-register-panel {
+  flex: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+}
+.app-frame__scroll .crm-module .crm-bid-desk .sheet-register__scroll,
+.app-frame__scroll .crm-module .crm-bid-desk .register-scroll-area,
+.crm-module .crm-bid-desk .sheet-register__scroll,
+.crm-module .crm-bid-desk .register-scroll-area {
+  flex: 1 1 auto !important;
+  min-height: 8rem !important;
+  height: auto !important;
+  max-height: min(22rem, 42vh) !important;
+  overflow: auto !important;
+}
+.crm-module .crm-bid-desk .sheet-register__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f0fdfa;
+  white-space: normal !important;
+}
+.crm-module .crm-bid-desk .cost-register-shell__toolbar {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+}
+.crm-module .crm-bid-desk .crm-bid-line-table thead th {
+  z-index: 1;
+  background: #f4f1ea;
 }
 
 /* Sheet Maker — full-width Notion-like grid inside office app shell (not project tool outlet) */

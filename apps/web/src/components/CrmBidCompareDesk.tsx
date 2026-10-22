@@ -1,4 +1,4 @@
-import { FormEvent, Fragment, type ReactNode } from "react";
+import { FormEvent, Fragment, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Card, Input } from "./ui";
 import { FilePickButton } from "./FilePickButton";
 import { CrmComparativeRegister } from "./CrmComparativeRegister";
@@ -87,6 +87,7 @@ export type CrmBidDeskProps = {
   uploadedPct: number;
   onProjectChange: (id: string) => void;
   onNewBid: () => void;
+  onUploadPackage?: () => void;
   onSelectPackage: (id: string) => void;
   onOpenBid: () => void;
   onRefreshCompare: () => void;
@@ -161,6 +162,7 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
     uploadedPct,
     onProjectChange,
     onNewBid,
+    onUploadPackage,
     onSelectPackage,
     onOpenBid,
     onRefreshCompare,
@@ -193,6 +195,17 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
 
   const hasCompare = Boolean(detail?.summary?.grandTotals && Object.keys(detail.summary.grandTotals).length);
   const hasMatrix = vendorMatrix.length > 0;
+  const lineSections = useMemo(() => {
+    const names = (detail?.comparative?.lines || []).map((line) => line.section).filter(Boolean);
+    return [...new Set(names)];
+  }, [detail?.comparative?.lines]);
+  const [lineSection, setLineSection] = useState("all");
+  const activeLineSection = lineSection === "all" || lineSections.includes(lineSection) ? lineSection : lineSections[0] || "all";
+  const visibleLines = useMemo(() => {
+    const lines = detail?.comparative?.lines || [];
+    if (activeLineSection === "all") return lines;
+    return lines.filter((line) => line.section === activeLineSection);
+  }, [detail?.comparative?.lines, activeLineSection]);
 
   return (
     <div className="crm-bid-desk">
@@ -226,9 +239,16 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
             value={pkgFilter}
             onChange={(e) => onPkgFilter(e.target.value)}
           />
-          <Button type="button" className="!text-xs w-full" onClick={onNewBid}>
-            + New bid
-          </Button>
+          <div className="grid grid-cols-1 gap-2">
+            <Button type="button" className="!text-xs w-full" onClick={onNewBid}>
+              + New bid
+            </Button>
+            {onUploadPackage ? (
+              <Button type="button" variant="secondary" className="!text-xs w-full" onClick={onUploadPackage}>
+                Upload package BOQ
+              </Button>
+            ) : null}
+          </div>
           <p className="text-[10px] text-steel-muted font-mono uppercase tracking-wide">
             {filteredPackages.length} of {packagesForDesk.length} package(s)
           </p>
@@ -245,9 +265,9 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
                   className={`crm-bid-rail-item${selectedId === p.id ? " is-selected" : ""}`}
                   onClick={() => onSelectPackage(p.id)}
                 >
-                  <div className="font-medium text-sm flex items-center gap-2">
-                    <span className="truncate">{p.title}</span>
-                    {statusBadge(p.status)}
+                  <div className="font-medium text-sm flex items-center gap-2 min-w-0">
+                    <span className="truncate min-w-0">{p.title}</span>
+                    <span className="shrink-0">{statusBadge(p.status)}</span>
                   </div>
                   <div className="text-xs text-steel-muted mt-0.5">
                     {p.project?.code ? `${p.project.code} · ` : ""}
@@ -447,69 +467,85 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
                     </p>
                   )}
                   {detail.comparative?.lines?.length ? (
-                    <div className="overflow-x-auto mb-4 border border-line rounded-lg">
-                      <table className="w-full text-xs">
-                        <thead className="bg-sand text-left">
-                          <tr>
-                            <th className="p-2">Sr</th>
-                            <th className="p-2 min-w-[220px]">Description</th>
-                            <th className="p-2">Qty</th>
-                            <th className="p-2">Unit</th>
-                            {detail.comparative.vendors.map((vendor) => (
-                              <th key={vendor} className="p-2 text-right" colSpan={2}>
-                                {vendor}
-                              </th>
-                            ))}
-                          </tr>
-                          <tr className="text-[10px] uppercase text-steel-muted">
-                            <th />
-                            <th />
-                            <th />
-                            <th />
-                            {detail.comparative.vendors.map((vendor) => (
-                              <th key={`${vendor}-h`} className="px-2 pb-2 text-right" colSpan={2}>
-                                Rate / Amount
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detail.comparative.lines.map((line, index) => {
-                            const prev = detail.comparative?.lines[index - 1];
-                            const amounts = line.quotes.map((q) => q.amount).filter((n): n is number => n != null && n > 0);
-                            const lowest = amounts.length ? Math.min(...amounts) : null;
-                            return (
-                              <Fragment key={line.key}>
-                                {line.section && line.section !== prev?.section ? (
-                                  <tr className="bg-sand">
-                                    <td className="p-2 font-semibold" colSpan={4 + detail.comparative!.vendors.length * 2}>
-                                      {line.section}
-                                    </td>
-                                  </tr>
-                                ) : null}
-                                <tr className="border-t border-line">
-                                  <td className="p-2 font-mono">{line.itemNo}</td>
-                                  <td className="p-2">{line.description}</td>
-                                  <td className="p-2">{line.qtyText || line.qty || ""}</td>
-                                  <td className="p-2">{line.unit}</td>
-                                  {detail.comparative!.vendors.map((vendor) => {
-                                    const quote = line.quotes.find((q) => q.vendor === vendor);
-                                    const low = lowest != null && quote?.amount === lowest;
-                                    return (
-                                      <td key={vendor} className={`p-2 text-right ${low ? "text-ok font-semibold" : ""}`} colSpan={2}>
-                                        {quote?.rate != null ? money(quote.rate) : ""}
-                                        <span className="block text-[10px] text-steel-muted">
-                                          {quote?.amount != null ? money(quote.amount) : ""}
-                                        </span>
+                    <div className="mb-4 space-y-2">
+                      <label className="text-xs font-semibold text-steel-muted block max-w-sm">
+                        BOQ section
+                        <select
+                          className="mt-1 w-full border border-line rounded-lg px-2 py-1.5 text-xs bg-white font-normal text-ink"
+                          value={activeLineSection}
+                          onChange={(e) => setLineSection(e.target.value)}
+                        >
+                          <option value="all">All sections ({detail.comparative.lines.length})</option>
+                          {lineSections.map((section) => (
+                            <option key={section} value={section}>
+                              {section}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="crm-bid-line-table">
+                        <table className="w-full text-xs">
+                          <thead className="text-left">
+                            <tr>
+                              <th className="p-2">Sr</th>
+                              <th className="p-2">Description</th>
+                              <th className="p-2">Qty</th>
+                              <th className="p-2">Unit</th>
+                              {detail.comparative.vendors.map((vendor) => (
+                                <th key={`${vendor}-rate`} className="p-2 text-right whitespace-nowrap">
+                                  {vendor} rate
+                                </th>
+                              ))}
+                              {detail.comparative.vendors.map((vendor) => (
+                                <th key={`${vendor}-amt`} className="p-2 text-right whitespace-nowrap">
+                                  {vendor} amount
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleLines.map((line, index) => {
+                              const prev = visibleLines[index - 1];
+                              const amounts = line.quotes.map((q) => q.amount).filter((n): n is number => n != null && n > 0);
+                              const lowest = amounts.length ? Math.min(...amounts) : null;
+                              return (
+                                <Fragment key={line.key}>
+                                  {activeLineSection === "all" && line.section && line.section !== prev?.section ? (
+                                    <tr className="bg-sand">
+                                      <td className="p-2 font-semibold" colSpan={4 + detail.comparative!.vendors.length * 2}>
+                                        {line.section}
                                       </td>
-                                    );
-                                  })}
-                                </tr>
-                              </Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                    </tr>
+                                  ) : null}
+                                  <tr className="border-t border-line">
+                                    <td className="p-2 font-mono align-top">{line.itemNo}</td>
+                                    <td className="p-2 align-top">{line.description}</td>
+                                    <td className="p-2 align-top whitespace-nowrap">{line.qtyText || line.qty || ""}</td>
+                                    <td className="p-2 align-top whitespace-nowrap">{line.unit}</td>
+                                    {detail.comparative!.vendors.map((vendor) => {
+                                      const quote = line.quotes.find((q) => q.vendor === vendor);
+                                      return (
+                                        <td key={`${vendor}-rate`} className="p-2 text-right align-top whitespace-nowrap">
+                                          {quote?.rate != null ? money(quote.rate) : ""}
+                                        </td>
+                                      );
+                                    })}
+                                    {detail.comparative!.vendors.map((vendor) => {
+                                      const quote = line.quotes.find((q) => q.vendor === vendor);
+                                      const low = lowest != null && quote?.amount === lowest;
+                                      return (
+                                        <td key={`${vendor}-amt`} className={`p-2 text-right align-top whitespace-nowrap ${low ? "text-ok font-semibold" : ""}`}>
+                                          {quote?.amount != null ? money(quote.amount) : ""}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                </Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   ) : null}
                   <CrmComparativeRegister

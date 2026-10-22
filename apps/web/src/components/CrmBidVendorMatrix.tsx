@@ -53,7 +53,7 @@ export function CrmBidVendorMatrix({
       <table className="sheet-register__table min-w-[900px]">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 bg-inherit min-w-[140px]">Bidder</th>
+            <th className="min-w-[140px] bg-sand">Bidder</th>
             {disciplines.map((d) => (
               <th key={d.key} className="text-center min-w-[100px]">
                 <div className="font-semibold">{d.label}</div>
@@ -71,7 +71,7 @@ export function CrmBidVendorMatrix({
             const isLowest = lowestVendor === vendorLabel;
             return (
               <tr key={vendorLabel} className={isLowest ? "bg-ok/5" : undefined}>
-                <td className="sticky left-0 z-10 bg-inherit font-semibold">
+                <td className="font-semibold bg-paper">
                   <div className="flex flex-wrap items-center gap-1">
                     <span>{vendorLabel}</span>
                     {isLowest && <Badge tone="ok">L1</Badge>}
