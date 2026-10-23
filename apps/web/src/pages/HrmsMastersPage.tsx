@@ -2,15 +2,29 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Button, Card, Input } from "../components/ui";
+import { formatUiText } from "../lib/formatUiText";
 import { canManageHrms } from "../lib/portalAccounts";
 import { HrmOrgMasters } from "../components/HrmOrgMasters";
+
+type WorkingHourOption = { id: string; label: string };
+
+function asHourList(payload: unknown): WorkingHourOption[] {
+  const rows = Array.isArray(payload) ? payload : [];
+  return rows.filter((row): row is WorkingHourOption => !!row && typeof row.id === "string" && typeof row.label === "string" && !!row.label);
+}
 
 /** HRMS · Masters — departments and roles, leave types, holidays. */
 export default function HrmsMastersPage() {
   const { token, user } = useAuth();
   const canManage = canManageHrms(user);
+  const canEditHours = user?.role === "admin" || user?.role === "office";
   const [types, setTypes] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [hours, setHours] = useState<WorkingHourOption[]>([]);
+  const [hourLabel, setHourLabel] = useState("");
+  const [editingHourId, setEditingHourId] = useState("");
+  const [hourMsg, setHourMsg] = useState("");
+  const [hourBusy, setHourBusy] = useState(false);
   const [typeForm, setTypeForm] = useState({ code: "", name: "", daysPerYear: "", isPaid: true, carryForward: false });
   const [editingTypeId, setEditingTypeId] = useState("");
   const [typeMsg, setTypeMsg] = useState("");
@@ -19,12 +33,14 @@ export default function HrmsMastersPage() {
 
   const load = useCallback(async () => {
     const y = new Date().getFullYear();
-    const [t, h] = await Promise.all([
+    const [t, h, hourRows] = await Promise.all([
       api<any[]>("/api/hrm/leave-types", { token }).catch(() => []),
       api<any[]>(`/api/hrm/holidays?year=${y}`, { token }).catch(() => []),
+      api<unknown>("/api/hrm/working-hours", { token }).catch(() => []),
     ]);
     setTypes(t);
     setHolidays(h);
+    setHours(asHourList(hourRows));
   }, [token]);
   useEffect(() => {
     void load();
@@ -87,6 +103,47 @@ export default function HrmsMastersPage() {
     }
   }
 
+  function blankHour() {
+    setEditingHourId("");
+    setHourLabel("");
+  }
+
+  async function saveHour(e: FormEvent) {
+    e.preventDefault();
+    const label = hourLabel.trim();
+    if (!label) return;
+    setHourMsg("");
+    setHourBusy(true);
+    try {
+      if (editingHourId) {
+        await api(`/api/hrm/working-hours/${editingHourId}`, { method: "PATCH", token, body: JSON.stringify({ label }) });
+      } else {
+        await api("/api/hrm/working-hours", { method: "POST", token, body: JSON.stringify({ label }) });
+      }
+      blankHour();
+      await load();
+    } catch (err) {
+      setHourMsg(err instanceof Error ? err.message : "Could not save working hours");
+    } finally {
+      setHourBusy(false);
+    }
+  }
+
+  async function removeHour(id: string, label: string) {
+    if (!window.confirm(`Delete ${label}?`)) return;
+    setHourMsg("");
+    setHourBusy(true);
+    try {
+      await api(`/api/hrm/working-hours/${id}`, { method: "DELETE", token });
+      if (editingHourId === id) blankHour();
+      await load();
+    } catch (err) {
+      setHourMsg(err instanceof Error ? err.message : "Could not delete working hours");
+    } finally {
+      setHourBusy(false);
+    }
+  }
+
   async function importHolidays(input: HTMLInputElement) {
     const file = input.files?.[0];
     if (!file) return;
@@ -111,6 +168,60 @@ export default function HrmsMastersPage() {
       )}
 
       <HrmOrgMasters token={token} canManage={canManage} />
+
+      <Card>
+        <h3 className="font-semibold mb-1">{formatUiText("Working Hours")}</h3>
+        <p className="text-[11px] text-steel-muted mb-3">
+          {formatUiText("Shifts offered on employee onboarding. For example, 9:30 AM To 6:30 PM.")}
+        </p>
+        {canEditHours ? (
+          <form className="flex flex-col gap-2 mb-3 max-w-md" onSubmit={saveHour}>
+            <Input
+              label="Label"
+              placeholder="9:30 AM To 6:30 PM"
+              value={hourLabel}
+              onChange={(e) => setHourLabel(e.target.value)}
+              required
+            />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={hourBusy}>
+                {hourBusy ? "Saving…" : editingHourId ? "Save Working Hours" : "Add Working Hours"}
+              </Button>
+              {editingHourId ? (
+                <Button type="button" variant="secondary" onClick={blankHour}>Cancel</Button>
+              ) : null}
+            </div>
+          </form>
+        ) : (
+          <p className="text-xs text-steel-muted mb-3">{formatUiText("Admin and office can add or edit these hours.")}</p>
+        )}
+        {hourMsg ? <p className="text-xs text-danger mb-2">{hourMsg}</p> : null}
+        <ul className="text-sm divide-y max-h-64 overflow-y-auto">
+          {hours.map((row) => (
+            <li key={row.id} className="py-1.5 flex justify-between gap-2 items-start">
+              <span className="font-medium" data-preserve-case>{row.label}</span>
+              {canEditHours ? (
+                <span className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    className="text-brand text-xs font-semibold"
+                    onClick={() => {
+                      setEditingHourId(row.id);
+                      setHourLabel(row.label);
+                    }}
+                  >
+                    {formatUiText("Edit")}
+                  </button>
+                  <button type="button" className="text-danger text-xs font-semibold" disabled={hourBusy} onClick={() => void removeHour(row.id, row.label)}>
+                    {formatUiText("Delete")}
+                  </button>
+                </span>
+              ) : null}
+            </li>
+          ))}
+          {!hours.length ? <li className="text-steel-muted py-2 text-sm">{formatUiText("No Working Hours Yet.")}</li> : null}
+        </ul>
+      </Card>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card>

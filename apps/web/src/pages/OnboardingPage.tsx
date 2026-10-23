@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, mediaUrl } from "../api";
 import { useAuth } from "../auth";
-import { Badge, Button, Card, Input, TextArea } from "../components/ui";
+import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
+import { formatUiText } from "../lib/formatUiText";
 import { canManageHrms } from "../lib/portalAccounts";
 import { HR_FILE_KINDS, hrFileContentUrl, isHrImage } from "../lib/hrFileView";
 import { StatusNote } from "../components/StatusNote";
@@ -19,17 +20,55 @@ export default function OnboardingPage() {
 
 const JOIN_STEPS = ["Convert", "Documents", "Letters", "Pre-join", "Day 1"];
 
+type WorkingHourOption = { id: string; label: string };
+
+function asHourList(payload: unknown): WorkingHourOption[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((row): row is WorkingHourOption => !!row && typeof row.id === "string" && typeof row.label === "string");
+  }
+  const options = payload && typeof payload === "object" ? (payload as { options?: unknown }).options : null;
+  return Array.isArray(options)
+    ? options.filter((row): row is WorkingHourOption => !!row && typeof row.id === "string" && typeof row.label === "string")
+    : [];
+}
+
+function echoedText(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+/** Documents, appointment letter, employee code, bank, PF / ESIC, and nominee. */
+function joineeOnboardingProgress(row: any, offer?: any): number {
+  const letter = row?.appointmentLetterUrl || offer?.appointmentLetterUrl || row?.preJoin?.appointmentLetterUrl;
+  const code = row?.empCode || offer?.empCode;
+  const checks = [
+    Number(row?.documentCount) > 0,
+    !!letter,
+    !!String(code || "").trim(),
+    !!(row?.bankDetailsDone || offer?.onboard?.bankDetailsDone),
+    !!(row?.pfEsicDone || offer?.onboard?.pfEsicDone),
+    !!(row?.nomineeDone || offer?.onboard?.nomineeDone),
+  ];
+  const done = checks.filter(Boolean).length;
+  return Math.round((done / checks.length) * 100);
+}
+
 function OnboardingList() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const [rows, setRows] = useState<any[]>([]);
+  const [offers, setOffers] = useState<any[]>([]);
   const [loadError, setLoadError] = useState("");
   const [busyId, setBusyId] = useState("");
   const [search, setSearch] = useState("");
 
   async function load() {
     try {
-      setRows(await api<any[]>("/api/hrm/onboarding-board", { token }));
+      const [board, offerRows] = await Promise.all([
+        api<any[]>("/api/hrm/onboarding-board", { token }),
+        api<any[]>("/api/hrm/offers", { token }).catch(() => []),
+      ]);
+      setRows(board);
+      setOffers(Array.isArray(offerRows) ? offerRows : []);
       setLoadError("");
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load onboarding");
@@ -46,6 +85,14 @@ function OnboardingList() {
       window.removeEventListener("focus", onFocus);
     };
   }, [token]);
+
+  const offerById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const offer of offers) {
+      if (offer?.id) map.set(offer.id, offer);
+    }
+    return map;
+  }, [offers]);
 
   const visible = rows.filter((row) => {
     const q = search.trim().toLowerCase();
@@ -75,10 +122,7 @@ function OnboardingList() {
   return (
     <div className="space-y-4">
       <Card className="!p-4">
-        <p className="text-sm font-semibold">New joinee desk</p>
-        <p className="text-xs text-steel-muted mt-1 leading-relaxed">
-          People converted from Recruitment land here. Open a person to finish documents, the appointment letter, employee code, email, and Day 1 formalities.
-        </p>
+        <p className="text-sm font-semibold">{formatUiText("New Joinee Desk")}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {JOIN_STEPS.map((step, i) => (
             <span key={step} className="inline-flex items-center gap-2 text-xs">
@@ -99,16 +143,24 @@ function OnboardingList() {
         <p className="text-xs text-steel-muted">{visible.length} of {rows.length} joinees</p>
       </div>
       <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-line bg-paper divide-y">
-        {visible.map((row) => (
+        {visible.map((row) => {
+          const progress = joineeOnboardingProgress(row, row.offerId ? offerById.get(row.offerId) : undefined);
+          return (
           <div key={row.candidateId} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold">{row.fullName}</p>
                 <p className="text-xs text-steel-muted mt-0.5">
-                  {[row.designation, row.department, row.requisitionNo].filter(Boolean).join(" · ") || "Joined"}
+                  {[row.designation, row.department, row.requisitionNo].filter(Boolean).join(" · ") || formatUiText("Onboarding")}
                 </p>
               </div>
-              <Badge tone="ok">{row.status}</Badge>
+              <div className="w-40 shrink-0">
+                <ProgressBar
+                  label={progress >= 100 ? formatUiText("Joined") : formatUiText("Onboarding")}
+                  value={progress / 100}
+                  tone={progress >= 100 ? "ok" : "brand"}
+                />
+              </div>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
               <div>
@@ -144,7 +196,8 @@ function OnboardingList() {
               ) : null}
             </div>
           </div>
-        ))}
+          );
+        })}
         {rows.length > 0 && !visible.length ? (
           <p className="p-4 text-sm text-steel-muted">No joinee matches that search.</p>
         ) : null}
@@ -174,9 +227,9 @@ function OfferOnboardingPage() {
   const [offer, setOffer] = useState<any | null>(null);
   const [preJoin, setPreJoin] = useState<any | null>(null);
   const [onboard, setOnboard] = useState<any | null>(null);
-  const [timeline, setTimeline] = useState<any[]>([]);
   const [msg, setMsg] = useState("");
-  const [logOpen, setLogOpen] = useState(false);
+  const [signedFiled, setSignedFiled] = useState(false);
+  const [hourOptions, setHourOptions] = useState<WorkingHourOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [staffUserId, setStaffUserId] = useState("");
   const [form, setForm] = useState<any | null>(null);
@@ -197,7 +250,8 @@ function OfferOnboardingPage() {
       try {
         pre = await api<any>(`/api/hrm/pre-joining/${offerId}`, { token, timeoutMs: 30_000 });
         setPreJoin(pre);
-        setForm({
+        if (String(pre.appointmentLetterUrl || "").toLowerCase().includes("-signed")) setSignedFiled(true);
+        setForm((prev: any) => ({
           docCollectionDone: !!pre.docCollectionDone,
           bgvStatus: pre.bgvStatus || "Pending",
           medicalStatus: pre.medicalStatus || "Pending",
@@ -208,11 +262,15 @@ function OfferOnboardingPage() {
           emailAddress: pre.emailAddress && pre.emailAddress !== "true" ? pre.emailAddress : o?.candidate?.email || "",
           idCardRequested: !!pre.idCardRequested,
           welcomeKitPrepared: !!pre.welcomeKitPrepared,
-        });
+          bankDetail: echoedText(pre.bankDetail, prev?.bankDetail || ""),
+          pfEsic: echoedText(pre.pfEsic, prev?.pfEsic || ""),
+          nomineeDetails: echoedText(pre.nomineeDetails, prev?.nomineeDetails || ""),
+          workingHours: echoedText(pre.workingHours, prev?.workingHours || ""),
+        }));
         if (pre.linkedUserId) linked = pre.linkedUserId;
       } catch (err) {
         setPreJoin(null);
-        setForm({
+        setForm((prev: any) => ({
           docCollectionDone: false,
           bgvStatus: "Pending",
           medicalStatus: "Pending",
@@ -223,13 +281,24 @@ function OfferOnboardingPage() {
           emailAddress: o?.candidate?.email || "",
           idCardRequested: false,
           welcomeKitPrepared: false,
-        });
+          bankDetail: prev?.bankDetail || "",
+          pfEsic: prev?.pfEsic || "",
+          nomineeDetails: prev?.nomineeDetails || "",
+          workingHours: prev?.workingHours || "",
+        }));
         setMsg(err instanceof Error ? err.message : "Could not load the pre-joining checklist. Try again.");
       }
       try {
         const onboardRow = await api<any>(`/api/hrm/onboarding/${offerId}`, { token });
         setOnboard(onboardRow);
         if (onboardRow?.userId) linked = onboardRow.userId;
+        setForm((prev: any) => prev ? {
+          ...prev,
+          bankDetail: echoedText(onboardRow.bankDetail, prev.bankDetail || ""),
+          pfEsic: echoedText(onboardRow.pfEsic, prev.pfEsic || ""),
+          nomineeDetails: echoedText(onboardRow.nomineeDetails, prev.nomineeDetails || ""),
+          workingHours: echoedText(onboardRow.workingHours, prev.workingHours || ""),
+        } : prev);
       } catch {
         setOnboard(null);
       }
@@ -244,16 +313,6 @@ function OfferOnboardingPage() {
         if (d?.fileUrl && !seen.has(d.fileUrl)) merged.push(d);
       }
       setVaultDocs(merged);
-      if (canHrWrite && (linked || o?.candidate?.id)) {
-        const q = new URLSearchParams();
-        if (offerId) q.set("offerId", offerId);
-        if (o?.candidate?.id) q.set("candidateId", o.candidate.id);
-        const who = linked || o.candidate.id;
-        const events = await api<any[]>(`/api/hrm/employees/${who}/timeline?${q.toString()}`, { token }).catch(() => []);
-        setTimeline(events);
-      } else {
-        setTimeline([]);
-      }
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not open this onboarding page");
     }
@@ -261,6 +320,21 @@ function OfferOnboardingPage() {
   useEffect(() => {
     void load();
   }, [offerId, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api<unknown>("/api/hrm/working-hours", { token })
+      .then((payload) => {
+        if (!cancelled) setHourOptions(asHourList(payload));
+      })
+      .catch(() => {
+        if (!cancelled) setHourOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     const onFocus = () => { void load(); };
@@ -329,7 +403,14 @@ function OfferOnboardingPage() {
         const row = await api<any>(`/api/hrm/onboarding/${offerId}`, {
           method: "PATCH",
           token,
-          body: JSON.stringify({ ...day1, notes }),
+          body: JSON.stringify({
+            ...day1,
+            notes,
+            bankDetail: form.bankDetail || "",
+            pfEsic: form.pfEsic || "",
+            nomineeDetails: form.nomineeDetails || "",
+            workingHours: form.workingHours || "",
+          }),
         });
         setOnboard(row);
       }
@@ -425,8 +506,9 @@ function OfferOnboardingPage() {
       const fd = new FormData();
       fd.append("file", file);
       await api(`/api/hrm/offers/${offerId}/signed-appointment`, { method: "POST", token, body: fd });
-      setMsg("Signed appointment filed. IT, email, ID card, and the welcome kit can be saved now.");
+      setSignedFiled(true);
       await load();
+      setMsg(formatUiText("Signed Copy Has Been Filed."));
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not file the signed letter");
     } finally {
@@ -447,6 +529,15 @@ function OfferOnboardingPage() {
     { key: "orientationDone", label: "10 · Orientation" },
     { key: "hrPolicyAcknowledged", label: "11 · HR policy acknowledged" },
   ];
+
+  const hourChoices = useMemo(() => {
+    const list = hourOptions.slice();
+    const current = String(form?.workingHours || "").trim();
+    if (current && !list.some((row) => row.label === current)) {
+      list.unshift({ id: `current-${current}`, label: current });
+    }
+    return list;
+  }, [hourOptions, form?.workingHours]);
 
   const preDone = form
     ? [
@@ -519,7 +610,7 @@ function OfferOnboardingPage() {
           ) : null}
         </div>
       </div>
-      <StatusNote msg={msg} />
+      <StatusNote msg={msg || (signedFiled ? formatUiText("Signed Copy Has Been Filed.") : "")} />
 
       {canHrWrite && form ? (
         <Card>
@@ -586,8 +677,7 @@ function OfferOnboardingPage() {
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-1">
-          <h3 className="font-semibold text-sm mb-1">Progress</h3>
-          <p className="text-[11px] text-steel-muted mb-3">Nirav HRMS flow · sections 2 &amp; 3</p>
+          <h3 className="font-semibold text-sm mb-3">{formatUiText("Progress")}</h3>
           <div className="space-y-3">
             <ProgressBar label={`Pre-joining · ${preDone}/${preTotal}`} value={preDone / preTotal} />
             <ProgressBar label={`Onboarding · ${onboardDone}/${onboardTotal}`} value={onboardDone / onboardTotal} tone="ok" />
@@ -626,8 +716,9 @@ function OfferOnboardingPage() {
                               disabled={uploadBusy}
                               onChange={(e) => void fileSignedAppointment(e.target.files?.[0] || null)}
                             />
-                            <span className="inline-flex items-center rounded-md border border-line px-2 py-1 cursor-pointer">{uploadBusy ? "Filing…" : "File signed copy"}</span>
+                            <span className="inline-flex items-center rounded-md border border-line px-2 py-1 cursor-pointer">{uploadBusy ? "Filing…" : formatUiText("File Signed Copy")}</span>
                           </label>
+                          {signedFiled ? <StatusNote compact msg={formatUiText("Signed Copy Has Been Filed.")} /> : null}
                         </>
                       ) : (
                         <span className="text-xs text-steel-muted">Generate the letter first. File the signed copy after they return it.</span>
@@ -702,11 +793,41 @@ function OfferOnboardingPage() {
       </div>
 
       <Card>
-        <h3 className="font-semibold text-sm mb-1">3 · Employee Onboarding</h3>
-        <p className="text-[11px] text-steel-muted mb-3">
-          Joining formalities · personal &amp; bank details · PAN/Aadhaar · PF/ESIC · nominee · doc verification · department ·
-          reporting manager · orientation · HR policy
-        </p>
+        <h3 className="font-semibold text-sm mb-3">{formatUiText("3 · Employee Onboarding")}</h3>
+        {form && (preJoinComplete || canHrWrite) ? (
+          <div className="grid md:grid-cols-2 gap-3 mb-4">
+            <Input
+              label="Bank Detail"
+              value={form.bankDetail || ""}
+              onChange={(e) => setForm({ ...form, bankDetail: e.target.value })}
+              disabled={!canHrWrite}
+            />
+            <Input
+              label="PF ESIC"
+              value={form.pfEsic || ""}
+              onChange={(e) => setForm({ ...form, pfEsic: e.target.value })}
+              disabled={!canHrWrite}
+            />
+            <TextArea
+              label="Nominee Details"
+              rows={3}
+              value={form.nomineeDetails || ""}
+              onChange={(e) => setForm({ ...form, nomineeDetails: e.target.value })}
+              disabled={!canHrWrite}
+            />
+            <Select
+              label="Working Hours"
+              value={form.workingHours || ""}
+              onChange={(e) => setForm({ ...form, workingHours: e.target.value })}
+              disabled={!canHrWrite}
+            >
+              <option value="">{formatUiText("Select Working Hours")}</option>
+              {hourChoices.map((row) => (
+                <option key={row.id} value={row.label} data-preserve-case>{row.label}</option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
         {!onboard && preJoinComplete && <p className="text-sm text-steel-muted">Loading onboarding checklist…</p>}
         {day1 && (preJoinComplete || canHrWrite) && (
           <ul className="grid md:grid-cols-2 gap-2 text-sm">
@@ -749,35 +870,6 @@ function OfferOnboardingPage() {
           </div>
         ) : null}
       </Card>
-
-      {canHrWrite ? (
-        <>
-          <Button type="button" variant="secondary" onClick={() => setLogOpen(true)}>
-            Activity log ({timeline.length})
-          </Button>
-          {logOpen ? (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/45" role="dialog" aria-modal="true" aria-label="Onboarding activity">
-              <div className="bg-paper border border-line rounded-xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-xl">
-                <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-3">
-                  <p className="font-semibold text-sm">Activity · {offer?.candidate?.fullName}</p>
-                  <Button type="button" variant="secondary" onClick={() => setLogOpen(false)}>Close</Button>
-                </div>
-                <ul className="divide-y overflow-y-auto">
-                  {timeline.map((e) => (
-                    <li key={e.id} className="px-4 py-2 text-xs">
-                      <div className="flex justify-between gap-3">
-                        <span className="font-mono">{e.action}</span>
-                        <span className="text-steel-muted whitespace-nowrap">{new Date(e.createdAt).toLocaleString("en-IN")}</span>
-                      </div>
-                    </li>
-                  ))}
-                  {!timeline.length && <li className="px-4 py-8 text-center text-sm text-steel-muted">No activity for this person yet.</li>}
-                </ul>
-              </div>
-            </div>
-          ) : null}
-        </>
-      ) : null}
     </div>
   );
 }

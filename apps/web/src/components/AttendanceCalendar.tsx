@@ -318,9 +318,6 @@ export function AttendanceCalendar({
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="font-semibold text-sm text-ink">Attendance calendar</h2>
-          <p className="text-xs text-steel-muted mt-0.5">
-            Clock-in/out, selfie, and GPS for each day. Download Excel for the blue monthly calendar and daily geo log (HR / office).
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="secondary" onClick={() => shiftMonth(-1)} aria-label="Previous month">
@@ -337,23 +334,26 @@ export function AttendanceCalendar({
       </div>
 
       {canViewTeam ? (
-        <div className="flex flex-wrap gap-2 mb-3 max-w-xl">
-          <Input value={staffQuery} onChange={(e) => setStaffQuery(e.target.value)} placeholder="Search employee" className="max-w-xs" />
-          <label className="block text-xs font-semibold text-steel-muted min-w-[12rem] flex-1">
-            Employee
-            <Select className="mt-1" value={userId} onChange={(e) => setUserId(e.target.value)}>
-              <option value="">All staff (this month)</option>
-              {staff.filter((s) => {
-                const q = staffQuery.trim().toLowerCase();
-                if (!q) return true;
-                return `${s.fullName} ${s.role || ""}`.toLowerCase().includes(q);
-              }).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.fullName}{s.role === "site_employee" ? " · Site" : ""}
-                </option>
-              ))}
-            </Select>
-          </label>
+        <div className="grid grid-cols-2 gap-3 mb-4 items-end">
+          <Input
+            label="Search Employee"
+            value={staffQuery}
+            onChange={(e) => setStaffQuery(e.target.value)}
+            placeholder="Name or role"
+            fieldClassName="min-w-0"
+          />
+          <Select label="Employee" fieldClassName="min-w-0" value={userId} onChange={(e) => setUserId(e.target.value)}>
+            <option value="">All staff (this month)</option>
+            {staff.filter((s) => {
+              const q = staffQuery.trim().toLowerCase();
+              if (!q) return true;
+              return `${s.fullName} ${s.role || ""}`.toLowerCase().includes(q);
+            }).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.fullName}{s.role === "site_employee" ? " · Site" : ""}
+              </option>
+            ))}
+          </Select>
         </div>
       ) : null}
 

@@ -151,9 +151,6 @@ export function AttendanceSitePins() {
     <Card padding={false}>
       <div className="px-4 py-3 border-b border-line bg-sand/40">
         <div className="font-semibold text-sm">Site Locations For Check-in</div>
-        <p className="text-[11px] text-steel-muted">
-          Pin each site on the map and set a radius. A check-in within the radius is verified automatically. A site with only a name (no pin) still works, but every punch there waits for HR review.
-        </p>
       </div>
       {sites.map((s) => (
         <SiteRow key={s.id} site={s} onSaved={() => void load()} />

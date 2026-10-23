@@ -20,15 +20,23 @@ type LeaveRow = {
   user?: { fullName?: string; email?: string };
 };
 
+type StaffRow = { id: string; fullName: string; role?: string; designation?: string | null };
+
+function textHasDirector(...parts: Array<string | null | undefined>) {
+  return parts.some((part) => /director/i.test(String(part || "")));
+}
+
 /** HRMS · Leave — balances (PL default 12), employee apply, HR approve / convert / adjust. */
 export default function HrmsLeavePage() {
   const { token, user } = useAuth();
   const canManage = canManageHrms(user);
+  const isAdmin = user?.role === "admin";
+  const isHr = user?.role === "office" || user?.role === "hr" || Boolean(user?.hrDeskOnly);
   const year = new Date().getFullYear();
   const [leave, setLeave] = useState<LeaveRow[]>([]);
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
-  const [staff, setStaff] = useState<{ id: string; fullName: string; role?: string }[]>([]);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
   const [staffQuery, setStaffQuery] = useState("");
   const [hrUserId, setHrUserId] = useState("");
   const [balanceDraft, setBalanceDraft] = useState<Record<string, string>>({});
@@ -46,9 +54,15 @@ export default function HrmsLeavePage() {
     setBalanceDraft(Object.fromEntries(b.map((row) => [row.leaveType.id, String(row.entitled)])));
   }, [token, balanceUserId, year]);
 
+  const self = staff.find((s) => s.id === user?.id);
+  const signedIn = user as ({ designation?: string | null; profile?: { designation?: string | null } | null } & typeof user) | null;
+  const isDirector = textHasDirector(user?.role, signedIn?.designation, signedIn?.profile?.designation, self?.role, self?.designation);
+  const canApprove = isAdmin || isHr || isDirector;
+  const showLeaveRequest = !isAdmin;
+
   const load = useCallback(async () => {
     if (!token) return;
-    const leaveQ = canManage ? "/api/hrm/leave?all=1" : "/api/hrm/leave";
+    const leaveQ = canApprove ? "/api/hrm/leave?all=1" : "/api/hrm/leave";
     const [l, t] = await Promise.all([
       api<LeaveRow[]>(leaveQ, { token }).catch(() => []),
       api<LeaveType[]>("/api/hrm/leave-types", { token }).catch(() => []),
@@ -56,7 +70,7 @@ export default function HrmsLeavePage() {
     setLeave(l);
     setTypes(t);
     await loadBalances();
-  }, [token, canManage, loadBalances]);
+  }, [token, canApprove, loadBalances]);
 
   useEffect(() => {
     void load();
@@ -64,8 +78,10 @@ export default function HrmsLeavePage() {
 
   useEffect(() => {
     if (!canManage || !token) return;
-    void api<{ id: string; fullName: string; role?: string }[]>("/api/hrm/employees", { token })
-      .then((rows) => setStaff(rows.map((e) => ({ id: e.id, fullName: e.fullName, role: e.role }))))
+    void api<{ id: string; fullName: string; role?: string; profile?: { designation?: string | null } | null }[]>("/api/hrm/employees", { token })
+      .then((rows) =>
+        setStaff(rows.map((e) => ({ id: e.id, fullName: e.fullName, role: e.role, designation: e.profile?.designation || null }))),
+      )
       .catch(() => setStaff([]));
   }, [token, canManage]);
 
@@ -75,6 +91,7 @@ export default function HrmsLeavePage() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!showLeaveRequest) return;
     setMsg("");
     try {
       await api("/api/hrm/leave", {
@@ -135,6 +152,11 @@ export default function HrmsLeavePage() {
   }
 
   const shownLeave = leave;
+  const pendingLeave = shownLeave.filter((l) => l.status === "Pending");
+  const appliedPeople = new Set(
+    shownLeave.map((l) => (l.user?.email || l.user?.fullName || "").trim().toLowerCase()).filter(Boolean),
+  );
+  const appliedCount = appliedPeople.size > 0 ? appliedPeople.size : shownLeave.length;
   const forStaff = canManage && hrUserId ? staff.find((s) => s.id === hrUserId) : null;
 
   return (
@@ -221,7 +243,8 @@ export default function HrmsLeavePage() {
         </Card>
       ) : null}
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className={showLeaveRequest ? "grid lg:grid-cols-2 gap-4" : "grid gap-4"}>
+        {showLeaveRequest ? (
         <Card className="space-y-3">
           <h3 className="font-semibold">{forStaff ? `Request leave for ${forStaff.fullName}` : "Request leave"}</h3>
           <form className="space-y-2" onSubmit={submit}>
@@ -260,13 +283,18 @@ export default function HrmsLeavePage() {
             </div>
           )}
         </Card>
+        ) : null}
 
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
             <h3 className="font-semibold">{canManage ? "Leave register" : "My requests"}</h3>
           </div>
           {canManage ? (
-            <p className="text-xs text-steel-muted mb-2">Status only. Approve or reject in Leave approval below — that step is separate from raising a request.</p>
+            <p className="text-xs text-steel-muted mb-2">
+              {isAdmin
+                ? formatUiText("Status only. Approve or reject in Leave Approval below.")
+                : "Status only. Approve or reject in Leave approval below — that step is separate from raising a request."}
+            </p>
           ) : null}
           <ul className="text-sm space-y-2">
             {shownLeave.map((l) => (
@@ -311,12 +339,15 @@ export default function HrmsLeavePage() {
         </Card>
       </div>
 
-      {canManage && (
+      {canApprove && (
         <Card className="space-y-3">
           <h3 className="font-semibold">Leave approval</h3>
+          <p className="text-sm font-semibold">
+            {formatUiText(`${appliedCount} ${appliedCount === 1 ? "person has" : "people have"} applied for leave`)}
+          </p>
           <p className="text-xs text-steel-muted">Pending requests only. This is not the leave request form.</p>
           <ul className="text-sm space-y-2">
-            {shownLeave.filter((l) => l.status === "Pending").map((l) => (
+            {pendingLeave.map((l) => (
               <li key={l.id} className="border-b border-line pb-2 flex flex-wrap items-center justify-between gap-2">
                 <span>
                   {l.user?.fullName ? `${l.user.fullName} · ` : ""}

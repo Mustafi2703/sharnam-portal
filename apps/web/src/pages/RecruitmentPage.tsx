@@ -47,12 +47,27 @@ const INTERVIEW_STAGES = ["Scheduled", "Completed", "No-Show", "Cancelled"] as c
 
 const rowBtn = "!px-2.5 !py-1.5 !text-xs !rounded-lg whitespace-nowrap";
 const linkBtn = "inline-flex items-center justify-center rounded-lg border border-line bg-paper px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-[var(--color-brand-soft)]";
+const decisionBtn = "!px-3 !py-[7.5px] !text-[10.5px]";
+
+type OnboardDesk = { offerId: string; userId?: string | null; empCode?: string | null };
 
 async function openOnboardingDesk(candidateId: string, token: string) {
-  return api<{ offerId: string }>(`/api/hrm/candidates/${candidateId}/start-onboarding`, {
+  // emp code: SPDC + initials + DDMMYYYY + HHmm
+  return api<OnboardDesk>(`/api/hrm/candidates/${candidateId}/start-onboarding`, {
     method: "POST",
     token,
+    body: JSON.stringify({ onboardedAt: new Date().toISOString() }),
   });
+}
+
+function offersDeskPath(candidate: any) {
+  const params = new URLSearchParams();
+  params.set("tab", "offers");
+  params.set("candidateId", String(candidate?.id || ""));
+  params.set("name", String(candidate?.fullName || ""));
+  params.set("role", String(candidate?.requisition?.designation || candidate?.posting?.title || candidate?.currentDesign || ""));
+  params.set("requisition", String(candidate?.requisition?.requisitionNo || ""));
+  return `/hrm/recruitment?${params.toString()}`;
 }
 
 function money(n?: number | null) {
@@ -634,6 +649,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
   async function goOnboard(c: any) {
     try {
       const desk = await openOnboardingDesk(c.id, token);
+      if (desk.empCode) setMsg(`Employee Code ${desk.empCode}`);
       navigate(`/hrm/onboarding/${desk.offerId}`);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Could not open onboarding");
@@ -988,6 +1004,8 @@ function ScoreMeter({ label, value }: { label: string; value: number | null }) {
 
 function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const groups = useMemo(() => {
     const by = new Map<string, { title: string; rows: any[] }>();
     for (const c of candidates || []) {
@@ -1074,9 +1092,12 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
                       <div className="flex flex-wrap gap-1.5">
                           <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
                           {canManage && onboardReady(c) && (
-                            <Button type="button" className={rowBtn} onClick={() => void openOnboardingDesk(c.id, token).then((desk) => navigate(`/hrm/onboarding/${desk.offerId}`)).catch((err) => setMsg(err instanceof Error ? err.message : "Could not open onboarding"))}>Onboard</Button>
+                            <Button type="button" className={rowBtn} onClick={() => void openOnboardingDesk(c.id, token).then((desk) => {
+                              if (desk.empCode) setMsg(`Employee Code ${desk.empCode}`);
+                              navigate(`/hrm/onboarding/${desk.offerId}`);
+                            }).catch((err) => setMsg(err instanceof Error ? err.message : "Could not open onboarding"))}>Onboard</Button>
                           )}
-                        {sheet ? <a href={sheet} target="_blank" rel="noreferrer" className={linkBtn}>SharePoint</a> : null}
+                        {sheet && isAdmin ? <a href={sheet} target="_blank" rel="noreferrer" className={linkBtn}>SharePoint</a> : null}
                         {employee ? <Link to={`/hrm/documents?employeeUserId=${employee.id}`} className={linkBtn}>Letters</Link> : null}
                         {canManage && <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeCandidate(c)}>Delete</Button>}
                       </div>
@@ -1097,6 +1118,8 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
 
 function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: any) {
   const { designations: orgRoles } = useHrmOrg(token);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const [sp] = useSearchParams();
   const preselected = sp.get("candidateId") || "";
@@ -1365,7 +1388,6 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
               </Button>
             </div>
             <Button type="submit" disabled={!SCHEDULE_ROUNDS.some((opt) => !roundOptionTaken(rounds, opt.id))}>Schedule interview meeting</Button>
-            {!SCHEDULE_ROUNDS.some((opt) => !roundOptionTaken(rounds, opt.id)) ? <p className="text-[11px] text-steel-muted">R1, R2, and R3 are already on file. Score the rounds they sat. Onboard opens when each of those rounds is Advance. A skipped round does not block it.</p> : null}
           </form>
         </Card>
       )}
@@ -1428,40 +1450,55 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                     />
                     <textarea defaultValue={r.feedbackTechnical || ""} onBlur={(e) => updateRound(r.id, { feedbackTechnical: e.target.value })} placeholder="Evidence / notes" rows={2} className="md:col-span-4 border border-line rounded px-2 py-1" />
                     <div className="md:col-span-4 flex gap-2 pt-1">
-                      <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Advance" })} variant="secondary">Advance</Button>
-                      <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Hold" })} variant="secondary">Hold</Button>
-                      <Button type="button" onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
+                      <Button type="button" className={decisionBtn} onClick={() => updateRound(r.id, { status: "Completed", decision: "Advance" })} variant="secondary">Advance</Button>
+                      <Button type="button" className={decisionBtn} onClick={() => updateRound(r.id, { status: "Completed", decision: "Hold" })} variant="secondary">Hold</Button>
+                      <Button type="button" className={decisionBtn} onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
                     </div>
                     {onboardReady(candidate) && canManage && (
                       <div className="md:col-span-4">
                         <Button
                           type="button"
-                          onClick={() => void openOnboardingDesk(candidate.id, token).then((desk) => navigate(`/hrm/onboarding/${desk.offerId}`)).catch((err) => setMsg(err instanceof Error ? err.message : "Could not open onboarding"))}
+                          onClick={() => {
+                            // emp code: SPDC + initials + DDMMYYYY + HHmm
+                            void openOnboardingDesk(candidate.id, token)
+                              .then((desk) => {
+                                if (desk.empCode) setMsg(`Employee Code ${desk.empCode}`);
+                                navigate(offersDeskPath(candidate), {
+                                  state: {
+                                    candidateId: candidate.id,
+                                    name: candidate.fullName || "",
+                                    role: candidate.requisition?.designation || candidate.posting?.title || candidate.currentDesign || "",
+                                    requisition: candidate.requisition?.requisitionNo || "",
+                                  },
+                                });
+                              })
+                              .catch((err) => setMsg(err instanceof Error ? err.message : "Could not open offers"));
+                          }}
                         >
-                          Onboard {candidate.fullName}
+                          Advance To Offer Generation
                         </Button>
                       </div>
                     )}
-                    {r.scorecardJson && (
+                    {r.scorecardJson && (r.scoreOverall != null || isAdmin) ? (
                       <p className="md:col-span-4 text-[11px] text-steel-muted">
-                        {r.scoreOverall != null ? `Saved score ${r.scoreOverall}%` : "Scorecard workbook is on SharePoint — fill the scores below."}
-                        {(() => {
+                        {r.scoreOverall != null ? `Saved score ${r.scoreOverall}%` : "Scorecard workbook is on SharePoint. Fill the scores below."}
+                        {isAdmin ? (() => {
                           try {
                             const url = JSON.parse(r.scorecardJson).sharePointUrl as string | undefined;
                             return url ? (
                               <>
                                 {" · "}
                                 <a href={url} target="_blank" rel="noreferrer" className="text-brand font-semibold">
-                                  Scorecard on SharePoint
+                                  {formatUiText("Scorecard on SharePoint")}
                                 </a>
                               </>
                             ) : null;
                           } catch {
                             return null;
                           }
-                        })()}
+                        })() : null}
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 )}
                 {r.decision && <div className="text-xs">Decision: <Badge tone={r.decision === "Advance" ? "ok" : r.decision === "Reject" ? "danger" : "warn"}>{r.decision}</Badge></div>}

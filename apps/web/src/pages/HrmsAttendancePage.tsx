@@ -16,11 +16,13 @@ type View = "team" | "person" | "punch" | "review" | "sites";
 export default function HrmsAttendancePage() {
   const { user } = useAuth();
   const isHr = canManageHrms(user);
+  const isAdminLogin = user?.role === "admin";
   const [params, setParams] = useSearchParams();
   const [memberId, setMemberId] = useState(params.get("user") || "");
   const requested = params.get("view") as View | null;
   const hrOnly: View[] = ["team", "review", "sites"];
-  const view: View = requested && (!hrOnly.includes(requested) || isHr) ? requested : isHr ? "team" : "person";
+  const picked: View = requested && (!hrOnly.includes(requested) || isHr) ? requested : isHr ? "team" : "person";
+  const view: View = isAdminLogin && picked === "punch" ? (isHr ? "team" : "person") : picked;
 
   function go(next: View, userId?: string) {
     const p = new URLSearchParams(params);
@@ -36,7 +38,7 @@ export default function HrmsAttendancePage() {
   const tabs: { id: View; label: string; hint: string }[] = [
     ...(isHr ? [{ id: "team" as View, label: "Team calendar", hint: "Everyone × every day" }] : []),
     { id: "person", label: isHr ? "Person calendar" : "My calendar", hint: "Punches, leave, holidays" },
-    { id: "punch", label: "Check in / out", hint: "Today's punch + roster" },
+    ...(isAdminLogin ? [] : [{ id: "punch" as View, label: "Check in / out", hint: "Today's punch + roster" }]),
     ...(isHr
       ? [
           { id: "review" as View, label: "Review & hours", hint: "Verify locations · month log" },
@@ -51,7 +53,6 @@ export default function HrmsAttendancePage() {
         dense
         eyebrow="HRMS"
         title="Attendance & Leave Calendar"
-        subtitle="See who was present, on leave, or absent for the month. Leave and holidays are shown on the same calendar as check-ins."
       />
 
       <div className="segmented" role="tablist" aria-label="Attendance views">
@@ -72,7 +73,7 @@ export default function HrmsAttendancePage() {
 
       {view === "team" && isHr ? <TeamMusterCalendar onOpenMember={(id) => go("person", id)} /> : null}
       {view === "person" ? <AttendanceCalendar initialUserId={memberId} /> : null}
-      {view === "punch" ? <AttendancePunchPanel variant="compact" showRoster /> : null}
+      {view === "punch" && !isAdminLogin ? <AttendancePunchPanel variant="compact" showRoster /> : null}
       {view === "review" && isHr ? <AttendanceMonthReview /> : null}
       {view === "sites" && isHr ? <AttendanceSitePins /> : null}
     </div>

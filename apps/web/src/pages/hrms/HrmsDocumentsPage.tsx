@@ -46,6 +46,8 @@ import {
   letterFormUsesSeparationReason,
   letterFormUsesWarningExtras,
   LETTER_VARIABLES,
+  normalizeSeverity,
+  withLetterAutofill,
 } from "./hrmsLetterDesk";
 import { StatusNote } from "../../components/StatusNote";
 import { IconCheck } from "../../components/icons";
@@ -59,10 +61,6 @@ export default function HrmsDocumentsPage() {
   const canManage = canManageHrms(user);
   const [rows, setRows] = useState<DocRow[]>([]);
   const [msg, setMsg] = useState("");
-  const initialKind = searchParams.get("kind");
-  const [kindFilter, setKindFilter] = useState<"all" | DocKind>(
-    initialKind && KIND_OPTIONS.some((k) => k.key === initialKind) ? (initialKind as DocKind) : "all",
-  );
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const [uploadForId, setUploadForId] = useState<string | null>(null);
 
@@ -139,11 +137,11 @@ export default function HrmsDocumentsPage() {
       setForm((f) => ({ ...f, kind: kindQ as DocKind }));
     }
     if (offerId && offers.some((o) => o.id === offerId)) {
-      setForm((f) => applySubjectKey(`offer:${offerId}`, staff, offers, f));
+      setForm((f) => withLetterAutofill(applySubjectKey(`offer:${offerId}`, staff, offers, f), staff, offers, rows));
     } else if (userId && staff.some((s) => s.id === userId)) {
-      setForm((f) => applySubjectKey(`staff:${userId}`, staff, offers, f));
+      setForm((f) => withLetterAutofill(applySubjectKey(`staff:${userId}`, staff, offers, f), staff, offers, rows));
     }
-  }, [searchParams, staff, offers]);
+  }, [searchParams, staff, offers, rows]);
 
   useEffect(() => {
     if (!subjectKey) return;
@@ -155,12 +153,10 @@ export default function HrmsDocumentsPage() {
     [rows, subjectKey, form],
   );
 
-  const visible = useMemo(() => (kindFilter === "all" ? rows : rows.filter((r) => r.kind === kindFilter)), [rows, kindFilter]);
-
   const registerVisible = useMemo(() => {
-    if (registerScope === "person" && subjectKey && form.employeeName) return visible.filter((r) => docMatchesSubject(r, form));
-    return visible;
-  }, [visible, registerScope, subjectKey, form]);
+    if (registerScope === "person" && subjectKey && form.employeeName) return rows.filter((r) => docMatchesSubject(r, form));
+    return rows;
+  }, [rows, registerScope, subjectKey, form]);
 
   function clearPreview() {
     setPreviewDocxBlob(null);
@@ -170,7 +166,7 @@ export default function HrmsDocumentsPage() {
   function setSubjectKey(key: string) {
     clearPreview();
     setEditingId(null);
-    setForm((f) => applyPriorLetters(applySubjectKey(key, staff, offers, f), rows));
+    setForm((f) => withLetterAutofill(applyPriorLetters(applySubjectKey(key, staff, offers, f), rows), staff, offers, rows));
   }
 
   const [activeStage, setActiveStage] = useState<LetterStage>("Pre-joining");
@@ -187,7 +183,12 @@ export default function HrmsDocumentsPage() {
     setForm((f) => {
       const next = { ...f, kind };
       const built = existing ? hydrateLetterFormFromDoc(existing, next) : applyPriorLetters(next, rows);
-      return { ...built, gender: f.gender || built.gender, signatoryName: f.signatoryName || built.signatoryName };
+      return withLetterAutofill(
+        { ...built, gender: f.gender || built.gender, signatoryName: f.signatoryName || built.signatoryName },
+        staff,
+        offers,
+        rows,
+      );
     });
     window.setTimeout(() => {
       formPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -403,10 +404,31 @@ export default function HrmsDocumentsPage() {
 
   async function create(e: FormEvent) {
     e.preventDefault();
+    const filed = filedAppointmentLetter();
+    if (filed) {
+      openFiledPdf(filed);
+      return;
+    }
     await generateKind(form.kind);
   }
 
+  function filedAppointmentLetter() {
+    if (form.kind !== "Appointment") return null;
+    return (
+      subjectRows.find((r) => r.kind === "Appointment" && r.status !== "Cancelled" && Boolean(r.generatedPdfUrl || r.sharePointUrl)) || null
+    );
+  }
+
+  function openFiledPdf(row: DocRow) {
+    const url = row.generatedPdfUrl || row.sharePointUrl || "";
+    if (!url) return;
+    const abs = /^https?:\/\//i.test(url) ? url : `${apiBase()}${url.startsWith("/") ? url : `/${url}`}`;
+    window.open(abs, "_blank", "noopener,noreferrer");
+  }
+
   const activeKindMeta = KIND_OPTIONS.find((k) => k.key === form.kind) || KIND_OPTIONS[0];
+  const filedAppointment = filedAppointmentLetter();
+  const fieldLabel = "text-[11px] text-steel-muted font-semibold";
 
   useEffect(() => {
     if (previewFingerprint && previewFingerprint !== currentFingerprint) {
@@ -443,7 +465,7 @@ export default function HrmsDocumentsPage() {
   }
 
   function editLetter(row: DocRow) {
-    setForm((f) => hydrateLetterFormFromDoc(row, f));
+    setForm((f) => withLetterAutofill(hydrateLetterFormFromDoc(row, f), staff, offers, rows));
     setEditingId(row.id);
     clearPreview();
     setMsg(`Editing ${row.refNo} · ${letterKindLabel(row.kind)}. Change the fields, preview, then Generate to update this letter.`);
@@ -523,27 +545,7 @@ export default function HrmsDocumentsPage() {
 
   return (
     <div className="space-y-4">
-      <HrmsPageHero
-        eyebrow="Documents · Letters"
-        title="HR letter desk"
-        subtitle="Fill the letter, open the full screen preview, then Generate & file. Open in SharePoint uses the filed Word file."
-        workflow={
-          <>
-            <span>
-              <strong className="text-ink font-semibold">1.</strong> Select person once
-            </span>
-            <span>
-              <strong className="text-ink font-semibold">2.</strong> Edit fields
-            </span>
-            <span>
-              <strong className="text-ink font-semibold">3.</strong> Generate & file
-            </span>
-            <span>
-              <strong className="text-ink font-semibold">4.</strong> Upload signed copy
-            </span>
-          </>
-        }
-      />
+      <HrmsPageHero eyebrow="Documents · Letters" title="HR letter desk" subtitle="" />
 
       {form.offerId ? (
         <p className="text-xs text-steel-muted px-1">
@@ -554,28 +556,14 @@ export default function HrmsDocumentsPage() {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-2 text-xs">
-          <label className="text-steel-muted uppercase font-mono">Register filter</label>
-          <Select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as "all" | DocKind)}>
-            <option value="all">All kinds</option>
-            {KIND_OPTIONS.map((k) => (
-              <option key={k.key} value={k.key}>
-                {k.label}
-              </option>
-            ))}
-          </Select>
-        </div>
+      <div className="flex justify-end px-1">
         <StatusNote msg={msg} compact />
       </div>
 
       {canManage && (
         <Card className="!p-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-line bg-sand/40">
-            <div className="font-semibold text-sm">Letter composer</div>
-            <p className="text-[11px] text-steel-muted mt-0.5">
-              Pick the person, set the original dates, upload scans if you have them, then file one letter or the joining set.
-            </p>
+            <div className="font-semibold text-sm">{formatUiText("Letter Composer")}</div>
             {editingId ? (
               <p className="text-xs text-brand mt-2">
                 Editing a letter already on the register. Generate updates that row.
@@ -587,7 +575,7 @@ export default function HrmsDocumentsPage() {
           </div>
           <div className="p-4 space-y-4">
             <label className="space-y-1 block max-w-xl">
-              <span className="text-[11px] text-steel-muted uppercase font-mono">Person (select once)</span>
+              <span className={fieldLabel}>{formatUiText("Person (Select Once)")}</span>
               <Select value={subjectKey} onChange={(e) => setSubjectKey(e.target.value)}>
                 <option value="">— Choose accepted offer or staff —</option>
                 {subjectOptions.map((o) => (
@@ -671,8 +659,8 @@ export default function HrmsDocumentsPage() {
                           className={`text-left rounded-lg border px-3 py-2.5 transition cursor-pointer ${active ? "bg-white shadow-sm" : "border-line bg-paper hover:bg-sand/40"}`}
                           style={active ? { borderColor: accent, boxShadow: `inset 3px 0 0 ${accent}` } : undefined}
                         >
-                          <div className="font-semibold text-sm text-ink">{k.label}</div>
-                          <div className="text-[11px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div>
+                          <div className="font-semibold text-sm text-ink">{formatUiText(k.label)}</div>
+                          {k.hint ? <div className="text-[11px] text-steel-muted mt-0.5 line-clamp-2">{k.hint}</div> : null}
                           {existing ? (
                             <span className="inline-flex items-center gap-1 mt-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
                               <IconCheck size={12} /> Filed · <span className="font-mono">{existing.refNo}</span>
@@ -689,8 +677,8 @@ export default function HrmsDocumentsPage() {
                 <div className="space-y-4 min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <h3 className="font-semibold text-sm">{activeKindMeta.label}</h3>
-                      <p className="text-[11px] text-steel-muted">{activeKindMeta.hint}</p>
+                      <h3 className="font-semibold text-sm">{formatUiText(activeKindMeta.label)}</h3>
+                      {activeKindMeta.hint ? <p className="text-[11px] text-steel-muted">{activeKindMeta.hint}</p> : null}
                     </div>
                     <div className="flex flex-wrap gap-1 items-center">
                       <div className="flex flex-col items-stretch">
@@ -705,14 +693,20 @@ export default function HrmsDocumentsPage() {
                           {previewBusy ? "Opening preview…" : "Full screen preview"}
                         </Button>
                       </div>
-                      <Button
-                        type="button"
-                        className="!py-1 !text-xs"
-                        disabled={generateBusy || previewBusy}
-                        onClick={() => void generateKind(form.kind)}
-                      >
-                        {generateBusy ? "Generating…" : "Generate & file"}
-                      </Button>
+                      {filedAppointment ? (
+                        <Button type="button" className="!py-1 !text-xs" onClick={() => openFiledPdf(filedAppointment)}>
+                          View PDF
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          className="!py-1 !text-xs"
+                          disabled={generateBusy || previewBusy}
+                          onClick={() => void generateKind(form.kind)}
+                        >
+                          {generateBusy ? "Generating…" : "Generate & file"}
+                        </Button>
+                      )}
                       {form.employeeUserId ? (
                         <Button
                           type="button"
@@ -727,39 +721,20 @@ export default function HrmsDocumentsPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <h4 className="text-[11px] font-mono uppercase text-steel-muted mb-2">Onboarding pack</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {ONBOARDING_LETTER_PACK.map((kind) => {
-                        const existing = subjectRows.find((r) => r.kind === kind);
-                        return (
-                          <button
-                            key={kind}
-                            type="button"
-                            onClick={() => selectKind(kind)}
-                            className="text-[11px] px-2 py-1 rounded border border-line hover:bg-sand/50"
-                          >
-                            {KIND_OPTIONS.find((k) => k.key === kind)?.label}
-                            {existing ? ` · ${existing.refNo}` : ""}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
                   <form onSubmit={create} className="rounded-lg border border-line p-3 bg-sand/20 space-y-3">
-                    <p className="text-[10px] font-mono uppercase text-steel-muted">Template variables for {form.employeeName}</p>
+                    <p className="text-[11px] font-semibold text-steel-muted">{formatUiText("Template Variables For")} {form.employeeName}</p>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                       <label className="space-y-1 sm:col-span-2">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Employee name</span>
+                        <span className={fieldLabel}>{formatUiText("Employee Name")}</span>
                         <Input value={form.employeeName} onChange={(e) => setForm({ ...form, employeeName: e.target.value })} required />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Emp code</span>
+                        <span className={fieldLabel}>{formatUiText("Emp Code")}</span>
                         <Input value={form.empCode} onChange={(e) => setForm({ ...form, empCode: e.target.value })} />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Department · department master</span>
+                        <span className={fieldLabel}>{formatUiText("Department")}</span>
+                        <span className="block text-[10px] font-normal text-steel-muted">{formatUiText("From the department master")}</span>
                         <Select
                           value={org.departments.some((d) => d.name === form.department) ? form.department : ""}
                           onChange={(e) => {
@@ -777,7 +752,8 @@ export default function HrmsDocumentsPage() {
                         </Select>
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Designation · role master</span>
+                        <span className={fieldLabel}>{formatUiText("Designation")}</span>
+                        <span className="block text-[10px] font-normal text-steel-muted">{formatUiText("From the role master")}</span>
                         <Select
                           value={roleTitles.includes(form.designation) ? form.designation : ""}
                           onChange={(e) => {
@@ -795,23 +771,25 @@ export default function HrmsDocumentsPage() {
                         </Select>
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Email</span>
+                        <span className={fieldLabel}>{formatUiText("Email")}</span>
                         <Input value={form.candidateEmail} onChange={(e) => setForm({ ...form, candidateEmail: e.target.value })} />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Mobile</span>
+                        <span className={fieldLabel}>{formatUiText("Mobile Number")}</span>
                         <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
                       </label>
+                      {form.kind === "Appointment" ? null : (
+                        <label className="space-y-1">
+                          <span className={fieldLabel}>{formatUiText("PAN")}</span>
+                          <Input value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} />
+                        </label>
+                      )}
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">PAN</span>
-                        <Input value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value })} />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Company signatory</span>
+                        <span className={fieldLabel}>{formatUiText("Company Signatory")}</span>
                         <Input value={form.signatoryName} onChange={(e) => setForm({ ...form, signatoryName: e.target.value })} />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Gender</span>
+                        <span className={fieldLabel}>{formatUiText("Gender")}</span>
                         <Select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
                           <option value="">Mr. / Ms.</option>
                           <option value="Male">Male · Mr. / he</option>
@@ -819,12 +797,12 @@ export default function HrmsDocumentsPage() {
                         </Select>
                       </label>
                       <label className="space-y-1 sm:col-span-2">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Project / client site</span>
+                        <span className={fieldLabel}>{formatUiText("Project / Client Site")}</span>
                         <Input value={form.projectName} onChange={(e) => setForm({ ...form, projectName: e.target.value })} />
                       </label>
                       <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">
-                          {isLeavingLetter(form.kind) ? "Last working date" : form.kind === "Promotion" || form.kind === "Warning" ? "Effective date" : "Joining date"}
+                        <span className={fieldLabel}>
+                          {formatUiText(isLeavingLetter(form.kind) ? "Last Working Date" : form.kind === "Promotion" || form.kind === "Warning" ? "Effective Date" : "Joining Date")}
                         </span>
                         <Input
                           type="date"
@@ -837,98 +815,93 @@ export default function HrmsDocumentsPage() {
                           }}
                         />
                       </label>
-                      <label className="space-y-1">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Date printed on the letter</span>
-                        <Input type="date" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} />
-                      </label>
                       <label className="space-y-1 sm:col-span-3">
-                        <span className="text-[11px] text-steel-muted uppercase font-mono">Address (as per records)</span>
-                        <TextArea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                        <span className={fieldLabel}>{formatUiText("Address (As Per Records)")}</span>
+                        <TextArea rows={2} value={form.address} readOnly className="bg-sand/60" />
                       </label>
-                      {letterFormUsesCtc(form.kind) && (
+                      {letterFormUsesCtc(form.kind) && form.kind !== "Promotion" && (
                         <>
-                          {letterFormUsesPromotionExtras(form.kind) && (
-                            <>
-                              <label className="space-y-1">
-                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous designation · role master</span>
-                                <Select
-                                  value={roleTitles.includes(form.previousDesignation) ? form.previousDesignation : ""}
-                                  onChange={(e) => {
-                                    const previousDesignation = e.target.value;
-                                    const previousDepartment = org.designations.find((d) => d.title === previousDesignation)?.department || "";
-                                    setForm({ ...form, previousDesignation, sheet: { ...form.sheet, previousDepartment } });
-                                  }}
-                                >
-                                  <option value="">Role…</option>
-                                  {roleTitles.map((title) => (
-                                    <option key={title} value={title}>
-                                      {title}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </label>
-                              <label className="space-y-1">
-                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous department · department master</span>
-                                <Input value={form.sheet.previousDepartment || ""} readOnly />
-                              </label>
-                              <label className="space-y-1">
-                                <span className="text-[11px] text-steel-muted uppercase font-mono">Previous CTC (INR p.a.)</span>
-                                <Input value={form.previousCtc} onChange={(e) => setForm({ ...form, previousCtc: e.target.value })} />
-                              </label>
-                            </>
-                          )}
                           <label className="space-y-1">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">
-                              {form.kind === "Promotion" ? "Revised CTC (INR p.a.)" : "Fixed CTC (INR p.a.)"}
-                            </span>
+                            <span className={fieldLabel}>{formatUiText("Fixed CTC (INR P.A.)")}</span>
                             <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
                           </label>
                           <label className="space-y-1 sm:col-span-2">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Reporting manager</span>
-                            <Input value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
-                          </label>
-                          <label className="space-y-1 sm:col-span-3">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Base location</span>
-                            <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                            <span className={fieldLabel}>{formatUiText("Reporting Manager")}</span>
+                            <Input value={form.reportingManager} readOnly className="bg-sand/60" />
                           </label>
                         </>
                       )}
-                      {letterFormUsesAssetExtras(form.kind) && (
-                        <>
-                          <label className="space-y-1 sm:col-span-2">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Assets returned</span>
-                            <Input value={form.assets} onChange={(e) => setForm({ ...form, assets: e.target.value })} />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Serials / tags</span>
-                            <Input value={form.serials} onChange={(e) => setForm({ ...form, serials: e.target.value })} />
-                          </label>
-                        </>
+                      {letterFormUsesCtc(form.kind) && (
+                        <label className="space-y-1 sm:col-span-3">
+                          <span className={fieldLabel}>{formatUiText("Base Location")}</span>
+                          <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                        </label>
                       )}
                       {letterFormUsesSeparationReason(form.kind) && !letterFormUsesWarningExtras(form.kind) && (
                         <label className="space-y-1 sm:col-span-3">
-                          <span className="text-[11px] text-steel-muted uppercase font-mono">Reason / remarks</span>
+                          <span className={fieldLabel}>{formatUiText("Reason / Remarks")}</span>
                           <TextArea rows={2} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
                         </label>
                       )}
                       <div className="sm:col-span-3 border-t border-line pt-3 space-y-2">
-                        <p className="text-[11px] font-semibold text-ink">Variable sheet · {KIND_OPTIONS.find((k) => k.key === form.kind)?.label}</p>
-                        <p className="text-[11px] text-steel-muted">
-                          These fields print into the Word letter. Offer, appointment and promotion salary lines (basic, HRA, gross, net, annual CTC) fill from the CTC amount above.
-                        </p>
+                        <p className="text-[11px] font-semibold text-ink">{formatUiText("Variable Sheet")}</p>
+                        {letterFormUsesPromotionExtras(form.kind) && (
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("Previous Designation")}</span>
+                              <Input value={form.previousDesignation} readOnly className="bg-sand/60" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("Previous Department")}</span>
+                              <Input value={form.sheet.previousDepartment || ""} readOnly className="bg-sand/60" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("Previous CTC (INR P.A.)")}</span>
+                              <Input value={form.previousCtc} readOnly className="bg-sand/60" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("Revised CTC (INR P.A.)")}</span>
+                              <Input value={form.ctcAnnual} onChange={(e) => setForm({ ...form, ctcAnnual: e.target.value })} />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("Previous Reporting Manager")}</span>
+                              <Input value={form.reportingManager} readOnly className="bg-sand/60" />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("New Reporting Manager")}</span>
+                              <Input
+                                value={form.sheet.newReportingManager || ""}
+                                onChange={(e) => setForm({ ...form, sheet: { ...form.sheet, newReportingManager: e.target.value } })}
+                              />
+                            </label>
+                          </div>
+                        )}
+                        {letterFormUsesAssetExtras(form.kind) && (
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <label className="space-y-1 sm:col-span-2">
+                              <span className={fieldLabel}>{formatUiText("Assets Returned")}</span>
+                              <Input value={form.assets} onChange={(e) => setForm({ ...form, assets: e.target.value })} />
+                            </label>
+                            <label className="space-y-1">
+                              <span className={fieldLabel}>{formatUiText("Serials / Tags")}</span>
+                              <Input value={form.serials} onChange={(e) => setForm({ ...form, serials: e.target.value })} />
+                            </label>
+                          </div>
+                        )}
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {(LETTER_VARIABLES[form.kind] || []).map((field) => {
-                            const value = form.sheet[field.key] ?? field.default ?? "";
+                          {(LETTER_VARIABLES[form.kind] || []).filter((field) => !field.hidden).map((field) => {
+                            const raw = form.sheet[field.key] ?? field.default ?? "";
+                            const value = field.key === "severity" ? normalizeSeverity(raw) : raw;
                             const onChange = (next: string) => setForm({ ...form, sheet: { ...form.sheet, [field.key]: next } });
                             return (
                               <label key={field.key} className={`space-y-1 ${field.wide ? "sm:col-span-3" : ""}`}>
-                                <span className="text-[11px] text-steel-muted uppercase font-mono">{field.label}</span>
+                                <span className={fieldLabel}>{formatUiText(field.label)}</span>
                                 {field.type === "select" ? (
                                   <Select value={value} onChange={(e) => onChange(e.target.value)}>
                                     <option value="">Select…</option>
                                     {(field.options || []).map((opt) => (
-                                      <option key={opt} value={opt}>
-                                        {opt}
+                                      <option key={opt} value={field.key === "severity" ? normalizeSeverity(opt) : opt}>
+                                        {formatUiText(field.key === "severity" ? normalizeSeverity(opt) : opt)}
                                       </option>
                                     ))}
                                   </Select>
@@ -963,15 +936,15 @@ export default function HrmsDocumentsPage() {
                       {letterFormUsesWarningExtras(form.kind) && (
                         <>
                           <label className="space-y-1 sm:col-span-3">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Issue in brief</span>
+                            <span className={fieldLabel}>{formatUiText("Issue In Brief")}</span>
                             <TextArea rows={2} value={form.issueInBrief} onChange={(e) => setForm({ ...form, issueInBrief: e.target.value })} />
                           </label>
                           <label className="space-y-1 sm:col-span-3">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Impact</span>
+                            <span className={fieldLabel}>{formatUiText("Impact")}</span>
                             <TextArea rows={2} value={form.impact} onChange={(e) => setForm({ ...form, impact: e.target.value })} />
                           </label>
                           <label className="space-y-1 sm:col-span-3">
-                            <span className="text-[11px] text-steel-muted uppercase font-mono">Corrective action required</span>
+                            <span className={fieldLabel}>{formatUiText("Corrective Action Required")}</span>
                             <TextArea rows={2} value={form.correctiveAction} onChange={(e) => setForm({ ...form, correctiveAction: e.target.value })} />
                           </label>
                         </>
@@ -984,9 +957,15 @@ export default function HrmsDocumentsPage() {
                           {previewBusy ? "Opening preview…" : "Full screen preview"}
                         </Button>
                       </div>
-                      <Button type="submit" disabled={generateBusy || previewBusy}>
-                        {generateBusy ? "Generating…" : "Generate & file"}
-                      </Button>
+                      {filedAppointment ? (
+                        <Button type="button" onClick={() => openFiledPdf(filedAppointment)}>
+                          View PDF
+                        </Button>
+                      ) : (
+                        <Button type="submit" disabled={generateBusy || previewBusy}>
+                          {generateBusy ? "Generating…" : "Generate & file"}
+                        </Button>
+                      )}
                     </div>
                   </form>
                 </div>
@@ -999,8 +978,7 @@ export default function HrmsDocumentsPage() {
       <Card padding={false}>
         <div className="px-4 py-3 border-b border-line bg-sand/40 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="font-semibold text-sm">Letters register · {registerVisible.length}</div>
-            <div className="text-[11px] text-steel-muted">Every letter can be edited or deleted. SharePoint, print HTML, and the Word file stay on the row.</div>
+            <div className="font-semibold text-sm">{formatUiText("Letters Register")} · {registerVisible.length}</div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" className="!text-xs" onClick={() => setRegisterScope(registerScope === "all" ? "person" : "all")}>
@@ -1122,7 +1100,7 @@ export default function HrmsDocumentsPage() {
               {!registerVisible.length && (
                 <tr>
                   <td colSpan={9} className="py-4 text-center text-steel-muted">
-                    {subjectKey ? "No letters for this person yet — use the pack above." : "No letters yet — select a person above."}
+                    {subjectKey ? "No letters for this person yet." : "No letters yet. Select a person above."}
                   </td>
                 </tr>
               )}
@@ -1152,7 +1130,12 @@ export default function HrmsDocumentsPage() {
                         Open in SharePoint
                       </a>
                     ) : null}
-                    {previewFromComposer ? (
+                    {previewFromComposer && filedAppointment ? (
+                      <Button type="button" className="!py-1 !text-xs" onClick={() => openFiledPdf(filedAppointment)}>
+                        View PDF
+                      </Button>
+                    ) : null}
+                    {previewFromComposer && !filedAppointment ? (
                       <Button type="button" className="!py-1 !text-xs" disabled={generateBusy} onClick={() => void generateKind(form.kind)}>
                         {generateBusy ? "Filing…" : "Generate & file"}
                       </Button>

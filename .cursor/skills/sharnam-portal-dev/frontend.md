@@ -10,9 +10,12 @@ Apply the **chosen** option from [ui-directions.md](ui-directions.md) via CSS va
 
 ## Copy & labels
 
+- Title case: the first letter of each word is capital. Do not use ALL CAPITALS, and do not leave labels in sentence case.
 - Run all user-visible headings, buttons, badges, and sheet toolbar labels through `formatUiText()` (title case per word; preserves acronyms like BOQ, WPR, CRM).
-- `PageHeader`, `PageHero`, `Button`, and `Badge` in `ui.tsx` already apply `formatUiText` to string children — pass raw labels; do not pre-capitalize in source unless needed for acronyms.
+- `PageHeader`, `PageHero`, `Button`, and `Badge` in `ui.tsx` already apply `formatUiText` to string children. Pass raw labels.
 - Sheet register heads and `ReferenceSheetToolbar` labels must use `formatUiText` as well.
+- Do not add `uppercase` or `text-transform: uppercase`.
+- The UI font is Arial. Do not add another Latin webfont.
 
 ## Upload modal (required)
 

@@ -1,0 +1,31 @@
+---
+description: Title case for every UI word, and Arial across the portal
+alwaysApply: true
+---
+
+# UI copy and type
+
+User-visible words use **Title Case**: the first letter of each word is capital. Do not set whole labels in ALL CAPITALS. Do not leave labels in sentence case.
+
+## Copy
+
+- Run headings, buttons, badges, nav, table headers, field labels, and empty states through `formatUiText()` in `apps/web/src/lib/formatUiText.ts`.
+- `PageHeader`, `PageHero`, `Button`, and `Badge` already do this for string children. Pass the raw phrase.
+- Keep real acronyms as written: RFI, QAP, BOQ, SPDC, GFC, DPR, NCR, CRM, HRMS.
+- Do not add Tailwind `uppercase`, `tracking-wider` shout styles, or `text-transform: uppercase`.
+
+```tsx
+// Good
+<Button>Save Draft</Button>
+formatUiText("Select Package")
+
+// Bad
+<span className="uppercase">SAVE DRAFT</span>
+<span>select package</span>
+```
+
+## Font
+
+- The app face is **Arial** (`--font-sans`, `--font-display`, and `--font-mono` in `apps/web/src/index.css`).
+- Do not introduce another Latin webfont for UI text.
+- The Hindi word on the brand lockup (`.brand-lockup__hi`) stays in a Devanagari face. Arial does not cover that word.

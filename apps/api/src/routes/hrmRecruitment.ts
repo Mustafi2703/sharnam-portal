@@ -1109,6 +1109,80 @@ hrmRecruitmentRouter.delete("/candidates/:id", requireRoles("admin", "office", "
   res.json({ ok: true });
 });
 
+/** SPDC + first initial + last initial + joining date DDMMYYYY + click time HHmm. */
+function spdcEmployeeCode(fullName: string, joining: Date, clickedAt: Date) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  const first = (parts[0]?.[0] || "X").toUpperCase();
+  const last = ((parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]) || "X").toUpperCase();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${pad(joining.getDate())}${pad(joining.getMonth() + 1)}${joining.getFullYear()}${pad(clickedAt.getHours())}${pad(clickedAt.getMinutes())}`;
+  return `SPDC-${first}${last}${stamp}`;
+}
+
+function clickedAtFrom(body: { onboardedAt?: unknown }) {
+  const raw = body?.onboardedAt ? new Date(String(body.onboardedAt)) : new Date();
+  return Number.isNaN(raw.getTime()) ? new Date() : raw;
+}
+
+async function assignSpdcEmpCode(opts: {
+  fullName: string;
+  userId?: string | null;
+  offerId?: string | null;
+  joining?: Date | null;
+  clickedAt?: Date | null;
+}) {
+  const clicked = opts.clickedAt && !Number.isNaN(opts.clickedAt.getTime()) ? opts.clickedAt : new Date();
+  const joining = opts.joining && !Number.isNaN(opts.joining.getTime()) ? opts.joining : clicked;
+  if (opts.offerId) {
+    const pre = await prisma.preJoiningChecklist.findUnique({ where: { offerId: opts.offerId }, select: { empCodeGenerated: true } });
+    if (pre?.empCodeGenerated?.startsWith("SPDC-")) {
+      if (opts.userId) {
+        const profile = await prisma.employeeProfile.findUnique({ where: { userId: opts.userId } });
+        if (profile && !profile.empCode.startsWith("SPDC-")) {
+          await prisma.employeeProfile.update({ where: { userId: opts.userId }, data: { empCode: pre.empCodeGenerated } });
+        }
+      }
+      return pre.empCodeGenerated;
+    }
+  }
+  if (opts.userId) {
+    const profile = await prisma.employeeProfile.findUnique({ where: { userId: opts.userId } });
+    if (profile?.empCode?.startsWith("SPDC-")) {
+      if (opts.offerId) {
+        await prisma.preJoiningChecklist.upsert({
+          where: { offerId: opts.offerId },
+          create: { offerId: opts.offerId, empCodeGenerated: profile.empCode },
+          update: { empCodeGenerated: profile.empCode },
+        });
+      }
+      return profile.empCode;
+    }
+  }
+  let code = spdcEmployeeCode(opts.fullName, joining, clicked);
+  const clash = await prisma.employeeProfile.findFirst({
+    where: { empCode: code, ...(opts.userId ? { NOT: { userId: opts.userId } } : {}) },
+    select: { userId: true },
+  });
+  if (clash) code = `${code}${String(clicked.getSeconds()).padStart(2, "0")}`;
+  if (opts.userId) {
+    const profile = await prisma.employeeProfile.findUnique({ where: { userId: opts.userId } });
+    if (profile) {
+      await prisma.employeeProfile.update({
+        where: { userId: opts.userId },
+        data: { empCode: code, joinDate: profile.joinDate || joining },
+      });
+    }
+  }
+  if (opts.offerId) {
+    await prisma.preJoiningChecklist.upsert({
+      where: { offerId: opts.offerId },
+      create: { offerId: opts.offerId, empCodeGenerated: code },
+      update: { empCodeGenerated: code },
+    });
+  }
+  return code;
+}
+
 hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
   const candidate = await prisma.candidate.findUnique({
     where: { id: req.params.id },
@@ -1146,13 +1220,14 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
         passwordHash: hash,
       },
     });
+    const clickedAt = clickedAtFrom(req.body);
     await prisma.employeeProfile.create({
       data: {
         userId: user.id,
-        empCode: `EMP-${Date.now().toString().slice(-6)}`,
+        empCode: spdcEmployeeCode(candidate.fullName, clickedAt, clickedAt),
         designation: hiredAs?.requisition?.designation || candidate.currentDesign,
         department: hiredAs?.requisition?.department || null,
-        joinDate: new Date(),
+        joinDate: clickedAt,
       },
     });
     const { ensureDefaultLeaveBalancesForUser } = await import("../services/spdcLeaveSeed.js");
@@ -1191,7 +1266,14 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
     entityId: user.id,
     meta: { candidateId: candidate.id, created, email },
   });
-  res.json({ userId: user.id, created, email: user.email, fullName: user.fullName, offerId: desk?.offerId || offer?.id || null });
+  const empCode = await assignSpdcEmpCode({
+    fullName: candidate.fullName,
+    userId: user.id,
+    offerId: desk?.offerId || offer?.id || null,
+    joining: offer?.joiningDate || null,
+    clickedAt: clickedAtFrom(req.body),
+  });
+  res.json({ userId: user.id, created, email: user.email, fullName: user.fullName, offerId: desk?.offerId || offer?.id || null, empCode });
 });
 
 const HIRED_STATUSES = new Set(["Joined", "Accepted", "Offered", "Selected"]);
@@ -1320,6 +1402,10 @@ hrmRecruitmentRouter.get("/onboarding-board", requireRoles("admin", "office", "h
           ...(staff ? staffUrls.get(staff.user.id) || [] : []),
         ].filter(Boolean)).size,
         empCode: staff?.profile?.empCode || offer?.preJoin?.empCodeGenerated || null,
+        appointmentLetterUrl: offer?.preJoin?.appointmentLetterUrl || null,
+        bankDetailsDone: !!offer?.onboard?.bankDetailsDone,
+        pfEsicDone: !!offer?.onboard?.pfEsicDone,
+        nomineeDone: !!offer?.onboard?.nomineeDone,
         userId: staff?.user.id || offer?.onboard?.userId || null,
         ctcAnnual: staff?.profile?.ctcAnnual ?? offer?.ctcAnnual ?? null,
         joinDate: staff?.profile?.joinDate || offer?.joiningDate || null,
@@ -1341,8 +1427,16 @@ hrmRecruitmentRouter.post("/candidates/:id/start-onboarding", requireRoles("admi
   if (!HIRED_STATUSES.has(candidate.status)) {
     await prisma.candidate.update({ where: { id: candidate.id }, data: { status: "Joined" } });
   }
-  await audit("hrms.onboarding.open", { userId: req.user!.id, entity: "Offer", entityId: desk.offerId, meta: { candidateId: candidate.id } });
-  res.json(desk);
+  const offerRow = await prisma.offer.findUnique({ where: { id: desk.offerId }, select: { joiningDate: true } });
+  const empCode = await assignSpdcEmpCode({
+    fullName: candidate.fullName,
+    userId: desk.userId,
+    offerId: desk.offerId,
+    joining: offerRow?.joiningDate || null,
+    clickedAt: clickedAtFrom(req.body),
+  });
+  await audit("hrms.onboarding.open", { userId: req.user!.id, entity: "Offer", entityId: desk.offerId, meta: { candidateId: candidate.id, empCode } });
+  res.json({ ...desk, empCode });
 });
 
 /* ═════════════════════════════════════  INTERVIEW ROUNDS  ═════════════════════════════════════ */
@@ -2726,7 +2820,15 @@ hrmRecruitmentRouter.get("/onboarding/:offerId", async (req, res) => {
     update: {},
     include: { offer: { include: { candidate: true } } },
   });
-  res.json({ ...row, itemsCompletedAt: JSON.parse(row.itemsCompletedAtJson || "{}") });
+  const itemsCompletedAt = JSON.parse(row.itemsCompletedAtJson || "{}") as Record<string, string>;
+  res.json({
+    ...row,
+    itemsCompletedAt,
+    bankDetail: itemsCompletedAt.bankDetail || "",
+    pfEsic: itemsCompletedAt.pfEsic || "",
+    nomineeDetails: itemsCompletedAt.nomineeDetails || "",
+    workingHours: itemsCompletedAt.workingHours || "",
+  });
 });
 
 hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office", "hr"), async (req: AuthedRequest, res) => {
@@ -2758,10 +2860,27 @@ hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office
     if (val && !stamps[key]) stamps[key] = now;
     if (!val) delete stamps[key];
   }
+  const textKeys = ["bankDetail", "pfEsic", "nomineeDetails", "workingHours"] as const;
+  for (const key of textKeys) {
+    if (req.body[key] === undefined) continue;
+    const value = String(req.body[key] ?? "").trim();
+    if (value) stamps[key] = value;
+    else delete stamps[key];
+  }
+  if (req.body.bankDetail !== undefined) patch.bankDetailsDone = String(req.body.bankDetail || "").trim().length > 0;
+  if (req.body.pfEsic !== undefined) patch.pfEsicDone = String(req.body.pfEsic || "").trim().length > 0;
+  if (req.body.nomineeDetails !== undefined) patch.nomineeDone = String(req.body.nomineeDetails || "").trim().length > 0;
   patch.itemsCompletedAtJson = JSON.stringify(stamps);
   const row = await prisma.onboardingChecklist.update({ where: { id: existing.id }, data: patch });
   await audit("hrms.onboarding.update", { userId: req.user!.id, entity: "OnboardingChecklist", entityId: row.id });
-  res.json({ ...row, itemsCompletedAt: stamps });
+  res.json({
+    ...row,
+    itemsCompletedAt: stamps,
+    bankDetail: stamps.bankDetail || "",
+    pfEsic: stamps.pfEsic || "",
+    nomineeDetails: stamps.nomineeDetails || "",
+    workingHours: stamps.workingHours || "",
+  });
 });
 
 hrmRecruitmentRouter.get("/onboarding/:offerId/hr-policy", async (req, res) => {

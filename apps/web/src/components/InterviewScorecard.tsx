@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../auth";
+import { formatUiText } from "../lib/formatUiText";
 import { Button } from "./ui";
 
 type Param = {
@@ -16,12 +18,6 @@ type Framework = {
   rounds: string[];
   roundFocus?: Record<string, string[] | null>;
   roundNote?: Record<string, string>;
-};
-
-const ROUND_LABEL: Record<string, string> = {
-  R1: "R1-HR screening",
-  R2: "R2-Technical",
-  R3: "R3-Management",
 };
 
 function roundId(round: string | null | undefined): "R1" | "R2" | "R3" {
@@ -45,6 +41,8 @@ export function InterviewScorecard({
   saved?: { position?: string; round?: string; scores?: Record<string, number[]>; sharePointUrl?: string | null; pdfUrl?: string | null } | null;
   onSave: (scorecard: { position: string; round: string; scores: Record<string, number[]> }) => Promise<void>;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [framework, setFramework] = useState<Framework | null>(null);
   const [position, setPosition] = useState(saved?.position || positionHint || "");
   const [round, setRound] = useState(() => roundId(roundHint || saved?.round));
@@ -80,7 +78,8 @@ export function InterviewScorecard({
     const focus = framework.roundFocus?.[round];
     return framework.params
       .filter((p) => !focus || focus.includes(p.code))
-      .map((p) => ({ ...p, weight: p.weights[position] || 0 }));
+      .map((p) => ({ ...p, weight: p.weights[position] || 0 }))
+      .filter((p) => p.weight > 0);
   }, [framework, position, round]);
 
   const preview = useMemo(() => {
@@ -115,6 +114,14 @@ export function InterviewScorecard({
       .finally(() => setBusy(false));
   }
 
+  const pdfLink = saved?.pdfUrl ? (
+    <a href={saved.pdfUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">
+      {formatUiText("Scorecard PDF")}
+    </a>
+  ) : null;
+
+  if (!isAdmin) return pdfLink;
+
   if (!framework) return <p className="text-xs text-steel-muted">Loading SPDC scorecard…</p>;
 
   return (
@@ -122,18 +129,10 @@ export function InterviewScorecard({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap gap-2 items-end">
           <label className="text-xs">
-            Position
+            {formatUiText("Position")}
             <select className="mt-1 block border border-line rounded px-2 py-1" value={position} onChange={(e) => setPosition(e.target.value)}>
               {framework.roles.map((r) => (
                 <option key={r}>{r}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            Round
-            <select className="mt-1 block border border-line rounded px-2 py-1" value={round} onChange={(e) => setRound(roundId(e.target.value))}>
-              {["R1", "R2", "R3"].map((r) => (
-                <option key={r} value={r}>{ROUND_LABEL[r] || r}</option>
               ))}
             </select>
           </label>
@@ -142,37 +141,31 @@ export function InterviewScorecard({
           </span>
         </div>
       </div>
-      <p className="text-xs rounded-lg border border-line bg-sand/40 px-3 py-2">
-        {framework.roundNote?.[round] || ROUND_LABEL[round]}
-        {" "}
-        {lines.filter((p) => p.weight).length} competencies apply to this round.
-      </p>
       <div className="max-h-64 overflow-auto border border-line rounded">
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-white">
             <tr>
-              <th className="text-left px-2 py-1 bg-white">Parameter</th>
-              <th className="text-left px-2 py-1 bg-white">Weight</th>
-              <th className="text-left px-2 py-1 bg-white">Score 1–5</th>
+              <th className="text-left px-2 py-1 bg-white">{formatUiText("Parameter")}</th>
+              <th className="text-left px-2 py-1 bg-white">{formatUiText("Weight")}</th>
+              <th className="text-left px-2 py-1 bg-white">{formatUiText("Score 1-5")}</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((p) => (
-              <tr key={p.code} className={`border-t border-line ${p.weight ? "" : "opacity-50"}`}>
+              <tr key={p.code} className="border-t border-line">
                 <td className="px-2 py-1">
                   <span className="font-mono text-[10px] text-steel-muted mr-1">{p.code}</span>
                   {p.parameter}
                   <div className="text-[10px] text-steel-muted">{p.category}</div>
                 </td>
-                <td className="px-2 py-1">{p.weight ? `${p.weight}%` : "—"}</td>
+                <td className="px-2 py-1">{p.weight}%</td>
                 <td className="px-2 py-1">
                   <input
                     type="number"
                     min={1}
                     max={5}
-                    disabled={!p.weight}
-                    className="w-16 border border-line rounded px-1 py-0.5 disabled:bg-sand"
-                    value={p.weight ? scores[p.code] || "" : ""}
+                    className="w-16 border border-line rounded px-1 py-0.5"
+                    value={scores[p.code] || ""}
                     onChange={(e) => setScores({ ...scores, [p.code]: e.target.value })}
                   />
                 </td>
@@ -183,11 +176,9 @@ export function InterviewScorecard({
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex flex-wrap items-center gap-3">
-          {saved?.pdfUrl ? (
-            <a href={saved.pdfUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Scorecard PDF</a>
-          ) : null}
+          {pdfLink}
           {saved?.sharePointUrl ? (
-            <a href={saved.sharePointUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Scorecard sheet</a>
+            <a href={saved.sharePointUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">{formatUiText("Scorecard Sheet")}</a>
           ) : null}
           <Button type="button" disabled={busy} onClick={save}>
             {busy ? "Saving…" : "Save scorecard"}

@@ -23,9 +23,9 @@
   --color-danger: #c0352b;
   --color-procore-navy: #2c3340;
   --color-procore-blue: #0b6a78;
-  --font-sans: "Manrope", "IBM Plex Sans", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Sora", "Space Grotesk", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-display: Arial, Helvetica, sans-serif;
+  --font-mono: Arial, Helvetica, sans-serif;
 }
 
 :root {
@@ -13340,4 +13340,17 @@ select:disabled {
 .meet-attendees__chip.is-cc .meet-attendees__role {
   background: var(--color-sand);
   color: var(--color-steel-muted);
+}
+
+/* Arial on every surface. Title case is the copy; do not shout labels. */
+#root,
+#root * {
+  font-family: Arial, Helvetica, sans-serif;
+}
+#root .brand-lockup__hi {
+  font-family: "Noto Sans Devanagari", "Tiro Devanagari Hindi", serif;
+}
+#root .uppercase,
+#root * {
+  text-transform: none;
 }

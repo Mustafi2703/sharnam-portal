@@ -111,6 +111,8 @@ export function AttendancePunchPanel({ variant = "compact", showRoster = true }:
     attendance.find((a) => a.userId === user?.id || a.user?.email === user?.email) ||
     (!showRoster ? attendance[0] : undefined);
 
+  if (user?.role === "admin") return null;
+
   async function punchSimple(kind: "in" | "out") {
     setBusy(true);
     setMsg("");

@@ -211,9 +211,6 @@ export function TeamMusterCalendar({ onOpenMember }: { onOpenMember?: (userId: s
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-4 border-b border-line">
         <div>
           <h2 className="font-semibold text-ink">{T("Team attendance & leave calendar")}</h2>
-          <p className="text-xs text-steel-muted mt-0.5">
-            {T("Every SPDC team member for the month. Select a name to open their personal calendar.")}
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input

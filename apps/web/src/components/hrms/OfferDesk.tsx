@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, apiBase } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { rolesForDepartment, useHrmOrg, withCurrentOption } from "../../lib/hrmOrg";
@@ -54,9 +54,139 @@ const FORM_BLANK = {
 
 const inr = (n?: number | null) => (n == null || Number.isNaN(Number(n)) ? "—" : `₹ ${Math.round(Number(n)).toLocaleString("en-IN")}`);
 const ELIGIBLE = ["Shortlisted", "Interview", "Interviewed", "Selected", "SalaryDiscussion"];
+const PROJECT_KEYS = ["projectName", "project", "site", "projectSite", "clientProject"];
+
+type ProjectRow = { id: string; code?: string | null; name?: string | null };
+
+function asText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+
+function readJson(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw as Record<string, any>;
+  if (typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, any>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** One string per option. Split children render as a blank label in the HRMS select. */
+function candidateName(c: any): string {
+  const direct = [c?.fullName, c?.full_name, c?.FullName, c?.name, c?.candidateName, c?.displayName, c?.candidate?.fullName, c?.user?.fullName]
+    .map(asText)
+    .find(Boolean);
+  if (direct) return direct;
+  const joined = [asText(c?.firstName), asText(c?.middleName), asText(c?.lastName)].filter(Boolean).join(" ");
+  if (joined) return joined;
+  return asText(c?.email) || "Unnamed Candidate";
+}
 
 function bestScore(c: any) {
   return Math.max(0, ...(c.interviews || []).map((r: any) => Number(r.scoreOverall) || 0));
+}
+
+function candidateOptionLabel(c: any): string {
+  const name = candidateName(c);
+  const score = bestScore(c);
+  const status = asText(c?.status) || "New";
+  return score ? `${name} · Score ${score} · ${status}` : `${name} · ${status}`;
+}
+
+function projectOptionLabel(p: ProjectRow): string {
+  const name = asText(p.name);
+  const code = asText(p.code);
+  if (code && name) return `${code} · ${name}`;
+  return name || code || "Untitled Project";
+}
+
+function textAt(obj: any, keys: string[]): string {
+  if (!obj || typeof obj !== "object") return "";
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" || typeof value === "number") {
+      const text = asText(value);
+      if (text) return text;
+    } else if (value && typeof value === "object") {
+      const nested = asText(value.name) || asText(value.code);
+      if (nested) return nested;
+    }
+  }
+  return "";
+}
+
+function offerForCandidate(c: any, offers: any[]) {
+  return (Array.isArray(offers) ? offers : []).find((o) => o?.candidateId === c?.id || o?.candidate?.id === c?.id);
+}
+
+function cardWasScored(round: any, card: Record<string, any>): boolean {
+  if (round?.scoreOverall != null && round?.scoreOverall !== "") return true;
+  const percent = Number(card?.result?.percent);
+  if (Number.isFinite(percent) && percent > 0) return true;
+  const scores = card?.scores;
+  if (!scores || typeof scores !== "object") return false;
+  return Object.values(scores).some((value) =>
+    Array.isArray(value) ? value.some((n) => Number(n) > 0) : Number(value) > 0,
+  );
+}
+
+function gradeFromCandidate(c: any, offers: any[]): string {
+  const rounds = Array.isArray(c?.interviews) ? [...c.interviews] : [];
+  rounds.sort((a, b) => Number(a?.roundNumber || 0) - Number(b?.roundNumber || 0));
+  let fromCard = "";
+  for (const round of rounds) {
+    const card = readJson(round?.scorecardJson ?? round?.scorecard);
+    if (!cardWasScored(round, card)) continue;
+    const grade = asText(card?.result?.grade) || asText(card?.grade) || asText(round?.grade);
+    if (grade) fromCard = grade;
+  }
+  if (fromCard) return fromCard;
+  const card = readJson(c?.scorecardJson ?? c?.scorecard);
+  const direct =
+    asText(c?.grade) ||
+    asText(c?.scorecardGrade) ||
+    (cardWasScored(c, card) ? asText(card?.result?.grade) || asText(card?.grade) : "");
+  if (direct) return direct;
+  const letter = readJson(offerForCandidate(c, offers)?.letterFieldsJson);
+  return asText(letter.grade);
+}
+
+function projectLabelForCandidate(c: any, projects: ProjectRow[]): string {
+  let hint =
+    textAt(c, PROJECT_KEYS) ||
+    textAt(c?.requisition, PROJECT_KEYS) ||
+    textAt(c?.posting, PROJECT_KEYS);
+  if (!hint) {
+    const rounds = Array.isArray(c?.interviews) ? c.interviews : [];
+    for (const round of rounds) {
+      const card = readJson(round?.scorecardJson ?? round?.scorecard);
+      hint = textAt(card, PROJECT_KEYS) || textAt(card?.result, PROJECT_KEYS);
+      if (hint) break;
+    }
+  }
+  if (!hint) {
+    const places = [c?.location, c?.requisition?.location, c?.posting?.location].map(asText).filter(Boolean);
+    for (const place of places) {
+      const q = place.toLowerCase();
+      const hit = projects.find(
+        (p) => asText(p.code).toLowerCase() === q || asText(p.name).toLowerCase() === q || projectOptionLabel(p).toLowerCase() === q,
+      );
+      if (hit) return projectOptionLabel(hit);
+    }
+    return "";
+  }
+  const q = hint.toLowerCase();
+  const hit = projects.find((p) => {
+    const code = asText(p.code).toLowerCase();
+    const name = asText(p.name).toLowerCase();
+    return p.id === hint || code === q || name === q || projectOptionLabel(p).toLowerCase() === q;
+  });
+  return hit ? projectOptionLabel(hit) : hint;
 }
 
 /** Steps an offer goes through, shown as a strip on every offer row. */
@@ -88,6 +218,10 @@ function stepState(o: any): Record<(typeof STEPS)[number]["key"], boolean> {
  */
 export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token }: any) {
   const org = useHrmOrg(token);
+  const [sp] = useSearchParams();
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [projectsReady, setProjectsReady] = useState(false);
+  const queryApplied = useRef(false);
   const [form, setForm] = useState(FORM_BLANK);
   const [letter, setLetter] = useState(LETTER_BLANK);
   const [ctc, setCtc] = useState<CtcInputs>({ fixedCtcAnnual: 600000, ...CTC_DEFAULTS });
@@ -100,6 +234,27 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
 
+  useEffect(() => {
+    if (!token) {
+      setProjectsReady(true);
+      return;
+    }
+    let live = true;
+    api<ProjectRow[]>("/api/projects", { token })
+      .then((rows) => {
+        if (live) setProjects(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (live) setProjects([]);
+      })
+      .finally(() => {
+        if (live) setProjectsReady(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
   /** Same data the saved offer will print — rendered by the server without saving anything. */
   async function previewLetter() {
     if (!person) return setMsg("Pick the candidate first to preview the letter.");
@@ -109,7 +264,7 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
       const data = {
         ...ctc,
         ...letter,
-        candidateName: person.fullName,
+        candidateName: candidateName(person),
         designation: form.designation,
         department: form.department,
         candidateEmail: person.email || "",
@@ -129,7 +284,7 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           kind: "Offer",
-          employeeName: person.fullName,
+          employeeName: candidateName(person),
           candidateEmail: person.email || null,
           designation: form.designation,
           department: form.department,
@@ -162,6 +317,17 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
   const person = candidates.find((c: any) => c.id === form.candidateId);
   const departments = withCurrentOption(org.departments.map((d) => d.name), form.department);
   const roles = rolesForDepartment(org.designations, form.department, form.designation);
+  const projectOptions = useMemo(() => {
+    const rows = projects.map((p) => {
+      const label = projectOptionLabel(p);
+      return { key: p.id, value: label, label };
+    });
+    const current = letter.projectName.trim();
+    if (current && !rows.some((row) => row.value === current)) {
+      rows.unshift({ key: `current:${current}`, value: current, label: current });
+    }
+    return rows;
+  }, [projects, letter.projectName]);
 
   // Live CTC split as HR types
   useEffect(() => {
@@ -181,14 +347,41 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
     return () => clearTimeout(t);
   }, [ctc, token, person?.fullName, form.designation]);
 
-  function pickCandidate(candidateId: string) {
-    const c = candidates.find((x: any) => x.id === candidateId);
+  function applyCandidate(c: any) {
     const designation = c?.requisition?.designation || c?.posting?.title || "";
     const dept = c?.requisition?.department || org.designations.find((d) => d.title === designation)?.department || "";
-    setForm({ ...form, candidateId, designation, department: dept });
-    setLetter((l) => ({ ...l, phone: c?.phone || "" }));
+    setForm((current) => ({ ...current, candidateId: c?.id || "", designation, department: dept }));
+    setLetter((current) => ({
+      ...current,
+      phone: asText(c?.phone),
+      projectName: projectLabelForCandidate(c, projects),
+      grade: gradeFromCandidate(c, offers),
+    }));
     if (c?.expectedCtc) setCtc((x) => ({ ...x, fixedCtcAnnual: Number(c.expectedCtc) }));
   }
+
+  function pickCandidate(candidateId: string) {
+    const c = candidates.find((x: any) => x.id === candidateId);
+    if (!c) {
+      setForm((current) => ({ ...current, candidateId }));
+      return;
+    }
+    applyCandidate(c);
+  }
+
+  useEffect(() => {
+    if (!projectsReady || !org.loaded || editId || queryApplied.current) return;
+    const id = sp.get("candidateId")?.trim() || "";
+    if (!id) return;
+    if (form.candidateId && form.candidateId !== id) {
+      queryApplied.current = true;
+      return;
+    }
+    const c = (candidates || []).find((x: any) => x.id === id);
+    if (!c) return;
+    queryApplied.current = true;
+    applyCandidate(c);
+  }, [projectsReady, org.loaded, org.designations, editId, sp, candidates, projects, offers, form.candidateId]);
 
   function startEdit(o: any) {
     let lf: Record<string, string> = {};
@@ -214,7 +407,10 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
       reportingManager: o.reportingManager || "",
       notes: o.notes || "",
     });
-    setLetter({ ...LETTER_BLANK, ...lf });
+    const loaded = { ...LETTER_BLANK, ...lf };
+    const storedLeave = asText(lf.clDays) || asText(lf.clPerYear) || asText(lf.plDays) || asText(lf.privilegeLeave);
+    if (storedLeave) loaded.clDays = storedLeave;
+    setLetter(loaded);
     setCtc({ ...CTC_DEFAULTS, ...inputs, fixedCtcAnnual: Number(inputs.fixedCtcAnnual || o.ctcAnnual || 0) } as CtcInputs);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -231,7 +427,7 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
     if (!form.candidateId) return setMsg("Pick the candidate first.");
     setSaving(true);
     try {
-      const ctcInputsJson = JSON.stringify({ ...ctc, candidateName: person?.fullName || "", designation: form.designation });
+      const ctcInputsJson = JSON.stringify({ ...ctc, candidateName: person ? candidateName(person) : "", designation: form.designation });
       const payload = { ...form, ctcAnnual: String(ctc.fixedCtcAnnual), ctcInputsJson, letterFieldsJson: JSON.stringify(letter) };
       let out: any;
       if (editId) {
@@ -295,14 +491,16 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
             <section>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-steel-muted mb-2">1. Candidate And Role</p>
               <div className="grid md:grid-cols-4 gap-3">
-                <Select label="Candidate *" value={form.candidateId} onChange={(e) => pickCandidate(e.target.value)} required disabled={!!editId}>
-                  <option value="">Select candidate</option>
-                  {eligible.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.fullName}
-                      {bestScore(c) ? ` · score ${bestScore(c)}` : ""} · {c.status}
-                    </option>
-                  ))}
+                <Select label="Candidate *" value={form.candidateId} onChange={(e) => pickCandidate(e.target.value)} required disabled={!!editId} style={{ textTransform: "none" }}>
+                  <option value="">Select Candidate</option>
+                  {eligible.map((c: any) => {
+                    const label = candidateOptionLabel(c);
+                    return (
+                      <option key={c.id} value={c.id} label={label}>
+                        {label}
+                      </option>
+                    );
+                  })}
                 </Select>
                 <Select label="Department *" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value, designation: "" })} required>
                   <option value="">Select department</option>
@@ -322,8 +520,15 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
                 <Input label="Base location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
                 <Input label="Reporting manager" value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
                 <Input label="Probation (months)" type="number" min={0} value={form.probationMonths} onChange={(e) => setForm({ ...form, probationMonths: e.target.value })} />
-                {L("grade", "Grade / band")}
-                {L("projectName", "Project / site (if known)")}
+                {L("grade", "Grade")}
+                <Select label="Project / Site (If Known)" value={letter.projectName} onChange={(e) => setLetter({ ...letter, projectName: e.target.value })} style={{ textTransform: "none" }}>
+                  <option value="">Not Known</option>
+                  {projectOptions.map((p) => (
+                    <option key={p.key} value={p.value} label={p.label}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
               </div>
               {person && (person.interviews || []).length ? (
                 <p className="mt-2 text-[11px] text-steel-muted">
@@ -428,7 +633,7 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
                 {L("employeeNotice", "Notice by employee (days)", { type: "number" })}
                 {L("companyNotice", "Notice by SPDC (days)", { type: "number" })}
                 <div className="grid grid-cols-2 gap-2">
-                  {L("clDays", "CL / year", { type: "number" })}
+                  {L("clDays", "PL", { type: "number" })}
                   {L("slDays", "SL / year", { type: "number" })}
                 </div>
                 <TextArea label="Notes / special terms" rows={2} fieldClassName="md:col-span-4" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

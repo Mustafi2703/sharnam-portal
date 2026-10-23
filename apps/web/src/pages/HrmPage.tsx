@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ACTIVE_CANDIDATE_STAGES } from "@sharnam/shared";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { canManageHrms } from "../lib/portalAccounts";
@@ -105,6 +106,42 @@ const JOURNEY = JOURNEY_RAW.map((j) => ({
 const QUICK = QUICK_RAW.map((q) => ({ ...q, label: formatUiText(q.label) }));
 const T = formatUiText;
 
+const PIPELINE_STAGES = new Set<string>(ACTIVE_CANDIDATE_STAGES);
+const OPEN_OFFER_STATUSES = new Set(["Draft", "Approved", "Sent"]);
+
+/** Closed, rejected, and filled requisitions stay off the Open and In Pipeline cards. */
+function requisitionIsClosed(status: string | null | undefined) {
+  const s = String(status || "").trim().toLowerCase();
+  if (!s) return false;
+  return s === "closed" || s.startsWith("closed") || s === "rejected" || s === "cancelled" || s === "canceled" || s === "filled";
+}
+
+function requisitionIsOpen(status: string | null | undefined) {
+  const s = String(status || "").trim();
+  return Boolean(s) && !requisitionIsClosed(s);
+}
+
+type ReqRow = { status?: string | null };
+type CandRow = {
+  status?: string | null;
+  requisition?: { status?: string | null } | null;
+  offers?: { status?: string | null }[] | null;
+};
+
+function hiringCounts(reqs: ReqRow[], candidates: CandRow[]) {
+  const openReqs = reqs.filter((r) => requisitionIsOpen(r.status)).length;
+  const activeCandidates = candidates.filter((c) => {
+    if (!PIPELINE_STAGES.has(String(c.status || ""))) return false;
+    if (c.requisition && requisitionIsClosed(c.requisition.status)) return false;
+    return true;
+  }).length;
+  const openOffers = candidates.reduce((n, c) => {
+    if (c.requisition && requisitionIsClosed(c.requisition.status)) return n;
+    return n + (c.offers || []).filter((o) => OPEN_OFFER_STATUSES.has(String(o.status || ""))).length;
+  }, 0);
+  return { openReqs, activeCandidates, openOffers };
+}
+
 /** HRMS home — the hiring-to-exit journey with live counts and what needs attention today. */
 export default function HrmPage() {
   const { token, user } = useAuth();
@@ -118,12 +155,21 @@ export default function HrmPage() {
     setLoading(true);
     setLoadError("");
     try {
-      const [e, dash] = await Promise.all([
+      const [e, dash, reqRows, candRows] = await Promise.all([
         api<any[]>("/api/hrm/employees", { token }),
         api<Dashboard>("/api/hrm/dashboard", { token }),
+        api<ReqRow[]>("/api/hrm/requisitions", { token }).catch(() => null),
+        api<CandRow[]>("/api/hrm/candidates", { token }).catch(() => null),
       ]);
+      const nextDash = { ...dash };
+      if (reqRows) nextDash.openReqs = reqRows.filter((r) => requisitionIsOpen(r.status)).length;
+      if (candRows) {
+        const pipeline = hiringCounts(reqRows || [], candRows);
+        nextDash.activeCandidates = pipeline.activeCandidates;
+        nextDash.openOffers = pipeline.openOffers;
+      }
       setEmployees(e);
-      setDashboard(dash);
+      setDashboard(nextDash);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load HR dashboard");
       setEmployees([]);
@@ -178,9 +224,21 @@ export default function HrmPage() {
             <Link to={step.to} className="hr-journey__card">
               <span className="hr-journey__num">{step.n}</span>
               <span className="hr-journey__title">{step.title}</span>
-              <span className="hr-journey__what">{step.what}</span>
-              <span className="hr-journey__metric">
-                <strong>{num(step.metric)}</strong> {step.metricLabel}
+              <span className="hr-journey__what" style={{ flex: "0 0 auto" }}>{step.what}</span>
+              <span
+                className="hr-journey__metric"
+                style={{
+                  flex: "1 1 auto",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "100%",
+                  textAlign: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                <strong style={{ lineHeight: 1 }}>{num(step.metric)}</strong>
+                <span style={{ lineHeight: 1 }}>{step.metricLabel}</span>
               </span>
               <span className="hr-journey__cta">
                 {step.cta} <span aria-hidden>→</span>

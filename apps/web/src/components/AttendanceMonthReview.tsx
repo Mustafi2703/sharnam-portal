@@ -123,9 +123,6 @@ export function AttendanceMonthReview() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="font-semibold">Review And Hours</h3>
-            <p className="text-[11px] text-steel-muted max-w-2xl">
-              Punches inside the site radius are auto-verified. Sites without a map pin, or punches outside the radius, wait here for HR to check the map and verify or reject. Rejected days are left out of the hours used for payslips. Selfies are kept for one day only.
-            </p>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <Input label="Month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
@@ -167,8 +164,7 @@ export function AttendanceMonthReview() {
       )}
 
       <Card>
-        <h4 className="font-semibold text-sm mb-1">Add A Missed Day</h4>
-        <p className="text-[11px] text-steel-muted mb-2">For an employee who forgot to check in. Saved as verified by HR with your reason.</p>
+        <h4 className="font-semibold text-sm mb-2">Add A Missed Day</h4>
         <div className="grid sm:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
           <Select label="Employee" value={manual.userId} onChange={(e) => setManual({ ...manual, userId: e.target.value })}>
             <option value="">Select</option>

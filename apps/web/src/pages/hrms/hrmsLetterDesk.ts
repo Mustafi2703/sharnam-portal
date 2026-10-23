@@ -56,6 +56,8 @@ export type StaffRow = {
     addressPermanent?: string;
     personalEmail?: string;
     personalPhone?: string;
+    /** Grade on the employee profile. Interview scorecard JSON is not on this payload. */
+    grade?: string;
   };
   memberships?: Array<{ project?: { name?: string } }>;
 };
@@ -63,13 +65,22 @@ export type StaffRow = {
 export type OfferRow = {
   id: string;
   status?: string;
+  offerNo?: string;
   designation: string;
   department?: string;
   ctcAnnual?: number;
   joiningDate?: string;
+  probationMonths?: number | null;
   location?: string;
   reportingManager?: string;
-  candidate?: { fullName: string; email?: string; id?: string };
+  createdAt?: string;
+  sentAt?: string | null;
+  acceptedAt?: string | null;
+  offerLetterDocId?: string | null;
+  /** Extra letter fields saved with the offer (address, phone, project, notices, grade). */
+  letterFieldsJson?: string | null;
+  empCode?: string | null;
+  candidate?: { fullName: string; email?: string; phone?: string; location?: string; id?: string };
   onboard?: { userId?: string | null };
 };
 
@@ -86,16 +97,16 @@ export const LETTER_STAGES: { key: LetterStage; label: string; hint: string; acc
 /** Ordered by when HR issues them — the letter list is grouped by stage. */
 export const KIND_OPTIONS: { key: DocKind; label: string; hint: string; stage: LetterStage }[] = [
   { key: "Offer", label: "Offer letter", hint: "Pre-appointment offer with fixed CTC and joining date", stage: "Pre-joining" },
-  { key: "Appointment", label: "Appointment letter", hint: "SPDC letter of appointment and Schedules I–VII", stage: "Joining" },
+  { key: "Appointment", label: "Appointment letter", hint: "", stage: "Joining" },
   { key: "NdaJoining", label: "NDA at joining", hint: "Confidentiality undertaking signed on appointment", stage: "Joining" },
-  { key: "Confirmation", label: "Confirmation letter", hint: "Post-probation confirmation of services", stage: "During employment" },
-  { key: "Promotion", label: "Letter of promotion", hint: "SPDC branded promotion with revised CTC", stage: "During employment" },
-  { key: "Warning", label: "Warning / concern letter", hint: "Notice of concern with corrective actions", stage: "During employment" },
-  { key: "AssetReturn", label: "Asset submission letter", hint: "IT + admin asset return acknowledgement", stage: "Exit" },
-  { key: "Exit", label: "Exit letter", hint: "Formal separation intimation & exit checklist trigger", stage: "Exit" },
-  { key: "Relieving", label: "Relieving letter", hint: "Issued on last working day after clearance", stage: "Exit" },
-  { key: "Experience", label: "Experience certificate", hint: "Tenure and role certificate on request", stage: "Exit" },
-  { key: "NdaPostEmployment", label: "NDA post-employment", hint: "Post-exit confidentiality reminder", stage: "Exit" },
+  { key: "Confirmation", label: "Confirmation letter", hint: "", stage: "During employment" },
+  { key: "Promotion", label: "Letter of promotion", hint: "", stage: "During employment" },
+  { key: "Warning", label: "Warning / concern letter", hint: "", stage: "During employment" },
+  { key: "AssetReturn", label: "Asset submission letter", hint: "", stage: "Exit" },
+  { key: "Exit", label: "Exit letter", hint: "", stage: "Exit" },
+  { key: "Relieving", label: "Relieving letter", hint: "", stage: "Exit" },
+  { key: "Experience", label: "Experience certificate", hint: "", stage: "Exit" },
+  { key: "NdaPostEmployment", label: "NDA post-employment", hint: "", stage: "Exit" },
 ];
 
 export function letterKindLabel(kind: string): string {
@@ -196,12 +207,13 @@ export function applySubjectKey(
   offers: OfferRow[],
   prev: LetterFormState,
 ): LetterFormState {
-  if (!key) return { ...prev, employeeUserId: "", offerId: "" };
+  if (!key) return { ...prev, employeeUserId: "", offerId: "", mobile: "", address: "", projectName: "", previousDesignation: "", previousCtc: "", pan: "", gender: "", empCode: "", sheet: {} };
+  const cleared = { ...prev, mobile: "", address: "", projectName: "", previousDesignation: "", previousCtc: "", pan: "", gender: "", empCode: "", sheet: {} };
   if (key.startsWith("staff:")) {
     const id = key.slice(6);
     const emp = staff.find((s) => s.id === id);
     if (!emp) return prev;
-    return applyStaff(emp, staff, { ...prev, employeeUserId: id, offerId: "" });
+    return bindLetterFromPerson(applyStaff(emp, staff, { ...cleared, employeeUserId: id, offerId: "" }), staff, offers);
   }
   if (key.startsWith("offer:")) {
     const id = key.slice(6);
@@ -209,7 +221,7 @@ export function applySubjectKey(
     if (!o) return prev;
     const linkedUserId = o.onboard?.userId || "";
     const base = {
-      ...prev,
+      ...cleared,
       offerId: id,
       employeeUserId: linkedUserId,
       employeeName: o.candidate?.fullName || prev.employeeName,
@@ -220,12 +232,13 @@ export function applySubjectKey(
       effectiveDate: o.joiningDate ? String(o.joiningDate).slice(0, 10) : prev.effectiveDate,
       location: o.location || prev.location || DEFAULT_LOCATION,
       reportingManager: o.reportingManager || prev.reportingManager,
+      empCode: o.empCode || "",
     };
     if (linkedUserId) {
       const emp = staff.find((s) => s.id === linkedUserId);
-      if (emp) return applyStaff(emp, staff, base);
+      if (emp) return bindLetterFromPerson(applyStaff(emp, staff, base), staff, offers);
     }
-    return base;
+    return bindLetterFromPerson(base, staff, offers);
   }
   return prev;
 }
@@ -234,7 +247,7 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
   const mgr = emp.profile?.reportingManagerId
     ? staff.find((s) => s.id === emp.profile!.reportingManagerId)?.fullName || form.reportingManager
     : form.reportingManager;
-  const project = emp.memberships?.[0]?.project?.name || form.projectName;
+  // Project / client site is the offer project name, not the first portal membership.
   const joined = emp.profile?.joinDate ? String(emp.profile.joinDate).slice(0, 10) : "";
   const leaving = isLeavingLetter(form.kind);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -254,18 +267,149 @@ function applyStaff(emp: StaffRow, staff: StaffRow[], form: LetterFormState): Le
     empCode: emp.profile?.empCode || form.empCode,
     pan: emp.profile?.panNumber || form.pan,
     gender: normalGender(emp.profile?.gender || form.gender),
-    address: emp.profile?.addressCurrent || emp.profile?.addressPermanent || form.address,
-    mobile: emp.phone || emp.profile?.personalPhone || form.mobile,
-    projectName: project,
     issueDate: form.kind === "Confirmation" ? form.issueDate || today : printed,
     sheet: {
       ...(leaving && joined && !form.sheet.joinDate ? { ...form.sheet, joinDate: joined } : form.sheet),
       officialEmail: form.sheet.officialEmail || emp.email || "",
-      clientProject: form.sheet.clientProject || project,
       personalEmail: form.sheet.personalEmail || emp.profile?.personalEmail || emp.email || "",
       joinDate: form.sheet.joinDate || joined,
     },
   };
+}
+
+type OfferLetterBits = {
+  gender?: string;
+  address?: string;
+  phone?: string;
+  grade?: string;
+  projectName?: string;
+  workingHours?: string;
+  reportingTime?: string;
+  reportingAddress?: string;
+  probationNotice?: string;
+  employeeNotice?: string;
+  companyNotice?: string;
+  clDays?: string;
+  slDays?: string;
+  interviewDates?: string;
+};
+
+const OFFER_LETTER_KEYS: (keyof OfferLetterBits)[] = [
+  "gender",
+  "address",
+  "phone",
+  "grade",
+  "projectName",
+  "workingHours",
+  "reportingTime",
+  "reportingAddress",
+  "probationNotice",
+  "employeeNotice",
+  "companyNotice",
+  "clDays",
+  "slDays",
+  "interviewDates",
+];
+
+function parseOfferLetterFields(raw?: string | null): OfferLetterBits {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const out: OfferLetterBits = {};
+    for (const key of OFFER_LETTER_KEYS) {
+      const value = String(obj[key] ?? "").trim();
+      if (value) out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function offerForForm(form: LetterFormState, offers: OfferRow[]): OfferRow | undefined {
+  if (form.offerId) return offers.find((o) => o.id === form.offerId);
+  if (form.employeeUserId) {
+    const byUser = offers.find((o) => o.onboard?.userId === form.employeeUserId);
+    if (byUser) return byUser;
+  }
+  const email = form.candidateEmail.trim().toLowerCase();
+  if (!email) return undefined;
+  return offers.find((o) => (o.candidate?.email || "").toLowerCase() === email);
+}
+
+function firstText(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+/**
+ * Mobile, address, project, reporting manager, and appointment terms come from the loaded offer and person.
+ * Candidate has no address or permanentAddress column on the offers list.
+ * Address uses offer letterFields.address, then EmployeeProfile.addressCurrent / addressPermanent.
+ * noOfCheques is not on the offer or candidate payload.
+ * kraNote is not on the offer or candidate payload.
+ * Interview scorecard JSON is not on the employee or offer payload. Current Grade uses EmployeeProfile.grade when present.
+ */
+export function bindLetterFromPerson(
+  form: LetterFormState,
+  staff: StaffRow[],
+  offers: OfferRow[],
+  docs: DocRow[] = [],
+): LetterFormState {
+  const offer = offerForForm(form, offers);
+  const emp = form.employeeUserId ? staff.find((s) => s.id === form.employeeUserId) : undefined;
+  const fields = parseOfferLetterFields(offer?.letterFieldsJson);
+  const mgrFromStaff = emp?.profile?.reportingManagerId
+    ? staff.find((s) => s.id === emp.profile!.reportingManagerId)?.fullName || ""
+    : "";
+  const mobile = firstText(emp?.phone, emp?.profile?.personalPhone, offer?.candidate?.phone, fields.phone) || form.mobile;
+  const address = firstText(fields.address, emp?.profile?.addressCurrent, emp?.profile?.addressPermanent) || form.address;
+  const projectName = fields.projectName || form.projectName;
+  const reportingManager = firstText(offer?.reportingManager, mgrFromStaff) || form.reportingManager;
+  const profileGrade = emp?.profile?.grade || "";
+  const permanent = firstText(fields.address, emp?.profile?.addressPermanent);
+  const sheet: Record<string, string> = { ...form.sheet };
+  if (permanent) sheet.permanentAddress = permanent;
+  if (projectName) sheet.clientProject = projectName;
+  if (offer?.probationMonths != null) sheet.probationMonths = String(offer.probationMonths);
+  for (const key of ["probationNotice", "employeeNotice", "companyNotice", "clDays", "slDays", "workingHours", "reportingTime", "reportingAddress", "interviewDates"] as const) {
+    if (fields[key]) sheet[key] = fields[key]!;
+  }
+  if (fields.grade) sheet.grade = fields.grade;
+  else if (profileGrade && !sheet.grade) sheet.grade = profileGrade;
+  if (profileGrade && !sheet.previousGrade) sheet.previousGrade = profileGrade;
+  else if (!sheet.previousGrade && fields.grade) sheet.previousGrade = fields.grade;
+  if (!sheet.previousDepartment && form.department) sheet.previousDepartment = form.department;
+  const offerDoc =
+    docs.find((row) => row.kind === "Offer" && row.status !== "Cancelled" && docMatchesSubject(row, form)) ||
+    (offer?.offerLetterDocId ? docs.find((row) => row.id === offer.offerLetterDocId) : undefined);
+  if (offerDoc?.refNo) sheet.offerRefNo = offerDoc.refNo;
+  else if (!sheet.offerRefNo && offer?.offerNo) sheet.offerRefNo = offer.offerNo;
+  if (offerDoc?.issueDate) sheet.offerDate = String(offerDoc.issueDate).slice(0, 10);
+  else if (!sheet.offerDate) {
+    const raw = offer?.sentAt || offer?.createdAt;
+    if (raw) sheet.offerDate = String(raw).slice(0, 10);
+  }
+  return {
+    ...form,
+    mobile,
+    address,
+    projectName,
+    reportingManager,
+    empCode: form.empCode || offer?.empCode || "",
+    gender: form.gender || normalGender(fields.gender || ""),
+    previousDesignation: form.previousDesignation || form.designation,
+    previousCtc: form.previousCtc || (form.ctcAnnual && form.kind === "Promotion" ? form.ctcAnnual : form.previousCtc),
+    sheet,
+  };
+}
+
+/** Re-apply offer and person autofill after a letter on the register is copied into the composer. */
+export function withLetterAutofill(form: LetterFormState, staff: StaffRow[], offers: OfferRow[], docs: DocRow[]): LetterFormState {
+  return bindLetterFromPerson(form, staff, offers, docs);
 }
 
 function normalGender(value: string): string {
@@ -281,7 +425,7 @@ export function isLeavingLetter(kind: DocKind) {
 }
 
 export function letterDataPayload(form: LetterFormState) {
-  return {
+  const payload: Record<string, string> = {
     candidateName: form.employeeName,
     joinDate: isLeavingLetter(form.kind) ? "" : form.effectiveDate,
     fixedCtcAnnual: form.ctcAnnual,
@@ -302,12 +446,12 @@ export function letterDataPayload(form: LetterFormState) {
     address: form.address,
     addressAsPerRecords: form.address,
     candidateAddress: form.address,
-    permanentAddress: form.address,
+    permanentAddress: form.sheet.permanentAddress || form.address,
     phone: form.mobile,
     mobile: form.mobile,
     projectName: form.projectName,
     project: form.projectName,
-    clientProject: form.sheet.clientProject || form.projectName,
+    clientProject: form.projectName || form.sheet.clientProject || "",
     signatoryName: form.signatoryName,
     separationBasis: form.sheet.separationBasis || "",
     issueInBrief: form.issueInBrief || form.reason,
@@ -318,6 +462,31 @@ export function letterDataPayload(form: LetterFormState) {
     natureOfWork: form.sheet.natureOfWork || "site supervision, planning, quality control and billing verification",
     ...filledSheet(form),
   };
+  if (form.kind === "Promotion") {
+    const previousRm = form.reportingManager;
+    const nextRm = (form.sheet.newReportingManager || "").trim();
+    if (form.previousDesignation || form.designation) payload.previousDesignation = form.previousDesignation || form.designation;
+    if (form.sheet.previousDepartment || form.department) payload.previousDepartment = form.sheet.previousDepartment || form.department;
+    if (form.previousCtc) payload.previousCtc = form.previousCtc;
+    if (previousRm) {
+      payload.previousReportingManager = previousRm;
+      if (!payload.previousReporting) payload.previousReporting = previousRm;
+    }
+    if (nextRm) {
+      payload.newReportingManager = nextRm;
+      payload.reportingManager = nextRm;
+    }
+  }
+  if (payload.severity) payload.severity = normalizeSeverity(String(payload.severity));
+  return payload;
+}
+
+export function normalizeSeverity(value: string): string {
+  const v = value.trim().toLowerCase();
+  if (v === "major") return "Major";
+  if (v === "gross") return "Gross";
+  if (v === "minor") return "Minor";
+  return value.trim();
 }
 
 function filledSheet(form: LetterFormState): Record<string, string> {
@@ -333,8 +502,37 @@ function filledSheet(form: LetterFormState): Record<string, string> {
   return out;
 }
 
+const RETIRED_TABLE_HINTS = new Set([
+  "Fill only the rows that apply. Use Y / N for returned.",
+  "One row per incident. Empty uses the issue in brief.",
+  "One row per project. Empty uses the project above.",
+  "One row per designation, oldest first. Empty uses the designation and dates above.",
+  "One row per project. Empty uses the project, client and period above.",
+]);
+
+const TABLE_LABELS: Record<string, string> = {
+  undertakingRows: "Undertakings",
+  priorInfoRows: "Prior Information Declared",
+  kraRows: "Key Result Areas",
+};
+
+const COLUMN_LABELS: Record<string, string> = {
+  "Client / project": "Client / Project",
+  "Undertaking ref. / date": "Undertaking Ref. / Date",
+  "Valid until": "Valid Until",
+  "Description of prior information": "Description Of Prior Information",
+  "Evidence of prior ownership": "Evidence Of Prior Ownership",
+  "Key result area": "Key Result Area",
+  "Target / measure": "Target / Measure",
+};
+
 export function letterTables(kind: DocKind): HrLetterTable[] {
-  return HR_LETTER_TABLES[kind] || [];
+  return (HR_LETTER_TABLES[kind] || []).map((spec) => ({
+    ...spec,
+    label: TABLE_LABELS[spec.key] || spec.label,
+    hint: spec.hint && RETIRED_TABLE_HINTS.has(spec.hint) ? undefined : spec.hint,
+    columns: spec.columns.map((col) => ({ ...col, label: COLUMN_LABELS[col.label] || col.label })),
+  }));
 }
 
 const KRA_DEFAULTS: string[][] = [
@@ -589,7 +787,7 @@ export function missingLetterFields(form: LetterFormState): string[] {
     missing.push("Fixed CTC");
   }
   for (const field of LETTER_VARIABLES[form.kind] || []) {
-    if (field.default || field.optional) continue;
+    if (field.hidden || field.default || field.optional) continue;
     const value = (form.sheet[field.key] || "").trim();
     if (!value) missing.push(field.label);
   }
@@ -638,6 +836,8 @@ export type LetterVar = {
   wide?: boolean;
   default?: string;
   optional?: boolean;
+  /** Kept on the generate payload, not shown as a box. */
+  hidden?: boolean;
 };
 
 const TERMS: LetterVar[] = [
@@ -664,14 +864,14 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "kraNote", label: "Role KRAs", default: "KRAs as per SPDC role master for this designation", type: "textarea", wide: true },
   ],
   Appointment: [
-    { key: "offerRefNo", label: "Offer reference no." },
-    { key: "offerDate", label: "Offer date", type: "date" },
-    ...TERMS,
-    { key: "lateMarks", label: "Late marks allowed", default: "3" },
-    { key: "payDay", label: "Pay day", default: "7th" },
-    { key: "retirementAge", label: "Retirement age", default: "58" },
-    { key: "noOfCheques", label: "Number of security cheques", hint: "0 if none are taken" },
-    { key: "kraNote", label: "Role KRAs", default: "KRAs as per SPDC role master for this designation", type: "textarea", wide: true },
+    { key: "offerRefNo", label: "Offer Reference No.", hidden: true },
+    { key: "offerDate", label: "Offer Date", type: "date", hidden: true },
+    ...TERMS.map((field) => ({ ...field, hidden: true })),
+    { key: "lateMarks", label: "Late Marks Allowed", default: "3" },
+    { key: "payDay", label: "Pay Day", default: "7th" },
+    { key: "retirementAge", label: "Retirement Age", default: "58" },
+    // noOfCheques is not on the offer or candidate payload.
+    // kraNote is not on the offer or candidate payload.
   ],
   Confirmation: [
     { key: "appointmentRefNo", label: "Appointment reference no." },
@@ -722,22 +922,24 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "newEmployer", label: "New employer (optional)", optional: true },
   ],
   Promotion: [
+    { key: "previousDepartment", label: "Previous Department", hidden: true },
+    { key: "newReportingManager", label: "New Reporting Manager", hidden: true },
     { key: "achievement", label: "Achievement", wide: true },
-    { key: "reviewCycle", label: "Review cycle", default: "Half-yearly" },
-    { key: "reviewMonths", label: "Review after (months)", default: "6" },
-    { key: "previousGrade", label: "Current grade" },
-    { key: "newGrade", label: "New grade" },
-    { key: "currentTeam", label: "Current team" },
-    { key: "newTeam", label: "New team" },
-    { key: "previousReporting", label: "Current reporting" },
-    { key: "currentNotice", label: "Current notice (days)", default: "60" },
-    { key: "newNotice", label: "New notice (days)", default: "60" },
-    { key: "currentLimit", label: "Current authority limit" },
-    { key: "newLimit", label: "New authority limit" },
+    { key: "reviewCycle", label: "Review Cycle", default: "Half-yearly" },
+    { key: "reviewMonths", label: "Review After (Months)", default: "6" },
+    { key: "previousGrade", label: "Current Grade" },
+    { key: "newGrade", label: "New Grade" },
+    { key: "currentTeam", label: "Current Team" },
+    { key: "newTeam", label: "New Team" },
+    { key: "previousReporting", label: "Current Reporting" },
+    { key: "currentNotice", label: "Current Notice (Days)", default: "60" },
+    { key: "newNotice", label: "New Notice (Days)", default: "60" },
+    { key: "currentLimit", label: "Current Authority Limit" },
+    { key: "newLimit", label: "New Authority Limit" },
   ],
   Warning: [
-    { key: "letterType", label: "Letter type", type: "select", options: ["Concern", "First warning", "Final warning", "Show-cause notice"], default: "Concern" },
-    { key: "severity", label: "Severity", type: "select", options: ["minor", "major", "gross"], default: "minor" },
+    { key: "letterType", label: "Letter Type", type: "select", options: ["Concern", "First warning", "Final warning", "Show-cause notice"], default: "Concern" },
+    { key: "severity", label: "Severity", type: "select", options: ["Minor", "Major", "Gross"], default: "Minor" },
     { key: "clausePolicy", label: "Clause / policy", default: "Clause 14 of your Appointment Letter", wide: true },
     { key: "previousWarnings", label: "Previous warnings", default: "None", wide: true },
     { key: "replyHours", label: "Reply within (hours)", default: "72" },
@@ -752,17 +954,18 @@ export const LETTER_VARIABLES: Record<DocKind, LetterVar[]> = {
     { key: "exitMode", label: "Issued", default: "on resignation" },
   ],
   NdaJoining: [
-    { key: "fatherOrSpouseName", label: "Father or spouse name" },
+    { key: "fatherOrSpouseName", label: "Father Or Spouse Name" },
     { key: "age", label: "Age" },
-    { key: "permanentAddress", label: "Permanent address", type: "textarea", wide: true },
-    { key: "appointmentRefNo", label: "Appointment reference no." },
-    { key: "appointmentDate", label: "Appointment date", type: "date" },
-    { key: "clientProject", label: "Client / project", wide: true, optional: true },
+    // Candidate.permanentAddress is not on the offers list. Filled from letterFields.address, else EmployeeProfile.addressPermanent.
+    { key: "permanentAddress", label: "Permanent Address", type: "textarea", wide: true, hidden: true },
+    { key: "appointmentRefNo", label: "Appointment Reference No." },
+    { key: "appointmentDate", label: "Appointment Date", type: "date" },
   ],
   NdaPostEmployment: [
-    { key: "fatherOrSpouseName", label: "Father or spouse name" },
+    { key: "fatherOrSpouseName", label: "Father Or Spouse Name" },
     { key: "age", label: "Age" },
-    { key: "permanentAddress", label: "Permanent address", type: "textarea", wide: true },
+    // Candidate.permanentAddress is not on the offers list. Filled from letterFields.address, else EmployeeProfile.addressPermanent.
+    { key: "permanentAddress", label: "Permanent Address", type: "textarea", wide: true, hidden: true },
     { key: "joinDate", label: "Joining date", type: "date" },
     { key: "appointmentRefNo", label: "Appointment reference no." },
     { key: "ndaJoiningRef", label: "Joining NDA reference" },
