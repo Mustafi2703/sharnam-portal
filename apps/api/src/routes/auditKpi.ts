@@ -71,8 +71,8 @@ function presentFinding<T extends { dueDate: Date | null; closedAt: Date | null;
   return { ...row, ...findingTiming(row) };
 }
 
-function presentChecklist<T extends { detailJson: string | null }>(row: T) {
-  return { ...row, detail: parseDetail(row.detailJson) };
+function presentChecklist<T extends { detailJson?: string | null }>(row: T) {
+  return { ...row, detail: parseDetail(row.detailJson ?? null) };
 }
 
 function presentSubject<T extends Parameters<typeof subjectRag>[0] & { pctClosed: number | null; rag: string }>(row: T) {

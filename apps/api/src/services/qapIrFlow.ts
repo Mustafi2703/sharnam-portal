@@ -70,7 +70,10 @@ export async function prepareQualityIrCreate(opts: {
   projectId: string;
   user: UserLike;
   body: Record<string, unknown>;
-}): Promise<{ error: string; status: number } | { qapLineId: string | null; previousIrId: string | null; form: Record<string, unknown>; linkedAssignmentId: string | null; status: string }> {
+}): Promise<
+  | { error: string; status: number }
+  | { qapLineId: string | null; previousIrId: string | null; form: Record<string, unknown>; linkedAssignmentId: string | null; status: string; needsChecklist: boolean }
+> {
   const user = await loadUser(opts.user);
   const body = opts.body;
   const formIn = body.formDataJson && typeof body.formDataJson === "object" ? { ...(body.formDataJson as Record<string, unknown>) } : parseForm(typeof body.formDataJson === "string" ? body.formDataJson : null);
@@ -107,9 +110,10 @@ export async function prepareQualityIrCreate(opts: {
   };
   if (line) form.irType = lineIrType(line);
 
+  const needsChecklist = !!(line && requiredEnclosures(line.records).some((e) => e.kind === "checklist"));
   let linkedAssignmentId = body.linkedAssignmentId ? String(body.linkedAssignmentId) : null;
-  if (line && !linkedAssignmentId && requiredEnclosures(line.records).some((e) => e.kind === "checklist")) {
-    linkedAssignmentId = await ensureActivityChecklist(opts.projectId, line.section || line.activity || "");
+  if (needsChecklist && !linkedAssignmentId) {
+    linkedAssignmentId = await ensureActivityChecklist(opts.projectId, line?.section || line?.activity || "");
   }
 
   const submit = body.submit === true || (body.status && String(body.status) !== "Draft");
@@ -119,7 +123,7 @@ export async function prepareQualityIrCreate(opts: {
       line,
       form,
       submittedAt: new Date(),
-      hasChecklist: !!linkedAssignmentId,
+      hasChecklist: !!linkedAssignmentId || needsChecklist,
       attachedRecordKeys: attachedKeys(typeof body.attachmentsJson === "string" ? body.attachmentsJson : null),
       requiredRecordKeys: requiredEnclosures(line.records).map((e) => e.key),
     });
@@ -131,7 +135,116 @@ export async function prepareQualityIrCreate(opts: {
     status = "Draft";
   }
 
-  return { qapLineId: line?.id || null, previousIrId: null, form, linkedAssignmentId, status };
+  return { qapLineId: line?.id || null, previousIrId: null, form, linkedAssignmentId, status, needsChecklist };
+}
+
+type QualityIrRow = {
+  id: string;
+  projectId: string;
+  number: string;
+  irNumber: string | null;
+  status: string;
+  formDataJson: string | null;
+  qapLineId: string | null;
+  subject: string;
+  assignedToId: string | null;
+  assigneeContactId: string | null;
+  assigneeEmail: string | null;
+  assigneeName: string | null;
+  responsibleVendorId: string | null;
+  linkedAssignmentId: string | null;
+};
+
+/** When F-01 is raised on a QAP line whose records name a checklist, open the linked F-02. */
+export async function raiseActivityChecklistForIr(opts: {
+  projectId: string;
+  userId: string;
+  qualityIr: QualityIrRow;
+}): Promise<{ id: string; number: string; formDataJson: string } | null> {
+  const form = parseForm(opts.qualityIr.formDataJson);
+  if (String(form.checklistRef || "").trim()) return null;
+  const line = opts.qualityIr.qapLineId
+    ? await prisma.qapLine.findFirst({ where: { id: opts.qualityIr.qapLineId, projectId: opts.projectId } })
+    : null;
+  if (!line || !requiredEnclosures(line.records).some((e) => e.kind === "checklist")) return null;
+
+  const existing = await prisma.rfi.findMany({
+    where: { projectId: opts.projectId, rfiKind: "ActivityInspection" },
+    select: { number: true },
+  });
+  const used = new Set(existing.map((row) => row.number));
+  let n = existing.length + 1;
+  let number = `CL-${String(n).padStart(3, "0")}`;
+  while (used.has(number)) {
+    n += 1;
+    number = `CL-${String(n).padStart(3, "0")}`;
+  }
+
+  const irNo = opts.qualityIr.irNumber || opts.qualityIr.number;
+  const activity = String(form.activityDescription || line.description || line.section || "Activity");
+  const today = new Date().toISOString().slice(0, 10);
+  const linkedAssignmentId =
+    opts.qualityIr.linkedAssignmentId || (await ensureActivityChecklist(opts.projectId, line.section || line.activity || ""));
+  const f02Form = {
+    projectFacility: form.projectFacility || "",
+    employerClient: form.employerClient || "",
+    contractorAgency: form.contractorAgency || "",
+    checklistNo: number,
+    dateRaised: form.dateRaised || today,
+    linkedIrNo: irNo,
+    activityDescription: activity,
+    discipline: String(form.discipline || line.discipline || line.section || ""),
+    location: form.location || "",
+    quantityUnit: form.quantityUnit || "",
+    drawingRef: form.drawingRef || "",
+    specClause: String(form.specClause || line.codeOfConformance || ""),
+    methodStmtNo: form.methodStmtNo || "",
+    itpRef: String(form.itpRef || [line.section, line.frequency].filter(Boolean).join(" / ")),
+    qapLineId: line.id,
+    parentIrId: opts.qualityIr.id,
+  };
+  const created = await prisma.rfi.create({
+    data: {
+      projectId: opts.projectId,
+      number,
+      irNumber: number,
+      subject: `Activity checklist: ${activity}`.slice(0, 500),
+      question: `SPDC/QA/F-02 raised with ${irNo}. ${activity}`,
+      rfiKind: "ActivityInspection",
+      formDataJson: JSON.stringify(f02Form),
+      status: opts.qualityIr.status === "Draft" ? "Draft" : "Open",
+      qapLineId: line.id,
+      ballInCourt: "Assignee",
+      assignedToId: opts.qualityIr.assignedToId,
+      assigneeContactId: opts.qualityIr.assigneeContactId,
+      assigneeEmail: opts.qualityIr.assigneeEmail,
+      assigneeName: opts.qualityIr.assigneeName,
+      createdById: opts.userId,
+      linkedAssignmentId,
+      responsibleVendorId: opts.qualityIr.responsibleVendorId,
+    },
+  });
+  const nextForm = { ...form, checklistRef: number, f02Id: created.id };
+  const formDataJson = JSON.stringify(nextForm);
+  await prisma.rfi.update({
+    where: { id: opts.qualityIr.id },
+    data: {
+      formDataJson,
+      ...(linkedAssignmentId && !opts.qualityIr.linkedAssignmentId ? { linkedAssignmentId } : {}),
+    },
+  });
+  if (linkedAssignmentId) {
+    const { ensureFillRequestDraft } = await import("./ensureFillRequestDraft.js");
+    await ensureFillRequestDraft(prisma as unknown as import("@prisma/client").PrismaClient, {
+      rfiId: created.id,
+      rfiNumber: number,
+      subject: created.subject,
+      assignmentId: linkedAssignmentId,
+      createdById: opts.userId,
+      assignedToId: opts.qualityIr.assignedToId,
+    }).catch(() => undefined);
+  }
+  return { id: created.id, number, formDataJson };
 }
 
 async function ensureActivityChecklist(projectId: string, section: string): Promise<string | null> {

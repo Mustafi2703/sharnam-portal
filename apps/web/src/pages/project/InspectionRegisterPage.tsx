@@ -376,7 +376,7 @@ export default function InspectionRegisterPage() {
   }) {
     setBusy(true);
     try {
-      await api(`/api/rfis/project/${id}`, {
+      const created = await api<{ activityChecklist?: { number: string } | null }>(`/api/rfis/project/${id}`, {
         method: "POST",
         token,
         body: JSON.stringify({
@@ -396,6 +396,9 @@ export default function InspectionRegisterPage() {
           status: payload.rfiKind === "QualityIR" ? "Draft" : payload.status,
         }),
       });
+      if (created.activityChecklist?.number) {
+        window.alert(`Quality IR saved. Activity checklist ${created.activityChecklist.number} (F-02) was raised for this line.`);
+      }
       await load();
     } finally {
       setBusy(false);

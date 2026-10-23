@@ -135,6 +135,7 @@ export function CoordinationPage() {
   const [filter, setFilter] = useState("All");
   const [msg, setMsg] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
+  const [issueAnswer, setIssueAnswer] = useState("");
   const [logBusy, setLogBusy] = useState(false);
   const [markupDraft, setMarkupDraft] = useState<File | null>(null);
   const [markupModal, setMarkupModal] = useState(false);
@@ -198,6 +199,9 @@ export function CoordinationPage() {
   }, [filtered, selectedId]);
 
   const selected = filtered.find((r) => r.id === selectedId) || null;
+  useEffect(() => {
+    setIssueAnswer(selected?.responseText || "");
+  }, [selected?.id, selected?.responseText]);
   const linkedDrawing = selected?.linkedDrawingId
     ? drawings.find((d) => d.id === selected.linkedDrawingId)
     : null;
@@ -226,6 +230,29 @@ export function CoordinationPage() {
     if (!focusDrawingId) return;
     setForm((f) => (f.linkedDrawingId === focusDrawingId ? f : { ...f, linkedDrawingId: focusDrawingId }));
   }, [focusDrawingId]);
+
+  async function submitIssueAnswer(issueId: string) {
+    const text = issueAnswer.trim();
+    if (!text) {
+      setMsg("Write the answer before submitting.");
+      return;
+    }
+    setFollowBusy(true);
+    setMsg("");
+    try {
+      await api(`/api/directory/coordination/${issueId}/answer`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ responseText: text }),
+      });
+      setMsg("Answer saved. The checker can close the issue after reviewing it.");
+      await load();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not save the answer");
+    } finally {
+      setFollowBusy(false);
+    }
+  }
 
   async function patchIssue(id: string, body: Record<string, unknown>) {
     await api(`/api/directory/coordination/${id}`, { method: "PATCH", token, body: JSON.stringify(body) });
@@ -628,7 +655,7 @@ export function CoordinationPage() {
       )}
 
       <div className="flex gap-1 flex-wrap">
-        {["All", "Open", "Closed"].map((f) => (
+        {["All", "Open", "Answered", "Closed"].map((f) => (
           <button
             key={f}
             type="button"
@@ -659,7 +686,7 @@ export function CoordinationPage() {
                     {r.location ? ` · ${r.location}` : ""}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge tone={r.status === "Open" ? "warn" : "ok"}>{r.status}</Badge>
+                    <Badge tone={r.status === "Open" ? "warn" : r.status === "Answered" ? "brand" : "ok"}>{r.status}</Badge>
                     {r.linkedDrawingId && <Badge tone="brand">Linked drawing</Badge>}
                   </div>
                 </button>
@@ -686,6 +713,18 @@ export function CoordinationPage() {
                   )}
                   {selected.description && (
                     <p className="text-sm text-steel-muted mt-2 leading-relaxed">{selected.description}</p>
+                  )}
+                  {selected.responseText && (
+                    <div className="mt-3 rounded-lg border border-line bg-sand/40 p-3 text-sm">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-steel-muted">Answer on file</p>
+                      <p className="mt-1 whitespace-pre-wrap">{selected.responseText}</p>
+                      {selected.respondedByName && (
+                        <p className="text-xs text-steel-muted mt-1">
+                          {selected.respondedByName}
+                          {selected.respondedAt ? ` · ${new Date(selected.respondedAt).toLocaleString("en-IN")}` : ""}
+                        </p>
+                      )}
+                    </div>
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge tone="neutral">BIC: {selected.ballInCourt || "Assignee"}</Badge>
@@ -780,15 +819,17 @@ export function CoordinationPage() {
                           e.target.value = "";
                         }}
                       />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!text-xs"
-                        onClick={() => void patchIssue(selected.id, { status: "Closed" })}
-                      >
-                        Close issue
-                      </Button>
                     </>
+                  )}
+                  {canEdit && selected.responseText && selected.status !== "Closed" && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs"
+                      onClick={() => void patchIssue(selected.id, { status: "Closed" })}
+                    >
+                      Close after checking the answer
+                    </Button>
                   )}
                   {canEdit && selected.status === "Escalated" && selected.escalatedRfiId && (
                     <Link to={`/projects/${id}/rfis?view=register&rfi=${selected.escalatedRfiId}`} className="text-xs font-semibold text-brand">
@@ -807,6 +848,33 @@ export function CoordinationPage() {
                   )}
                 </div>
               </div>
+
+              {selected.status !== "Closed" &&
+                (canEdit ||
+                  (user?.id && user.id === selected.assignedToId) ||
+                  (user?.email &&
+                    selected.assignedToEmail &&
+                    user.email.toLowerCase() === String(selected.assignedToEmail).toLowerCase())) && (
+                <form
+                  className="mt-4 pt-4 border-t border-line space-y-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void submitIssueAnswer(selected.id);
+                  }}
+                >
+                  <TextArea
+                    rows={3}
+                    label="Answer"
+                    placeholder="The assigned party writes the answer. Sharnam office can answer if they are the ones who should reply."
+                    value={issueAnswer}
+                    onChange={(e) => setIssueAnswer(e.target.value)}
+                    required
+                  />
+                  <Button type="submit" className="!text-xs" disabled={followBusy}>
+                    {followBusy ? "Saving…" : "Submit answer"}
+                  </Button>
+                </form>
+              )}
 
               {selected.documents?.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-line">

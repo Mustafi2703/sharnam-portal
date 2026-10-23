@@ -23,6 +23,13 @@ function safeName(s: string) {
   return String(s || "file").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 72);
 }
 
+/** Same folder the PDF and DWG use, under Checklist, so the filled revision check sits with the drawing. */
+export function drawingRevisionChecklistFolder(drawingNumber: string, revisionNumber: string, discipline?: string | null) {
+  const disc = String(discipline || "Architecture").replace(/[\\/:*?"<>|#%]+/g, "-").replace(/\s*-\s*/g, "-").trim() || "Architecture";
+  const seg = (value: string) => String(value || "unknown").replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `${MODULE_TO_ISO_FOLDER.drawings}/${disc}/${seg(drawingNumber)}/${seg(revisionNumber)}/Checklist`;
+}
+
 export type ChecklistDriveExport = { kind: "xlsx" | "html"; path: string; url?: string | null };
 
 export async function syncChecklistSubmissionToDrive(
@@ -62,6 +69,11 @@ export async function syncChecklistSubmissionToDrive(
         ? `${MODULE_TO_ISO_FOLDER.safety}/Checklists`
         : MODULE_TO_ISO_FOLDER.qualityChecklist;
   const folder = `${baseFolder}/${statusFolder}`;
+  const revisionNo = submission.revision?.revisionNumber || submission.revisionNumber || "";
+  const besideFolder =
+    checklistType === "DrawingCheck" && submission.drawing?.drawingNumber && revisionNo
+      ? drawingRevisionChecklistFolder(submission.drawing.drawingNumber, revisionNo, submission.drawing.discipline)
+      : "";
   const base = `${safeName(templateName)}_${safeName(submission.submittedBy?.fullName || "filler")}_${stamp}`;
 
   const exports: ChecklistDriveExport[] = [];
@@ -82,6 +94,17 @@ export async function syncChecklistSubmissionToDrive(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
     exports.push({ kind: "xlsx", path: xlsx.sharePointPath || xlsx.path, url: xlsx.sharePointUrl || xlsx.url });
+    if (besideFolder) {
+      const beside = await mockOneDrive.upload(
+        project.code,
+        besideFolder,
+        `${base}.xlsx`,
+        xlsxBuf,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        { replace: true }
+      );
+      exports.push({ kind: "xlsx", path: beside.sharePointPath || beside.path, url: beside.sharePointUrl || beside.url });
+    }
   } catch (err) {
     console.warn("[checklist] XLSX drive sync failed:", err instanceof Error ? err.message : err);
   }
@@ -99,6 +122,21 @@ export async function syncChecklistSubmissionToDrive(
       path: htmlFile.sharePointPath || htmlFile.path,
       url: htmlFile.sharePointUrl || htmlFile.url,
     });
+    if (besideFolder) {
+      const besideHtml = await mockOneDrive.upload(
+        project.code,
+        besideFolder,
+        `${base}.html`,
+        Buffer.from(html, "utf8"),
+        "text/html",
+        { replace: true }
+      );
+      exports.push({
+        kind: "html",
+        path: besideHtml.sharePointPath || besideHtml.path,
+        url: besideHtml.sharePointUrl || besideHtml.url,
+      });
+    }
   } catch (err) {
     console.warn("[checklist] HTML drive sync failed:", err instanceof Error ? err.message : err);
   }

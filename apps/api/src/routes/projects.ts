@@ -2310,10 +2310,22 @@ drawingsRouter.post(
       });
     }
 
+    const linkedRev = await prisma.drawingRevision.findFirst({
+      where: { drawingId: drawing.id, revisionNumber: rev },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, revisionNumber: true },
+    });
     await prisma.checklistSubmission.update({
       where: { id: unlock.submissionId },
-      data: { drawingId: drawing.id },
+      data: {
+        drawingId: drawing.id,
+        revisionId: linkedRev?.id || null,
+        revisionNumber: linkedRev?.revisionNumber || rev,
+      },
     });
+    import("../services/syncChecklistSubmissionToDrive.js")
+      .then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(unlock.submissionId))
+      .catch((err) => console.warn("[drawing] checklist beside revision:", err instanceof Error ? err.message : err));
 
     await audit("drawing.upload", {
       userId: req.user!.id,
@@ -3648,6 +3660,17 @@ drawingsRouter.post(
           data: { drawingId: drawing.id, revisionId: rev.id, revisionNumber },
         });
       }
+    }
+
+    const checklistId = unlockSubmissionId || existingRev?.preCheckSubmissionId || null;
+    if (checklistId) {
+      await prisma.checklistSubmission.update({
+        where: { id: checklistId },
+        data: { drawingId: drawing.id, revisionId: rev.id, revisionNumber },
+      });
+      import("../services/syncChecklistSubmissionToDrive.js")
+        .then(({ syncChecklistSubmissionToDrive }) => syncChecklistSubmissionToDrive(checklistId))
+        .catch((err) => console.warn("[drawing] checklist beside revision:", err instanceof Error ? err.message : err));
     }
 
     const updated = await prisma.drawing.update({

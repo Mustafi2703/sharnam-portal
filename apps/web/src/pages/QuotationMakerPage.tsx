@@ -640,7 +640,7 @@ export default function QuotationMakerPage() {
                         <li key={rev.id} className="rounded-lg border border-line px-3 py-2 text-sm flex items-start justify-between gap-3">
                           <div>
                             <div className="font-mono text-xs font-semibold">R{rev.revisionNo} · {rev.stage}</div>
-                            <div className="text-xs text-steel-muted">{rev.fileName || "PMC proposal"}</div>
+                            <div className="text-xs text-steel-muted">{rev.fileName || "Proposal"}</div>
                             {rev.note ? <div className="text-xs text-steel-muted mt-0.5">{rev.note}</div> : null}
                           </div>
                           {href ? (

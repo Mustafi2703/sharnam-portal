@@ -801,8 +801,7 @@ async function resolveRfiAssignee(
 }
 
 rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
-  const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
-  const canRespond = await roleOnRfiMatrix(req.params.projectId, req.user!.role);
+  const { rfiAccess } = await import("../services/rfiPartyAccess.js");
   const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
   const kindList =
     kind && kind !== "All" ? expandRfiKindQuery(kind.split(",").map((k) => k.trim()).filter(Boolean)) : [];
@@ -814,7 +813,16 @@ rfiRouter.get("/project/:projectId", async (req: AuthedRequest, res) => {
     include: rfiDetailInclude,
     orderBy: { createdAt: "desc" },
   });
-  res.json({ rfis, canRespond, canClose: canRespond, matrixGate: true });
+  const withAccess = rfis.map((rfi) => {
+    const access = rfiAccess(req.user!, rfi);
+    return { ...rfi, canAnswer: access.canAnswer, canClose: access.canClose };
+  });
+  res.json({
+    rfis: withAccess,
+    canRespond: withAccess.some((rfi) => rfi.canAnswer),
+    canClose: withAccess.some((rfi) => rfi.canClose),
+    matrixGate: true,
+  });
 });
 
 rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_employee", "employee", "client", "vendor"), async (req: AuthedRequest, res) => {
@@ -1000,6 +1008,27 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       vendor: { select: { id: true, name: true } },
     },
   });
+  let activityChecklist: { id: string; number: string } | null = null;
+  let responseForm = rfi.formDataJson;
+  if (rfiKind === "QualityIR") {
+    try {
+      const { raiseActivityChecklistForIr } = await import("../services/qapIrFlow.js");
+      const raised = await raiseActivityChecklistForIr({
+        projectId: req.params.projectId,
+        userId: req.user!.id,
+        qualityIr: rfi,
+      });
+      if (raised) {
+        activityChecklist = { id: raised.id, number: raised.number };
+        responseForm = raised.formDataJson;
+        import("../services/syncRfiToDrive.js")
+          .then(({ syncRfiToDrive }) => syncRfiToDrive(raised.id))
+          .catch((err) => console.warn("[RFI] F-02 drive sync failed:", err instanceof Error ? err.message : err));
+      }
+    } catch (err) {
+      console.warn("[RFI] F-02 raise failed:", err instanceof Error ? err.message : err);
+    }
+  }
   await audit("rfi.create", {
     userId: req.user!.id,
     entity: "Rfi",
@@ -1064,7 +1093,7 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       console.warn("[RFI] fill-request draft:", err instanceof Error ? err.message : err);
     }
   }
-  res.status(201).json({ ...rfi, sharePointExports, sharePointPending });
+  res.status(201).json({ ...rfi, formDataJson: responseForm, activityChecklist, sharePointExports, sharePointPending });
 });
 
 /** SPDC RFI register = design queries only (Request for Information). Inspection / checklist requests have their own registers. */
@@ -1357,30 +1386,51 @@ rfiRouter.post("/:id/follow-up", requireRoles("admin", "office", "site_employee"
 });
 
 rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
-  const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.rfi.findUnique({
+    where: { id: req.params.id },
+    include: {
+      assignedTo: { select: { id: true, email: true, fullName: true } },
+      createdBy: { select: { id: true, email: true, fullName: true } },
+      responses: { select: { id: true, isOfficialResponse: true } },
+    },
+  });
   if (!existing) return res.status(404).json({ error: "RFI not found" });
-  const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
-  const allowed = await roleOnRfiMatrix(existing.projectId, req.user!.role);
-  if (!allowed) {
+  const responseText = String(req.body.responseText || "").trim();
+  if (!responseText) return res.status(400).json({ error: "Write the answer before submitting." });
+  const { rfiAccess } = await import("../services/rfiPartyAccess.js");
+  const access = rfiAccess(req.user!, existing);
+  if (!access.canAnswer) {
     return res.status(403).json({
-      error: "Only roles listed on this project's Communication Matrix (RFI rows) can respond. Ask Sharnam office to add your role.",
+      error: "Only the assigned party, the person who raised this RFI, or Sharnam office can answer it.",
     });
   }
   const response = await prisma.rfiResponse.create({
     data: {
       rfiId: req.params.id,
       respondedById: req.user!.id,
-      responseText: req.body.responseText,
+      responseText,
       responseChannel: req.body.responseChannel || "Web",
-      isOfficialResponse: !!req.body.isOfficialResponse,
+      isOfficialResponse: req.body.isOfficialResponse !== false,
     },
   });
+  let form: Record<string, unknown> = {};
+  try {
+    form = existing.formDataJson ? JSON.parse(existing.formDataJson) : {};
+  } catch {
+    form = {};
+  }
+  const answeredOn = new Date().toISOString().slice(0, 10);
+  form.officialResponse = responseText;
+  form.response = responseText;
+  form.respondedBy = req.user!.fullName || req.user!.email || "";
+  form.dateResponded = answeredOn;
   await prisma.rfi.update({
     where: { id: req.params.id },
     data: {
-      status: req.body.close ? "Answered" : "Open",
-      ballInCourt: req.body.isOfficialResponse ? "Creator" : "Assignee",
-      closedAt: req.body.close ? new Date() : null,
+      status: "Answered",
+      ballInCourt: "Creator",
+      closedAt: null,
+      formDataJson: JSON.stringify(form),
     },
   });
   try {
@@ -1393,7 +1443,7 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
         where: { id: existing.id },
         include: {
           assignedTo: { select: { fullName: true, email: true } },
-          createdBy: { select: { fullName: true } },
+          createdBy: { select: { fullName: true, email: true } },
           drawing: { select: { drawingNumber: true, title: true } },
           vendor: { select: { name: true } },
         },
@@ -1401,13 +1451,17 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
     ]);
     const { notifyRfiResponse, rfiEmailContextFromRecord, rfiAssigneeRecipient } = await import("../services/rfiFlowNotify.js");
     if (fullRfi) {
+      const checker = fullRfi.createdBy?.email || "";
       await notifyRfiResponse({
         projectId: existing.projectId,
         rfiId: existing.id,
-        responseText: req.body.responseText || "",
+        responseText,
         respondedByName: req.user!.fullName || undefined,
-        isOfficial: !!req.body.isOfficialResponse,
+        isOfficial: true,
         createdById: req.user!.id,
+        toOverride: checker || undefined,
+        status: "Answered",
+        ballInCourt: "Creator",
         ...rfiAssigneeRecipient(fullRfi),
         ...rfiEmailContextFromRecord(fullRfi, project),
       });
@@ -1453,12 +1507,34 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       if (line) await notifyQualityIr(existing.projectId, "submit", line, existing.irNumber || existing.number);
     }
   } else {
+  const closing = req.body.status === "Closed";
+  if (closing) {
+    const { rfiAccess } = await import("../services/rfiPartyAccess.js");
+    const answers = await prisma.rfiResponse.count({ where: { rfiId: existing.id } });
+    const access = rfiAccess(req.user!, {
+      ...existing,
+      responses: answers ? [{ id: "answered", isOfficialResponse: true }] : [],
+    });
+    if (!access.hasAnswer) {
+      return res.status(400).json({
+        error: "The assigned party must answer before this RFI can be closed. You can answer it yourself if you are the one who should reply.",
+      });
+    }
+    if (!access.canClose) {
+      return res.status(403).json({
+        error: "After the answer is in, the person who raised the RFI or Sharnam office closes it.",
+      });
+    }
+  } else {
   const { roleOnRfiMatrix } = await import("../services/reportPacks.js");
-  const allowed = await roleOnRfiMatrix(existing.projectId, req.user!.role);
+  const { rfiAccess } = await import("../services/rfiPartyAccess.js");
+  const access = rfiAccess(req.user!, existing);
+  const allowed = access.canAnswer || (await roleOnRfiMatrix(existing.projectId, req.user!.role));
   if (!allowed) {
     return res.status(403).json({
-      error: "Only Communication Matrix parties (or Sharnam office) can close / update this RFI.",
+      error: "Only the assigned party, the person who raised this RFI, or Sharnam office can update it.",
     });
+  }
   }
   // Safety IR clearance: PMC records S1-S4, validity and conditions on the request.
   if (req.body.formPatch && typeof req.body.formPatch === "object") {
@@ -2302,9 +2378,84 @@ function publishCoordinationRegisterInBackground(projectId: string, issueId?: st
     .catch((err) => console.warn("[coordination] SharePoint register:", err instanceof Error ? err.message : err));
 }
 
+async function ensureCoordinationAnswerColumns() {
+  const alters = [
+    "ALTER TABLE `DesignCoordinationIssue` ADD COLUMN `responseText` TEXT NULL",
+    "ALTER TABLE `DesignCoordinationIssue` ADD COLUMN `respondedByName` VARCHAR(191) NULL",
+    "ALTER TABLE `DesignCoordinationIssue` ADD COLUMN `respondedAt` DATETIME(3) NULL",
+  ];
+  for (const sql of alters) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch {
+      /* column already exists */
+    }
+  }
+}
+
+function coordinationCanAnswer(user: { id: string; role: string; email?: string | null }, issue: { assignedToId?: string | null; assignedToEmail?: string | null; status?: string | null }) {
+  if (issue.status === "Closed") return false;
+  if (user.role === "admin" || user.role === "office" || user.role === "employee" || user.role === "site_employee") return true;
+  if (issue.assignedToId && issue.assignedToId === user.id) return true;
+  const email = String(user.email || "").trim().toLowerCase();
+  return !!email && email === String(issue.assignedToEmail || "").trim().toLowerCase();
+}
+
+directoryRouter.post("/coordination/:id/answer", async (req: AuthedRequest, res) => {
+  await ensureCoordinationAnswerColumns();
+  const issue = await prisma.designCoordinationIssue.findUnique({ where: { id: req.params.id } });
+  if (!issue) return res.status(404).json({ error: "Not found" });
+  if (!coordinationCanAnswer(req.user!, issue)) {
+    return res.status(403).json({ error: "Only the assigned party or Sharnam office can answer this issue." });
+  }
+  const responseText = String(req.body.responseText || "").trim();
+  if (!responseText) return res.status(400).json({ error: "Write the answer before submitting." });
+  const row = await prisma.designCoordinationIssue.update({
+    where: { id: issue.id },
+    data: {
+      responseText,
+      respondedByName: req.user!.fullName || req.user!.email || issue.assignedToName || "Assignee",
+      respondedAt: new Date(),
+      status: "Answered",
+      ballInCourt: "Creator",
+    },
+  });
+  const { getProjectMatrixEmails } = await import("../services/matrixContacts.js");
+  const matrix = await getProjectMatrixEmails(issue.projectId, "TECHNICAL");
+  const to = matrix.to[0] || matrix.cc[0] || String(issue.assignedToEmail || "");
+  if (to) {
+    const { queueProjectEmail } = await import("../services/email.js");
+    await queueProjectEmail({
+      projectId: issue.projectId,
+      subject: `Answer to check — ${issue.title}`,
+      body: [
+        `${row.respondedByName} answered a design coordination issue. Check the answer, then close it.`,
+        ``,
+        `Issue: ${issue.title}`,
+        `Answer: ${responseText}`,
+        issue.assignedToName ? `Assigned to: ${issue.assignedToName}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      context: "coordination.answered",
+      createdById: req.user!.id,
+      toOverride: to,
+      ccOverride: [...new Set([...matrix.to, ...matrix.cc, String(issue.assignedToEmail || "")])].filter((email) => email && email !== to).join(", "),
+    }).catch(() => undefined);
+  }
+  publishCoordinationRegisterInBackground(issue.projectId, issue.id);
+  await audit("coordination.answer", { userId: req.user!.id, entity: "DesignCoordinationIssue", entityId: issue.id });
+  res.json(row);
+});
+
 directoryRouter.patch("/coordination/:id", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
   const before = await prisma.designCoordinationIssue.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Not found" });
+  if (req.body.status === "Closed" && !String(before.responseText || "").trim()) {
+    return res.status(400).json({
+      error: "The assigned party must answer before this issue can be closed. Sharnam office can answer it if they are the ones who should reply.",
+    });
+  }
   if (req.body.linkedDrawingId !== undefined) {
     const nextDrawingId = String(req.body.linkedDrawingId || "").trim();
     if (!nextDrawingId) return res.status(400).json({ error: "A coordination issue must stay linked to a GFC drawing." });

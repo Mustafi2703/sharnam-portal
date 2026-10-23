@@ -197,7 +197,7 @@ export default function DrawingsPage() {
     if (precheckModeRef.current === "revision") {
       setRevUnlockToken(tok);
       setUploadStep("files");
-      setMsg("Checklist complete. Add stakeholder signatures, then upload the PDF and DWG.");
+      setMsg("Checklist complete. One signature is already on the check. Upload the PDF and DWG.");
     } else {
       setUnlockToken(tok);
       const gateDiscipline = precheckDisciplineRef.current;
@@ -604,7 +604,7 @@ export default function DrawingsPage() {
       const needsCheck = revUploadMode !== "replace" && !revUnlockToken;
       if (!needsCheck) {
         setUploadStep("files");
-        setMsg(`${uploadTarget?.drawingNumber || "Drawing"} · ${revForm.revisionNumber} confirmed. Add signatures and the PDF or DWG.`);
+        setMsg(`${uploadTarget?.drawingNumber || "Drawing"} · ${revForm.revisionNumber} confirmed. Add the PDF or DWG. One signature is enough.`);
         return;
       }
       const match = (uploadTarget?.revisions || []).find(
@@ -1513,8 +1513,8 @@ export default function DrawingsPage() {
             revUploadMode === "replace"
               ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only`
               : revUploadMode === "update"
-                ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · same revision, signatures and files only`
-                : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist, then sign, then upload`
+                ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · same revision, one signature and the files`
+                : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist, one signature, then upload`
           }
           file={revPdf || revDwg}
           onFile={() => undefined}
@@ -1569,7 +1569,7 @@ export default function DrawingsPage() {
                   />
                 </div>
                 <p className="text-xs text-steel-muted pt-1">
-                  Confirm opens the checklist on this page. Save a draft if it is not finished — confirm again to continue that draft, then sign and upload the PDF and DWG.
+                  Confirm opens the checklist on this page. Save a draft if it is not finished. Confirm again to continue that draft, then sign once and upload the PDF and DWG.
                 </p>
               </div>
             ) : revUploadMode === "replace" && revReplaceRole === "dwg" ? (
@@ -1744,7 +1744,7 @@ export default function DrawingsPage() {
                   {revUploadMode === "new" && !revUnlockToken && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
                       <p className="text-sm text-ink">
-                        This revision still needs the Drawing Check. Save a draft if it is not complete. After submit, add the signature here and upload the files.
+                        This revision still needs the Drawing Check. Save a draft if it is not complete. After you submit and sign once, upload the files.
                       </p>
                       <Button type="button" className="mt-2 !bg-amber-500 !font-medium" onClick={() => launchDrawingCheck("revision", uploadTarget, revForm.revisionNumber)}>
                         Open Drawing Check
@@ -1753,7 +1753,7 @@ export default function DrawingsPage() {
                   )}
                   {revUploadMode === "new" && revUnlockToken && (
                     <p className="text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
-                      Checklist complete for {revForm.revisionNumber}. Add stakeholder signatures, then upload the PDF and DWG.
+                      Checklist complete for {revForm.revisionNumber}. One signature is on the check. Upload the PDF and DWG. The filled checklist is saved in the same drive folder.
                     </p>
                   )}
                   <DrawingIssueFields

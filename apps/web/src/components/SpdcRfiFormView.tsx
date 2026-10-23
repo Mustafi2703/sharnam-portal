@@ -400,7 +400,7 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
             });
           }}
         >
-          <TextArea rows={3} placeholder="Official response (section 6)" value={answer} onChange={(e) => setAnswer(e.target.value)} required />
+          <TextArea rows={3} placeholder="Official response (section 6). The assigned party answers. The raiser closes after checking." value={answer} onChange={(e) => setAnswer(e.target.value)} required />
           <div className="flex gap-2">
             <Button type="submit" disabled={!!busy}>
               {busy === "respond" ? "Saving…" : "Submit response"}
@@ -421,7 +421,7 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
                   })
                 }
               >
-                Close RFI
+                Close after checking the answer
               </Button>
             )}
           </div>
@@ -430,7 +430,7 @@ export function SpdcRfiFormView({ rfi, project, token, canRespond, canClose, pro
 
       {!canRespond && rfi.status !== "Closed" && (
         <p className="text-xs text-steel-muted bg-sand/50 p-3 rounded-lg">
-          Respond / close is for Communication Matrix parties — ask Sharnam office under Comms → Matrix.
+          The assigned party is notified and answers here. The person who raised the RFI closes it after checking that answer.
         </p>
       )}
 

@@ -146,8 +146,6 @@ export default function RfisPage() {
 
   const isClient = user?.role === "client";
   const canCreate = !!user && user.role !== "client";
-  const canRespond = matrixCanRespond;
-  const canClose = matrixCanRespond;
 
   const moduleScope = rfiModuleScope(location.pathname, location.search);
   const moduleScoped = isModuleScopedRfi(moduleScope);
@@ -347,6 +345,8 @@ export default function RfisPage() {
   }, [rfis, statusFilter, kindFilter, moduleScope, moduleScoped]);
 
   const selected = rfis.find((r) => r.id === active);
+  const canRespond = selected?.canAnswer ?? matrixCanRespond;
+  const canClose = selected?.canClose ?? false;
   const selectedProgress = selected ? rfiProgress(selected) : null;
   /** Drawings RFI (SPDC RFI form): drawing + published revision required. */
   const drawingsRfi = !isClient && form.rfiKind === "RequestForInformation";
@@ -1124,7 +1124,7 @@ export default function RfisPage() {
                     rows={3}
                     label="Official response *"
                     aria-required
-                    placeholder="Response from the matrix party"
+                    placeholder="Answer from the assigned party"
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     required
@@ -1144,7 +1144,7 @@ export default function RfisPage() {
                           await load();
                         }}
                       >
-                        Close
+                        Close after checking the answer
                       </Button>
                     )}
                   </div>
@@ -1152,7 +1152,7 @@ export default function RfisPage() {
               )}
               {!canRespond && selected.status !== "Closed" && (
                 <p className="text-xs text-steel-muted bg-sand/50 p-3 rounded-lg">
-                  Respond / close is for Communication Matrix parties — ask Sharnam office under Comms → Matrix.
+                  The assigned party answers. The person who raised the RFI closes it after checking that answer. Sharnam office can answer or close.
                 </p>
               )}
             </div>
