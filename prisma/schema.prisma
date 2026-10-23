@@ -78,6 +78,10 @@ model Project {
   location                String?
   /// Free status note on the project card. Not a fixed list.
   status                  String    @default("Planning") @db.Text
+  /// Working days in a week for milestone duration. 6 means Sunday off.
+  workdaysPerWeek         Int       @default(6)
+  /// Bundled sample progress registers load only when this is true.
+  allowSampleRegisters    Boolean   @default(false)
   startDate               DateTime?
   endDate                 DateTime?
   /// Comma-separated notification emails for this project
@@ -121,6 +125,7 @@ model Project {
   rateDiffs               CostRateDifference[]
   mbLines                 CostMbLine[]
   bbsLines                CostBbsLine[]
+  bbsItemMaps             CostBbsItemMap[]
   leads                   Lead[]
   deals                   Deal[]
   vendors                 ProjectVendor[]
@@ -157,7 +162,7 @@ model Project {
   qualityNcrs             QualityNcr[]
   qualitySiteRecords      QualitySiteRecord[]
   purchaseOrders          PurchaseOrder[]
-  financeSapDocuments     FinanceSapDocument[]
+  financeSapDocuments    FinanceSapDocument[]
   raBills                 RaBill[]
   certificates            CertificateOfPayment[]
   financeMaterialInvoices FinanceMaterialInvoice[]
@@ -664,9 +669,26 @@ model CostBudgetLine {
   /// Gross Total Amount (Projected)
   grossTotal        Float    @default(0)
   remarks           String?  @db.Text
+  /// Set when certified, forecast, rate difference or gross was typed instead of calculated.
+  overrideReason    String?  @db.Text
   createdAt         DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sources CostBudgetSource[]
+}
+
+/// Where a budget line's certified, forecast and rate-difference amounts come from.
+model CostBudgetSource {
+  id           String   @id @default(cuid())
+  budgetLineId String
+  /// monitoringPackage | vendor | rateDiff
+  kind         String
+  ref          String
+  createdAt    DateTime @default(now())
+
+  budgetLine CostBudgetLine @relation(fields: [budgetLineId], references: [id], onDelete: Cascade)
+
+  @@index([budgetLineId])
 }
 
 model CostMonitoringLine {
@@ -715,6 +737,11 @@ model CostMonitoringLine {
   overrunBoq           Float    @default(0)
   overrunGfc           Float    @default(0)
   overrunCertified     Float    @default(0)
+  /// mb | bbs | override. Empty means the quantity was typed or imported.
+  achievedFrom         String?
+  achievedOverrideReason String? @db.Text
+  /// Reinforcement tonnes posted from the BBS rollup.
+  bbsSteelMt           Float    @default(0)
   createdAt            DateTime @default(now())
 
   project               Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -745,6 +772,8 @@ model CostMbLine {
   lineIndex   Int      @default(0)
   /// item | description | subsection | subitem | data | total | note
   rowKind     String   @default("data")
+  /// Measurement inside a Deduction block. Its quantity subtracts in the rollup.
+  isDeduction Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -785,9 +814,26 @@ model CostBbsLine {
   lineIndex        Int      @default(0)
   /// section | subsection | subheader | data | note
   rowKind          String   @default("data")
+  /// Weight or length came from a #REF! or #DIV/0! cell. weightKg is stored as 0.
+  sourceError      Boolean  @default(false)
   createdAt        DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// Which monitoring item receives BBS steel for a section or location.
+model CostBbsItemMap {
+  id               String   @id @default(cuid())
+  projectId        String
+  packageName      String
+  sectionMark      String   @default("")
+  locationPattern  String   @default("")
+  monitoringItemNo String
+  createdAt        DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, packageName])
 }
 
 /**
@@ -1625,12 +1671,6 @@ model CrmBidPackage {
   disciplinesJson          String?   @db.LongText
   dueDate                  DateTime?
   notes                    String?   @db.Text
-  /// Unpriced package BOQ. Comparative columns come from this file, not from an R1 or R2 name.
-  blankBoqFileName         String?
-  blankBoqPath             String?
-  blankBoqSharePointUrl    String?
-  boqLinesJson             String?   @db.LongText
-  comparativeJson          String?   @db.LongText
   comparativeSheetId       String?
   summarySheetId           String?
   comparativeSharePointUrl String?
@@ -1656,9 +1696,10 @@ model CrmVendorBoq {
   storagePath   String?
   sharePointUrl String?
   sheetId       String?
+  /// Rates read from this contractor's uploaded BOQ copy.
+  rateLinesJson String?   @db.LongText
   uploadedById  String?
   uploadedAt    DateTime?
-  rateLinesJson String?   @db.LongText
 
   bidPackage CrmBidPackage @relation(fields: [bidPackageId], references: [id], onDelete: Cascade)
   vendor     Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
@@ -2145,6 +2186,8 @@ model ProgressMilestone {
   actualEnd    DateTime?
   actualDays   Float     @default(0)
   varianceDays Float     @default(0)
+  /// Calendar days finished before planned end. varianceDays stays 0 when this is set.
+  aheadDays    Float     @default(0)
   weightage    Float     @default(0)
   pctComplete  Float     @default(0)
   stakeholder  String?
@@ -2192,6 +2235,8 @@ model ProgressRisk {
   probability       Int       @default(1)
   consequence       Int       @default(1)
   severity          Int       @default(1)
+  /// High | Medium | Low from severity. 15-25 High, 8-14 Medium, 1-7 Low.
+  rating            String?
   probabilityPct    Float     @default(0)
   costImpact        Float     @default(0)
   weeksLikely       Float     @default(0)

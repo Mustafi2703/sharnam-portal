@@ -9,7 +9,8 @@ import fs from "fs";
 import path from "path";
 import * as XLSX from "xlsx";
 import type { PrismaClient } from "@prisma/client";
-import { parseBbsRows, parseMbRows } from "./costSheetParser.js";
+import { markBbsSheetErrors, parseBbsRows, parseMbRows } from "./costSheetParser.js";
+import { isCashflowWorkRow, periodTooEarly } from "./cashflowParser.js";
 import { monitoringItemRows, parseSpdcMonitoringRows } from "./spdcMonitoringParser.js";
 import {
   COST_SHEET_TOOLS,
@@ -200,6 +201,7 @@ export async function seedCostFromBudgetWorkbook(
           raBill: r.raBill || null,
           remark: r.remark || null,
           rowKind: r.rowKind || "data",
+          isDeduction: Boolean(r.isDeduction),
           lineIndex: lineIndex++,
         });
       }
@@ -215,7 +217,8 @@ export async function seedCostFromBudgetWorkbook(
       const rows = sheet(wb, sheetName);
       if (!rows.length) continue;
       let lineIndex = 0;
-      for (const r of parseBbsRows(rows)) {
+      const bbsLines = markBbsSheetErrors(wb.Sheets[sheetName], parseBbsRows(rows));
+      for (const r of bbsLines) {
         if (r.rowKind && r.rowKind !== "data") {
           data.push({
             projectId,
@@ -242,7 +245,7 @@ export async function seedCostFromBudgetWorkbook(
           });
           continue;
         }
-        if (!r.diameterMm && !r.totalLength && !r.nos && !r.weightKg) continue;
+        if (!r.diameterMm && !r.totalLength && !r.nos && !r.weightKg && !r.sourceError) continue;
         data.push({
           projectId,
           packageName,
@@ -262,7 +265,8 @@ export async function seedCostFromBudgetWorkbook(
           shapeLenD: r.shapeLenD,
           shapeLenE: r.shapeLenE,
           totalLength: r.totalLength,
-          weightKg: r.weightKg,
+          weightKg: r.sourceError ? 0 : r.weightKg,
+          sourceError: Boolean(r.sourceError),
           location: r.location || null,
           rowKind: r.rowKind || "data",
           lineIndex: lineIndex++,
@@ -356,6 +360,7 @@ async function seedCashflowDashboard(
     const actual = (rows[4] || []) as unknown[];
     for (let c = 1; c < months.length; c++) {
       if (s(months[c]).toLowerCase() === "total") continue;
+      if (periodTooEarly(months[c])) continue;
       const label = excelMonthLabel(months[c]);
       const p = n(planned[c]);
       const a = n(actual[c]);
@@ -378,10 +383,10 @@ async function seedCashflowDashboard(
     for (let i = 6; i < Math.min(rows.length, 40); i++) {
       const row = rows[i] as unknown[];
       const structure = s(row[1], 120);
-      if (!structure || /total/i.test(structure)) continue;
+      if (!isCashflowWorkRow(structure)) continue;
       // store quarterly-ish totals using col "Total" near end, plus first month planned
       const total = n(row[header.length - 2]) || n(row[22]) || n(row[2]);
-      const firstMonth = n(row[4]) || n(row[5]);
+      const firstMonth = periodTooEarly(header[4]) ? 0 : n(row[4]) || n(row[5]);
       data.push({
         projectId,
         periodLabel: "Forecast total",
@@ -390,7 +395,7 @@ async function seedCashflowDashboard(
         actualAmount: 0,
         progressPct: 0,
       });
-      if (firstMonth) {
+      if (firstMonth && !periodTooEarly(header[4])) {
         data.push({
           projectId,
           periodLabel: excelMonthLabel(header[4]) || "Forecast M1",
@@ -410,7 +415,7 @@ async function seedCashflowDashboard(
     for (let i = 7; i < Math.min(rows.length, 50); i++) {
       const row = rows[i] as unknown[];
       const work = s(row[0], 120);
-      if (!work) continue;
+      if (!isCashflowWorkRow(work)) continue;
       for (let c = 1; c <= 4; c++) {
         const amt = n(row[c]);
         if (!amt) continue;

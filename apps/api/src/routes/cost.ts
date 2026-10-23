@@ -749,6 +749,8 @@ costRouter.get("/:projectId/summary", async (req, res) => {
     bbsWeightKg: bbsByPackage[name]?.weightKg || 0,
   }));
 
+  const { projectProgress } = await import("../services/projectProgress.js");
+  const physicalProgress = await projectProgress(projectId);
   const siteView = (req as AuthedRequest).user?.role === "site_employee";
   const out = {
     totals: {
@@ -765,7 +767,12 @@ costRouter.get("/:projectId/summary", async (req, res) => {
       monitoringLines: monPkgs.reduce((s, g) => s + g._count, 0),
       financeCopPayable: financeBridge.finance.copPayable,
       financeCopCertified: financeBridge.finance.copCertified,
+      physicalPct: physicalProgress.physicalPct,
+      plannedPct: physicalProgress.plannedPct,
+      schedulePct: physicalProgress.schedulePct,
+      spi: physicalProgress.spi,
     },
+    physicalProgress,
     financeBridge,
     packages,
     monByPackage,
@@ -967,6 +974,23 @@ costRouter.patch("/:projectId/budget/:lineId", requireRoles("admin", "office"), 
   });
   if (!existing) return res.status(404).json({ error: "Not found" });
   const body = req.body || {};
+  const derivedKeys = [
+    "certifiedAmount",
+    "forecastedAmount",
+    "forecastReduction",
+    "steelExcess",
+    "steelSaving",
+    "cementExcess",
+    "cementSaving",
+    "tilesExcess",
+    "tilesSaving",
+    "grossTotal",
+  ];
+  const overridesDerived = derivedKeys.some((key) => body[key] != null);
+  const overrideReason = String(body.overrideReason || "").trim();
+  if (overridesDerived && !overrideReason) {
+    return res.status(400).json({ error: "A reason is required to override a calculated budget amount." });
+  }
   const num = (k: string) => (body[k] != null ? Number(body[k]) : undefined);
   const line = await prisma.costBudgetLine.update({
     where: { id: existing.id },
@@ -988,6 +1012,7 @@ costRouter.patch("/:projectId/budget/:lineId", requireRoles("admin", "office"), 
       ...(num("tilesSaving") != null ? { tilesSaving: num("tilesSaving")! } : {}),
       ...(num("grossTotal") != null ? { grossTotal: num("grossTotal")! } : {}),
       ...(body.remarks !== undefined ? { remarks: body.remarks ? String(body.remarks) : null } : {}),
+      ...(overridesDerived ? { overrideReason } : {}),
     },
   });
   res.json(line);
@@ -1000,6 +1025,53 @@ costRouter.delete("/:projectId/budget/:lineId", requireRoles("admin", "office"),
   if (!existing) return res.status(404).json({ error: "Not found" });
   await prisma.costBudgetLine.delete({ where: { id: existing.id } });
   res.json({ ok: true });
+});
+
+costRouter.post("/:projectId/budget/recalculate", requireRoles("admin", "office"), async (req: AuthedRequest, res) => {
+  const { recalculateBudget } = await import("../services/costBudgetDerive.js");
+  const out = await recalculateBudget(req.params.projectId);
+  res.json({ ok: true, ...out });
+});
+
+costRouter.get("/:projectId/bbs-map", async (req, res) => {
+  const packageName = String(req.query.package || "Dormitory BBS");
+  const { monitoringPackageForBbs } = await import("../services/costPackageMap.js");
+  const monitoringPackage = monitoringPackageForBbs(packageName);
+  const [maps, monitoring, errors] = await Promise.all([
+    prisma.costBbsItemMap.findMany({ where: { projectId: req.params.projectId, packageName } }),
+    prisma.costMonitoringLine.findMany({
+      where: { projectId: req.params.projectId, packageName: monitoringPackage },
+      orderBy: { itemNo: "asc" },
+    }),
+    prisma.costBbsLine.findMany({
+      where: { projectId: req.params.projectId, packageName, sourceError: true },
+      select: { id: true, barMark: true, sectionMark: true, location: true },
+    }),
+  ]);
+  const suggestions = monitoring
+    .filter((line) => /reinforcement/i.test(line.description) && /m\.?\s*t|mt|ton/i.test(line.uom || ""))
+    .map((line) => ({ itemNo: line.itemNo, description: line.description, uom: line.uom, gfcQty: line.gfcQty }));
+  res.json({ packageName, monitoringPackage, maps, suggestions, sourceErrors: errors });
+});
+
+costRouter.put("/:projectId/bbs-map", requireRoles("admin", "office", "employee"), async (req: AuthedRequest, res) => {
+  const packageName = String(req.body.packageName || "Dormitory BBS");
+  const maps = Array.isArray(req.body.maps) ? req.body.maps : [];
+  await prisma.costBbsItemMap.deleteMany({ where: { projectId: req.params.projectId, packageName } });
+  if (maps.length) {
+    await prisma.costBbsItemMap.createMany({
+      data: maps.map((row: { sectionMark?: string; locationPattern?: string; monitoringItemNo?: string }) => ({
+        projectId: req.params.projectId,
+        packageName,
+        sectionMark: String(row.sectionMark || ""),
+        locationPattern: String(row.locationPattern || ""),
+        monitoringItemNo: String(row.monitoringItemNo || ""),
+      })).filter((row: { monitoringItemNo: string }) => row.monitoringItemNo),
+    });
+  }
+  const { syncSteelFromBbs } = await import("../services/costQuantitySync.js");
+  const updated = await syncSteelFromBbs(req.params.projectId, packageName);
+  res.json({ ok: true, updated });
 });
 
 /** Load full SPDC_Budget_Arvind workbook (Budget + Monitoring + MB + BBS + rates) like QAP/Cube sync-template. */
@@ -1049,19 +1121,29 @@ costRouter.post(
     if (isFullSpdcWorkbook(req.file.buffer) && kind === "all") {
       const { syncBudgetWorkbookFromBuffer } = await import("../services/budgetWorkbookImport.js");
       const out = await syncBudgetWorkbookFromBuffer(req.params.projectId, req.file.buffer, req.file.originalname);
+      const { parseWorkbookIssues } = await import("../services/workbookIssues.js");
+      const { skippedBudgetTabs, workbookSheetNames } = await import("../services/costSheetParser.js");
+      const issues = parseWorkbookIssues(req.file.buffer);
       return res.status(201).json({
         ...out,
         mbImported: out.mb,
         bbsImported: out.bbs,
         openTab: "monitoring",
         openPackage: "Civil Dormitory",
+        skippedTabs: skippedBudgetTabs(workbookSheetNames(req.file.buffer)),
+        errors: issues.errors,
+        externalLinks: issues.externalLinks,
       });
     }
 
     const mbSheets = importMb ? parseAllMbSheets(req.file.buffer) : [];
     const bbsSheets = importBbs ? parseAllBbsSheets(req.file.buffer) : [];
     if (!mbSheets.length && !bbsSheets.length) {
-      return res.status(400).json({ error: "No MB/BBS sheets found — check SPDC workbook tab names." });
+      const { skippedBudgetTabs, workbookSheetNames } = await import("../services/costSheetParser.js");
+      return res.status(400).json({
+        error: "No MB or BBS sheets found. Check the SPDC workbook tab names.",
+        skippedTabs: skippedBudgetTabs(workbookSheetNames(req.file.buffer)),
+      });
     }
 
     if (replace) {
@@ -1094,6 +1176,7 @@ costRouter.post(
           raBill: r.raBill || null,
           remark: r.remark || null,
           rowKind: r.rowKind || "data",
+          isDeduction: Boolean(r.isDeduction),
           lineIndex,
         })),
       });
@@ -1110,6 +1193,7 @@ costRouter.post(
           r.diameterMm >= 6 ||
           r.totalLength > 0 ||
           r.weightKg > 0 ||
+          r.sourceError ||
           (r.nos ?? 0) > 0
       );
       if (!linesToImport.length) continue;
@@ -1136,16 +1220,18 @@ costRouter.post(
           shapeLenD: r.shapeLenD || 0,
           shapeLenE: r.shapeLenE || 0,
           totalLength: r.totalLength || 0,
-          weightKg: r.weightKg || 0,
           location: r.location || null,
           rowKind: r.rowKind || "data",
+          sourceError: Boolean(r.sourceError),
+          weightKg: r.sourceError ? 0 : r.weightKg || 0,
           lineIndex,
         })),
       });
       bbsImported += linesToImport.length;
       packagesImported.push(batch.packageName);
-      const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
+      const { applyShapeMastersToBbs, syncSteelFromBbs } = await import("../services/costQuantitySync.js");
       await applyShapeMastersToBbs(project.id, batch.packageName);
+      await syncSteelFromBbs(project.id, batch.packageName);
     }
 
     const saved = await mockOneDrive.upload(
@@ -1177,6 +1263,12 @@ costRouter.post(
       meta: { mbImported, bbsImported, packages: packagesImported },
     });
 
+    const { workbookSheetNames } = await import("../services/costSheetParser.js");
+    const { parseWorkbookIssues } = await import("../services/workbookIssues.js");
+    const issues = parseWorkbookIssues(req.file.buffer);
+    const importedNames = new Set(
+      [...mbSheets, ...bbsSheets].map((sheet) => sheet.sheetName.trim().toLowerCase())
+    );
     res.status(201).json({
       ok: true,
       mbImported,
@@ -1184,6 +1276,9 @@ costRouter.post(
       mbSheets: mbSheets.length,
       bbsSheets: bbsSheets.length,
       packages: [...new Set(packagesImported)],
+      skippedTabs: workbookSheetNames(req.file.buffer).filter((name) => !importedNames.has(name.trim().toLowerCase())),
+      errors: issues.errors,
+      externalLinks: issues.externalLinks,
     });
   }
 );
@@ -1491,9 +1586,13 @@ costRouter.post("/:projectId/mb", requireRoles("admin", "office", "employee", "s
       remark: req.body.remark || null,
       rowKind,
       lineIndex,
+      isDeduction: /^deduction\b/i.test(String(req.body.description || "")),
     },
   });
-  res.status(201).json(row);
+  const { syncEditedMbLine } = await import("../services/costQuantitySync.js");
+  await syncEditedMbLine(req.params.projectId, packageName, row.id, null);
+  const fresh = await prisma.costMbLine.findFirst({ where: { id: row.id } });
+  res.status(201).json(fresh || row);
 });
 
 costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee", "site_employee"), async (req: AuthedRequest, res) => {
@@ -1527,6 +1626,8 @@ costRouter.post("/:projectId/bbs", requireRoles("admin", "office", "employee", "
       lineIndex,
     },
   });
+  const { syncSteelFromBbs } = await import("../services/costQuantitySync.js");
+  await syncSteelFromBbs(req.params.projectId, packageName);
   res.status(201).json(row);
 });
 
@@ -1572,7 +1673,10 @@ costRouter.patch(
         ...(body.itemCode !== undefined ? { itemCode: body.itemCode ? String(body.itemCode) : null } : {}),
       },
     });
-    res.json(row);
+    const { syncEditedMbLine } = await import("../services/costQuantitySync.js");
+    await syncEditedMbLine(req.params.projectId, row.packageName, row.id, existing.itemCode);
+    const fresh = await prisma.costMbLine.findFirst({ where: { id: row.id } });
+    res.json(fresh || row);
   }
 );
 
@@ -1584,7 +1688,11 @@ costRouter.delete(
       where: { id: req.params.lineId, projectId: req.params.projectId },
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
+    const packageName = existing.packageName;
+    const previousItem = existing.itemCode;
     await prisma.costMbLine.delete({ where: { id: existing.id } });
+    const { syncEditedMbLine } = await import("../services/costQuantitySync.js");
+    await syncEditedMbLine(req.params.projectId, packageName, null, previousItem);
     res.json({ ok: true });
   }
 );
@@ -1638,10 +1746,14 @@ costRouter.patch(
             shape: master.name || row.shape,
           },
         });
+        const { syncSteelFromBbs } = await import("../services/costQuantitySync.js");
+        await syncSteelFromBbs(req.params.projectId, linked.packageName);
         return res.json(linked);
       }
     }
 
+    const { syncSteelFromBbs } = await import("../services/costQuantitySync.js");
+    await syncSteelFromBbs(req.params.projectId, row.packageName);
     res.json(row);
   }
 );
@@ -1654,7 +1766,10 @@ costRouter.delete(
       where: { id: req.params.lineId, projectId: req.params.projectId },
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
+    const packageName = existing.packageName;
     await prisma.costBbsLine.delete({ where: { id: existing.id } });
+    const { syncSteelFromBbs } = await import("../services/costQuantitySync.js");
+    await syncSteelFromBbs(req.params.projectId, packageName);
     res.json({ ok: true });
   }
 );
@@ -1761,7 +1876,11 @@ costRouter.post(
     const { parseCashflowBuffer, parseCashflowMonitoringBuffer, parseCashflowRateDiffsBuffer } = await import(
       "../services/cashflowParser.js"
     );
-    const parsed = parseCashflowBuffer(req.file.buffer);
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { startDate: true },
+    });
+    const parsed = parseCashflowBuffer(req.file.buffer, project?.startDate);
     if (!parsed.length) return res.status(400).json({ error: "No cashflow rows parsed" });
     const projectId = req.params.projectId;
     if (replace) {
@@ -1834,6 +1953,8 @@ costRouter.post(
       buffer: req.file.buffer,
       auditAction: "cost.cashflow.archived",
     });
+    const { parseWorkbookIssues } = await import("../services/workbookIssues.js");
+    const issues = parseWorkbookIssues(req.file.buffer);
     res.status(201).json({
       ok: true,
       imported: parsed.length,
@@ -1842,6 +1963,8 @@ costRouter.post(
       replace,
       reconciled: true,
       drive,
+      errors: issues.errors,
+      externalLinks: issues.externalLinks,
     });
   }
 );
@@ -1870,7 +1993,16 @@ costRouter.post(
       buffer: req.file.buffer,
       auditAction: "cost.budget.archived",
     });
-    res.status(201).json({ ok: true, imported: parsed.length, replace, drive });
+    const { parseWorkbookIssues } = await import("../services/workbookIssues.js");
+    const issues = parseWorkbookIssues(req.file.buffer);
+    res.status(201).json({
+      ok: true,
+      imported: parsed.length,
+      replace,
+      drive,
+      errors: issues.errors,
+      externalLinks: issues.externalLinks,
+    });
   }
 );
 
@@ -1884,6 +2016,13 @@ costRouter.patch(
     if (!existing) return res.status(404).json({ error: "Not found" });
 
     const body = req.body || {};
+    const fromMeasure = existing.achievedFrom === "mb" || existing.achievedFrom === "bbs";
+    if (body.achievedQty != null && fromMeasure) {
+      const reason = String(body.overrideReason || body.achievedOverrideReason || "").trim();
+      if (!reason) {
+        return res.status(400).json({ error: "A reason is required to override a quantity filled from MB or BBS." });
+      }
+    }
     const nextBoq = body.boqQty != null ? Number(body.boqQty) : existing.boqQty;
     const nextGfc = body.gfcQty != null ? Number(body.gfcQty) : existing.gfcQty;
     const nextRate = body.rate != null ? Number(body.rate) : existing.rate;
@@ -1913,6 +2052,12 @@ costRouter.patch(
         ...(body.extraQty != null ? { extraQty: nextExtra } : {}),
         ...(body.gfcQty != null ? { gfcQty: nextGfc } : {}),
         ...(body.achievedQty != null ? { achievedQty: nextAchieved } : {}),
+        ...(body.achievedQty != null && fromMeasure
+          ? {
+              achievedFrom: "override",
+              achievedOverrideReason: String(body.overrideReason || body.achievedOverrideReason || "").trim(),
+            }
+          : {}),
         ...(body.certifiedQty != null ? { certifiedQty: nextCertified } : {}),
         ...metrics,
       },
@@ -2154,7 +2299,7 @@ async function importCostSheet(
   const packageName = String(req.body.packageName || "Imported").trim();
   const replace = String(req.body.replace || "") === "1" || req.body.replace === true;
   const parsed = parse(req.file.buffer);
-  if (!parsed.length) return { status: 400, body: { error: "No rows parsed — check sheet layout (SPDC BBS/MB format)" } };
+  if (!parsed.length) return { status: 400, body: { error: "No rows parsed. Check the sheet layout (SPDC BBS/MB format)." } };
 
   if (replace) {
     if (kind === "bbs") {
@@ -2194,14 +2339,16 @@ async function importCostSheet(
         shapeLenD: Number(r.shapeLenD) || 0,
         shapeLenE: Number(r.shapeLenE) || 0,
         totalLength: Number(r.totalLength) || 0,
-        weightKg: Number(r.weightKg) || 0,
+        weightKg: r.sourceError ? 0 : Number(r.weightKg) || 0,
         location: (r.location as string) || null,
         rowKind: (r.rowKind as string) || "data",
+        sourceError: Boolean(r.sourceError),
         lineIndex,
       })),
     });
-    const { applyShapeMastersToBbs } = await import("../services/costQuantitySync.js");
+    const { applyShapeMastersToBbs, syncSteelFromBbs } = await import("../services/costQuantitySync.js");
     await applyShapeMastersToBbs(project.id, packageName);
+    await syncSteelFromBbs(project.id, packageName);
   } else {
     await prisma.costMbLine.createMany({
       data: parsed.map((r, lineIndex) => ({
@@ -2220,6 +2367,7 @@ async function importCostSheet(
         raBill: (r.raBill as string) || null,
         remark: (r.remark as string) || null,
         rowKind: (r.rowKind as string) || "data",
+        isDeduction: Boolean(r.isDeduction),
         lineIndex,
       })),
     });
@@ -2260,6 +2408,7 @@ async function importCostSheet(
       packageName,
       rowsImported: parsed.length,
       replace,
+      sourceErrors: parsed.filter((row) => row.sourceError).length,
       file: {
         path: saved.path,
         url: saved.url,

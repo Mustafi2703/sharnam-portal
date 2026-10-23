@@ -289,10 +289,14 @@ dprMakerRouter.get("/:projectId", async (req, res) => {
       ? extras.scurveEntries
       : scurveEntriesFromChartPoints(scurve);
 
+  const { projectProgress } = await import("../services/projectProgress.js");
+  const physicalProgress = await projectProgress(projectId, logDate);
+
   res.json({
     projectId,
     projectCode: project.code,
     logDate: logDate.toISOString(),
+    physicalProgress,
     discipline,
     header,
     lines,

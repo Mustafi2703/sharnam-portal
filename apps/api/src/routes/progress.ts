@@ -19,6 +19,18 @@ import {
   MS_PROJECT_SCURVE_PACKAGE,
 } from "../services/msProjectSchedule.js";
 import { isContentLessonRow } from "../services/lessonLearntUtils.js";
+import {
+  calendarSpanDays,
+  correspondenceWarning,
+  defaultProbabilityPct,
+  deriveMilestone,
+  hindranceStatus,
+  legalDelayDays,
+  legalStatus,
+  milestoneDateError,
+  riskRating,
+  riskSeverity,
+} from "@sharnam/shared";
 
 export const progressRouter = Router();
 progressRouter.use(requireAuth);
@@ -106,32 +118,50 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       prisma.progressDesignStatus.findMany({ where: { projectId }, orderBy: { srNo: "asc" } }),
     ]);
 
-  const { readProgressOverviewDashboard } = await import("../services/progressRegistersImport.js");
-  // The Progress Overview workbook describes one project — only show it where that pack was loaded
-  // (or, for projects loaded earlier, where its start date matches the project's).
-  const overviewFile = readProgressOverviewDashboard();
-  const overviewSheet = await (async () => {
-    if (!overviewFile) return null;
-    const loaded = await prisma.auditEvent.findFirst({
-      where: { entityId: projectId, action: { in: ["progress.registers.pack", "progress.registers.resync"] } },
-      select: { id: true },
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { startDate: true, workdaysPerWeek: true },
+  });
+  const daysPerWeek = project?.workdaysPerWeek || 6;
+  const derivedMilestones = milestones.map((row) => {
+    const derived = deriveMilestone({
+      plannedStart: row.plannedStart,
+      plannedEnd: row.plannedEnd,
+      actualStart: row.actualStart,
+      actualEnd: row.actualEnd,
+      pctComplete: row.pctComplete,
+      daysPerWeek,
+      projectStart: project?.startDate,
     });
-    if (loaded) return overviewFile;
-    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { startDate: true } });
-    const sheetStart = overviewFile.startDate ? new Date(overviewFile.startDate as unknown as string) : null;
-    const near =
-      project?.startDate && sheetStart && !Number.isNaN(sheetStart.getTime())
-        ? Math.abs(project.startDate.getTime() - sheetStart.getTime()) <= 31 * 86400000
-        : false;
-    return near ? overviewFile : null;
-  })();
+    return { ...row, ...derived };
+  });
+  const derivedHindrances = hindrances.map((row) => ({
+    ...row,
+    daysImpacted: calendarSpanDays(row.occurredAt, row.resolvedAt),
+    status: hindranceStatus(row.resolvedAt),
+    correspondenceWarning: correspondenceWarning(row.correspondence, row.occurredAt),
+  }));
+  const derivedRisks = risks.map((row) => {
+    const severity = riskSeverity(row.probability, row.consequence);
+    return {
+      ...row,
+      severity,
+      rating: riskRating(severity),
+      probabilityPct: row.probabilityPct > 0 ? row.probabilityPct : defaultProbabilityPct(row.probability),
+    };
+  });
+  const derivedLegal = legalApprovals.map((row) => ({
+    ...row,
+    delayDays: legalDelayDays(row.requiredBy, row.receivedDate),
+    status: legalStatus(row.receivedDate, row.status),
+  }));
+  const { projectProgress } = await import("../services/projectProgress.js");
+  const physical = await projectProgress(projectId);
 
-  const openHindrance = hindrances.filter((h) => h.status === "Open").length;
-  const openRisk = risks.filter((r) => r.status === "Open").length;
-  const delayed = milestones.filter((m) => /delay/i.test(m.status) || (m.varianceDays || 0) > 0).length;
-  const weightedPct =
-    milestones.reduce((s, m) => s + (m.weightage || 0) * asFraction(m.pctComplete), 0) /
-    Math.max(1, milestones.reduce((s, m) => s + (m.weightage || 0), 0));
+  const openHindrance = derivedHindrances.filter((h) => h.status === "Open").length;
+  const openRisk = derivedRisks.filter((r) => r.status === "Open").length;
+  const delayed = derivedMilestones.filter((m) => m.status === "Delayed" || m.status === "Completed Late" || m.status === "Late Start").length;
+  const overviewSheet = null;
 
   const cashflowPvA = plannedActual.filter((p) => p.packageName !== MS_PROJECT_SCURVE_PACKAGE);
 
@@ -141,12 +171,16 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
       delayed,
       openHindrance,
       openRisk,
-      legal: legalApprovals.length,
-      legalApproved: legalApprovals.filter((l) => /approved/i.test(l.status)).length,
+      legal: derivedLegal.length,
+      legalApproved: derivedLegal.filter((l) => /approved/i.test(l.status)).length,
       activityLines: activityLines.length,
       boqLines: boqLineCount,
-      projectProgressPct: weightedPct || 0,
-      sheetProgressPct: overviewSheet?.sheetProgressPct ?? null,
+      projectProgressPct: physical.physicalPct,
+      plannedPct: physical.plannedPct,
+      schedulePct: physical.schedulePct,
+      spi: physical.spi,
+      progressMethod: physical.method,
+      sheetProgressPct: null,
       avgActualPct:
         cashflowPvA.length > 0
           ? cashflowPvA.reduce((s, p) => s + p.actualPct, 0) / cashflowPvA.length
@@ -154,19 +188,19 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
     },
     overviewSheet,
     charts: {
-      milestoneByStatus: countBy(milestones, (m) => m.status || "Unknown"),
-      milestoneByPhase: countBy(milestones, (m) => m.category || "Other").map((x) => ({
+      milestoneByStatus: countBy(derivedMilestones, (m) => m.status || "Unknown"),
+      milestoneByPhase: countBy(derivedMilestones, (m) => m.category || "Other").map((x) => ({
         ...x,
         value:
-          milestones.filter((m) => (m.category || "Other") === x.label).reduce((s, m) => s + asFraction(m.pctComplete), 0) /
-          Math.max(1, milestones.filter((m) => (m.category || "Other") === x.label).length),
+          derivedMilestones.filter((m) => (m.category || "Other") === x.label).reduce((s, m) => s + asFraction(m.pctComplete), 0) /
+          Math.max(1, derivedMilestones.filter((m) => (m.category || "Other") === x.label).length),
       })),
-      hindranceByActivity: countBy(hindrances, (h) => h.activity || "Other"),
-      hindranceByStatus: countBy(hindrances, (h) => h.status || "Unknown"),
-      hindranceByCategory: countBy(hindrances, (h) => h.category || h.type || "Other"),
-      legalByStatus: countBy(legalApprovals, (l) => l.status || "Unknown"),
-      riskByStatus: countBy(risks, (r) => r.status || "Unknown"),
-      riskBySeverity: countBy(risks, (r) => String(r.severity || "0")),
+      hindranceByActivity: countBy(derivedHindrances, (h) => h.activity || "Other"),
+      hindranceByStatus: countBy(derivedHindrances, (h) => h.status || "Unknown"),
+      hindranceByCategory: countBy(derivedHindrances, (h) => h.category || h.type || "Other"),
+      legalByStatus: countBy(derivedLegal, (l) => l.status || "Unknown"),
+      riskByStatus: countBy(derivedRisks, (r) => r.status || "Unknown"),
+      riskBySeverity: countBy(derivedRisks, (r) => String(r.severity || "0")),
       cashflow: cashflowPvA.map((p) => ({
         label: p.periodLabel,
         planned: p.plannedAmount,
@@ -186,11 +220,11 @@ progressRouter.get("/:projectId/summary", async (req, res) => {
         rate: s.closureRate,
       })),
     },
-    milestones,
-    hindrances,
-    risks,
+    milestones: derivedMilestones,
+    hindrances: derivedHindrances,
+    risks: derivedRisks,
     plannedActual,
-    legalApprovals,
+    legalApprovals: derivedLegal,
     manpower,
     activityLines,
     boqLineCount,
@@ -743,26 +777,41 @@ progressRouter.post(
   requireRoles("admin", "office", "employee", "site_employee"),
   async (req: AuthedRequest, res) => {
     const body = req.body || {};
-    const plannedDays = Number(body.plannedDays || 0);
-    const actualDays = Number(body.actualDays || 0);
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { startDate: true, workdaysPerWeek: true },
+    });
+    const dates = {
+      plannedStart: body.plannedStart ? new Date(body.plannedStart) : null,
+      plannedEnd: body.plannedEnd ? new Date(body.plannedEnd) : null,
+      actualStart: body.actualStart ? new Date(body.actualStart) : null,
+      actualEnd: body.actualEnd ? new Date(body.actualEnd) : null,
+      pctComplete: body.pctComplete,
+      daysPerWeek: project?.workdaysPerWeek || 6,
+      projectStart: project?.startDate,
+    };
+    const dateError = milestoneDateError(dates);
+    if (dateError) return res.status(400).json({ error: dateError });
+    const derived = deriveMilestone(dates);
     const row = await prisma.progressMilestone.create({
       data: {
         projectId: req.params.projectId,
         code: body.code || null,
         category: body.category || null,
         activity: String(body.activity || "Milestone"),
-        plannedStart: body.plannedStart ? new Date(body.plannedStart) : null,
-        plannedEnd: body.plannedEnd ? new Date(body.plannedEnd) : null,
-        plannedDays,
-        actualStart: body.actualStart ? new Date(body.actualStart) : null,
-        actualEnd: body.actualEnd ? new Date(body.actualEnd) : null,
-        actualDays,
-        varianceDays: Number(body.varianceDays ?? actualDays - plannedDays),
+        plannedStart: dates.plannedStart,
+        plannedEnd: dates.plannedEnd,
+        plannedDays: derived.plannedDays,
+        actualStart: dates.actualStart,
+        actualEnd: dates.actualEnd,
+        actualDays: derived.actualDays,
+        varianceDays: derived.varianceDays,
+        aheadDays: derived.aheadDays,
         weightage: Number(body.weightage || 0),
-        pctComplete: asFraction(body.pctComplete),
+        pctComplete: derived.pctComplete,
         stakeholder: body.stakeholder || null,
         zone: body.zone || null,
-        status: body.status || "Planned",
+        status: derived.status,
       },
     });
     await audit("progress.milestone.create", {
@@ -789,19 +838,38 @@ progressRouter.patch(
       "code",
       "category",
       "activity",
-      "status",
       "stakeholder",
       "zone",
     ] as const) {
       if (body[k] != null) data[k] = body[k];
     }
-    for (const k of ["plannedDays", "actualDays", "varianceDays", "weightage"] as const) {
-      if (body[k] != null) data[k] = Number(body[k]);
-    }
-    if (body.pctComplete != null) data.pctComplete = asFraction(body.pctComplete);
+    if (body.weightage != null) data.weightage = Number(body.weightage);
     for (const k of ["plannedStart", "plannedEnd", "actualStart", "actualEnd"] as const) {
       if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
     }
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.projectId },
+      select: { startDate: true, workdaysPerWeek: true },
+    });
+    const dates = {
+      plannedStart: ("plannedStart" in data ? data.plannedStart : existing.plannedStart) as Date | null,
+      plannedEnd: ("plannedEnd" in data ? data.plannedEnd : existing.plannedEnd) as Date | null,
+      actualStart: ("actualStart" in data ? data.actualStart : existing.actualStart) as Date | null,
+      actualEnd: ("actualEnd" in data ? data.actualEnd : existing.actualEnd) as Date | null,
+      pctComplete: body.pctComplete != null ? body.pctComplete : existing.pctComplete,
+      daysPerWeek: project?.workdaysPerWeek || 6,
+      projectStart: project?.startDate,
+    };
+    const dateError = milestoneDateError(dates);
+    if (dateError) return res.status(400).json({ error: dateError });
+    const derived = deriveMilestone(dates);
+    data.plannedDays = derived.plannedDays;
+    data.actualDays = derived.actualDays;
+    data.varianceDays = derived.varianceDays;
+    data.aheadDays = derived.aheadDays;
+    data.status = derived.status;
+    data.pctComplete = derived.pctComplete;
+    data.status = derived.status;
     const row = await prisma.progressMilestone.update({
       where: { id: existing.id },
       data,
@@ -826,11 +894,14 @@ progressRouter.post(
         type: body.type || null,
         occurredAt: body.occurredAt ? new Date(body.occurredAt) : new Date(),
         resolvedAt: body.resolvedAt ? new Date(body.resolvedAt) : null,
-        daysImpacted: Number(body.daysImpacted || 0),
+        daysImpacted: calendarSpanDays(
+          body.occurredAt ? new Date(body.occurredAt) : new Date(),
+          body.resolvedAt ? new Date(body.resolvedAt) : null
+        ),
         baselineStart: body.baselineStart ? new Date(body.baselineStart) : null,
         scheduleImpact: Number(body.scheduleImpact || 0),
         delayType: body.delayType || null,
-        status: body.status || "Open",
+        status: hindranceStatus(body.resolvedAt ? new Date(body.resolvedAt) : null),
         accountable: body.accountable || null,
         resolutionDescription: body.resolutionDescription || null,
         remarks: body.remarks || null,
@@ -858,21 +929,26 @@ progressRouter.patch(
       "category",
       "type",
       "delayType",
-      "status",
       "accountable",
       "resolutionDescription",
       "remarks",
     ] as const) {
       if (body[k] !== undefined) data[k] = body[k];
     }
-    for (const k of ["daysImpacted", "scheduleImpact"] as const) {
-      if (body[k] != null) data[k] = Number(body[k]);
-    }
+    if (body.scheduleImpact != null) data.scheduleImpact = Number(body.scheduleImpact);
     for (const k of ["occurredAt", "resolvedAt", "baselineStart"] as const) {
       if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
     }
+    const occurredAt = ("occurredAt" in data ? data.occurredAt : existing.occurredAt) as Date | null;
+    const resolvedAt = ("resolvedAt" in data ? data.resolvedAt : existing.resolvedAt) as Date | null;
+    data.daysImpacted = calendarSpanDays(occurredAt, resolvedAt);
+    data.status = hindranceStatus(resolvedAt);
+    const warning = correspondenceWarning(
+      String(("correspondence" in data ? data.correspondence : existing.correspondence) || ""),
+      occurredAt
+    );
     const row = await prisma.progressHindrance.update({ where: { id: existing.id }, data });
-    res.json(row);
+    res.json({ ...row, correspondenceWarning: warning });
   }
 );
 
@@ -906,8 +982,12 @@ progressRouter.post(
         description: body.description || null,
         probability,
         consequence,
-        severity: probability * consequence,
-        probabilityPct: Number(body.probabilityPct || 0),
+        severity: riskSeverity(probability, consequence),
+        rating: riskRating(riskSeverity(probability, consequence)),
+        probabilityPct:
+          body.probabilityPct != null && body.probabilityPct !== ""
+            ? asFraction(body.probabilityPct)
+            : defaultProbabilityPct(probability),
         costImpact: Number(body.costImpact || 0),
         weeksLikely: Number(body.weeksLikely || 0),
         urgency: body.urgency || null,
@@ -950,12 +1030,23 @@ progressRouter.patch(
     ] as const) {
       if (body[k] !== undefined) data[k] = body[k];
     }
-    for (const k of ["probability", "consequence", "severity"] as const) {
-      if (body[k] != null) data[k] = k === "severity" ? Number(body[k]) || 0 : riskLevel(body[k]);
+    for (const k of ["probability", "consequence"] as const) {
+      if (body[k] != null) data[k] = riskLevel(body[k]);
     }
-    for (const k of ["probabilityPct", "costImpact", "weeksLikely"] as const) {
+    for (const k of ["costImpact", "weeksLikely"] as const) {
       if (body[k] != null) data[k] = Number(body[k]);
     }
+    const probability = Number(data.probability ?? existing.probability);
+    const consequence = Number(data.consequence ?? existing.consequence);
+    const severity = riskSeverity(probability, consequence);
+    data.severity = severity;
+    data.rating = riskRating(severity);
+    data.probabilityPct =
+      body.probabilityPct != null && body.probabilityPct !== ""
+        ? asFraction(body.probabilityPct)
+        : existing.probabilityPct > 0 && body.probability == null
+          ? existing.probabilityPct
+          : defaultProbabilityPct(probability);
     if (body.dateLastUpdated !== undefined) {
       data.dateLastUpdated = body.dateLastUpdated ? new Date(body.dateLastUpdated) : null;
     }
@@ -980,8 +1071,11 @@ progressRouter.post(
         submissionDate: body.submissionDate ? new Date(body.submissionDate) : null,
         requiredBy: body.requiredBy ? new Date(body.requiredBy) : null,
         receivedDate: body.receivedDate ? new Date(body.receivedDate) : null,
-        status: body.status || "Submitted",
-        delayDays: Number(body.delayDays || 0),
+        status: legalStatus(body.receivedDate ? new Date(body.receivedDate) : null, body.status),
+        delayDays: legalDelayDays(
+          body.requiredBy ? new Date(body.requiredBy) : null,
+          body.receivedDate ? new Date(body.receivedDate) : null
+        ),
         responsible: body.responsible || null,
         remarks: body.remarks || null,
       },
@@ -1012,10 +1106,13 @@ progressRouter.patch(
     ] as const) {
       if (body[k] !== undefined) data[k] = body[k];
     }
-    if (body.delayDays != null) data.delayDays = Number(body.delayDays);
     for (const k of ["submissionDate", "requiredBy", "receivedDate"] as const) {
       if (body[k] !== undefined) data[k] = body[k] ? new Date(body[k]) : null;
     }
+    const requiredBy = ("requiredBy" in data ? data.requiredBy : existing.requiredBy) as Date | null;
+    const receivedDate = ("receivedDate" in data ? data.receivedDate : existing.receivedDate) as Date | null;
+    data.delayDays = legalDelayDays(requiredBy, receivedDate);
+    data.status = legalStatus(receivedDate, String(data.status || existing.status));
     const row = await prisma.progressLegalApproval.update({ where: { id: existing.id }, data });
     res.json(row);
   }
@@ -1140,6 +1237,11 @@ progressRouter.post(
   async (req: AuthedRequest, res) => {
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Project not found" });
+    if (!project.allowSampleRegisters) {
+      return res.status(403).json({
+        error: "Sample register pack is only available on demo or UAT projects. Import the project's own Excel file.",
+      });
+    }
     const force = Boolean(req.body?.force);
     const { syncProgressRegisterPack } = await import("../services/progressRegistersImport.js");
     const { syncProgressTemplates } = await import("../services/projectSheetPack.js");
@@ -1153,6 +1255,17 @@ progressRouter.post(
     });
     const report = await verifyProgressProject(project.id);
     res.json({ ok: true, registers, planned, verify: report });
+  }
+);
+
+progressRouter.post(
+  "/:projectId/registers/preview",
+  requireRoles("admin", "office", "employee"),
+  upload.single("file"),
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "file required" });
+    const { previewProgressWorkbook } = await import("../services/progressRegistersImport.js");
+    res.json(previewProgressWorkbook(req.file.buffer));
   }
 );
 

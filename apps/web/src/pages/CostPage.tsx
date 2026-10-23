@@ -92,6 +92,80 @@ function SheetTable({
   );
 }
 
+function BbsReinforcementMap({
+  projectId,
+  token,
+  packageName,
+  canEdit,
+}: {
+  projectId: string;
+  token: string | null;
+  packageName: string;
+  canEdit: boolean;
+}) {
+  const [suggestions, setSuggestions] = useState<{ itemNo: string; description: string }[]>([]);
+  const [itemNo, setItemNo] = useState("");
+  useEffect(() => {
+    api<{ suggestions: { itemNo: string; description: string }[]; maps: { sectionMark: string; locationPattern: string; monitoringItemNo: string }[] }>(
+      `/api/cost/${projectId}/bbs-map?package=${encodeURIComponent(packageName)}`,
+      { token }
+    )
+      .then((out) => {
+        setSuggestions(out.suggestions || []);
+        const pinned = (out.maps || []).find((row) => !row.sectionMark && !row.locationPattern);
+        setItemNo(pinned?.monitoringItemNo || out.suggestions?.[0]?.itemNo || "");
+      })
+      .catch(() => setSuggestions([]));
+  }, [projectId, packageName, token]);
+  if (!suggestions.length && !itemNo) return null;
+  return (
+    <div className="rounded border border-line bg-paper p-3 text-sm flex flex-wrap items-end gap-3">
+      <label className="text-xs text-steel-muted">
+        Reinforcement item
+        <Select className="mt-1" value={itemNo} disabled={!canEdit} onChange={(e) => setItemNo(e.target.value)}>
+          {suggestions.map((row) => (
+            <option key={row.itemNo} value={row.itemNo}>
+              {row.itemNo} {row.description}
+            </option>
+          ))}
+        </Select>
+      </label>
+      {canEdit && (
+        <Button
+          type="button"
+          onClick={() => {
+            void api(`/api/cost/${projectId}/bbs-map`, {
+              method: "PUT",
+              token,
+              body: JSON.stringify({ packageName, maps: itemNo ? [{ monitoringItemNo: itemNo }] : [] }),
+            });
+          }}
+        >
+          Save steel mapping
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function BbsSourceErrors({ rows }: { rows: { id?: string; sourceError?: boolean; barMark?: string; sectionMark?: string; location?: string }[] }) {
+  const bad = rows.filter((row) => row.sourceError);
+  if (!bad.length) return null;
+  return (
+    <div className="rounded border border-line bg-paper p-3 text-sm">
+      <p className="font-semibold text-ink">BBS rows with a source error</p>
+      <p className="text-xs text-steel-muted mb-2">These rows came from a #REF! or #DIV/0! cell. Their weight is 0 and they are not included in the steel total.</p>
+      <ul className="text-xs space-y-1">
+        {bad.slice(0, 30).map((row) => (
+          <li key={row.id || `${row.barMark}-${row.location}`}>
+            {row.barMark || "Bar"} {row.sectionMark ? `(${row.sectionMark})` : ""} {row.location || ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function CostPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -745,9 +819,26 @@ export default function CostPage() {
                 </Button>
               )}
               {tab === "budget" && (
-                <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("budget")}>
-                  Download Budget
-                </Button>
+                <>
+                  <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("budget")}>
+                    Download Budget
+                  </Button>
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!bg-white/15 !text-white !border-white/30"
+                      onClick={() => {
+                        void api(`/api/cost/${id}/budget/recalculate`, { method: "POST", token }).then(() => {
+                          setMsg("Budget recalculated from monitoring, finance and rate differences");
+                          return load();
+                        });
+                      }}
+                    >
+                      Recalculate
+                    </Button>
+                  )}
+                </>
               )}
               {tab === "cashflow" && (
                 <Button type="button" className="!bg-white/15 !text-white !border-white/30" variant="secondary" onClick={() => downloadSheet("cashflow")}>
@@ -829,6 +920,11 @@ export default function CostPage() {
 
       {!isRegisterView && (
       <>
+      {summary.physicalProgress && (
+        <p className="text-sm text-ink">
+          Physical progress {Math.round((summary.physicalProgress.physicalPct || 0) * 100)}%. {summary.physicalProgress.method}
+        </p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         {(
           [
@@ -1064,6 +1160,7 @@ export default function CostPage() {
               preferredAddKind={monAddKind}
               onAddClose={() => setMonAddOpen(false)}
               onChanged={() => void load()}
+              onOpenSource={(line) => navigateCostFlow(line.achievedFrom === "bbs" ? "bbs" : "mb")}
             />
           </div>
         </div>
@@ -1155,6 +1252,8 @@ export default function CostPage() {
 
       {tab === "bbs" && (
         <div className="cost-sheet-block space-y-3">
+          <BbsSourceErrors rows={bbsRows} />
+          {id && <BbsReinforcementMap projectId={id} token={token} packageName={writePackage("bbs")} canEdit={canEdit} />}
           <CostSheetFlowBar active="bbs" packageName={pkgFilter} counts={flowCounts} onNavigate={navigateCostFlow} canEdit={canEdit} />
           <ReferenceSheetToolbar
             sheetLabel={`BBS — ${writePackage("bbs")}`}

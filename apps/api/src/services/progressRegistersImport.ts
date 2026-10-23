@@ -350,6 +350,21 @@ export async function syncLessonsFromTemplate(projectId: string, opts?: { force?
 }
 
 export async function syncProgressRegisterPack(projectId: string, opts?: { force?: boolean }) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { allowSampleRegisters: true },
+  });
+  if (!project?.allowSampleRegisters) {
+    return {
+      refused: true,
+      reason: "Sample register pack is only available on demo or UAT projects. Import the project's own Excel file.",
+      milestones: null,
+      hindrance: null,
+      risk: null,
+      legal: null,
+      lessons: null,
+    };
+  }
   const milestones = await syncMilestonesFromTemplate(projectId, opts);
   const hindrance = await syncHindranceFromTemplate(projectId, opts).catch((err) => ({
     imported: 0,
@@ -364,4 +379,29 @@ export async function syncProgressRegisterPack(projectId: string, opts?: { force
   const { audit } = await import("./audit.js");
   await audit("progress.registers.pack", { entity: "project", entityId: projectId, meta: { source: resolveProgressOverviewPath() } });
   return { milestones, hindrance, risk, legal, lessons };
+}
+
+/** Preview a client register workbook and flag rows that look like the sample pack. */
+export function previewProgressWorkbook(buffer: Buffer) {
+  const wb = XLSX.read(buffer, { type: "buffer" });
+  const horizon = new Date();
+  horizon.setMonth(horizon.getMonth() + 6);
+  const sheets = wb.SheetNames.map((name) => {
+    const rows = XLSX.utils.sheet_to_json<(string | number)[]>(wb.Sheets[name]!, { header: 1, defval: "" });
+    const flags: { row: number; reason: string }[] = [];
+    rows.forEach((row, index) => {
+      const text = (row || []).map((cell) => String(cell ?? "")).join(" ");
+      if (/\b(ABC|XYZ|LMN|PQR)\b/.test(text)) flags.push({ row: index + 1, reason: "Sample vendor name" });
+      if (/\bBuilding\s+[ABC]\b/i.test(text)) flags.push({ row: index + 1, reason: "Sample building name" });
+      for (const cell of row || []) {
+        const serial = Number(cell);
+        if (!Number.isFinite(serial) || serial < 30000 || serial > 80000) continue;
+        const date = new Date(Date.UTC(1899, 11, 30));
+        date.setUTCDate(date.getUTCDate() + Math.round(serial));
+        if (date > horizon) flags.push({ row: index + 1, reason: "Date is more than 6 months ahead" });
+      }
+    });
+    return { sheet: name, rows: rows.length, flags: flags.slice(0, 40) };
+  });
+  return { sheets };
 }

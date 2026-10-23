@@ -70,7 +70,7 @@ export function deriveMonitoringMetrics(q: MonitoringQtyInput): MonitoringMetric
   const evGfc = achievedCost;
   const evCertified = certifiedInvoiceCost;
   const cpi = actualCost > 0 ? evBoq / actualCost : 0;
-  const cpiStatus = !actualCost ? "—" : cpi >= 1 ? "On Budget" : "Cost Overrun";
+  const cpiStatus = !actualCost ? "No cost" : cpi >= 1 ? "On Budget" : "Cost Overrun";
 
   const etcBoq = Math.max(0, boqCost - achievedCost);
   const etcGfc = gfcCost - achievedCost;

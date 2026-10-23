@@ -1,7 +1,7 @@
 /**
  * Parse SPDC-style MB / BBS Excel sheets (same layout as SPDC_Budget_Arvind *.xls).
  */
-import XLSX, { type WorkBook } from "../lib/xlsx.js";
+import XLSX, { type WorkBook, type WorkSheet } from "../lib/xlsx.js";
 
 function n(v: unknown): number {
   const x = Number(v);
@@ -28,6 +28,7 @@ export type ParsedMbLine = {
   unit?: string;
   raBill?: string;
   remark?: string;
+  isDeduction?: boolean;
   rowKind?: MbRowKind;
   lineIndex?: number;
 };
@@ -42,11 +43,21 @@ function hasMbMeasureFields(r: Pick<ParsedMbLine, "qty" | "nos1" | "length" | "w
   );
 }
 
+/** "Extra Item 2" is a second sequence. It must not inherit the previous BOQ item number. */
+function extraItemCode(raw: string | null | undefined): string {
+  const match = String(raw || "").trim().match(/^extra\s*item\s*(\d+)/i);
+  if (match) return `E${Number(match[1])}`;
+  const coded = String(raw || "").trim();
+  if (/^E\d+$/i.test(coded)) return coded.toUpperCase();
+  return "";
+}
+
 export function inferMbRowKind(r: Pick<ParsedMbLine, "srNo" | "description" | "remark" | "qty" | "nos1" | "length" | "width" | "height">): MbRowKind {
   const desc = String(r.description ?? "").trim();
   const sr = String(r.srNo ?? "").trim();
-  if (!desc) return "note";
+  if (!desc && !sr) return "note";
   if (isMbTotalRow(desc)) return "total";
+  if (extraItemCode(sr)) return hasMbMeasureFields(r) ? "data" : "item";
   if (hasMbMeasureFields(r)) return "data";
   if (sr && /^\d+$/.test(sr)) {
     if (/^-do\b/i.test(desc)) return "subitem";
@@ -86,6 +97,8 @@ export type ParsedBbsLine = {
   weightKg: number;
   location?: string;
   rowKind?: "section" | "subsection" | "subheader" | "data" | "note";
+  sourceError?: boolean;
+  sourceRow?: number;
 };
 
 function sheetRows(wb: WorkBook, name?: string): unknown[][] {
@@ -182,6 +195,8 @@ type BbsColLayout = {
   cutting: number;
   totalLen: number;
   weight: number;
+  /** Running metres per diameter. SPDC sheets have no weight column; kg = metres × kg/m. */
+  diaMetres: { col: number; kgPerM: number }[];
 };
 
 function detectBbsLayout(rows: unknown[][]): BbsColLayout {
@@ -220,6 +235,7 @@ function detectBbsLayout(rows: unknown[][]): BbsColLayout {
   const cutting = colIndex(hdr, [/cutting length/]);
   const totalLen = colIndex(hdr, [/total\s*length/]);
   const weight = colIndex(hdr, [/weight\s*kg/, /^weight$/]);
+  const diaMetres = diaMetreColumns(rows, headerRow);
 
   return {
     startRow: (headerRow >= 0 ? headerRow : 6) + 1,
@@ -240,7 +256,47 @@ function detectBbsLayout(rows: unknown[][]): BbsColLayout {
     // SPDC BBS sheets carry no weight column — the columns after "Total length" are running metres per
     // diameter (8 … 32 mm), so weight is only read from a real weight / kg header.
     weight,
+    diaMetres,
   };
+}
+
+/** kg per metre as stored on the SPDC dia-wise weight row (not the unrounded d²/162 factor). */
+const BBS_KG_PER_M: Record<number, number> = {
+  8: 0.395,
+  10: 0.617,
+  12: 0.888,
+  16: 1.58,
+  20: 2.47,
+  25: 3.85,
+  32: 6.31,
+};
+
+function diaMetreColumns(rows: unknown[][], headerRow: number): { col: number; kgPerM: number }[] {
+  const start = headerRow >= 0 ? headerRow : 0;
+  for (let i = start; i <= start + 8 && i < rows.length; i++) {
+    const sub = rows[i] as unknown[];
+    const found: { col: number; kgPerM: number }[] = [];
+    for (let j = 0; j < sub.length; j++) {
+      const dia = Number(String(sub[j] ?? "").trim());
+      const kgPerM = BBS_KG_PER_M[dia];
+      if (kgPerM) found.push({ col: j, kgPerM });
+    }
+    if (found.length >= 4) return found;
+  }
+  return [];
+}
+
+function weightFromDiaMetres(row: unknown[], cols: { col: number; kgPerM: number }[]): number {
+  let weight = 0;
+  let any = false;
+  for (const col of cols) {
+    const metres = n(row[col.col]);
+    if (!metres) continue;
+    any = true;
+    weight += metres * col.kgPerM;
+  }
+  if (!any) return 0;
+  return Math.round(weight * 100) / 100;
 }
 
 /** Bar weight in kg: a real weight column if the sheet has one, else d² / 162 kg per metre × total metres. */
@@ -349,7 +405,75 @@ export function parseMbRows(rows: unknown[][]): ParsedMbLine[] {
     dataRow.rowKind = inferMbRowKind(dataRow);
     out.push(dataRow);
   }
-  return out;
+  return assignMbItemCodes(out);
+}
+
+function itemNumber(raw: string | null | undefined): string {
+  const extra = extraItemCode(raw);
+  if (extra) return extra;
+  const t = String(raw || "").trim();
+  if (!t) return "";
+  if (/^\d+(\.0+)?$/.test(t)) return String(Number(t));
+  if (/^\d+$/.test(t)) return t;
+  return "";
+}
+
+/** Measurement rows inherit the item or sub-item header above them. Deduction blocks subtract. */
+export function assignMbItemCodes<T extends ParsedMbLine>(lines: T[]): T[] {
+  let current = "";
+  let deduct = false;
+  for (const line of lines) {
+    const desc = String(line.description || "").trim();
+    const own = itemNumber(line.srNo) || itemNumber(line.itemCode);
+    const kind = line.rowKind || "data";
+    if (/^deduction\b/i.test(desc)) {
+      deduct = true;
+      line.itemCode = current || own || undefined;
+      line.isDeduction = kind === "data";
+      continue;
+    }
+    if (kind === "item" || kind === "subitem") {
+      if (own) current = own;
+      deduct = false;
+      line.itemCode = current || undefined;
+      line.isDeduction = false;
+      continue;
+    }
+    line.itemCode = current || own || line.itemCode;
+    line.isDeduction = deduct && kind === "data";
+  }
+  return lines;
+}
+
+/** Achieved quantity = data rows minus deduction rows. Total rows are display only. */
+export function rollupMbQtyByItem(lines: ParsedMbLine[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const line of lines) {
+    if ((line.rowKind || "data") !== "data") continue;
+    const code = itemNumber(line.itemCode) || itemNumber(line.srNo);
+    if (!code) continue;
+    const qty = Number(line.qty) || 0;
+    const signed = line.isDeduction ? -Math.abs(qty) : qty;
+    totals.set(code, (totals.get(code) || 0) + signed);
+  }
+  return totals;
+}
+
+/** Unit printed on each item's "Total Up to Date" row (Cum, KG, Smt, …). */
+export function mbItemUnits(lines: ParsedMbLine[]): Map<string, string> {
+  const units = new Map<string, string>();
+  for (const line of lines) {
+    if ((line.rowKind || "") !== "total") continue;
+    if (!/up to date/i.test(line.description || "")) continue;
+    const code = itemNumber(line.itemCode) || itemNumber(line.srNo);
+    const unit = String(line.unit || "").trim();
+    if (code && unit) units.set(code, unit);
+  }
+  return units;
+}
+
+export function normItemNo(raw: string | null | undefined): string {
+  return itemNumber(raw) || String(raw || "").trim();
 }
 
 export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
@@ -357,23 +481,32 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
   const out: ParsedBbsLine[] = [];
   let currentSection = "";
   let currentShapeCode = "";
+  let lastDescription = "";
 
   for (let i = layout.startRow; i < rows.length; i++) {
     const row = rows[i] as unknown[];
     const markRaw = s(row[layout.mark], 40);
-    const description = s(row[layout.desc], 300);
+    let description = s(row[layout.desc], 300);
     const shapeCell = s(row[layout.shape], 80);
+    const dia = n(row[layout.dia]);
+    const totalLen = n(row[layout.totalLen]);
+    const totalNos = n(row[layout.totalNos]);
+    // Ring sets put the label on one row and the bar (dia, nos, length) on the next row.
+    const continuation = !description && !markRaw && dia >= 6 && dia <= 50 && (totalLen > 0 || totalNos > 0);
+    if (continuation) description = lastDescription;
+    if (description && !/^(sr\.?\s*no|description|shape of bar|shape length|cutting length|total\s*length|weight\s*kg)$/i.test(description)) {
+      lastDescription = description;
+    }
 
     if (!description && !markRaw) continue;
-    if (/name of project|bar bending schedule|project development consultancy/i.test(description)) continue;
+    if (/name of project|bar bending schedule|project development consultancy/i.test(description + " " + markRaw)) continue;
     if (/^sr\.?\s*no$/i.test(description) || /^sr\.?\s*no$/i.test(markRaw)) continue;
     if (/^\s*(grand\s*)?total\b/i.test(description) || /^\s*(grand\s*)?total\b/i.test(markRaw)) continue;
+    if (/dia wise|weight\/mtr|weight in kg|weight in mt|in tonne/i.test(description)) continue;
     if (/^dia\s*\d+(\.\d+)?(\s*mm)?$/i.test(description)) continue;
 
-    const dia = n(row[layout.dia]);
     const nosPerMember = n(row[layout.nosPerMember]);
     const nosOfMember = n(row[layout.nosOfMember]);
-    const totalNos = n(row[layout.totalNos]);
     const nos = totalNos || (nosPerMember && nosOfMember ? nosPerMember * nosOfMember : 0);
     const shapeLenA = n(row[layout.a]);
     const shapeLenB = n(row[layout.b]);
@@ -381,9 +514,12 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
     const shapeLenD = n(row[layout.d]);
     const shapeLenE = n(row[layout.e]);
     const cuttingLen = n(row[layout.cutting]);
-    const totalLen = n(row[layout.totalLen]);
     const shapeFromCell = shapeCell && !/^[\d.\-]+$/.test(shapeCell) ? shapeCell : undefined;
-    const weightKg = bbsWeightKg(dia, totalLen, row, layout.weight);
+    const fromDia = dia >= 6 && dia <= 50 ? weightFromDiaMetres(row, layout.diaMetres) : 0;
+    const weightKg = fromDia || bbsWeightKg(dia, totalLen, row, layout.weight);
+    const sourceError = [layout.totalLen, layout.weight, layout.cutting, layout.dia].some(
+      (c) => c >= 0 && /^#(REF!|DIV\/0!|VALUE!|N\/A|NAME\?)/i.test(String(row[c] ?? "").trim())
+    );
 
     if (!description && !markRaw) continue;
     if (/^description$|^shape of bar$|^shape length$|^cutting length$|^total\s*length$|^weight\s*kg$/i.test(description)) continue;
@@ -536,67 +672,75 @@ export function parseBbsRows(rows: unknown[][]): ParsedBbsLine[] {
       shapeLenD,
       shapeLenE,
       totalLength: totalLen,
-      weightKg,
+      weightKg: sourceError ? 0 : weightKg,
       location: description || undefined,
       rowKind: "data",
+      sourceError,
+      sourceRow: i,
     });
   }
   return out;
-}
-
-/** Pick the sheet with the most valid rows (handles full budget workbooks). */
-function bestSheetParse<T>(buffer: Buffer, parse: (rows: unknown[][]) => T[], nameHint?: RegExp): T[] {
-  const wb = workbookFromBuffer(buffer);
-  let best: T[] = [];
-  for (const name of wb.SheetNames) {
-    if (nameHint && !nameHint.test(name)) continue;
-    const rows = parse(sheetRows(wb, name));
-    if (rows.length > best.length) best = rows;
-  }
-  if (best.length) return best;
-  for (const name of wb.SheetNames) {
-    const rows = parse(sheetRows(wb, name));
-    if (rows.length > best.length) best = rows;
-  }
-  return best;
 }
 
 import {
   SPDC_BBS_SHEETS,
   SPDC_MB_SHEETS,
   SPDC_MONITORING_SHEETS,
+  SPDC_RATE_SHEETS,
 } from "./spdcBudgetManifest.js";
+import { foldTabName, packageForTab } from "@sharnam/shared";
 
 /** SPDC_Budget_Arvind 49.xls — Excel tab name → portal package name */
 export const SPDC_MB_SHEET_PACKAGES = SPDC_MB_SHEETS;
 export const SPDC_BBS_SHEET_PACKAGES = SPDC_BBS_SHEETS;
 export const SPDC_MONITORING_SHEET_PACKAGES = SPDC_MONITORING_SHEETS;
 
-function resolveSheetPackage(sheetName: string, mappings: [string, string][], fallbackHint?: RegExp): string | null {
-  const trimmed = sheetName.trim();
-  for (const [sheet, pkg] of mappings) {
-    if (trimmed === sheet.trim() || trimmed.toLowerCase() === sheet.trim().toLowerCase()) return pkg;
-  }
-  if (fallbackHint?.test(trimmed)) {
-    const base = trimmed.replace(/\s*(MB|BBS|Monitoring)\s*$/i, "").trim();
-    return base || trimmed;
-  }
-  return null;
+export type ParsedSheetBatch<T> = { sheetName: string; packageName: string; lines: T[] };
+
+/** Tabs that are not an exact MB, BBS, Monitoring, Budget or rate-difference name. */
+export function workbookSheetNames(buffer: Buffer): string[] {
+  return workbookFromBuffer(buffer).SheetNames;
 }
 
-export type ParsedSheetBatch<T> = { sheetName: string; packageName: string; lines: T[] };
+export function skippedBudgetTabs(names: string[]): string[] {
+  const known = new Set<string>();
+  for (const [sheet] of [...SPDC_MB_SHEETS, ...SPDC_BBS_SHEETS, ...SPDC_MONITORING_SHEETS]) {
+    known.add(foldTabName(sheet));
+  }
+  known.add("budget");
+  for (const rate of SPDC_RATE_SHEETS) known.add(foldTabName(rate.sheet));
+  return names.filter((name) => !known.has(foldTabName(name)));
+}
+
+/** Flag BBS rows whose length or weight cell is an Excel error, and zero the weight. */
+export function markBbsSheetErrors(sheet: WorkSheet | undefined, lines: ParsedBbsLine[]) {
+  if (!sheet) return lines;
+  const badRows = new Set<number>();
+  for (const addr of Object.keys(sheet)) {
+    if (addr.startsWith("!")) continue;
+    const cell = sheet[addr] as { t?: string; v?: unknown; w?: unknown } | undefined;
+    const text = String(cell?.w ?? cell?.v ?? "");
+    if (cell?.t !== "e" && !/^#(REF!|DIV\/0!|VALUE!|N\/A|NAME\?)/i.test(text.trim())) continue;
+    const decoded = XLSX.utils.decode_cell(addr);
+    badRows.add(decoded.r);
+  }
+  for (const line of lines) {
+    if (line.sourceRow == null || !badRows.has(line.sourceRow)) continue;
+    if (line.rowKind && line.rowKind !== "data") continue;
+    line.sourceError = true;
+    line.weightKg = 0;
+  }
+  return lines;
+}
 
 export function parseAllMbSheets(buffer: Buffer): ParsedSheetBatch<ParsedMbLine>[] {
   const wb = workbookFromBuffer(buffer);
   const out: ParsedSheetBatch<ParsedMbLine>[] = [];
   for (const name of wb.SheetNames) {
-    const pkg =
-      resolveSheetPackage(name, SPDC_MB_SHEET_PACKAGES, /\bMB\b|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i) ||
-      null;
-    if (!pkg && !/\bMB\b|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i.test(name))
-      continue;
+    const pkg = packageForTab(name, SPDC_MB_SHEETS);
+    if (!pkg) continue;
     const lines = parseMbRows(sheetRows(wb, name));
-    if (lines.length) out.push({ sheetName: name, packageName: pkg || name.trim(), lines });
+    if (lines.length) out.push({ sheetName: name, packageName: pkg, lines });
   }
   return out;
 }
@@ -605,13 +749,10 @@ export function parseAllBbsSheets(buffer: Buffer): ParsedSheetBatch<ParsedBbsLin
   const wb = workbookFromBuffer(buffer);
   const out: ParsedSheetBatch<ParsedBbsLine>[] = [];
   for (const name of wb.SheetNames) {
-    const pkg =
-      resolveSheetPackage(name, SPDC_BBS_SHEET_PACKAGES, /\bBBS\b|bending|rebar|bar/i) || null;
-    if (!pkg && !/\bBBS\b|bending|rebar|bar/i.test(name)) continue;
-    const lines = parseBbsRows(sheetRows(wb, name));
-    const dataLines = lines.filter((r) => r.rowKind === "data" && (r.diameterMm || r.totalLength || r.weightKg));
-    if (dataLines.length || lines.length >= 3)
-      out.push({ sheetName: name, packageName: pkg || name.replace(/\s*BBS\s*/i, " BBS").trim(), lines });
+    const pkg = packageForTab(name, SPDC_BBS_SHEETS);
+    if (!pkg) continue;
+    const lines = markBbsSheetErrors(wb.Sheets[name], parseBbsRows(sheetRows(wb, name)));
+    if (lines.length) out.push({ sheetName: name, packageName: pkg, lines });
   }
   return out;
 }
@@ -623,14 +764,20 @@ export function isFullSpdcWorkbook(buffer: Buffer): boolean {
 }
 
 export function parseMbBuffer(buffer: Buffer): ParsedMbLine[] {
-  if (isFullSpdcWorkbook(buffer)) {
-    const all = parseAllMbSheets(buffer);
-    if (all.length === 1) return all[0]!.lines;
-    if (all.length > 1) return bestSheetParse(buffer, parseMbRows, /mb|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i);
-  }
-  return bestSheetParse(buffer, parseMbRows, /mb|dormitory|compound|ugwt|septic|road|plumb|electric|fire|gas|wall|paving|door|window|furniture/i);
+  const all = parseAllMbSheets(buffer);
+  if (all.length) return all.reduce((best, sheet) => (sheet.lines.length > best.lines.length ? sheet : best)).lines;
+  const wb = workbookFromBuffer(buffer);
+  if (wb.SheetNames.length === 1) return parseMbRows(sheetRows(wb, wb.SheetNames[0]));
+  return [];
 }
 
 export function parseBbsBuffer(buffer: Buffer): ParsedBbsLine[] {
-  return bestSheetParse(buffer, parseBbsRows, /bbs|bending|rebar|bar/i);
+  const all = parseAllBbsSheets(buffer);
+  if (all.length) return all.reduce((best, sheet) => (sheet.lines.length > best.lines.length ? sheet : best)).lines;
+  const wb = workbookFromBuffer(buffer);
+  if (wb.SheetNames.length === 1) {
+    const name = wb.SheetNames[0]!;
+    return markBbsSheetErrors(wb.Sheets[name], parseBbsRows(sheetRows(wb, name)));
+  }
+  return [];
 }

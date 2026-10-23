@@ -799,11 +799,7 @@ export default function ProgressPage() {
           }
           actions={
             <div className="flex flex-wrap gap-2 items-center">
-              <Badge tone="brand">
-                {data.overviewSheet?.sheetProgressPct != null
-                  ? `${pct(Number(data.overviewSheet.sheetProgressPct))} sheet`
-                  : pct(data.totals.projectProgressPct)}
-              </Badge>
+              <Badge tone="brand">{pct(data.totals.projectProgressPct)}</Badge>
               <ReportExportButtons projectId={id} kind="progress" compact />
             </div>
           }
@@ -839,17 +835,10 @@ export default function ProgressPage() {
                 <h3 className="font-display text-lg text-ink">
                   {data.overviewSheet?.title || "Key registers at a glance"}
                 </h3>
-                {data.overviewSheet && (
-                  <p className="text-xs text-steel-muted mt-1">
-                    Dates from {data.overviewSheet.source}: start {fmtDate(data.overviewSheet.startDate)} · planned end{" "}
-                    {fmtDate(data.overviewSheet.plannedEnd)} · sheet current {fmtDate(data.overviewSheet.currentDate)}
-                    {data.overviewSheet.sheetProgressPct != null
-                      ? ` · sheet progress ${pct(Number(data.overviewSheet.sheetProgressPct))}`
-                      : ""}
-                    {" · "}
-                    register weighted {pct(data.totals?.projectProgressPct || 0)}
-                  </p>
-                )}
+                <p className="text-xs text-steel-muted mt-1">
+                  Physical progress {pct(data.totals?.projectProgressPct || 0)}. {data.totals?.progressMethod || "Cost-weighted achieved vs GFC, from BOQ monitoring"}.
+                  {data.totals?.schedulePct != null ? ` Schedule progress ${pct(data.totals.schedulePct)}.` : ""}
+                </p>
               </div>
               {!isToolWindow(location.search, location.pathname) && (
               <Link to={`/projects/${id}/hub/progress`} className="text-sm font-semibold text-brand">
@@ -1007,8 +996,8 @@ export default function ProgressPage() {
                         onCommit={(v) => void patchMilestone(m.id, { plannedEnd: v || null })}
                       />
                     </td>
-                    <td className="py-2 pr-3 font-mono text-xs">
-                      <RegisterSheetCell type="number" value={m.plannedDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { plannedDays: Number(v) })} />
+                    <td className="py-2 pr-3 font-mono text-xs" title="Working days between planned start and planned end">
+                      {m.plannedDays ?? 0}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">
                       <RegisterSheetCell
@@ -1026,8 +1015,8 @@ export default function ProgressPage() {
                         onCommit={(v) => void patchMilestone(m.id, { actualEnd: v || null })}
                       />
                     </td>
-                    <td className="py-2 pr-3 font-mono text-xs">
-                      <RegisterSheetCell type="number" value={m.actualDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { actualDays: Number(v) })} />
+                    <td className="py-2 pr-3 font-mono text-xs" title="Working days from actual start to actual end, or to today">
+                      {m.actualDays ?? 0}
                     </td>
                     <td className="py-2 pr-3">
                       <RegisterSheetCell type="number" value={m.weightage} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { weightage: Number(v) })} />
@@ -1042,11 +1031,18 @@ export default function ProgressPage() {
                       <RegisterSheetCell value={m.zone} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { zone: v })} />
                     </td>
                     <td className="py-2 pr-3">
-                      <RegisterSheetCell value={m.status} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { status: v })} />
+                      <span
+                        title="Status is calculated from the dates"
+                        className={/late|delayed/i.test(m.status || "") ? "text-danger font-semibold" : /completed/i.test(m.status || "") ? "text-brand font-semibold" : "text-ink"}
+                      >
+                        {m.status}
+                      </span>
                     </td>
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
-                        <RegisterSheetCell type="number" value={m.varianceDays} disabled={!canEdit} onCommit={(v) => void patchMilestone(m.id, { varianceDays: Number(v) })} />
+                        <span title="Delay days after the planned end. Finished early is shown as ahead.">
+                          {m.varianceDays > 0 ? m.varianceDays : m.aheadDays > 0 ? `ahead ${m.aheadDays}` : 0}
+                        </span>
                         {canEdit && (
                           <button type="button" className="text-danger text-[11px] shrink-0" onClick={() => void deleteRegisterRow(`milestones/${m.id}`, "milestone")}>
                             Delete
@@ -1556,8 +1552,8 @@ export default function ProgressPage() {
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(h.occurredAt)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(h.resolvedAt)}</td>
-                    <td className="py-2 pr-3">
-                      <RegisterSheetCell type="number" value={h.daysImpacted} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { daysImpacted: Number(v) })} />
+                    <td className="py-2 pr-3 font-mono text-xs" title="Days from occurrence to resolution, or to today while open">
+                      {h.daysImpacted ?? 0}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(h.baselineStart)}</td>
                     <td className="py-2 pr-3">
@@ -1569,8 +1565,8 @@ export default function ProgressPage() {
                     <td className="py-2 pr-3">
                       <RegisterSheetCell value={h.accountable} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { accountable: v })} />
                     </td>
-                    <td className="py-2 pr-3">
-                      <RegisterSheetCell value={h.status} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { status: v })} />
+                    <td className="py-2 pr-3" title="Open until a resolution date is set">
+                      {h.status}
                     </td>
                     <td className="py-2 pr-3 max-w-[180px]">
                       <RegisterSheetCell value={h.resolutionDescription} disabled={!canEdit} onCommit={(v) => void patchHindrance(h.id, { resolutionDescription: v })} />
@@ -1656,7 +1652,9 @@ export default function ProgressPage() {
                     <td className="py-2 pr-3">
                       <RegisterSheetCell type="number" value={r.consequence} disabled={!canEdit} onCommit={(v) => void patchRisk(r.id, { consequence: Number(v) })} />
                     </td>
-                    <td className="py-2 pr-3 font-semibold">{r.severity}</td>
+                    <td className="py-2 pr-3 font-semibold" title="Severity is probability times consequence">
+                      {r.severity} {r.rating ? `(${r.rating})` : ""}
+                    </td>
                     <td className="py-2 pr-3">{Math.round((r.probabilityPct || 0) * 100)}%</td>
                     <td className="py-2 pr-3">{inr(r.costImpact)}</td>
                     <td className="py-2 pr-3">{r.weeksLikely ?? "—"}</td>
@@ -1745,11 +1743,11 @@ export default function ProgressPage() {
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(l.submissionDate)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(l.requiredBy)}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(l.receivedDate)}</td>
-                    <td className="py-2 pr-3">
-                      <RegisterSheetCell value={l.status} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { status: v })} />
+                    <td className="py-2 pr-3" title="Approved only after the approval is received">
+                      {l.status}
                     </td>
-                    <td className="py-2 pr-3">
-                      <RegisterSheetCell type="number" value={l.delayDays} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { delayDays: Number(v) })} />
+                    <td className="py-2 pr-3 font-mono text-xs" title="Days after the required-by date, or zero when it is not late">
+                      {l.delayDays ?? 0}
                     </td>
                     <td className="py-2 pr-3">
                       <RegisterSheetCell value={l.responsible} disabled={!canEdit} onCommit={(v) => void patchLegal(l.id, { responsible: v })} />
@@ -2191,15 +2189,9 @@ export default function ProgressPage() {
           />
           <Input type="date" value={mileForm.plannedStart} onChange={(e) => setMileForm({ ...mileForm, plannedStart: e.target.value })} />
           <Input type="date" value={mileForm.plannedEnd} onChange={(e) => setMileForm({ ...mileForm, plannedEnd: e.target.value })} />
-          <Input placeholder="Plan days" value={mileForm.plannedDays} onChange={(e) => setMileForm({ ...mileForm, plannedDays: e.target.value })} />
-          <Input placeholder="Actual days" value={mileForm.actualDays} onChange={(e) => setMileForm({ ...mileForm, actualDays: e.target.value })} />
           <Input placeholder="Weightage" value={mileForm.weightage} onChange={(e) => setMileForm({ ...mileForm, weightage: e.target.value })} />
-          <Input placeholder="% complete 0–1" value={mileForm.pctComplete} onChange={(e) => setMileForm({ ...mileForm, pctComplete: e.target.value })} />
-          <Select value={mileForm.status} onChange={(e) => setMileForm({ ...mileForm, status: e.target.value })}>
-            {["Completed", "Delayed", "In Progress", "Not Started"].map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </Select>
+          <Input placeholder="% complete, 0 to 100" value={mileForm.pctComplete} onChange={(e) => setMileForm({ ...mileForm, pctComplete: e.target.value })} />
+          <p className="sm:col-span-2 text-xs text-steel-muted">Days, delay and status are calculated from the dates. Percent stays under 100 until the milestone is completed.</p>
         </form>
       </RegisterEntryModal>
 

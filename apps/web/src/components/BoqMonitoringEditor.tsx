@@ -51,6 +51,9 @@ export type MonLine = {
   overrunBoq?: number;
   overrunGfc?: number;
   overrunCertified?: number;
+  achievedFrom?: string | null;
+  achievedOverrideReason?: string | null;
+  bbsSteelMt?: number;
 };
 
 function parentSectionName(section: string) {
@@ -92,6 +95,7 @@ type Props = {
   addOpen?: boolean;
   onAddClose?: () => void;
   preferredAddKind?: "item" | "section" | "subsection";
+  onOpenSource?: (line: MonLine) => void;
 };
 
 type Draft = ReturnType<typeof emptyDraft>;
@@ -461,6 +465,7 @@ export function BoqMonitoringEditor({
   addOpen = false,
   onAddClose,
   preferredAddKind,
+  onOpenSource,
 }: Props) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -936,11 +941,40 @@ export function BoqMonitoringEditor({
                               type="number"
                               className={siteQtyOnly ? "boq-achieved-input" : undefined}
                               value={b.achievedQty}
-                              onCommit={(v) => void patchLine(b.id, { achievedQty: Number(v) || 0 })}
+                              onCommit={(v) => {
+                                const fromMeasure = b.achievedFrom === "mb" || b.achievedFrom === "bbs";
+                                if (fromMeasure) {
+                                  const reason = window.prompt("Reason for this manual override");
+                                  if (!reason?.trim()) return;
+                                  void patchLine(b.id, { achievedQty: Number(v) || 0, overrideReason: reason.trim() });
+                                  return;
+                                }
+                                void patchLine(b.id, { achievedQty: Number(v) || 0 });
+                              }}
                             />
                           ) : (
                             formatQty(b.achievedQty)
                           )}
+                          {b.achievedFrom === "mb" || b.achievedFrom === "bbs" ? (
+                            <button
+                              type="button"
+                              className="block text-[10px] text-brand"
+                              title={b.achievedFrom === "bbs" ? "Quantity filled from the BBS" : "Quantity filled from the measurement book"}
+                              onClick={() => onOpenSource?.(b)}
+                            >
+                              {b.achievedFrom === "bbs" ? "from BBS" : "from MB"}
+                            </button>
+                          ) : null}
+                          {b.achievedFrom === "override" ? (
+                            <span className="block text-[10px] text-steel-muted" title={b.achievedOverrideReason || "Manual override"}>
+                              override
+                            </span>
+                          ) : null}
+                          {b.bbsSteelMt ? (
+                            <span className="block text-[10px] text-steel-muted" title="Variance against the GFC quantity is in the GFC column">
+                              Steel from BBS: {b.bbsSteelMt} MT
+                            </span>
+                          ) : null}
                         </td>
                         <td className={monitoringColClass(9, { extra: "num" })}>{formatQty(b.excessQty)}</td>
                         <td className={monitoringColClass(10, { extra: "num" })}>{formatQty(b.savingQty)}</td>

@@ -148,6 +148,7 @@ type Snap = {
   status: string;
   publishedPath?: string | null;
   publishedAt?: string | null;
+  physicalProgress?: { physicalPct: number; method: string };
   autoFillSources?: string[];
   scurveEntries?: ScurveEntry[];
   charts?: {
@@ -749,6 +750,11 @@ export default function DprMakerPage() {
           busy={busy}
           actions={<Badge tone={snap.status === "Published" ? "ok" : "warn"}>{snap.status}</Badge>}
         />
+        {snap.physicalProgress && (
+          <p className="text-xs text-steel-muted px-1">
+            Physical progress {Math.round(snap.physicalProgress.physicalPct * 100)}%. {snap.physicalProgress.method}
+          </p>
+        )}
 
         <div className="maker-toolbar !py-0 !px-0 !bg-transparent !border-0">
           <div className="maker-toolbar__field">

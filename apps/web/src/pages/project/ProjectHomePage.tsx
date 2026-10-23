@@ -185,8 +185,9 @@ export default function ProjectHomePage() {
         <Stat label="Open RFIs" value={s.openRfis ?? "—"} />
         <Stat label="Open hindrances" value={pt.openHindrance ?? "—"} />
         <Stat
-          label="Project progress"
-          value={pt.projectProgressPct != null ? `${Math.round(pt.projectProgressPct * 100)}%` : "—"}
+          label="Physical progress"
+          hint="Cost-weighted achieved vs GFC, from BOQ monitoring"
+          value={pt.projectProgressPct != null ? `${Math.round(pt.projectProgressPct * 100)}%` : "n/a"}
         />
       </div>
 

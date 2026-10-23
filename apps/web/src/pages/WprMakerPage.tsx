@@ -83,6 +83,7 @@ type Pack = {
   publishedAt?: string | null;
   publishedPath?: string | null;
   publishedUrl?: string | null;
+  physicalProgress?: { physicalPct: number; method: string };
 };
 
 function resolveMediaUrl(ref: string): string {
@@ -522,6 +523,11 @@ export default function WprMakerPage() {
           busy={busy}
           actions={<Badge tone={pack.status === "Published" ? "ok" : "warn"}>{pack.status}</Badge>}
         />
+        {pack.physicalProgress && (
+          <p className="text-xs text-steel-muted px-1">
+            Physical progress {Math.round(pack.physicalProgress.physicalPct * 100)}%. {pack.physicalProgress.method}
+          </p>
+        )}
 
         <div className="maker-toolbar !py-0 !px-0 !bg-transparent !border-0 flex-wrap">
           <div className="maker-toolbar__field">

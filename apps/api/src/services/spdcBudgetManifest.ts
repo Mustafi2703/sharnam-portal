@@ -1,51 +1,13 @@
 /**
  * SPDC_Budget_Arvind 49.xls — canonical tab list (36 sheets).
- * Single source for seed, upload parsers, and verify.
+ * Tab names live in packages/shared. This file re-exports them for seed and parsers.
  */
+import { SPDC_BBS_SHEETS, SPDC_MB_SHEETS, SPDC_MONITORING_SHEETS } from "@sharnam/shared";
+
+export { SPDC_BBS_SHEETS, SPDC_MB_SHEETS, SPDC_MONITORING_SHEETS };
 
 /** Budget WBS — first data row is Excel row 8 (0-based index 7). XLSX drops empty col A: [0]=Sr, [1]=Desc. */
 export const SPDC_BUDGET_DATA_START_ROW = 7;
-
-export const SPDC_MONITORING_SHEETS: [string, string][] = [
-  ["Monitoring Combined", "Combined"],
-  ["Monitoring Civil Dormitory", "Civil Dormitory"],
-  ["Monitoring Electric", "Electric"],
-  ["Monitoring Plumbing", "Plumbing"],
-  ["Monitoring UGWT", "UGWT"],
-  ["Monitoring Septic Tank", "Septic Tank"],
-  ["Monitoring External Dev", "External Development"],
-  ["Monitoring Windows", "Windows"],
-  ["Monitoring Furniture ", "Furniture"],
-  ["Monitoring WPC Door", "WPC Door"],
-  ["Monitoring Fire Fighting", "Fire Fighting"],
-  ["Monitoring Gas", "Gas Line"],
-  ["Monitoring External Electric", "External Electric"],
-];
-
-export const SPDC_MB_SHEETS: [string, string][] = [
-  ["DORMITORY MB", "Dormitory Civil"],
-  ["Electric MB", "Electric"],
-  ["Plumbing MB", "Plumbing"],
-  ["UGWT MB", "UGWT"],
-  ["Septic Tank", "Septic Tank"],
-  ["Compound Wall", "Compound Wall"],
-  ["Road & Paving", "Road & Paving"],
-  ["Windows ", "Windows"],
-  ["Furniture", "Furniture"],
-  ["WPC Door", "WPC Door"],
-  ["Fire Fighting", "Fire Fighting"],
-  ["Fire Alarm", "Fire Alarm"],
-  ["Gas Line", "Gas Line"],
-  ["External Electric", "External Electric"],
-];
-
-export const SPDC_BBS_SHEETS: [string, string][] = [
-  ["DORMITORY BBS", "Dormitory BBS"],
-  ["Compound Wall BBS", "Compound Wall BBS"],
-  ["Septic Tank BBS", "Septic Tank BBS"],
-  ["Road BBS", "Road BBS"],
-  ["UGWT BBS", "UGWT BBS"],
-];
 
 /** MB package → linked BBS tab (SPDC sheet flow). */
 export const SPDC_MB_TO_BBS_PACKAGE: Record<string, string> = {

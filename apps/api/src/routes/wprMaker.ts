@@ -249,9 +249,13 @@ wprMakerRouter.get("/:projectId", async (req, res) => {
     weekEnd.toISOString().slice(0, 10)
   );
 
+  const { projectProgress } = await import("../services/projectProgress.js");
+  const physicalProgress = await projectProgress(projectId, weekEnd);
+
   res.json({
     projectId,
     projectCode: project.code,
+    physicalProgress,
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(),
     rangePreset: range.preset,

@@ -21,6 +21,49 @@ function excelMonthLabel(serial: unknown): string {
   return epoch.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
 }
 
+const CASHFLOW_SKIP =
+  /^(month|difference|cpi|earned value|planned budget|progress percentage|prgress percentage|actual work done|work description|invoice month|yy|xx\s*-\s*yy|total)$/i;
+
+/** Package rows only. Header and calculation labels are not packages. */
+export function isCashflowWorkRow(label: string): boolean {
+  const t = label.trim();
+  if (!t) return false;
+  if (CASHFLOW_SKIP.test(t)) return false;
+  if (/^revised on\b/i.test(t)) return false;
+  if (/planned budget|progress percentage|prgress percentage|actual work done|earned value/i.test(t)) return false;
+  if (/^\d+(\.\d+)?$/.test(t)) return false;
+  const serial = Number(t);
+  if (Number.isFinite(serial) && serial >= 30000 && serial < 80000) return false;
+  return true;
+}
+
+function periodDate(serialOrLabel: unknown): Date | null {
+  if (typeof serialOrLabel === "number" && serialOrLabel >= 30000 && serialOrLabel < 80000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    epoch.setUTCDate(epoch.getUTCDate() + Math.floor(serialOrLabel));
+    return epoch;
+  }
+  const text = s(serialOrLabel, 40);
+  const year = text.match(/\b(19|20)\d{2}\b/);
+  const month = text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i);
+  if (year && month) return new Date(`${month[1]} 1, ${year[0]}`);
+  if (year && /^q[1-4]/i.test(text)) {
+    const q = Number(text.match(/q([1-4])/i)?.[1] || 1);
+    return new Date(Number(year[0]), (q - 1) * 3, 1);
+  }
+  return null;
+}
+
+/** Drop a column dated more than 2 years before the project start. Sep 2022 is that column. */
+export function periodTooEarly(serialOrLabel: unknown, projectStart?: Date | null): boolean {
+  const d = periodDate(serialOrLabel);
+  if (!d) return false;
+  const start = projectStart && !Number.isNaN(projectStart.getTime()) ? projectStart : new Date(2025, 0, 1);
+  const cutoff = new Date(start);
+  cutoff.setFullYear(cutoff.getFullYear() - 2);
+  return d < cutoff;
+}
+
 function sheetRows(wb: WorkBook, name: string): unknown[][] {
   const key =
     wb.SheetNames.find((n: string) => n === name) ||
@@ -66,7 +109,7 @@ export type ParsedRateDiff = {
   savingAmount: number;
 };
 
-export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
+export function parseCashflowBuffer(buffer: Buffer, projectStart?: Date | null): ParsedCashflowPeriod[] {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const data: ParsedCashflowPeriod[] = [];
 
@@ -77,6 +120,7 @@ export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
     const actual = (rows[4] || []) as unknown[];
     for (let c = 1; c < months.length; c++) {
       if (s(months[c]).toLowerCase() === "total") continue;
+      if (periodTooEarly(months[c], projectStart)) continue;
       const label = excelMonthLabel(months[c]);
       const p = n(planned[c]);
       const a = n(actual[c]);
@@ -97,9 +141,18 @@ export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
     for (let i = 6; i < Math.min(rows.length, 40); i++) {
       const row = rows[i] as unknown[];
       const structure = s(row[1], 120);
-      if (!structure || /total/i.test(structure)) continue;
+      if (!isCashflowWorkRow(structure)) continue;
       const total = n(row[header.length - 2]) || n(row[22]) || n(row[2]);
-      const firstMonth = n(row[4]) || n(row[5]);
+      let firstMonth = 0;
+      let firstLabel = "";
+      for (let c = 4; c < header.length; c++) {
+        if (periodTooEarly(header[c], projectStart)) continue;
+        const amt = n(row[c]);
+        if (!amt) continue;
+        firstMonth = amt;
+        firstLabel = excelMonthLabel(header[c]);
+        break;
+      }
       if (!total && !firstMonth) continue;
       data.push({
         periodLabel: "Forecast total",
@@ -110,7 +163,7 @@ export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
       });
       if (firstMonth) {
         data.push({
-          periodLabel: excelMonthLabel(header[4]) || "Forecast M1",
+          periodLabel: firstLabel || "Forecast M1",
           packageName: `Forecast · ${structure}`,
           plannedAmount: firstMonth,
           actualAmount: 0,
@@ -127,8 +180,9 @@ export function parseCashflowBuffer(buffer: Buffer): ParsedCashflowPeriod[] {
     for (let i = 7; i < Math.min(rows.length, 50); i++) {
       const row = rows[i] as unknown[];
       const work = s(row[0], 120);
-      if (!work || /^total/i.test(work)) continue;
+      if (!isCashflowWorkRow(work)) continue;
       for (let c = 1; c <= monthCount; c++) {
+        if (periodTooEarly(months[c], projectStart)) continue;
         const amt = n(row[c]);
         if (!amt) continue;
         data.push({
@@ -236,37 +290,89 @@ export type ParsedBudgetLine = {
   remarks: string | null;
 };
 
+function headerText(v: unknown): string {
+  return s(v, 80).toLowerCase().replace(/\s+/g, " ");
+}
+
+function findCol(rows: unknown[][], from: number, to: number, pattern: RegExp): number {
+  for (let i = from; i <= to && i < rows.length; i++) {
+    const row = (rows[i] || []) as unknown[];
+    for (let j = 0; j < row.length; j++) {
+      if (pattern.test(headerText(row[j]))) return j;
+    }
+  }
+  return -1;
+}
+
 export function parseBudgetBuffer(buffer: Buffer): ParsedBudgetLine[] {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const budgetSheet =
     wb.SheetNames.find((n) => /^budget$/i.test(n.trim())) || wb.SheetNames[0];
   const rows = sheetRows(wb, budgetSheet);
+  let headerAt = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const blob = ((rows[i] || []) as unknown[]).map(headerText).join(" | ");
+    if (/budgeted/.test(blob) && /work order|certif/.test(blob)) {
+      headerAt = i;
+      break;
+    }
+  }
+  if (headerAt < 0) headerAt = Math.max(0, SPDC_BUDGET_DATA_START_ROW - 3);
+  const subAt = headerAt + 2;
+  const descCol = findCol(rows, headerAt, subAt, /^description$/);
+  const srCol = findCol(rows, headerAt, subAt, /^sr/);
+  const whoCol = findCol(rows, headerAt, subAt, /stackholder|stakeholder/);
+  const budgetedCol = findCol(rows, headerAt, headerAt + 1, /budgeted/);
+  const woCol = findCol(rows, headerAt, headerAt + 1, /actual wo|work order/);
+  const certifiedCol = findCol(rows, headerAt, headerAt + 1, /certif/);
+  const forecastCol = findCol(rows, headerAt, headerAt + 1, /fore\s*cast/);
+  // The group header is "FORECASTED / NON TENDERED ITEMS". The amount column is the next header row.
+  const nonTenderedCol = findCol(rows, headerAt + 1, headerAt + 1, /non tendered/);
+  const steelCol = findCol(rows, headerAt, headerAt + 1, /\bsteel\b/);
+  const cementCol = findCol(rows, headerAt, headerAt + 1, /\bcement\b/);
+  const tilesCol = findCol(rows, headerAt, headerAt + 1, /\btiles\b/);
+  const grossCol = findCol(rows, headerAt, headerAt + 1, /gross total|^total$/);
+  const remarksCol = findCol(rows, headerAt, headerAt + 1, /^remarks$/);
+  const sub = (rows[subAt] || []) as unknown[];
+  const additionCol = sub.findIndex((cell) => /^addition$/i.test(headerText(cell)));
+  const reductionCol = sub.findIndex((cell) => /^reduction$/i.test(headerText(cell)));
   const data: ParsedBudgetLine[] = [];
-  // SPDC_Budget_Arvind: header block ends at row 6; first WBS line is row index 7.
-  for (let i = SPDC_BUDGET_DATA_START_ROW; i < rows.length; i++) {
+  const start = Math.max(subAt + 1, SPDC_BUDGET_DATA_START_ROW);
+  for (let i = start; i < rows.length; i++) {
     const row = rows[i] as unknown[];
-    const description = s(row[1], 400);
+    const description = s(row[descCol >= 0 ? descCol : 1], 400);
     if (!description) continue;
-    // Skip leftover header labels if a short sheet was pasted above the WBS.
-    if (/^description$/i.test(description) || /^budget wbs$/i.test(description)) continue;
+    if (/^description$|^budget wbs$|^sr no/i.test(description)) continue;
+    if (/^gst\b|total project cost/i.test(description)) continue;
+    const excessAt = (base: number) => {
+      if (base < 0) return { excess: 0, saving: 0 };
+      const next = headerText(sub[base]);
+      const after = headerText(sub[base + 1]);
+      const excess = next === "excess" ? n(row[base]) : 0;
+      const saving = after === "saving" ? n(row[base + 1]) : next === "saving" ? n(row[base]) : 0;
+      return { excess, saving };
+    };
+    const steel = excessAt(steelCol);
+    const cement = excessAt(cementCol);
+    const tiles = excessAt(tilesCol);
     data.push({
-      srNo: s(row[0], 20) || null,
+      srNo: s(row[srCol >= 0 ? srCol : 0], 20) || null,
       description,
-      stakeholder: s(row[2], 120) || null,
-      budgetedAmount: n(row[3]),
-      workOrderAmount: n(row[4]),
-      certifiedAmount: n(row[5]),
-      forecastedAmount: n(row[6]),
-      forecastReduction: n(row[7]),
-      nonTendered: n(row[8]),
-      steelExcess: n(row[9]),
-      steelSaving: n(row[10]),
-      cementExcess: n(row[11]),
-      cementSaving: n(row[12]),
-      tilesExcess: n(row[13]),
-      tilesSaving: n(row[14]),
-      grossTotal: n(row[15]),
-      remarks: s(row[16], 2000) || null,
+      stakeholder: s(row[whoCol >= 0 ? whoCol : 2], 120) || null,
+      budgetedAmount: budgetedCol >= 0 ? n(row[budgetedCol]) : 0,
+      workOrderAmount: woCol >= 0 ? n(row[woCol]) : 0,
+      certifiedAmount: certifiedCol >= 0 ? n(row[certifiedCol]) : 0,
+      forecastedAmount: additionCol >= 0 ? n(row[additionCol]) : forecastCol >= 0 ? n(row[forecastCol]) : 0,
+      forecastReduction: reductionCol >= 0 ? n(row[reductionCol]) : 0,
+      nonTendered: nonTenderedCol >= 0 ? n(row[nonTenderedCol]) : 0,
+      steelExcess: steel.excess,
+      steelSaving: steel.saving,
+      cementExcess: cement.excess,
+      cementSaving: cement.saving,
+      tilesExcess: tiles.excess,
+      tilesSaving: tiles.saving,
+      grossTotal: grossCol >= 0 ? n(row[grossCol]) : 0,
+      remarks: remarksCol >= 0 ? s(row[remarksCol], 2000) || null : null,
     });
   }
   return data;
