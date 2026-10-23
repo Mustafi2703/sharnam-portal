@@ -1671,6 +1671,12 @@ model CrmBidPackage {
   disciplinesJson          String?   @db.LongText
   dueDate                  DateTime?
   notes                    String?   @db.Text
+  /// Unpriced package BOQ. Comparative columns come from this file, not from an R1 or R2 name.
+  blankBoqFileName         String?
+  blankBoqPath             String?
+  blankBoqSharePointUrl    String?
+  boqLinesJson             String?   @db.LongText
+  comparativeJson          String?   @db.LongText
   comparativeSheetId       String?
   summarySheetId           String?
   comparativeSharePointUrl String?
@@ -1908,6 +1914,10 @@ model DesignCoordinationIssue {
   lastFollowUpAt  DateTime?
   escalatedRfiId  String?
   dueDate         DateTime?
+  /// Answer from the assigned party. The raiser closes the issue after checking it.
+  responseText    String?   @db.Text
+  respondedByName String?
+  respondedAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
