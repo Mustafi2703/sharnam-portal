@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader, TextArea } from "../../components/ui";
@@ -9,7 +9,6 @@ import { SetupPartyMultiPick, setupPartyKind } from "../../components/SetupParty
 import { WorkPackagesPanel } from "../../components/WorkPackagesPanel";
 import { ProjectTeamAllocatePanel } from "../../components/ProjectTeamAllocatePanel";
 import { ProjectClientRepresentativesPanel, type ProjectClientRep } from "../../components/ProjectClientRepresentativesPanel";
-import { projectStatusHint } from "../../lib/projectStatus";
 import { trimField } from "../../lib/stringUtils";
 import { useClientLogo } from "../../lib/useClientLogo";
 import { uiCopy } from "../../lib/formatUiText";
@@ -149,7 +148,6 @@ const STEPS: { id: Step; n: string; label: string }[] = [
 
 export default function CrmProjectSetupPage() {
   const { token, user } = useAuth();
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const projectId = params.get("projectId") || "";
   const step = (["project", "matrix", "launch"].includes(params.get("step") || "") ? params.get("step") : "project") as Step;
@@ -551,11 +549,6 @@ export default function CrmProjectSetupPage() {
         <PageHeader
           eyebrow="CRM · project start"
           title={projectId ? (isLaunched ? "Edit project card & SPDC team" : "Project setup") : "Project setup"}
-          subtitle={
-            projectId && isLaunched
-              ? "Job is live — update the client card and add consultants, vendors, packages, or SPDC team members as the project grows. Save links them; new logins are still created on the directory pages."
-              : "Pick client, PMC, consultants, vendors, packages, and SPDC team. New people and companies are added on the directory pages — save only links them to this job."
-          }
         />
         {summary && (
           <div className="flex flex-wrap items-center gap-2">
@@ -564,11 +557,6 @@ export default function CrmProjectSetupPage() {
             <span className="text-sm text-ink max-w-md whitespace-pre-wrap break-words">
               {summary.project.status && summary.project.status !== "Planning" ? summary.project.status : "No status note yet"}
             </span>
-            <Link to="/crm/projects">
-              <Button type="button" variant="secondary">
-                Back to Project Register
-              </Button>
-            </Link>
           </div>
         )}
       </div>
@@ -600,11 +588,6 @@ export default function CrmProjectSetupPage() {
         <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
           <Card className="!p-4 space-y-3">
             <h3 className="font-semibold text-sm">{projectId ? "Project card & parties" : "New delivery project"}</h3>
-            {projectId && isLaunched ? (
-              <p className="text-xs text-steel-muted leading-relaxed">
-                Tick consultants, PMC, contractors, or SPDC team members below and save. Unticking a company and saving removes it from this job.
-              </p>
-            ) : null}
             <form
               className="grid sm:grid-cols-2 gap-2"
               onSubmit={projectId ? saveDetails : createProject}
@@ -639,7 +622,6 @@ export default function CrmProjectSetupPage() {
               {projectId ? (
                 <TextArea
                   label="Status note"
-                  hint="Write this in your own words. You can change it any time."
                   rows={3}
                   fieldClassName="sm:col-span-2"
                   value={details.status === "Planning" ? "" : details.status || ""}
@@ -764,9 +746,6 @@ export default function CrmProjectSetupPage() {
                           : setCreateForm({ ...createForm, clientAddress: e.target.value })
                       }
                     />
-                    <p className="sm:col-span-2 text-[11px] text-steel-muted">
-                      Office and admin only. Save updates the client directory and every project linked to this company.
-                    </p>
                     {projectId && token ? (
                       <ClientLogoUpload
                         projectId={projectId}
@@ -774,11 +753,7 @@ export default function CrmProjectSetupPage() {
                         logoUrl={summary?.project.clientLogoUrl}
                         onUploaded={() => void loadProject()}
                       />
-                    ) : (
-                      <p className="sm:col-span-2 text-[11px] text-steel-muted">
-                        Client logo is optional. Save the card first, then upload it anytime.
-                      </p>
-                    )}
+                    ) : null}
                     {projectId ? (
                       <div className="sm:col-span-2 mt-2">
                         <ProjectClientRepresentativesPanel
@@ -790,11 +765,7 @@ export default function CrmProjectSetupPage() {
                       </div>
                     ) : null}
                   </div>
-                ) : (
-                  <p className="text-[11px] text-steel-muted rounded-lg border border-dashed border-line px-3 py-2">
-                    Pick a client above to edit the card here, or add a new company on CRM → Clients.
-                  </p>
-                )}
+                ) : null}
               </div>
               <div className="sm:col-span-2 grid lg:grid-cols-3 gap-3">
                 <SetupPartyMultiPick
@@ -804,8 +775,6 @@ export default function CrmProjectSetupPage() {
                   vendors={vendors}
                   selectedIds={consultantIds}
                   onChange={setConsultantIds}
-                  directoryHref="/crm/directory/stakeholders"
-                  directoryLabel="Add on Consultants →"
                 />
                 <SetupPartyMultiPick
                   token={token}
@@ -814,8 +783,6 @@ export default function CrmProjectSetupPage() {
                   vendors={vendors}
                   selectedIds={pmcIds}
                   onChange={setPmcIds}
-                  directoryHref="/crm/directory/stakeholders"
-                  directoryLabel="Add on Consultants →"
                 />
                 <SetupPartyMultiPick
                   token={token}
@@ -824,8 +791,6 @@ export default function CrmProjectSetupPage() {
                   vendors={vendors}
                   selectedIds={contractorIds}
                   onChange={setContractorIds}
-                  directoryHref="/crm/directory/vendors"
-                  directoryLabel="Add on Vendors →"
                 />
               </div>
               <div className="sm:col-span-2">
@@ -844,9 +809,6 @@ export default function CrmProjectSetupPage() {
               <div className="sm:col-span-2 flex flex-wrap gap-2 items-center">
                 <Button type="submit" disabled={busy}>
                   {projectId ? (isLaunched ? "Save card & SPDC team" : "Save project card") : "Create project"}
-                </Button>
-                <Button type="button" variant="secondary" disabled={busy} onClick={() => navigate("/crm/projects")}>
-                  Back to Project Register
                 </Button>
                 {projectId ? (
                   <Link to={`/crm/setup?projectId=${projectId}&step=matrix`} className="text-[11px] font-semibold text-steel-muted">
@@ -893,7 +855,6 @@ export default function CrmProjectSetupPage() {
                 </p>
                 {summary.lead && <p className="text-xs text-steel-muted">From lead: {summary.lead.title}</p>}
                 <p className="text-[11px] text-steel-muted leading-relaxed">
-                  {projectStatusHint(summary.project.status)}{" "}
                   {
                     summary.members.filter((m) => {
                       const email = (m.email || "").trim().toLowerCase();
@@ -924,7 +885,7 @@ export default function CrmProjectSetupPage() {
         <div className="space-y-4">
           {summary && (
             <p className="text-xs text-steel-muted">
-              Assigned so far: {summary.members.length} people · {summary.vendors.length} companies. Name lists include people added on each CRM company. Add a missing company on the matrix — no need to leave this step.
+              Assigned so far: {summary.members.length} people · {summary.vendors.length} companies.
             </p>
           )}
           <ProjectSetupMatrixDesk
@@ -959,12 +920,8 @@ export default function CrmProjectSetupPage() {
       {step === "launch" && projectId && isLaunched && (
         <Card className="!p-4 space-y-3">
           <h3 className="font-semibold text-sm">Project already launched</h3>
-          <p className="text-sm text-steel-muted leading-relaxed">
-            Status is <strong>{summary?.project.status}</strong>. Create the SharePoint folders if they are missing — existing folders are left as they are.
-            Use step 1 to add consultants, vendors, or SPDC team members during the job.
-          </p>
           <p className="text-xs text-steel-muted">
-            Onboarding mail uses the communication matrix. To: {mailPreview?.to.join(", ") || "—"}. CC: {mailPreview?.cc.join(", ") || "—"}. Only people already on the project (SPDC team and parties) are included. Nothing is sent until you click Send onboarding.
+            To: {mailPreview?.to.join(", ") || "—"}. CC: {mailPreview?.cc.join(", ") || "—"}.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={busy} onClick={() => void launchDrive()}>
@@ -973,14 +930,6 @@ export default function CrmProjectSetupPage() {
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void sendOnboarding()}>
               Send onboarding
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setStep("project")}>
-              Edit card & SPDC team
-            </Button>
-            <Link to="/crm/projects">
-              <Button type="button" variant="secondary">
-                Back to Project Register
-              </Button>
-            </Link>
           </div>
         </Card>
       )}
@@ -990,9 +939,6 @@ export default function CrmProjectSetupPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="font-semibold text-sm">Launch this project</h3>
-              <p className="text-xs text-steel-muted mt-0.5">
-                Saves the launch, then creates the ISO folders in SharePoint after you leave this page. The status note on the card stays as you wrote it. No emails are sent.
-              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" disabled={busy} onClick={() => void completeSetup()}>
@@ -1003,7 +949,7 @@ export default function CrmProjectSetupPage() {
               </Button>
             </div>
             <p className="text-xs text-steel-muted">
-              Launch creates the SharePoint folders and files the project card in SPDC CRM. Send onboarding mails only the people already on the matrix and the team. To: {mailPreview?.to.join(", ") || "—"}. CC: {mailPreview?.cc.join(", ") || "—"}.
+              To: {mailPreview?.to.join(", ") || "—"}. CC: {mailPreview?.cc.join(", ") || "—"}.
             </p>
           </div>
           <ul className="grid sm:grid-cols-2 gap-2">
@@ -1081,7 +1027,6 @@ function ClientLogoUpload({
       <Button type="button" variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
         {busy ? "Uploading…" : logoUrl ? "Replace Client Logo" : "Upload Client Logo On The Project Card"}
       </Button>
-      <span className="text-[11px] text-steel-muted">PNG or JPG. Up to 2 MB. A wide mark about 400 by 160 pixels stays sharp on the matrix.</span>
       {err ? <span className="text-[11px] text-danger">{err}</span> : null}
     </div>
   );

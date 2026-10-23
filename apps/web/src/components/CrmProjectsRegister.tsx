@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { CrmDetailLines, CrmDetailPanel } from "./crm/CrmDetailPanel";
 import { RegisterEmptyRow, RegisterSheetFrame } from "./RegisterSheetFrame";
 import { Button, Input } from "./ui";
-import { projectStatusHint } from "../lib/projectStatus";
 
 export type CrmProjectRow = {
   id: string;
@@ -251,9 +250,7 @@ export function CrmProjectsRegister({
                 <h3 className="font-display text-lg leading-snug">{selected.name}</h3>
                 {selected.status && selected.status !== "Planning" ? (
                   <p className="text-sm mt-1 whitespace-pre-wrap break-words">{selected.status}</p>
-                ) : (
-                  <p className="text-[11px] text-steel-muted mt-1">{projectStatusHint(selected.status)}</p>
-                )}
+                ) : null}
               </div>
               <CrmDetailLines lines={projectDetailLines(selected, selectedProposal)} />
               <div className="flex flex-col gap-2 border-t border-line pt-3">

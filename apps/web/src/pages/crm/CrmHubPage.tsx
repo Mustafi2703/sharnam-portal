@@ -22,28 +22,8 @@ export default function CrmHubPage() {
             CRM
           </span>
           <div className="min-w-0 flex-1">
-            <PageHeader
-              eyebrow="CRM · Tool desk"
-              title="CRM"
-              subtitle={formatUiText(
-                "Leads, proposals, bids, and company directory — all on this desk. Open a tool in a new window to work, then return to the hub."
-              )}
-            />
+            <PageHeader eyebrow="CRM · Tool desk" title="CRM" />
           </div>
-        </div>
-        <div className="module-hub__workflow border-t border-line bg-sand/80 px-5 sm:px-6 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
-          <span>
-            <strong className="text-ink font-semibold">1.</strong> Clients directory → activate portal
-          </span>
-          <span>
-            <strong className="text-ink font-semibold">2.</strong> Lead → proposal → SharePoint Word
-          </span>
-          <span>
-            <strong className="text-ink font-semibold">3.</strong> Award → project setup + matrix export
-          </span>
-          <span>
-            <strong className="text-ink font-semibold">4.</strong> Bids · vendors upload rates → R2
-          </span>
         </div>
       </div>
 
@@ -67,7 +47,6 @@ export default function CrmHubPage() {
                     <div className="font-display text-base font-semibold text-ink group-hover:text-brand leading-snug">
                       {formatUiText(t.label)}
                     </div>
-                    <p className="text-sm text-steel-muted mt-2 leading-relaxed line-clamp-3">{formatUiText(t.subtitle)}</p>
                     <div className="mt-4 pt-3 border-t border-line/80 text-sm font-semibold text-brand flex items-center justify-between gap-2">
                       <span>Open</span>
                       <span aria-hidden className="group-hover:translate-x-0.5 transition-transform">

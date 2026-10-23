@@ -1669,6 +1669,7 @@ model CrmBidPackage {
   vendorNamesJson          String    @default("[]") @db.LongText
   /// Selected discipline BOQ sheets for this package (JSON array of {key,label,sheetName})
   disciplinesJson          String?   @db.LongText
+  /// Quote-by deadline. Vendors upload the Excel BOQ by this date.
   dueDate                  DateTime?
   notes                    String?   @db.Text
   /// Unpriced package BOQ. Comparative columns come from this file, not from an R1 or R2 name.
@@ -2918,6 +2919,8 @@ model Quotation {
   leadId                  String?
   quotationNo             String
   clientName              String
+  /// Who referred this proposal. Free text, separate from the quotation number.
+  referenceBy             String?
   clientAddress           String?   @db.Text
   clientGst               String?
   scopeSummary            String?   @db.Text

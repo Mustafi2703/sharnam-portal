@@ -176,9 +176,6 @@ export function ProjectTeamAllocatePanel({
   return (
     <Card className="!p-4 space-y-3">
       <h3 className="font-semibold text-sm">SPDC Team</h3>
-      <p className="text-xs text-steel-muted">
-        Mark the company role on this project card — Director, Coordinator, Project Manager, Senior / Junior / Billing / Planning / Safety / MEPF engineer. It is saved on the person and used on the communication matrix.
-      </p>
       {staffMembers.length > 0 && (
         <>
           <Input
@@ -263,13 +260,7 @@ export function ProjectTeamAllocatePanel({
                 Add to SPDC team ({selectedIds.length})
               </Button>
             </div>
-          ) : (
-            <p className="text-[11px] text-steel-muted">
-              {selectedIds.length
-                ? `${selectedIds.length} SPDC team member(s) selected — they save with the project card (roles from HRMS company role).`
-                : "Select team members; they save with the project card."}
-            </p>
-          )}
+          ) : null}
         </div>
       )}
     </Card>

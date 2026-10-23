@@ -1,9 +1,10 @@
-import { fmtInr, fmtLeadDate, textToLineItems, type CrmLead } from "./crmLeadUtils";
+import { fmtLeadDate, textToLineItems, type CrmLead } from "./crmLeadUtils";
 
 export type CrmQuotation = {
   id: string;
   quotationNo: string;
   clientName: string;
+  referenceBy?: string | null;
   clientAddress?: string | null;
   clientGst?: string | null;
   scopeSummary?: string | null;
@@ -64,14 +65,11 @@ export function proposalDetailLines(q: CrmQuotation) {
   return [
     { label: "Quotation no", value: q.quotationNo, mono: true },
     { label: "Client", value: q.clientName },
+    { label: "Reference by", value: q.referenceBy || "—" },
     { label: "Status", value: q.status },
-    { label: "Total value", value: fmtInr(q.totalValue) },
-    { label: "Currency", value: q.currency || "INR", mono: true },
     { label: "Quotation date", value: fmtProposalDate(q.quotationDate) },
-    { label: "Validity", value: q.validityDays != null ? `${q.validityDays} days` : "—" },
     { label: "Awarded", value: fmtProposalDate(q.awardedAt) },
     { label: "Client address", value: q.clientAddress || "—" },
-    { label: "Client GST", value: q.clientGst || "—", mono: true },
     { label: "Linked lead", value: q.lead?.title || "—" },
     { label: "Current version", value: `R${q.currentRevisionNo ?? 0}`, mono: true },
     { label: "Versions kept", value: String(q.revisions?.length || 0) },
@@ -92,6 +90,7 @@ export function filterQuotations(
     const hay = [
       r.clientName,
       r.quotationNo,
+      r.referenceBy,
       r.status,
       r.scopeSummary,
       r.lead?.title,

@@ -123,7 +123,19 @@ async function loadBidPackage(id: string) {
       lead: { select: { id: true, title: true, stage: true } },
       project: { select: { id: true, code: true, name: true } },
       vendorBoqs: {
-        include: { vendor: { select: { id: true, name: true, email: true } } },
+        include: {
+          vendor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              contacts: {
+                select: { id: true, email: true, fullName: true, role: true },
+                orderBy: { email: "asc" },
+              },
+            },
+          },
+        },
         orderBy: [{ vendorLabel: "asc" }, { discipline: "asc" }],
       },
     },
@@ -164,6 +176,35 @@ function parseCustomDisciplines(raw: unknown): DisciplineDef[] {
 function parseDisciplineKeys(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   return raw.map((x) => normalizeDisciplineKey(String(x))).filter(Boolean);
+}
+
+/** Quote-by date. Accepts YYYY-MM-DD or a full ISO timestamp. */
+function parseQuoteDue(raw: unknown): { ok: true; value: Date } | { ok: false; error: string } {
+  const s = String(raw ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(s)) {
+    return { ok: false, error: "Quote by must be a valid ISO date" };
+  }
+  const d = new Date(s.length === 10 ? `${s}T00:00:00.000Z` : s);
+  if (Number.isNaN(d.getTime())) return { ok: false, error: "Quote by must be a valid ISO date" };
+  if (s.length === 10) {
+    const [y, m, day] = s.split("-").map(Number);
+    if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== m || d.getUTCDate() !== day) {
+      return { ok: false, error: "Quote by must be a valid ISO date" };
+    }
+  }
+  return { ok: true, value: d };
+}
+
+function parseRecipientEmails(raw: unknown): string[] | undefined {
+  if (raw == null) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  return [
+    ...new Set(
+      raw
+        .map((e) => String(e).trim().toLowerCase())
+        .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)),
+    ),
+  ];
 }
 
 crmComparativeRouter.get("/disciplines", (_req, res) => {
@@ -1110,7 +1151,24 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
     return res.status(400).json({ error: "Select at least one vendor / contractor, then open the bid for them." });
   }
 
-  const dueDate = req.body.dueDate ? new Date(String(req.body.dueDate)) : pkg.dueDate;
+  const body = req.body && typeof req.body === "object" ? (req.body as Record<string, unknown>) : {};
+  const hasQuote = Object.prototype.hasOwnProperty.call(body, "quoteDueAt") || Object.prototype.hasOwnProperty.call(body, "dueDate");
+  let dueDate = pkg.dueDate;
+  if (hasQuote) {
+    const raw = Object.prototype.hasOwnProperty.call(body, "quoteDueAt") ? body.quoteDueAt : body.dueDate;
+    if (raw == null || String(raw).trim() === "") {
+      return res.status(400).json({ error: "Quote by date is required" });
+    }
+    const parsed = parseQuoteDue(raw);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+    dueDate = parsed.value;
+  } else if (!pkg.dueDate) {
+    return res.status(400).json({ error: "Quote by date is required" });
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "recipientEmails") && !Array.isArray(body.recipientEmails)) {
+    return res.status(400).json({ error: "recipientEmails must be an array of email addresses" });
+  }
+  const recipientEmails = parseRecipientEmails(body.recipientEmails);
 
   await prisma.crmBidPackage.update({
     where: { id: pkg.id },
@@ -1128,6 +1186,7 @@ crmComparativeRouter.post("/bid-packages/:id/open", requireRoles("admin", "offic
         bidPackageId: pkg.id,
         openedByUserId: req.user!.id,
         dueDate,
+        recipientEmails,
         createLogins: req.body.createLogins !== false,
       }),
       25000,
@@ -1236,6 +1295,7 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
           summarySheetId: true,
           comparativeSheetId: true,
           awardedVendorId: true,
+          dueDate: true,
           project: { select: { id: true, code: true } },
         },
       },
@@ -1266,6 +1326,7 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
         bidPackageTitle: s.bidPackage.title,
         bidPackageStatus: s.bidPackage.status,
         revisionLabel: s.bidPackage.revisionLabel,
+        dueDate: s.bidPackage.dueDate,
         projectNote: s.bidPackage.notes,
         projectId: s.bidPackage.project?.id || null,
         projectCode: s.bidPackage.project?.code || null,

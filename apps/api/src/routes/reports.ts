@@ -147,6 +147,7 @@ import {
   quotationInclude,
   resolveProposalDiskPath,
   startNextProposalRevision,
+  syncQuotationProposalFile,
 } from "../services/proposalRevisions.js";
 
 export const reportsRouter = Router();
@@ -791,7 +792,8 @@ crmRouter.post("/leads/:id/to-proposal", requireRoles("admin", "office"), async 
     quotationNo,
     userId: req.user!.id,
     clientAddress: lead.district ? [lead.landmark, lead.district, lead.state].filter(Boolean).join(", ") : null,
-    scopeSummary: lead.description || `PMC proposal for ${clientName}`,
+    referenceBy: optionalText(req.body.referenceBy),
+    scopeSummary: optionalText(req.body.scopeSummary) || lead.description || null,
     totalValue: lead.value || 0,
     leadId: lead.id,
   });
@@ -1071,9 +1073,10 @@ crmRouter.post("/quotations", requireRoles("admin", "office"), async (req: Authe
       clientName,
       quotationNo,
       userId: req.user!.id,
-      clientAddress: req.body.clientAddress || null,
-      clientGst: req.body.clientGst || null,
-      scopeSummary: req.body.scopeSummary || `PMC proposal for ${clientName}`,
+      clientAddress: optionalText(req.body.clientAddress),
+      clientGst: optionalText(req.body.clientGst),
+      referenceBy: optionalText(req.body.referenceBy),
+      scopeSummary: optionalText(req.body.scopeSummary),
       totalValue: Number(req.body.totalValue) || 0,
       currency: req.body.currency || "INR",
       validityDays: Math.round(Number(req.body.validityDays)) || 30,
@@ -1190,16 +1193,20 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
   const validityDays = req.body.validityDays != null ? optionalNumber(req.body.validityDays) : before.validityDays;
   if (totalValue === "invalid") return res.status(400).json({ error: "Total value must be a number" });
   if (validityDays === "invalid") return res.status(400).json({ error: "Validity days must be a number" });
+  const referenceBy = req.body.referenceBy !== undefined ? optionalText(req.body.referenceBy) : before.referenceBy;
+  const leadId = req.body.leadId !== undefined ? optionalText(req.body.leadId) : before.leadId;
 
-  const row = await prisma.quotation.update({
+  let row = await prisma.quotation.update({
     where: { id: req.params.id },
     data: {
       status: nextStatus,
       quotationNo,
       clientName,
-      clientAddress: req.body.clientAddress ?? before.clientAddress,
-      clientGst: req.body.clientGst ?? before.clientGst,
-      scopeSummary: req.body.scopeSummary ?? before.scopeSummary,
+      referenceBy,
+      leadId,
+      clientAddress: req.body.clientAddress !== undefined ? optionalText(req.body.clientAddress) : before.clientAddress,
+      clientGst: req.body.clientGst !== undefined ? optionalText(req.body.clientGst) : before.clientGst,
+      scopeSummary: req.body.scopeSummary !== undefined ? optionalText(req.body.scopeSummary) : before.scopeSummary,
       totalValue: totalValue ?? 0,
       validityDays: validityDays == null ? before.validityDays : Math.round(validityDays),
       sectionsJson,
@@ -1208,19 +1215,35 @@ crmRouter.patch("/quotations/:id", requireRoles("admin", "office"), async (req: 
     },
     include: quotationInclude(),
   });
-  if (
+  const docFieldsChanged =
     req.body.sectionsJson != null ||
     req.body.quotationNo != null ||
     req.body.clientName != null ||
     req.body.clientAddress != null ||
-    req.body.clientGst != null ||
+    req.body.referenceBy != null ||
     req.body.scopeSummary != null ||
-    req.body.totalValue != null ||
-    req.body.validityDays != null ||
     req.body.quotationDate != null ||
-    req.body.currency != null
-  ) {
+    req.body.status != null;
+  if (docFieldsChanged) {
     writeQuotationFiles(quotationFromRecord(row));
+  }
+  const wordFieldsChanged =
+    req.body.quotationNo != null ||
+    req.body.clientName != null ||
+    req.body.clientAddress != null ||
+    req.body.referenceBy !== undefined ||
+    req.body.scopeSummary !== undefined ||
+    req.body.quotationDate != null ||
+    req.body.status != null;
+  if (wordFieldsChanged) {
+    try {
+      const synced = await syncQuotationProposalFile(row.id);
+      if (synced) row = synced;
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : "Proposal saved, but the SharePoint Word file could not be updated",
+      });
+    }
   }
   if (nextStatus === "Sent to client" && before.status !== "Sent to client") {
     await markCurrentProposalSent({

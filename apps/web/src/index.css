@@ -493,29 +493,33 @@ html.is-standalone-form #root {
   padding: 0.75rem 1rem 1rem;
 }
 .crm-shell:has(.crm-bid-page) {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0.5rem 0.75rem 0.75rem;
+  display: block;
+  flex: none;
+  overflow: visible;
+  min-height: 0;
+  padding: 0.5rem 0.75rem 1.25rem;
 }
 .crm-bid-page {
-  flex: 1 1 auto;
+  flex: none;
+  height: auto;
   min-height: 0;
   min-width: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 .crm-bid-desk {
   display: flex;
-  flex: 1 1 auto;
+  flex: none;
+  height: auto;
   min-height: 0;
   min-width: 0;
   width: 100%;
+  align-items: flex-start;
   border: 1px solid var(--color-line);
   border-radius: var(--ui-radius, 12px);
-  overflow: hidden;
+  overflow: visible;
   background: var(--color-paper);
 }
 .crm-bid-desk__rail {
@@ -545,8 +549,8 @@ html.is-standalone-form #root {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
+  height: auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -631,6 +635,7 @@ html.is-standalone-form #root {
   .crm-bid-desk__rail {
     width: 100%;
     max-height: min(38vh, 320px);
+    overflow: hidden;
     border-right: none;
     border-bottom: 1px solid var(--color-line);
   }
@@ -765,9 +770,10 @@ html.is-standalone-form #root {
   background: var(--color-paper);
 }
 .crm-bid-tab-panel {
-  flex: 1 1 auto;
-  min-height: min(18rem, 42vh);
-  overflow: auto;
+  flex: none;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
   padding: 0.85rem 1rem 1.25rem;
 }
 .crm-bid-rail-item {
@@ -811,7 +817,8 @@ html.is-standalone-form #root {
 }
 .crm-bid-line-table {
   max-height: min(26rem, 48vh);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid var(--color-line);
   border-radius: 0.5rem;
 }
@@ -840,9 +847,49 @@ html.is-standalone-form #root {
 .crm-bid-manage-grid > * {
   min-width: 0;
 }
-@media (min-width: 768px) {
+@media (min-width: 1281px) and (min-height: 761px) {
   .crm-bid-manage-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.crm-bid-invite__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+.crm-bid-invite-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
+@media (max-width: 1280px), (max-height: 760px) {
+  .crm-bid-manage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .crm-bid-invite.is-send .crm-bid-invite__fields {
+    padding-bottom: 5.5rem;
+  }
+  .crm-bid-invite-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+    margin-top: 0;
+    padding: 0.75rem 0.85rem calc(0.75rem + env(safe-area-inset-bottom));
+    background: var(--color-paper);
+    border-top: 1px solid var(--color-line);
+    box-shadow: 0 -8px 18px rgb(18 20 23 / 0.06);
+  }
+}
+@media (min-width: 1024px) {
+  .crm-bid-desk__rail {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    max-height: calc(100dvh - 7.5rem);
+    overflow: hidden;
   }
 }
 .crm-bid-slot-panel {
@@ -4340,6 +4387,33 @@ html.is-tool-window #root {
   height: 100%;
   min-height: 0;
   overflow: auto;
+}
+
+/* Bid desk scrolls in the main column. Nested overflow:hidden was clipping Open & invite. */
+.app-frame__scroll:has(.crm-bid-page),
+.app-frame__scroll--project:has(.crm-bid-page),
+.app-frame--tool-win .app-frame__scroll:has(.crm-bid-page),
+.app-frame--tool-win .app-frame__scroll--project:has(.crm-bid-page),
+.app-frame--embed .app-frame__scroll:has(.crm-bid-page),
+.app-frame--embed .app-frame__scroll--project:has(.crm-bid-page) {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+.app-frame__scroll:has(.crm-bid-page) > div,
+.app-frame--tool-win .app-frame__scroll:has(.crm-bid-page) > div,
+.app-frame--embed .app-frame__scroll:has(.crm-bid-page) > div {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100%;
+  overflow: visible !important;
+  flex: none !important;
+}
+.tool-workspace:has(.crm-bid-page),
+.crm-workspace:has(.crm-bid-page) {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  flex: none;
 }
 
 .in-page-overlay {

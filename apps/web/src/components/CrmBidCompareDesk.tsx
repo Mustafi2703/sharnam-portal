@@ -318,7 +318,7 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
                 {detail.project?.code ? <span className="font-mono font-semibold">{detail.project.code}</span> : null}
                 <span>{detail.revisionLabel}</span>
                 {statusBadge(detail.status)}
-                {detail.dueDate ? <span>Due {new Date(detail.dueDate).toLocaleDateString("en-IN")}</span> : null}
+                {detail.dueDate ? <span>Quote by {new Date(detail.dueDate).toLocaleDateString("en-IN")}</span> : null}
               </div>
               {detail.project?.name ? (
                 <p className="text-xs text-steel-muted mt-1 line-clamp-2">{detail.project.name}</p>

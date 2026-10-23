@@ -2,6 +2,8 @@
  * HRMS — Recruitment, Pre-joining, Onboarding, Pay Hike, Payslip.
  * Every mutation is written to AuditEvent so we get a per-employee timeline for free.
  */
+import fs from "fs";
+import path from "path";
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
@@ -9,7 +11,10 @@ import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
 import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { isDemoSeedLoginEmail } from "../services/keepPortalUsers.js";
-import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, listDriveFiles, moveDriveItem, SHAREPOINT_SANDBOX_ROOT, uploadToProjectLibrary } from "../services/graph.js";
+import { createTeamsSchedule, downloadDriveFile, driveItemWebUrl, listDriveFiles, moveDriveItem, SHAREPOINT_SANDBOX_ROOT, sharePointPathFromWebUrl, uploadToProjectLibrary } from "../services/graph.js";
+import { sendGraphHtmlMail } from "../services/graphHtmlMail.js";
+import { allowedRecipients, portalMailLive } from "../services/mailSwitch.js";
+import { wrapCommsPlainEmail } from "../services/rfiEmailFormat.js";
 import { mimeForFileName, mockOneDrive } from "../services/mockOneDrive.js";
 import { designationRow, isSpdcHiringRole, scorecardRoleForDesignation } from "@sharnam/shared";
 import { INTERVIEW_PARAMS, INTERVIEW_ROLES, ROUND_FOCUS, ROUND_NOTE, buildScorecardPdf, buildSelectionMatrixPdf, compositePercent, scorecardRoundId, scorecardWorkbook, scoreInterviewRound, selectionMatrixWorkbook, type ScorecardResult } from "../services/interviewScorecard.js";
@@ -98,6 +103,136 @@ hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
   );
 });
 
+const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+
+function isUniqueConflict(err: unknown) {
+  return Boolean(err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "P2002");
+}
+
+/** YYYYMMDD-NNN from the server's local calendar day. Serial restarts each day. */
+async function allocateRequisitionNo(at = new Date()) {
+  const prefix = `${at.getFullYear()}${String(at.getMonth() + 1).padStart(2, "0")}${String(at.getDate()).padStart(2, "0")}-`;
+  const rows = await prisma.manpowerRequisition.findMany({
+    where: { requisitionNo: { startsWith: prefix } },
+    select: { requisitionNo: true },
+  });
+  let max = 0;
+  const re = new RegExp(`^${prefix}(\\d+)$`);
+  for (const row of rows) {
+    const hit = re.exec(row.requisitionNo);
+    if (hit) max = Math.max(max, Number(hit[1]));
+  }
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+function insideDir(root: string, file: string) {
+  const rel = path.relative(root, file);
+  return Boolean(rel) && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+function uploadSearchRoots() {
+  return [
+    path.resolve(UPLOAD_ROOT),
+    path.resolve(process.cwd(), "uploads"),
+    path.resolve(process.cwd(), "data", "uploads"),
+    path.resolve(process.cwd(), "apps", "api", "uploads"),
+    path.resolve(process.cwd(), "apps", "api", "data", "uploads"),
+  ];
+}
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Path under onedrive/ from a portal media URL or a SharePoint library URL. */
+function resumeRelFromStored(raw: string | null | undefined): string | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  const marker = "/uploads/onedrive/";
+  const idx = value.indexOf(marker);
+  if (idx >= 0) {
+    const rel = safeDecode(value.slice(idx + marker.length).split("?")[0]).replace(/^\/+/, "");
+    return rel.includes("..") ? null : rel;
+  }
+  if (value.startsWith("/uploads/")) {
+    const rest = safeDecode(value.slice("/uploads/".length).split("?")[0]).replace(/^\/+/, "");
+    const rel = rest.startsWith("onedrive/") ? rest.slice("onedrive/".length) : rest;
+    return rel && !rel.includes("..") ? rel : null;
+  }
+  const sandbox = value.includes(`${SHAREPOINT_SANDBOX_ROOT}/`)
+    ? value.slice(value.indexOf(`${SHAREPOINT_SANDBOX_ROOT}/`))
+    : sharePointPathFromWebUrl(value);
+  if (!sandbox) return null;
+  const prefix = `${SHAREPOINT_SANDBOX_ROOT}/`;
+  const rel = safeDecode(sandbox.startsWith(prefix) ? sandbox.slice(prefix.length) : sandbox).split("?")[0].replace(/^\/+/, "");
+  return rel && !rel.includes("..") ? rel : null;
+}
+
+function publicUploadPath(disk: string): string | null {
+  const root = path.resolve(UPLOAD_ROOT, "onedrive");
+  const file = path.resolve(disk);
+  if (!insideDir(root, file)) return null;
+  const rel = path.relative(root, file).split(path.sep).join("/");
+  return `/uploads/onedrive/${rel.split("/").map((seg) => encodeURIComponent(seg)).join("/")}`;
+}
+
+function fileAt(root: string, rel: string): string | null {
+  const disk = path.resolve(root, "onedrive", rel);
+  if (!insideDir(path.resolve(root, "onedrive"), disk)) return null;
+  try {
+    return fs.existsSync(disk) && fs.statSync(disk).isFile() ? disk : null;
+  } catch {
+    return null;
+  }
+}
+
+function findNamedResume(fullName: string): string | null {
+  const safe = fullName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const needle = `resume-${safe}`.toLowerCase();
+  function walk(dir: string, depth: number): string | null {
+    if (depth > 6) return null;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const ent of entries) {
+      if (!ent.isFile()) continue;
+      const lower = ent.name.toLowerCase();
+      const next = lower[needle.length];
+      if (lower.startsWith(needle) && (next === undefined || next === "." || next === "-")) return path.join(dir, ent.name);
+    }
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const hit = walk(path.join(dir, ent.name), depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  for (const root of uploadSearchRoots()) {
+    const base = path.join(root, "onedrive", HR_DRIVE);
+    const hit = walk(base, 0);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function locateResumeFile(resumeUrl: string | null | undefined, fullName: string): string | null {
+  const rel = resumeRelFromStored(resumeUrl);
+  if (rel) {
+    for (const root of uploadSearchRoots()) {
+      const hit = fileAt(root, rel);
+      if (hit) return hit;
+    }
+  }
+  return findNamedResume(fullName);
+}
+
 /** A requisition's role must be an open role in the HRMS roles master under the chosen department (built-in list for older rows). */
 async function pickDesignation(title: string | null, department: string | null): Promise<{ title: string; department: string } | null> {
   if (!title || !department) return null;
@@ -112,23 +247,32 @@ hrmRecruitmentRouter.post("/requisitions", requireRoles("admin", "office", "hr")
   if (!picked) {
     return res.status(400).json({ error: "Choose a department and one of its designations." });
   }
-  const row = await prisma.manpowerRequisition.create({
-    data: {
-      requisitionNo: s(req.body.requisitionNo) || `MR-${Date.now()}`,
-      department: picked.department,
-      designation: picked.title,
-      count: Number(req.body.count || 1),
-      employmentType: s(req.body.employmentType) || "Permanent",
-      reportingManager: s(req.body.reportingManager),
-      justification: s(req.body.justification),
-      urgency: s(req.body.urgency) || "Normal",
-      ctcRangeMin: n(req.body.ctcRangeMin),
-      ctcRangeMax: n(req.body.ctcRangeMax),
-      location: s(req.body.location),
-      requestedById: req.user!.id,
-      status: "Submitted",
-    },
-  });
+  const data = {
+    department: picked.department,
+    designation: picked.title,
+    count: Number(req.body.count || 1),
+    employmentType: s(req.body.employmentType) || "Permanent",
+    reportingManager: s(req.body.reportingManager),
+    justification: s(req.body.justification),
+    urgency: s(req.body.urgency) || "Normal",
+    ctcRangeMin: n(req.body.ctcRangeMin),
+    ctcRangeMax: n(req.body.ctcRangeMax),
+    location: s(req.body.location),
+    requestedById: req.user!.id,
+    status: "Submitted" as const,
+  };
+  let row: Awaited<ReturnType<typeof prisma.manpowerRequisition.create>> | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      row = await prisma.manpowerRequisition.create({
+        data: { ...data, requisitionNo: await allocateRequisitionNo() },
+      });
+      break;
+    } catch (err) {
+      if (!isUniqueConflict(err) || attempt === 4) throw err;
+    }
+  }
+  if (!row) return res.status(500).json({ error: "Could not assign a requisition number." });
   await audit("hrms.requisition.create", { userId: req.user!.id, entity: "ManpowerRequisition", entityId: row.id, meta: { department: row.department, designation: row.designation, count: row.count } });
   res.status(201).json(row);
 });
@@ -500,7 +644,7 @@ hrmRecruitmentRouter.post("/candidates", requireRoles("admin", "office", "hr"), 
       req.file.mimetype,
       { replace: true },
     );
-    resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
+    resumeUrl = saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   }
   const row = await prisma.candidate.create({
     data: {
@@ -574,7 +718,7 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
     req.file.mimetype,
     { replace: true },
   );
-  const resumeUrl = saved.sharePointUrl || saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
+  const resumeUrl = saved.url || `/uploads/onedrive/${HR_DRIVE}/${saved.path}`;
   const row = await prisma.candidate.update({
     where: { id: before.id },
     data: {
@@ -584,6 +728,49 @@ hrmRecruitmentRouter.post("/candidates/:id/resume", requireRoles("admin", "offic
   });
   await audit("hrms.candidate.resume", { userId: req.user!.id, entity: "Candidate", entityId: row.id });
   res.json(row);
+});
+
+/** Open resume: local files use the static /uploads path the API serves. SharePoint-only files get a fresh web URL. */
+async function resolveResumeOpen(candidate: { id: string; fullName: string; resumeUrl: string | null }) {
+  const disk = locateResumeFile(candidate.resumeUrl, candidate.fullName);
+  if (disk) {
+    const media = publicUploadPath(disk);
+    if (media) {
+      if (candidate.resumeUrl !== media) {
+        await prisma.candidate.update({ where: { id: candidate.id }, data: { resumeUrl: media } }).catch(() => null);
+      }
+      return { kind: "local" as const, url: media };
+    }
+    return { kind: "file" as const, url: `/api/hrm/candidates/${candidate.id}/resume/file`, disk };
+  }
+  const rel = resumeRelFromStored(candidate.resumeUrl);
+  const sandbox = rel ? `${SHAREPOINT_SANDBOX_ROOT}/${rel}` : sharePointPathFromWebUrl(candidate.resumeUrl || "");
+  if (sandbox) {
+    const fresh = await driveItemWebUrl(sandbox);
+    if (fresh && /sharepoint\.com/i.test(fresh)) return { kind: "sharepoint" as const, url: fresh };
+  }
+  return null;
+}
+
+hrmRecruitmentRouter.get("/candidates/:id/resume", async (req, res) => {
+  const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  if (!candidate) return res.status(404).json({ error: "not found" });
+  if (!candidate.resumeUrl) return res.status(404).json({ error: "No resume on file." });
+  const open = await resolveResumeOpen(candidate);
+  if (!open) return res.status(404).json({ error: "Resume file was not found." });
+  if (open.kind === "file") return res.json({ kind: open.kind, url: open.url });
+  return res.json({ kind: open.kind, url: open.url });
+});
+
+hrmRecruitmentRouter.get("/candidates/:id/resume/file", async (req, res) => {
+  const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+  if (!candidate?.resumeUrl) return res.status(404).json({ error: "No resume on file." });
+  const disk = locateResumeFile(candidate.resumeUrl, candidate.fullName);
+  if (!disk) return res.status(404).json({ error: "Resume file was not found." });
+  const name = path.basename(disk).replace(/"/g, "");
+  res.setHeader("Content-Type", mimeForFileName(name));
+  res.setHeader("Content-Disposition", `inline; filename="${name}"`);
+  res.send(fs.readFileSync(disk));
 });
 
 const BGV_CATEGORIES = ["Passport photo", "Photo", "PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Bank", "PF-ESIC", "Medical", "BGV", "Other"] as const;
@@ -1179,6 +1366,7 @@ type IntervieweeSeat = {
 function decodeInterviewPanel(json: string | null | undefined, interviewee: IntervieweeSeat): {
   interviewers: InterviewerSeat[];
   interviewee: IntervieweeSeat;
+  meetingType: "online" | "offline" | null;
 } {
   try {
     const p = JSON.parse(json || "[]");
@@ -1189,10 +1377,12 @@ function decodeInterviewPanel(json: string | null | undefined, interviewee: Inte
           seat: "Technical",
         })),
         interviewee,
+        meetingType: null,
       };
     }
     if (p && typeof p === "object") {
       const interviewers = Array.isArray(p.interviewers) ? p.interviewers : [];
+      const meetingType = p.meetingType === "offline" ? "offline" : p.meetingType === "online" ? "online" : null;
       return {
         interviewers: interviewers.map((row: InterviewerSeat) => ({
           userId: row.userId,
@@ -1202,12 +1392,13 @@ function decodeInterviewPanel(json: string | null | undefined, interviewee: Inte
           seat: String(row.seat || "Technical"),
         })),
         interviewee: { ...interviewee, ...(p.interviewee || {}) },
+        meetingType,
       };
     }
   } catch {
     /* legacy */
   }
-  return { interviewers: [], interviewee };
+  return { interviewers: [], interviewee, meetingType: null };
 }
 
 function interviewPublic(row: { panelJson?: string | null; candidate?: { id?: string; fullName?: string; email?: string | null; phone?: string | null; posting?: { title?: string } | null } } & Record<string, unknown>) {
@@ -1219,7 +1410,8 @@ function interviewPublic(row: { panelJson?: string | null; candidate?: { id?: st
     applyingFor: row.candidate?.posting?.title || "",
   };
   const panel = decodeInterviewPanel(row.panelJson as string, interviewee);
-  return { ...row, ...panel };
+  const meetingType = panel.meetingType || (row.mode === "Teams" ? "online" : "offline");
+  return { ...row, ...panel, meetingType };
 }
 
 hrmRecruitmentRouter.get("/interviews", async (_req, res) => {
@@ -1450,14 +1642,16 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
         .filter((row: InterviewerSeat) => row.name)
     : fromPanel.filter(Boolean).map((name: unknown) => ({ name: String(name), seat: "Technical" }));
   const scheduledAt = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
-  const mode = s(req.body.mode) === "In-person" || s(req.body.mode) === "Phone" ? String(req.body.mode) : "Teams";
+  const meetingType = String(req.body.meetingType || req.body.locationMode || "online").toLowerCase() === "offline" ? "offline" : "online";
+  const requestedMode = s(req.body.mode);
+  const mode = meetingType === "online" ? "Teams" : requestedMode === "Phone" ? "Phone" : "In-person";
   const durationMins = Number(req.body.durationMins) || 60;
-  const location = s(req.body.location) || (mode === "Teams" ? "Microsoft Teams" : "");
+  const location = s(req.body.location) || (meetingType === "online" ? "Microsoft Teams" : "");
 
-  let meetingLink = s(req.body.meetingLink);
-  let meetingId = s(req.body.meetingId);
+  let meetingLink = meetingType === "online" ? s(req.body.meetingLink) : null;
+  let meetingId = meetingType === "online" ? s(req.body.meetingId) : null;
   let teamsNote: string | null = null;
-  if (!meetingLink && scheduledAt && mode === "Teams") {
+  if (meetingType === "online" && !meetingLink && scheduledAt) {
     try {
       const end = new Date(scheduledAt.getTime() + durationMins * 60_000);
       const interviewerLines = interviewers
@@ -1516,7 +1710,7 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
       candidateId: candidate.id,
       roundNumber: roundType === "R1" ? 1 : roundType === "R3" ? 3 : 2,
       roundType,
-      panelJson: JSON.stringify({ version: 1, interviewers, interviewee }),
+      panelJson: JSON.stringify({ version: 1, interviewers, interviewee, meetingType }),
       scheduledAt,
       durationMins,
       mode,
@@ -1534,9 +1728,52 @@ hrmRecruitmentRouter.post("/candidates/:id/interviews", requireRoles("admin", "o
     userId: req.user!.id,
     entity: "InterviewRound",
     entityId: row.id,
-    meta: { candidateId: candidate.id, roundNumber: row.roundNumber, mode, interviewers: interviewers.map((p) => p.name) },
+    meta: { candidateId: candidate.id, roundNumber: row.roundNumber, mode, meetingType, interviewers: interviewers.map((p) => p.name) },
   });
-  res.status(201).json({ ...interviewPublic({ ...row, candidate }), teamsNote });
+  let emailNote: string | null = null;
+  const inviteTo = (candidate.email || "").trim();
+  if (!inviteTo) {
+    emailNote = "Candidate has no email, so the invite was not sent.";
+  } else if (!portalMailLive()) {
+    emailNote = "Mail is switched off, so the invite was not sent.";
+  } else if (!allowedRecipients([inviteTo]).length) {
+    emailNote = "This address is not on the mail allow list, so the invite was not sent.";
+  } else {
+    try {
+      const whenLabel = scheduledAt
+        ? scheduledAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })
+        : "Time to be confirmed";
+      const people = interviewers.map((p) => `${p.name} (${p.seat})`).join(", ") || "To be confirmed";
+      const place = location || (meetingType === "online" ? "Online" : "To be confirmed");
+      const roundLabel = roundType === "R1" ? "R1-HR screening" : roundType === "R3" ? "R3-Management" : "R2-Technical";
+      const lines = [
+        `Round: ${roundLabel}`,
+        `When: ${whenLabel} · ${durationMins} minutes`,
+        `Place: ${place}`,
+        `Interviewers: ${people}`,
+      ];
+      if (meetingType === "online" && meetingLink) lines.push("", meetingLink);
+      await sendGraphHtmlMail({
+        to: [inviteTo],
+        subject: `Interview scheduled · ${candidate.fullName} · ${roundLabel}`,
+        bodyHtml: wrapCommsPlainEmail({
+          eyebrow: "Interview",
+          headline: `${candidate.fullName} · ${roundLabel}`,
+          bodyText: lines.join("\n"),
+          primaryAction: meetingType === "online" && meetingLink ? { href: meetingLink, label: "Join Teams meeting" } : undefined,
+        }),
+      });
+    } catch (err) {
+      emailNote = err instanceof Error ? err.message : "Invite email failed";
+      pushRuntimeLog({
+        level: "error",
+        source: "hrm.interview",
+        message: "Interview invite email failed",
+        detail: errorDetail(err),
+      });
+    }
+  }
+  res.status(201).json({ ...interviewPublic({ ...row, candidate }), teamsNote, emailNote, meetingType });
 });
 
 hrmRecruitmentRouter.get("/interview-framework", requireRoles("admin", "office", "hr"), (_req, res) => {

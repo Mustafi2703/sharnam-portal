@@ -168,11 +168,6 @@ export function WorkPackagesPanel({ token, projectId, selected, onChange, onSave
     <Card className="!p-4 space-y-3">
       <div>
         <h2 className="font-semibold text-base">{formatUiText(pick ? "Work packages" : "Package catalogue")}</h2>
-        <p className="text-xs text-steel-muted mt-0.5">
-          {pick
-            ? "Tick the packages for this job (Civil, Electrical, Plumbing…). They save with the project card."
-            : "Add or delete work packages here, then pin them on a project."}
-        </p>
       </div>
 
       <StatusNote msg={msg} compact />

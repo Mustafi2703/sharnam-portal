@@ -10,6 +10,7 @@ import {
 } from "./crm/CrmDetailPanel";
 import { RegisterEmptyRow, RegisterSheetFrame } from "./RegisterSheetFrame";
 import { Button, Card, Input, Select } from "./ui";
+import { ProposalPartySelect } from "./ProposalPartySelect";
 import {
   type CrmQuotation,
   type QuotationLogEntry,
@@ -43,6 +44,9 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
   const [createOpen, setCreateOpen] = useState(false);
   const [createLeadId, setCreateLeadId] = useState("");
   const [createClient, setCreateClient] = useState("");
+  const [createAddress, setCreateAddress] = useState("");
+  const [createScope, setCreateScope] = useState("");
+  const [createReferenceBy, setCreateReferenceBy] = useState("");
   const [createQuotationNo, setCreateQuotationNo] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
   const [createMsg, setCreateMsg] = useState("");
@@ -86,6 +90,9 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
   async function openCreateModal(leadId = "", clientName = "") {
     setCreateLeadId(leadId);
     setCreateClient(clientName);
+    setCreateAddress("");
+    setCreateScope("");
+    setCreateReferenceBy("");
     setCreateMsg("");
     setCreateOpen(true);
     if (token) {
@@ -120,6 +127,9 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
           clientName,
           quotationNo,
           leadId: createLeadId || undefined,
+          referenceBy: createReferenceBy.trim() || null,
+          clientAddress: createAddress.trim() || null,
+          scopeSummary: createScope.trim() || null,
         }),
       });
       setCreateOpen(false);
@@ -230,7 +240,7 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
 
       <div className="grid xl:grid-cols-[1fr_360px] gap-3">
         <RegisterSheetFrame
-          title="PMC proposals register"
+          title="Proposals Register"
           sheetLabel="SharePoint versions · Award → Planning project"
           rowCount={filtered.length}
           className="min-h-[420px]"
@@ -478,10 +488,7 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
           <Card className="w-full max-w-md space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-display text-xl">New PMC proposal</h3>
-                <p className="text-xs text-steel-muted mt-1">
-                  Creates the SharePoint Word file in 05.03 / PMC_Proposals. Edit and add revisions on the proposal page.
-                </p>
+                <h3 className="font-display text-xl">New Proposal</h3>
               </div>
               <Button type="button" variant="ghost" className="!text-xs" onClick={() => setCreateOpen(false)}>
                 Close
@@ -498,17 +505,32 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
             </label>
             <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
               Client name
+              <div className="mt-1 normal-case font-normal tracking-normal">
+                <ProposalPartySelect
+                  token={token}
+                  clientName={createClient}
+                  leadId={createLeadId || null}
+                  prefillLead={Boolean(createLeadId)}
+                  onChange={(next) => {
+                    setCreateClient(next.clientName);
+                    if (next.source !== "typed") {
+                      setCreateAddress(next.clientAddress || "");
+                      if (next.scopeHint) setCreateScope((cur) => (cur.trim() ? cur : next.scopeHint || ""));
+                    }
+                    if (next.leadId) setCreateLeadId(next.leadId);
+                  }}
+                />
+              </div>
+            </label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              Reference by
               <Input
                 className="mt-1"
-                value={createClient}
-                onChange={(e) => setCreateClient(e.target.value)}
-                placeholder="e.g. Arvind Limited"
-                autoFocus
+                value={createReferenceBy}
+                onChange={(e) => setCreateReferenceBy(e.target.value)}
+                placeholder="Who referred this proposal"
               />
             </label>
-            {createLeadId ? (
-              <p className="text-[11px] text-steel-muted">Linked to lead — award later puts the job on Projects as Planning.</p>
-            ) : null}
             {createMsg ? <p className="text-xs text-danger">{createMsg}</p> : null}
             <div className="flex gap-2 pt-1">
               <Button type="button" disabled={createBusy} onClick={() => void createProposal()}>

@@ -71,6 +71,7 @@ export default function HrmsDocumentsPage() {
   const [previewDocxBlob, setPreviewDocxBlob] = useState<Blob | null>(null);
   const [previewTitle, setPreviewTitle] = useState("");
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState("");
   const [filedSharePoint, setFiledSharePoint] = useState("");
   const [generateBusy, setGenerateBusy] = useState(false);
   const [previewFingerprint, setPreviewFingerprint] = useState("");
@@ -268,9 +269,12 @@ export default function HrmsDocumentsPage() {
     const missing = missingLetterFields(form);
     const problems = letterContentProblems(form);
     if (missing.length || problems.length) {
-      setMsg([...missing.map((m) => `Fill ${m}`), ...problems].join(" "));
+      const message = [...missing.map((m) => `Fill ${m}`), ...problems].join(" ");
+      setPreviewError(message);
+      setMsg(message);
       return;
     }
+    setPreviewError("");
     setMsg("");
     setPreviewBusy(true);
     try {
@@ -281,8 +285,11 @@ export default function HrmsDocumentsPage() {
       setPreviewFingerprint(letterFormFingerprint(form));
       setPreviewFromComposer(true);
       setPreviewExpanded(true);
+      setPreviewError("");
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Preview failed");
+      const message = err instanceof Error ? err.message : "Preview failed";
+      setPreviewError(message);
+      setMsg(message);
     } finally {
       setPreviewBusy(false);
     }
@@ -686,15 +693,18 @@ export default function HrmsDocumentsPage() {
                       <p className="text-[11px] text-steel-muted">{activeKindMeta.hint}</p>
                     </div>
                     <div className="flex flex-wrap gap-1 items-center">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!py-1 !text-xs"
-                        disabled={previewBusy || generateBusy}
-                        onClick={() => void previewFullScreen()}
-                      >
-                        {previewBusy ? "Opening preview…" : "Full screen preview"}
-                      </Button>
+                      <div className="flex flex-col items-stretch">
+                        {previewError ? <p className="text-danger text-xs mb-1">{previewError}</p> : null}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!py-1 !text-xs"
+                          disabled={previewBusy || generateBusy}
+                          onClick={() => void previewFullScreen()}
+                        >
+                          {previewBusy ? "Opening preview…" : "Full screen preview"}
+                        </Button>
+                      </div>
                       <Button
                         type="button"
                         className="!py-1 !text-xs"
@@ -967,10 +977,13 @@ export default function HrmsDocumentsPage() {
                         </>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <Button type="button" variant="secondary" disabled={previewBusy || generateBusy} onClick={() => void previewFullScreen()}>
-                        {previewBusy ? "Opening preview…" : "Full screen preview"}
-                      </Button>
+                    <div className="flex flex-wrap gap-2 pt-1 items-end">
+                      <div className="flex flex-col items-stretch">
+                        {previewError ? <p className="text-danger text-xs mb-1">{previewError}</p> : null}
+                        <Button type="button" variant="secondary" disabled={previewBusy || generateBusy} onClick={() => void previewFullScreen()}>
+                          {previewBusy ? "Opening preview…" : "Full screen preview"}
+                        </Button>
+                      </div>
                       <Button type="submit" disabled={generateBusy || previewBusy}>
                         {generateBusy ? "Generating…" : "Generate & file"}
                       </Button>

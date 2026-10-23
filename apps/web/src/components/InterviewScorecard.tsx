@@ -19,9 +19,9 @@ type Framework = {
 };
 
 const ROUND_LABEL: Record<string, string> = {
-  R1: "R1 – HR Screening",
-  R2: "R2 – Technical",
-  R3: "R3 – Management",
+  R1: "R1-HR screening",
+  R2: "R2-Technical",
+  R3: "R3-Management",
 };
 
 function roundId(round: string | null | undefined): "R1" | "R2" | "R3" {
@@ -132,7 +132,7 @@ export function InterviewScorecard({
           <label className="text-xs">
             Round
             <select className="mt-1 block border border-line rounded px-2 py-1" value={round} onChange={(e) => setRound(roundId(e.target.value))}>
-              {framework.rounds.map((r) => (
+              {["R1", "R2", "R3"].map((r) => (
                 <option key={r} value={r}>{ROUND_LABEL[r] || r}</option>
               ))}
             </select>
@@ -141,9 +141,6 @@ export function InterviewScorecard({
             Score {preview.percent.toFixed(1)}% · Grade {preview.grade}
           </span>
         </div>
-        <Button type="button" disabled={busy} onClick={save}>
-          {busy ? "Saving…" : "Save scorecard"}
-        </Button>
       </div>
       <p className="text-xs rounded-lg border border-line bg-sand/40 px-3 py-2">
         {framework.roundNote?.[round] || ROUND_LABEL[round]}
@@ -152,11 +149,11 @@ export function InterviewScorecard({
       </p>
       <div className="max-h-64 overflow-auto border border-line rounded">
         <table className="w-full text-xs">
-          <thead className="bg-sand/50 sticky top-0">
+          <thead className="sticky top-0 z-10 bg-white">
             <tr>
-              <th className="text-left px-2 py-1">Parameter</th>
-              <th className="text-left px-2 py-1">Weight</th>
-              <th className="text-left px-2 py-1">Score 1–5</th>
+              <th className="text-left px-2 py-1 bg-white">Parameter</th>
+              <th className="text-left px-2 py-1 bg-white">Weight</th>
+              <th className="text-left px-2 py-1 bg-white">Score 1–5</th>
             </tr>
           </thead>
           <tbody>
@@ -184,10 +181,7 @@ export function InterviewScorecard({
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-steel-muted">
-          Save writes the scorecard sheet and a PDF into the candidate folder, and updates the selection matrix with this date.
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex flex-wrap items-center gap-3">
           {saved?.pdfUrl ? (
             <a href={saved.pdfUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Scorecard PDF</a>

@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
@@ -11,6 +11,13 @@ import { isVendorOrContractor } from "../lib/vendorTypes";
 
 type Discipline = { key: string; label: string; sheetName: string };
 
+type VendorContact = {
+  id: string;
+  email: string;
+  fullName?: string | null;
+  role?: string | null;
+};
+
 type VendorBoqSlot = {
   id: string;
   vendorLabel: string;
@@ -19,8 +26,58 @@ type VendorBoqSlot = {
   uploadedAt?: string | null;
   sharePointUrl?: string | null;
   sheetId?: string | null;
-  vendor?: { id?: string; name?: string; email?: string | null } | null;
+  vendor?: { id?: string; name?: string; email?: string | null; contacts?: VendorContact[] } | null;
 };
+
+type InviteRecipient = {
+  email: string;
+  vendorLabel: string;
+  contactName?: string | null;
+  role?: string | null;
+};
+
+function inviteRecipientsFromPackage(detail: { vendorBoqs?: VendorBoqSlot[] } | null): InviteRecipient[] {
+  if (!detail?.vendorBoqs?.length) return [];
+  const seen = new Set<string>();
+  const byVendor = new Map<string, VendorBoqSlot>();
+  for (const slot of detail.vendorBoqs) {
+    if (!byVendor.has(slot.vendorLabel)) byVendor.set(slot.vendorLabel, slot);
+  }
+  const out: InviteRecipient[] = [];
+  for (const slot of byVendor.values()) {
+    const primary = (slot.vendor?.email || "").trim();
+    const rows: InviteRecipient[] = [];
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primary)) {
+      rows.push({
+        email: primary,
+        vendorLabel: slot.vendorLabel,
+        contactName: slot.vendor?.name || slot.vendorLabel,
+      });
+    }
+    for (const contact of slot.vendor?.contacts || []) {
+      const email = (contact.email || "").trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+      if (email.toLowerCase() === primary.toLowerCase()) continue;
+      rows.push({
+        email,
+        vendorLabel: slot.vendorLabel,
+        contactName: contact.fullName,
+        role: contact.role,
+      });
+    }
+    if (!rows.length) {
+      out.push({ email: "", vendorLabel: slot.vendorLabel, contactName: slot.vendorLabel });
+      continue;
+    }
+    for (const row of rows) {
+      const key = `${row.vendorLabel}\0${row.email.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+  }
+  return out;
+}
 
 type BidPackage = {
   id: string;
@@ -105,6 +162,9 @@ export default function CrmBidComparePage() {
   const [projectVendorIds, setProjectVendorIds] = useState<string[]>([]);
   const [disciplineSource, setDisciplineSource] = useState<"saved" | "work_packages" | "default" | "">("");
   const [dueDate, setDueDate] = useState("");
+  const [selectedRecipientEmails, setSelectedRecipientEmails] = useState<string[]>([]);
+  const recipientKeyRef = useRef("");
+  const inviteStepFor = useRef<string | null>(null);
   const [accessSlip, setAccessSlip] = useState<{ vendor: string; email: string; tempPassword: string }[]>([]);
   const [actionError, setActionError] = useState<ActionReason | null>(null);
   const [mainTab, setMainTab] = useState<"overview" | "comparative" | "matrix" | "manage">("overview");
@@ -201,12 +261,51 @@ export default function CrmBidComparePage() {
     else setDetail(null);
   }, [selectedId, loadDetail]);
 
+  const recipientOptions = useMemo(() => inviteRecipientsFromPackage(detail), [detail]);
+  const recipientGroups = useMemo(() => {
+    const map = new Map<string, InviteRecipient[]>();
+    for (const row of recipientOptions) {
+      const list = map.get(row.vendorLabel) || [];
+      list.push(row);
+      map.set(row.vendorLabel, list);
+    }
+    return [...map.entries()];
+  }, [recipientOptions]);
+
+  const dueSyncFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detail?.id) return;
+    if (dueSyncFor.current === detail.id) return;
+    dueSyncFor.current = detail.id;
+    setDueDate(detail.dueDate ? String(detail.dueDate).slice(0, 10) : "");
+  }, [detail?.id, detail?.dueDate]);
+
+  useEffect(() => {
+    const key = `${detail?.id || ""}|${recipientOptions.map((r) => r.email.toLowerCase()).join(",")}`;
+    if (key === recipientKeyRef.current) return;
+    recipientKeyRef.current = key;
+    setSelectedRecipientEmails(recipientOptions.map((r) => r.email).filter(Boolean));
+  }, [detail?.id, recipientOptions]);
+
+  useEffect(() => {
+    if (!detail || detail.status !== "Draft") return;
+    if (inviteStepFor.current === detail.id) return;
+    inviteStepFor.current = detail.id;
+    setMainTab("manage");
+  }, [detail]);
+
   function selectPackage(id: string) {
     setSelectedId(id);
     setShowNewBidForm(false);
     setSlotPanel(null);
     setUploadFile(null);
-    setMainTab("overview");
+    const row = packages.find((p) => p.id === id);
+    if (row?.status === "Draft") {
+      inviteStepFor.current = id;
+      setMainTab("manage");
+    } else {
+      setMainTab("overview");
+    }
     const q = setupProjectId ? `?projectId=${encodeURIComponent(setupProjectId)}` : "";
     nav(`/crm/bids/${id}${q}`, { replace: true });
   }
@@ -393,8 +492,21 @@ export default function CrmBidComparePage() {
     return { inSummaryOnly, inSlotsOnly };
   }, [detail]);
 
+  function toggleRecipient(email: string, on: boolean) {
+    const key = email.toLowerCase();
+    setSelectedRecipientEmails((prev) => {
+      if (on) return prev.some((e) => e.toLowerCase() === key) ? prev : [...prev, email];
+      return prev.filter((e) => e.toLowerCase() !== key);
+    });
+  }
+
   async function openBidPackage() {
     if (!selectedId) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      setMainTab("manage");
+      showActionNeed("Quote by date required", "Pick the date the vendor must quote by.");
+      return;
+    }
     setBusy(true);
     setMsg("");
     try {
@@ -409,7 +521,11 @@ export default function CrmBidComparePage() {
       }>(`/api/crm/bid-packages/${selectedId}/open`, {
         method: "POST",
         token,
-        body: JSON.stringify({ dueDate: dueDate || undefined, createLogins: true }),
+        body: JSON.stringify({
+          dueDate,
+          recipientEmails: selectedRecipientEmails,
+          createLogins: true,
+        }),
       });
       const missing = out.notify.missingEmail?.length
         ? ` Missing email: ${out.notify.missingEmail.join(", ")}.`
@@ -419,7 +535,7 @@ export default function CrmBidComparePage() {
         .join(" | ");
       setAccessSlip(out.notify.accessSlips || []);
       setMsg(
-        `Bid opened — emailed ${out.notify.notified}/${out.notify.total} bidder(s). They can upload BOQs at /crm/vendor-bids.${missing}${
+        `Bid opened — emailed ${out.notify.notified}/${out.notify.total} selected recipient(s). Quote by ${dueDate}. They upload the Excel BOQ at /login/vendor or /crm/vendor-bids.${missing}${
           slips ? ` Access slip: ${slips}` : ""
         }`,
       );
@@ -744,7 +860,7 @@ export default function CrmBidComparePage() {
           {
             kind: "text",
             name: "due",
-            label: "Due date",
+            label: "Quote by",
             inputType: "date",
             value: packageDue,
             onChange: setPackageDue,
@@ -899,7 +1015,10 @@ export default function CrmBidComparePage() {
                   value={form.revisionLabel}
                   onChange={(e) => setForm({ ...form, revisionLabel: e.target.value })}
                 />
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <label className="text-xs font-semibold text-steel-muted block">
+                  Quote by
+                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </label>
               </div>
               <div>
                 <p className="text-xs font-semibold text-steel-muted mb-1">
@@ -1006,70 +1125,147 @@ export default function CrmBidComparePage() {
           nav(`/crm/bids${q}`, { replace: true });
         }}
         managePanel={
-          <div className="crm-bid-manage-grid">
-            <Card className="!p-4">
-              <h4 className="font-semibold text-sm mb-1">Add bidders</h4>
-              <p className="text-xs text-steel-muted mb-3">
-                {detail?.blankBoq
-                  ? "Each contractor gets this package BOQ. Open the bid when the list is complete so they are notified."
-                  : "Creates BOQ slots and portal logins when email is on file."}
-              </p>
-              <SearchableCheckboxList
-                items={vendorsNotOnPackage.map((v) => ({
-                  id: v.id,
-                  label: v.name,
-                  sublabel: v.partyType || "Vendor",
-                  trade: v.trade,
-                }))}
-                selectedIds={addVendorIds}
-                onChange={setAddVendorIds}
-                placeholder="Search contractor…"
-                emptyMessage="All CRM contractors are already on this bid."
-              />
-              <Button type="button" className="mt-3 !text-xs" disabled={busy || !addVendorIds.length} onClick={() => void addVendorsToPackage()}>
-                Add selected bidders
-              </Button>
-            </Card>
-            {!detail?.blankBoq && (
-            <Card className="!p-4">
-              <h4 className="font-semibold text-sm mb-1">Add BOQ sheets</h4>
-              <p className="text-xs text-steel-muted mb-3">Sample BOQs and work packages. Each sheet is one file the contractor fills or uploads.</p>
-              <div className="max-h-36 overflow-y-auto border rounded-xl p-2 space-y-1 mb-3">
-                {boqChoices.map((d) => (
-                  <label key={d.key} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={addDiscKeys.includes(d.key)}
-                      onChange={(e) => {
-                        setAddDiscKeys(
-                          e.target.checked ? [...addDiscKeys, d.key] : addDiscKeys.filter((k) => k !== d.key)
-                        );
-                      }}
+          <div className={`crm-bid-invite${detail?.status === "Draft" || detail?.status === "Open" ? " is-send" : ""}`}>
+            <div className="crm-bid-invite__fields">
+              {detail?.blankBoq ? (
+                <Card className="!p-4">
+                  <h4 className="font-semibold text-sm mb-1">Package BOQ</h4>
+                  <p className="text-sm text-steel-muted">
+                    {detail.lineCount || 0} lines. Contractors download this Excel workbook, fill Rate and Amount, and upload the same .xlsx file. The upload is saved to SharePoint.
+                  </p>
+                  {detail.blankBoqSharePointUrl ? (
+                    <a href={detail.blankBoqSharePointUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-brand font-semibold mt-2 inline-block">
+                      Unpriced BOQ in SharePoint
+                    </a>
+                  ) : null}
+                </Card>
+              ) : null}
+              <div className="crm-bid-manage-grid">
+                <Card className="!p-4">
+                  <h4 className="font-semibold text-sm mb-1">Add bidders</h4>
+                  <p className="text-xs text-steel-muted mb-3">
+                    {detail?.blankBoq
+                      ? "Each contractor gets this package BOQ. Choose who receives the email, then open the bid."
+                      : "Creates BOQ slots. Choose who receives the email before you open the bid."}
+                  </p>
+                  <SearchableCheckboxList
+                    items={vendorsNotOnPackage.map((v) => ({
+                      id: v.id,
+                      label: v.name,
+                      sublabel: v.partyType || "Vendor",
+                      trade: v.trade,
+                    }))}
+                    selectedIds={addVendorIds}
+                    onChange={setAddVendorIds}
+                    placeholder="Search contractor…"
+                    emptyMessage="All CRM contractors are already on this bid."
+                  />
+                  <Button type="button" className="mt-3 !text-xs" disabled={busy || !addVendorIds.length} onClick={() => void addVendorsToPackage()}>
+                    Add selected bidders
+                  </Button>
+                </Card>
+                {!detail?.blankBoq && (
+                <Card className="!p-4">
+                  <h4 className="font-semibold text-sm mb-1">Add BOQ sheets</h4>
+                  <p className="text-xs text-steel-muted mb-3">Sample BOQs and work packages. Each sheet is one file the contractor fills or uploads.</p>
+                  <div className="max-h-36 overflow-y-auto border rounded-xl p-2 space-y-1 mb-3">
+                    {boqChoices.map((d) => (
+                      <label key={d.key} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={addDiscKeys.includes(d.key)}
+                          onChange={(e) => {
+                            setAddDiscKeys(
+                              e.target.checked ? [...addDiscKeys, d.key] : addDiscKeys.filter((k) => k !== d.key)
+                            );
+                          }}
+                        />
+                        <span>
+                          {d.label}
+                          {d.sheetName && d.sheetName !== d.label ? (
+                            <span className="block text-[10px] text-steel-muted">{d.sheetName}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      className="flex-1 min-w-[140px] !text-xs"
+                      placeholder="Custom discipline"
+                      value={customDiscLabel}
+                      onChange={(e) => setCustomDiscLabel(e.target.value)}
                     />
-                    <span>
-                      {d.label}
-                      {d.sheetName && d.sheetName !== d.label ? (
-                        <span className="block text-[10px] text-steel-muted">{d.sheetName}</span>
-                      ) : null}
-                    </span>
-                  </label>
-                ))}
+                    <Button type="button" variant="secondary" className="!text-xs" onClick={() => void addCustomDiscipline()}>
+                      Add custom
+                    </Button>
+                  </div>
+                  <Button type="button" className="mt-3 !text-xs" disabled={busy || !addDiscKeys.length} onClick={() => void addDisciplinesToPackage()}>
+                    Add discipline BOQs
+                  </Button>
+                </Card>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  className="flex-1 min-w-[140px] !text-xs"
-                  placeholder="Custom discipline"
-                  value={customDiscLabel}
-                  onChange={(e) => setCustomDiscLabel(e.target.value)}
-                />
-                <Button type="button" variant="secondary" className="!text-xs" onClick={() => void addCustomDiscipline()}>
-                  Add custom
+              <Card className="!p-4">
+                <h4 className="font-semibold text-sm mb-1">Email recipients</h4>
+                <p className="text-xs text-steel-muted mb-3">
+                  Tick who receives the bid email. Unticked people are not emailed. The message includes the portal link, the quote-by date, and asks them to upload the Excel BOQ.
+                </p>
+                {!recipientGroups.length ? (
+                  <p className="text-xs text-steel-muted">Add bidders first, then choose which emails receive the BOQ link.</p>
+                ) : (
+                  <div className="overflow-x-auto border border-line rounded-xl">
+                    <ul className="divide-y min-w-[16rem]">
+                      {recipientGroups.map(([vendorLabel, rows]) => (
+                        <li key={vendorLabel} className="px-3 py-2">
+                          <p className="text-sm font-semibold">{vendorLabel}</p>
+                          <div className="mt-1 space-y-1">
+                            {rows.map((row) =>
+                              row.email ? (
+                                <label key={`${vendorLabel}-${row.email}`} className="flex items-start gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-0.5"
+                                    checked={selectedRecipientEmails.some((e) => e.toLowerCase() === row.email.toLowerCase())}
+                                    onChange={(e) => toggleRecipient(row.email, e.target.checked)}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="font-mono text-xs">{row.email}</span>
+                                    {row.contactName && row.contactName !== vendorLabel ? (
+                                      <span className="text-steel-muted"> · {row.contactName}</span>
+                                    ) : null}
+                                    {row.role ? <span className="text-steel-muted"> · {row.role}</span> : null}
+                                  </span>
+                                </label>
+                              ) : (
+                                <p key={`${vendorLabel}-none`} className="text-xs text-amber-800">No email on file</p>
+                              ),
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <label className="text-xs font-semibold text-steel-muted block mt-4 max-w-xs">
+                  Quote by
+                  <Input
+                    type="date"
+                    required
+                    className="mt-1"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </label>
+                <p className="text-[11px] text-steel-muted mt-1">Vendors must upload the Excel BOQ by this date.</p>
+              </Card>
+            </div>
+            {(detail?.status === "Draft" || detail?.status === "Open") && (
+              <div className="crm-bid-invite-bar">
+                <Button type="button" disabled={busy || !detail} onClick={() => void openBidPackage()}>
+                  {busy ? "Sending…" : detail?.status === "Draft" ? "Open bid & notify" : "Resend invites"}
                 </Button>
               </div>
-              <Button type="button" className="mt-3 !text-xs" disabled={busy || !addDiscKeys.length} onClick={() => void addDisciplinesToPackage()}>
-                Add discipline BOQs
-              </Button>
-            </Card>
             )}
           </div>
         }

@@ -2,7 +2,8 @@ import fs from "fs";
 import path from "path";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { resolveR2TemplatePath } from "./comparativeStatement.js";
-import { proposalDocxFilename, resolveProposalDocxPath } from "./proposalTemplate.js";
+import { fillProposalDocxBuffer } from "./proposalDocxFill.js";
+import { proposalDocxFilename } from "./proposalTemplate.js";
 import { ensureSandboxLibraryFolders } from "./graph.js";
 import { CRM_DRIVE, CRM_LIBRARY_FOLDERS, crmProposalFolder, wonOrderFolder } from "./spdcLibraryFolders.js";
 
@@ -71,7 +72,11 @@ export async function syncProposalDocx(
   revisionNo = 0
 ) {
   await ensureCrmLibraryTree();
-  const buffer = fs.readFileSync(resolveProposalDocxPath());
+  const buffer = await fillProposalDocxBuffer({
+    clientName: clientName || "",
+    quotationNo,
+    revisionNo,
+  });
   const fileName = proposalDocxFilename(quotationNo, clientName, revisionNo);
   await mockOneDrive.upload(
     CRM_DRIVE,
@@ -89,10 +94,17 @@ export async function createProjectProposalFile(
   clientName: string,
   quotationNo?: string,
   revisionNo = 0,
-  buffer?: Buffer
+  buffer?: Buffer,
+  opts?: { replace?: boolean }
 ) {
   await ensureCrmLibraryTree();
-  const bytes = buffer ?? fs.readFileSync(resolveProposalDocxPath());
+  const bytes =
+    buffer ??
+    (await fillProposalDocxBuffer({
+      clientName,
+      quotationNo: quotationNo || "",
+      revisionNo,
+    }));
   const fileName = proposalDocxFilename(quotationNo, clientName, revisionNo);
   const stage = revisionNo > 0 ? "submitted" : "working";
   const saved = await mockOneDrive.upload(
@@ -101,7 +113,7 @@ export async function createProjectProposalFile(
     fileName,
     bytes,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    { replace: false },
+    { replace: opts?.replace ?? false },
   );
   if (projectCode && projectCode !== CRM_OFFICE_LIBRARY && projectCode !== CRM_DRIVE) {
     await syncBufferToProjectSharePoint(projectCode, CRM_SHAREPOINT.pmcProposals, fileName, bytes).catch(() => undefined);

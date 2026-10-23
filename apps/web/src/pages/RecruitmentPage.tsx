@@ -1,6 +1,6 @@
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, mediaUrl } from "../api";
+import { api, apiBase, mediaUrl } from "../api";
 import { rolesForDepartment, scorecardForRole, useHrmOrg, withCurrentOption } from "../lib/hrmOrg";
 import { useAuth } from "../auth";
 import { SearchableSelect } from "../components/SearchableSelect";
@@ -60,6 +60,46 @@ function money(n?: number | null) {
   return "₹ " + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
+/** Keep a stored name. All-caps values become first-letter capitals so the screen is not shouting. */
+function personName(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const letters = raw.replace(/[^A-Za-z]/g, "");
+  if (!letters || letters !== letters.toUpperCase()) return raw;
+  return raw.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_m, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`);
+}
+
+function portalUploadPath(raw: string | null | undefined) {
+  const value = String(raw || "");
+  const marker = "/uploads/onedrive/";
+  const idx = value.indexOf(marker);
+  if (idx < 0) return null;
+  const path = value.slice(idx).split("?")[0];
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+function ResumePick({ file, onFile }: { file: File | null; onFile: (file: File | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button type="button" variant="secondary" onClick={() => ref.current?.click()}>
+        Upload resume
+      </Button>
+      {file ? <span className="text-xs text-steel-muted" data-preserve-case>{file.name}</span> : null}
+      <input
+        ref={ref}
+        type="file"
+        accept=".pdf,.doc,.docx"
+        className="hidden"
+        onChange={(e) => {
+          onFile(e.target.files?.[0] || null);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
 export default function RecruitmentPage() {
   const { token, user } = useAuth();
   const canManage = canManageHrms(user);
@@ -101,18 +141,6 @@ export default function RecruitmentPage() {
     void reload();
   }, [token]);
 
-  async function deleteAllRecruitment() {
-    const ok = window.confirm("Delete all recruitment data? Requisitions, resumes, interviews, offers, and letters are removed. Staff logins and projects stay. This cannot be undone.");
-    if (!ok) return;
-    try {
-      await api("/api/hrm/registers/clear", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR" }) });
-      setMsg("Recruitment data deleted. Staff logins and projects are unchanged.");
-      await reload();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not delete recruitment data");
-    }
-  }
-
   return (
     <div className="space-y-6">
       <nav className="hr-steps" aria-label="Recruitment steps">
@@ -141,22 +169,6 @@ export default function RecruitmentPage() {
       {tab === "compare" && <CompareTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "offers" && <OfferDesk candidates={candidates} offers={offers} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
-
-      {canManage ? (
-        <details className="danger-zone">
-          <summary>{formatUiText("Danger zone — reset recruitment data")}</summary>
-          <div className="danger-zone__body">
-            <p>
-              {formatUiText(
-                "Permanently deletes every requisition, resume, interview, offer and recruitment letter. Staff logins and projects are kept. This cannot be undone.",
-              )}
-            </p>
-            <Button type="button" variant="danger" onClick={() => deleteAllRecruitment()}>
-              Delete all recruitment data
-            </Button>
-          </div>
-        </details>
-      ) : null}
     </div>
   );
 }
@@ -164,9 +176,10 @@ export default function RecruitmentPage() {
 /* ────────────────────────────  1  Requisitions  ──────────────────────────── */
 
 function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
-  const blank = { requisitionNo: "", department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" };
+  const blank = { department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" };
   const [form, setForm] = useState(blank);
   const [editId, setEditId] = useState<string | null>(null);
+  const [savedNo, setSavedNo] = useState("");
   const org = useHrmOrg(token);
   const departmentOptions = withCurrentOption(org.departments.map((d) => d.name), form.department);
   const designationOptions = rolesForDepartment(org.designations, form.department, form.designation);
@@ -181,6 +194,7 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
         setMsg("Requisition submitted.");
       }
       setEditId(null);
+      setSavedNo("");
       setForm(blank);
       await reload();
     } catch (err) {
@@ -209,7 +223,12 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
         <Card>
           <h3 className="font-semibold text-sm mb-2">Raise a manpower requisition</h3>
           <form onSubmit={add} className="grid md:grid-cols-4 gap-x-3 gap-y-3">
-            <Input label="Requisition no." hint={formatUiText("Leave blank to auto-number")} placeholder="Auto" value={form.requisitionNo} onChange={(e) => setForm({ ...form, requisitionNo: e.target.value })} />
+            <label className="ui-field">
+              <span className="ui-field__label">Requisition no.</span>
+              <p className="px-3 py-2 text-sm font-mono text-ink min-h-[38px]" data-preserve-case>
+                {editId && savedNo ? savedNo : "Assigned when you save"}
+              </p>
+            </label>
             <Select
               label="Department *"
               value={form.department}
@@ -242,7 +261,7 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
             <div className="md:col-span-4 flex gap-2">
               <Button type="submit">{editId ? "Save requisition" : "Submit requisition"}</Button>
               {editId ? (
-                <Button type="button" variant="secondary" onClick={() => { setEditId(null); setForm(blank); }}>Cancel</Button>
+                <Button type="button" variant="secondary" onClick={() => { setEditId(null); setSavedNo(""); setForm(blank); }}>Cancel</Button>
               ) : null}
             </div>
           </form>
@@ -285,8 +304,8 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
                           className={rowBtn}
                           onClick={() => {
                             setEditId(r.id);
+                            setSavedNo(r.requisitionNo || "");
                             setForm({
-                              requisitionNo: r.requisitionNo || "",
                               department: r.department || "",
                               designation: r.designation || "",
                               count: r.count || 1,
@@ -466,6 +485,29 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
   const [docCategory, setDocCategory] = useState("PAN");
   const [docFile, setDocFile] = useState<File | null>(null);
 
+  async function openResume(c: { id: string; resumeUrl?: string | null }) {
+    const direct = portalUploadPath(c.resumeUrl);
+    if (direct) {
+      window.open(mediaUrl(direct), "_blank", "noopener,noreferrer");
+      return;
+    }
+    try {
+      const r = await api<{ url: string; kind: "local" | "sharepoint" | "file" }>(`/api/hrm/candidates/${c.id}/resume`, { token });
+      if (r.kind === "sharepoint") {
+        window.open(r.url, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (r.kind === "file") {
+        const join = r.url.includes("?") ? "&" : "?";
+        window.open(`${apiBase()}${r.url}${join}token=${encodeURIComponent(token)}`, "_blank", "noopener,noreferrer");
+        return;
+      }
+      window.open(mediaUrl(r.url), "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not open the resume");
+    }
+  }
+
   async function add(e: FormEvent) {
     e.preventDefault();
     if (saving) return;
@@ -641,12 +683,10 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
             <Input placeholder="Notice (days)" type="number" value={form.noticePeriodDays} onChange={(e) => setForm({ ...form, noticePeriodDays: e.target.value })} />
             <Input placeholder="Experience (yrs)" type="number" value={form.experienceYears} onChange={(e) => setForm({ ...form, experienceYears: e.target.value })} />
             <TextArea rows={2} placeholder="Skills (comma-separated)" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} className="md:col-span-4" />
-            <label className="md:col-span-4 text-xs text-steel-muted">
-              Resume (PDF / DOC)
-              <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
-            </label>
+            <div className="md:col-span-4">
+              <ResumePick file={file} onFile={setFile} />
+            </div>
             <Button type="submit" className="md:col-span-4" disabled={saving}>{saving ? "Adding…" : "Add candidate"}</Button>
-            <p className="md:col-span-4 text-[11px] text-steel-muted">The person is filed on the requisition you pick. With a resume the stage is Resume received. Without one it stays Upload resume until you attach the file.</p>
           </form>
         </Card>
       )}
@@ -771,7 +811,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                 <td className="px-3 py-3">
                 <div className="flex flex-wrap gap-1.5 max-w-[280px]">
                   {hasResume ? (
-                    <a href={mediaUrl(c.resumeUrl)} target="_blank" rel="noreferrer" className={linkBtn}>Open resume</a>
+                    <button type="button" className={linkBtn} onClick={() => void openResume(c)}>Open resume</button>
                   ) : canManage ? (
                     <Button type="button" className={rowBtn} onClick={() => openEdit(c)}>Upload resume</Button>
                   ) : null}
@@ -850,10 +890,9 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                     <Select value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })}>
                       {CANDIDATE_STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </Select>
-                    <label className="md:col-span-3 text-xs text-steel-muted">
-                      Replace resume
-                      <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setEditFile(e.target.files?.[0] || null)} className="block mt-1 text-xs" />
-                    </label>
+                    <div className="md:col-span-3">
+                      <ResumePick file={editFile} onFile={setEditFile} />
+                    </div>
                     <div className="md:col-span-4 flex gap-2">
                       <Button type="submit">Save</Button>
                       <Button type="button" variant="secondary" onClick={() => setOpenId(null)}>Close</Button>
@@ -880,10 +919,14 @@ function bestScore(c: any) {
 }
 
 const SCHEDULE_ROUNDS = [
-  { id: "R1" as const, label: "R1 – HR Screening" },
-  { id: "R2" as const, label: "R2 – Technical" },
-  { id: "R3" as const, label: "R3 – Management" },
+  { id: "R1" as const, label: "R1-HR screening" },
+  { id: "R2" as const, label: "R2-Technical" },
+  { id: "R3" as const, label: "R3-Management" },
 ];
+
+function roundOptionTaken(rounds: Array<{ roundType?: string }>, id: "R1" | "R2" | "R3") {
+  return rounds.some((row) => new RegExp(`^${id}\\b`, "i").test(String(row.roundType || "").trim()));
+}
 
 function scheduledRoundId(roundType: string): "R1" | "R2" | "R3" | null {
   const t = String(roundType || "");
@@ -1063,6 +1106,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
   const [form, setForm] = useState({
     position: "",
     roundType: "R1",
+    meetingType: "online",
     scheduledAt: "",
     durationMins: 60,
     mode: "Teams",
@@ -1085,9 +1129,9 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
     api<any[]>(`/api/hrm/candidates/${candidateId}/interviews`, { token }).then((rows) => {
       setRounds(rows);
       setForm((prev) => {
-        const taken = (id: string) => rows.some((row) => scheduledRoundId(row.roundType) === id);
-        if (!taken(prev.roundType)) return prev;
-        const open = SCHEDULE_ROUNDS.find((opt) => !taken(opt.id));
+        const current = prev.roundType === "R2" || prev.roundType === "R3" ? prev.roundType : "R1";
+        if (!roundOptionTaken(rows, current)) return prev;
+        const open = SCHEDULE_ROUNDS.find((opt) => !roundOptionTaken(rows, opt.id));
         return open ? { ...prev, roundType: open.id } : prev;
       });
     }).catch(() => setRounds([]));
@@ -1123,19 +1167,21 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
         body: JSON.stringify({
           position: form.position,
           roundType: form.roundType,
+          meetingType: form.meetingType,
           scheduledAt: form.scheduledAt,
           durationMins: form.durationMins,
-          mode: form.mode,
-          meetingLink: form.meetingLink,
+          mode: form.meetingType === "offline" ? (form.mode === "Teams" ? "In-person" : form.mode) : "Teams",
+          meetingLink: form.meetingType === "offline" ? "" : form.meetingLink,
           location: form.location,
           interviewers,
         }),
       });
       setRounds((prev) => [...prev, r]);
-      const stillOpen = SCHEDULE_ROUNDS.find((opt) => opt.id !== form.roundType && !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id));
+      const stillOpen = SCHEDULE_ROUNDS.find((opt) => opt.id !== form.roundType && !roundOptionTaken(rounds, opt.id));
       setForm({
         position: "",
         roundType: stillOpen?.id || "R1",
+        meetingType: "online",
         scheduledAt: "",
         durationMins: 60,
         mode: "Teams",
@@ -1143,13 +1189,12 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
         location: "",
         interviewers: [{ userId: "", seat: "Technical" }],
       });
-      setMsg(
-        r.meetingLink
-          ? "Interview meeting scheduled. Interviewee and interviewers are on the card — use Join for Teams."
-          : r.teamsNote
-            ? `Interview saved. Teams: ${r.teamsNote}`
-            : "Interview meeting saved in the portal."
-      );
+      const emailed = form.meetingType === "offline"
+        ? "Interview scheduled. The candidate was emailed the time and place."
+        : r.meetingLink
+          ? "Interview scheduled. A Teams link was emailed to the candidate."
+          : "Interview scheduled. The candidate was emailed the time and place.";
+      setMsg([emailed, r.emailNote, !r.meetingLink && form.meetingType === "online" ? r.teamsNote : ""].filter(Boolean).join(" "));
       const all = await api<any[]>("/api/hrm/interviews", { token }).catch(() => []);
       setDiary(all);
       await reload();
@@ -1180,14 +1225,14 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
           {diary.slice(0, 12).map((r) => (
             <li key={r.id} className="px-4 py-2.5 text-sm flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="font-medium">
-                  {r.interviewee?.name || r.candidate?.fullName} · {r.roundType}
+                <div className="font-medium" data-preserve-case>
+                  {personName(r.interviewee?.name || r.candidate?.fullName)} · {r.roundType}
                 </div>
-                <div className="text-[11px] text-steel-muted">
-                  Interviewee: {r.interviewee?.name || "—"}
+                <div className="text-[11px] text-steel-muted" data-preserve-case>
+                  Interviewee & interviewers: {personName(r.interviewee?.name) || "—"}
                   {r.interviewee?.applyingFor ? ` · ${r.interviewee.applyingFor}` : ""}
                   {" · "}
-                  Interviewer: {(r.interviewers || []).map((p: any) => `${p.name} (${p.seat})`).join(", ") || "—"}
+                  {(r.interviewers || []).map((p: any) => `${personName(p.name)} (${p.seat})`).join(", ") || "—"}
                 </div>
               </div>
               <div className="text-xs text-right">
@@ -1207,7 +1252,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
       </Card>
 
       <Card>
-        <h3 className="font-semibold text-sm mb-2">Interviewee (candidate)</h3>
+        <h3 className="font-semibold text-sm mb-2" data-preserve-case>Interviewee</h3>
         <Select value={candidateId} onChange={(e) => setCandidateId(e.target.value)} className="max-w-md">
           <option value="">— select candidate —</option>
           {candidates.map((c: any) => (
@@ -1229,7 +1274,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
 
       {candidate && canManage && (
         <Card>
-          <h3 className="font-semibold text-sm mb-2">Schedule meeting · interviewers</h3>
+          <h3 className="font-semibold text-sm mb-2" data-preserve-case>Schedule meeting · interviewers</h3>
           <form onSubmit={schedule} className="space-y-3">
             <div className="grid md:grid-cols-4 gap-2">
               <Select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} required className="md:col-span-2">
@@ -1239,25 +1284,45 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 ))}
               </Select>
               <Select value={form.roundType} onChange={(e) => setForm({ ...form, roundType: e.target.value })}>
-                {SCHEDULE_ROUNDS.filter((opt) => opt.id === form.roundType || !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id)).map((opt) => (
-                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                {SCHEDULE_ROUNDS.map((opt) => (
+                  <option key={opt.id} value={opt.id} disabled={roundOptionTaken(rounds, opt.id) && form.roundType !== opt.id}>{opt.label}</option>
                 ))}
               </Select>
-              <Select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
-                <option>Teams</option>
-                <option>In-person</option>
-                <option>Phone</option>
+              <Select
+                label="Meeting type"
+                value={form.meetingType}
+                onChange={(e) => {
+                  const meetingType = e.target.value === "offline" ? "offline" : "online";
+                  setForm({
+                    ...form,
+                    meetingType,
+                    mode: meetingType === "online" ? "Teams" : form.mode === "Teams" ? "In-person" : form.mode,
+                    meetingLink: meetingType === "offline" ? "" : form.meetingLink,
+                  });
+                }}
+              >
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
               </Select>
+              {form.meetingType === "offline" ? (
+                <Select value={form.mode === "Phone" ? "Phone" : "In-person"} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
+                  <option>In-person</option>
+                  <option>Phone</option>
+                </Select>
+              ) : null}
               <Input type="datetime-local" required value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} />
               <Input placeholder="Duration (mins)" type="number" value={form.durationMins} onChange={(e) => setForm({ ...form, durationMins: Number(e.target.value) })} />
-              <Input placeholder={form.mode === "Teams" ? "Location (optional)" : "Site / office room"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="md:col-span-2" />
-              <Input placeholder="Paste Teams link only if Graph is down" value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} className="md:col-span-2" />
+              <Input placeholder={form.meetingType === "online" ? "Location (optional)" : "Site / office room"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="md:col-span-2" />
+              {form.meetingType === "online" ? (
+                <Input placeholder="Paste Teams link only if Graph is down" value={form.meetingLink} onChange={(e) => setForm({ ...form, meetingLink: e.target.value })} className="md:col-span-2" />
+              ) : null}
             </div>
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase text-steel-muted">Interviewers (staff seats)</div>
+              <div className="text-[11px] font-semibold text-steel-muted" data-preserve-case>Interviewers</div>
               {form.interviewers.map((row, idx) => (
-                <div key={idx} className="grid md:grid-cols-[1fr_220px_auto] gap-2 items-center">
+                <div key={idx} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem_auto] items-end gap-2">
                   <SearchableSelect
+                    className="min-w-0 w-full"
                     options={staffOptions}
                     value={row.userId}
                     onChange={(userId) => {
@@ -1270,6 +1335,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                   />
                   <Select
                     value={row.seat}
+                    className="min-w-0 w-full max-w-full"
                     onChange={(e) => {
                       const next = [...form.interviewers];
                       next[idx] = { ...row, seat: e.target.value };
@@ -1298,18 +1364,15 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 Add interviewer
               </Button>
             </div>
-            <Button type="submit" disabled={!SCHEDULE_ROUNDS.some((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id))}>Schedule interview meeting</Button>
-            {!SCHEDULE_ROUNDS.some((opt) => !rounds.some((row) => scheduledRoundId(row.roundType) === opt.id)) ? <p className="text-[11px] text-steel-muted">R1, R2, and R3 are already on file. Score the rounds they sat. Onboard opens when each of those rounds is Advance. A skipped round does not block it.</p> : null}
+            <Button type="submit" disabled={!SCHEDULE_ROUNDS.some((opt) => !roundOptionTaken(rounds, opt.id))}>Schedule interview meeting</Button>
+            {!SCHEDULE_ROUNDS.some((opt) => !roundOptionTaken(rounds, opt.id)) ? <p className="text-[11px] text-steel-muted">R1, R2, and R3 are already on file. Score the rounds they sat. Onboard opens when each of those rounds is Advance. A skipped round does not block it.</p> : null}
           </form>
-          <p className="text-[10px] text-steel-muted mt-2">
-            Schedule only R1, R2, or R3. Skip any round this candidate does not need. Three is the maximum. The scorecard sheet uses the candidate’s name. Teams meetings are created on the SPDC mailbox when Graph is connected.
-          </p>
         </Card>
       )}
 
       {candidate && (
         <Card padding={false}>
-          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm">Rounds for {candidate.fullName}</div>
+          <div className="px-4 py-3 border-b border-line bg-sand/40 font-semibold text-sm" data-preserve-case>Rounds for {personName(candidate.fullName)}</div>
           <ul className="divide-y max-h-[32rem] overflow-y-auto">
             {roundsByCode(rounds).map((r) => (
               <li key={r.id} className="p-4 space-y-2">
@@ -1324,15 +1387,19 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 </div>
                 <div className="text-xs grid sm:grid-cols-2 gap-2">
                   <div>
-                    <span className="uppercase text-steel-muted block">Interviewee</span>
-                    {r.interviewee?.name || candidate.fullName}
-                    {r.interviewee?.email ? ` · ${r.interviewee.email}` : ""}
+                    <span className="text-steel-muted block" data-preserve-case>Interviewee</span>
+                    <span data-preserve-case>
+                      {personName(r.interviewee?.name || candidate.fullName)}
+                      {r.interviewee?.email ? ` · ${r.interviewee.email}` : ""}
+                    </span>
                   </div>
                   <div>
-                    <span className="uppercase text-steel-muted block">Interviewers</span>
-                    {(r.interviewers || []).length
-                      ? (r.interviewers as any[]).map((p) => `${p.name} — ${p.seat}${p.designation ? ` (${p.designation})` : ""}`).join("; ")
-                      : "—"}
+                    <span className="text-steel-muted block" data-preserve-case>Interviewers</span>
+                    <span data-preserve-case>
+                      {(r.interviewers || []).length
+                        ? (r.interviewers as any[]).map((p) => `${personName(p.name)} — ${p.seat}${p.designation ? ` (${p.designation})` : ""}`).join("; ")
+                        : "—"}
+                    </span>
                   </div>
                 </div>
                 {r.meetingLink && (

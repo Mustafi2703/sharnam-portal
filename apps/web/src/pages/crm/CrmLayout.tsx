@@ -51,8 +51,6 @@ export default function CrmLayout() {
     });
   }, [loc.pathname]);
 
-  const onBids = loc.pathname.startsWith("/crm/bids");
-  const onSetup = loc.pathname.startsWith("/crm/setup");
   const onBidDetail = /\/crm\/bids\/[^/]+/.test(loc.pathname);
   const onProposalEdit = /\/crm\/proposals\/(new|[^/]+)/.test(loc.pathname);
 
@@ -62,17 +60,8 @@ export default function CrmLayout() {
       : onBidDetail
         ? "Comparative bids"
         : onProposalEdit
-          ? "PMC proposal"
+          ? "Proposal"
           : activeTool?.label || (isVendor ? "My bids" : "CRM desk"),
-  );
-
-  const pageSubtitle = formatUiText(
-    onHub
-      ? "Open a tool in a new window — same pattern as Quality, Safety, and Drawings."
-      : activeTool?.subtitle ||
-          (isVendor
-            ? "Fill R2 discipline BOQs in-portal — no separate sheet maker."
-            : "Project setup, leads, comparative bids, and PMC proposals — one desk."),
   );
 
   return (
@@ -96,17 +85,21 @@ export default function CrmLayout() {
               CRM
             </span>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
-                <span className="font-semibold" style={{ color: CRM_ACCENT }}>
-                  {formatUiText(isVendor ? "Contractor portal" : "Market intelligence")}
-                </span>
-                {onBidDetail && (
-                  <>
-                    <span>·</span>
-                    <span className="font-mono text-ink">Package detail</span>
-                  </>
-                )}
-              </div>
+              {isVendor || onBidDetail ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-steel-muted">
+                  {isVendor ? (
+                    <span className="font-semibold" style={{ color: CRM_ACCENT }}>
+                      {formatUiText("Contractor portal")}
+                    </span>
+                  ) : null}
+                  {onBidDetail ? (
+                    <>
+                      {isVendor ? <span>·</span> : null}
+                      <span className="font-mono text-ink">Package detail</span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               <h1 className="font-display text-base sm:text-lg text-ink truncate">{pageTitle}</h1>
             </div>
           </div>
@@ -140,9 +133,7 @@ export default function CrmLayout() {
                   Close window
                 </Button>
               </>
-            ) : (
-              <p className="text-xs text-steel-muted max-w-md hidden lg:block leading-relaxed">{pageSubtitle}</p>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -216,25 +207,6 @@ export default function CrmLayout() {
           </div>
         </nav>
 
-        {inWin && !onHub && (
-          <div className="px-3 sm:px-5 pb-2.5 text-xs text-steel-muted">
-            Editing <strong className="text-ink">{pageTitle}</strong> — add or save, then return to the CRM hub.
-          </div>
-        )}
-
-        {onSetup && !isVendor && (
-          <div className="module-hub__workflow border-t border-line bg-sand/80 px-3 sm:px-5 py-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-steel-muted">
-            <span>
-              <strong className="text-ink font-semibold">1.</strong> Code · name · pick parties from CRM lists
-            </span>
-            <span>
-              <strong className="text-ink font-semibold">2.</strong> Communication matrix
-            </span>
-            <span>
-              <strong className="text-ink font-semibold">3.</strong> Launch folders
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="crm-shell crm-module min-w-0 w-full flex-1 min-h-0 flex flex-col">

@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth";
 import { SPDC_OFFICE_ADDRESS } from "@sharnam/shared";
 import { Button, Card, Input, PageHeader, Select, TextArea } from "../components/ui";
+import { ProposalPartySelect } from "../components/ProposalPartySelect";
 import { downloadAuthFile } from "../lib/downloadReport";
 import { StatusNote } from "../components/StatusNote";
 
@@ -35,16 +36,14 @@ type Quotation = {
   id: string;
   quotationNo: string;
   clientName: string;
+  referenceBy?: string | null;
   clientAddress?: string | null;
-  clientGst?: string | null;
   scopeSummary?: string | null;
-  totalValue?: number | null;
-  validityDays?: number | null;
   quotationDate?: string | null;
-  currency?: string | null;
   sectionsJson?: string | null;
   status: string;
   projectId?: string | null;
+  leadId?: string | null;
   awardedProjectId?: string | null;
   currentRevisionNo?: number | null;
   attachmentUrl?: string | null;
@@ -62,10 +61,6 @@ function parseSections(raw: string | null | undefined): QuotationSection[] {
   } catch {
     return [];
   }
-}
-
-function sumSections(sections: QuotationSection[]): number {
-  return sections.reduce((s, sec) => s + sec.rows.reduce((r, row) => r + Number(row.amount || 0), 0), 0);
 }
 
 function normalizeRow(row: QuotationRow): QuotationRow {
@@ -111,18 +106,16 @@ export default function QuotationMakerPage() {
   const [status, setStatus] = useState<string>("Draft");
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState<Quotation | null>(null);
+  const [leadId, setLeadId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [details, setDetails] = useState({
     quotationNo: "",
     clientName: "",
+    referenceBy: "",
     clientAddress: SPDC_OFFICE_ADDRESS,
-    clientGst: "",
     scopeSummary: "",
-    totalValue: "",
-    validityDays: "30",
     quotationDate: "",
-    currency: "INR",
   });
   const [sections, setSections] = useState<QuotationSection[]>([]);
 
@@ -135,18 +128,16 @@ export default function QuotationMakerPage() {
     (async () => {
       const q = await api<Quotation>(`/api/crm/quotations/${id}`, { token });
       setSaved(q);
+      setLeadId(q.leadId || null);
       setStatus(q.status);
       const loadedSections = parseSections(q.sectionsJson);
       setDetails({
         quotationNo: q.quotationNo || "",
         clientName: q.clientName || "",
+        referenceBy: q.referenceBy || "",
         clientAddress: q.clientAddress || SPDC_OFFICE_ADDRESS,
-        clientGst: q.clientGst || "",
         scopeSummary: q.scopeSummary || "",
-        totalValue: q.totalValue != null ? String(q.totalValue) : "",
-        validityDays: q.validityDays != null ? String(q.validityDays) : "30",
         quotationDate: q.quotationDate ? String(q.quotationDate).slice(0, 10) : "",
-        currency: q.currency || "INR",
       });
       setSections(loadedSections.length ? loadedSections : []);
     })().catch((err) => setMsg(err instanceof Error ? err.message : "Load failed"));
@@ -163,28 +154,30 @@ export default function QuotationMakerPage() {
         ...sec,
         rows: sec.rows.map((row) => normalizeRow(row)),
       }));
-      const computedTotal = sumSections(normalizedSections);
-      const totalValue = details.totalValue ? Number(details.totalValue) : computedTotal;
       const r = await api<Quotation>(`/api/crm/quotations/${saved.id}`, {
         method: "PATCH",
         token,
         body: JSON.stringify({
           quotationNo: details.quotationNo.trim(),
           clientName: details.clientName.trim(),
+          referenceBy: details.referenceBy.trim() || null,
           clientAddress: details.clientAddress.trim(),
-          clientGst: details.clientGst.trim() || null,
           scopeSummary: details.scopeSummary.trim() || null,
-          totalValue,
-          validityDays: details.validityDays ? Number(details.validityDays) : 30,
           quotationDate: details.quotationDate || undefined,
-          currency: details.currency.trim() || "INR",
           sectionsJson: normalizedSections,
+          leadId: leadId || null,
         }),
       });
       setSaved(r);
+      setLeadId(r.leadId || null);
       setSections(parseSections(r.sectionsJson));
-      setDetails((d) => ({ ...d, totalValue: r.totalValue != null ? String(r.totalValue) : d.totalValue }));
-      setMsg("Proposal details saved — download .docx or open SharePoint to refresh Word.");
+      setDetails((d) => ({
+        ...d,
+        referenceBy: r.referenceBy || "",
+        clientAddress: r.clientAddress || d.clientAddress,
+        scopeSummary: r.scopeSummary || "",
+      }));
+      setMsg("Proposal details saved. The SharePoint Word file was updated.");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -300,7 +293,6 @@ export default function QuotationMakerPage() {
       <PageHeader
         eyebrow="CRM · Proposal"
         title={saved?.clientName || "Proposal"}
-        subtitle="SharePoint PMC format — edit in Word, mark sent, Award to Planning on Projects."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -335,46 +327,50 @@ export default function QuotationMakerPage() {
 
       {saved && canWrite && (
         <Card className="!p-4 space-y-3">
-          <h3 className="font-semibold text-sm">Proposal details (portal form)</h3>
-          <p className="text-[11px] text-steel-muted">
-            Client address defaults to the SPDC Vadodara office — update for the client site. Saved fields feed exports and SharePoint metadata.
-          </p>
+          <h3 className="font-semibold text-sm">Proposal details</h3>
           <div className="grid sm:grid-cols-2 gap-3 text-sm">
             <Input placeholder="Quotation no." value={details.quotationNo} onChange={(e) => setDetails({ ...details, quotationNo: e.target.value })} />
-            <Input placeholder="Client name" value={details.clientName} onChange={(e) => setDetails({ ...details, clientName: e.target.value })} />
+            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
+              Reference by
+              <Input
+                className="mt-1 normal-case font-normal tracking-normal"
+                placeholder="Who referred this proposal"
+                value={details.referenceBy}
+                onChange={(e) => setDetails({ ...details, referenceBy: e.target.value })}
+              />
+            </label>
+            <div className="sm:col-span-2">
+              <ProposalPartySelect
+                token={token}
+                clientName={details.clientName}
+                leadId={leadId}
+                onChange={(next) => {
+                  setDetails((d) => ({
+                    ...d,
+                    clientName: next.clientName,
+                    clientAddress: next.source === "typed" ? d.clientAddress : next.clientAddress || "",
+                    scopeSummary: !d.scopeSummary.trim() && next.scopeHint ? next.scopeHint : d.scopeSummary,
+                  }));
+                  if (next.leadId) setLeadId(next.leadId);
+                }}
+              />
+            </div>
             <Input className="sm:col-span-2" placeholder="Client address" value={details.clientAddress} onChange={(e) => setDetails({ ...details, clientAddress: e.target.value })} />
-            <Input placeholder="Client GSTIN" value={details.clientGst} onChange={(e) => setDetails({ ...details, clientGst: e.target.value })} />
             <Input type="date" placeholder="Quotation date" value={details.quotationDate} onChange={(e) => setDetails({ ...details, quotationDate: e.target.value })} />
-            <Input placeholder="Currency" value={details.currency} onChange={(e) => setDetails({ ...details, currency: e.target.value })} />
-            <Input placeholder="Validity (days)" value={details.validityDays} onChange={(e) => setDetails({ ...details, validityDays: e.target.value })} />
-            <Input placeholder="Total value (INR)" value={details.totalValue} onChange={(e) => setDetails({ ...details, totalValue: e.target.value })} />
             <TextArea className="sm:col-span-2" rows={3} placeholder="Scope summary" value={details.scopeSummary} onChange={(e) => setDetails({ ...details, scopeSummary: e.target.value })} />
           </div>
 
           <div className="border-t border-line pt-4 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="font-semibold text-sm">Commercial sections (portal → HTML export)</h4>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!py-1 !text-xs"
-                  onClick={() => setSections((s) => [...s, emptySection()])}
-                >
-                  Add section
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!py-1 !text-xs"
-                  onClick={() => {
-                    const t = sumSections(sections);
-                    setDetails((d) => ({ ...d, totalValue: String(t) }));
-                  }}
-                >
-                  Recalc total from rows
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                className="!py-1 !text-xs"
+                onClick={() => setSections((s) => [...s, emptySection()])}
+              >
+                Add section
+              </Button>
             </div>
             {!sections.length ? (
               <p className="text-xs text-steel-muted">
@@ -569,7 +565,7 @@ export default function QuotationMakerPage() {
         <div className="grid lg:grid-cols-[1fr_340px] gap-4">
           <Card className="!p-0 overflow-hidden border-brand/30">
             <div className="px-5 py-4 bg-brand/5 border-b border-line">
-              <div className="text-[10px] uppercase tracking-wider text-steel-muted mb-1">PMC proposal · Word in SharePoint</div>
+              <div className="text-[10px] uppercase tracking-wider text-steel-muted mb-1">Proposal</div>
               <div className="font-display text-xl">{saved.clientName}</div>
               <div className="font-mono text-xs text-steel-muted mt-1">{saved.quotationNo}</div>
             </div>

@@ -18,7 +18,7 @@ import {
   type VendorPartyType,
 } from "../../lib/vendorTypes";
 import { trimField } from "../../lib/stringUtils";
-import { formatUiText, uiCopy } from "../../lib/formatUiText";
+import { uiCopy } from "../../lib/formatUiText";
 import { StatusNote } from "../../components/StatusNote";
 
 function directoryVendorsQuery(tab: string) {
@@ -42,26 +42,20 @@ const TAB_META: Record<
 > = {
   vendors: {
     title: uiCopy("Vendors / contractors master"),
-    subtitle: uiCopy(
-      "Step 1: company + primary email. Step 2: add more users and activate /login/vendor — separate from client logins.",
-    ),
+    subtitle: "",
     partyTypes: ["Contractor", "Vendor"] as VendorPartyType[],
     defaultParty: "Contractor",
   },
   clients: {
     title: uiCopy("Client directory"),
-    subtitle: uiCopy(
-      "Step 1: client company. Step 2: add representatives and activate /login/client — separate from vendor/consultant logins.",
-    ),
+    subtitle: "",
     partyTypes: ["Client"],
     defaultParty: "Client",
     loginRole: "client",
   },
   stakeholders: {
     title: uiCopy("Consultants"),
-    subtitle: uiCopy(
-      "Step 1: consultant firm. Step 2: add users and activate /login/stakeholder — not SPDC staff (HRMS → Users).",
-    ),
+    subtitle: "",
     partyTypes: ["Consultant", "PMC", "Designer"],
     defaultParty: "Consultant",
     loginRole: "employee",
@@ -72,40 +66,22 @@ export const DIRECTORY_TAB_META = TAB_META;
 
 const ADD_COPY: Record<
   keyof typeof TAB_META,
-  { newLabel: string; title: string; steps: [string, string, string]; edit: string; create: string }
+  { newLabel: string; edit: string; create: string }
 > = {
   clients: {
     newLabel: "+ New client",
-    title: "How to add a client (3 steps)",
-    steps: [
-      "+ New client",
-      "Add each site representative (name + email)",
-      "Activate portal",
-    ],
     edit: "Edit client",
-    create: "Step 1 · New client company",
+    create: "New client",
   },
   vendors: {
     newLabel: "+ New vendor",
-    title: "How to add a vendor (3 steps)",
-    steps: [
-      "+ New vendor",
-      "Add each vendor user (name + email)",
-      "Activate portal",
-    ],
     edit: "Edit vendor",
-    create: "Step 1 · New vendor",
+    create: "New vendor",
   },
   stakeholders: {
     newLabel: "+ New consultant",
-    title: "How to add a consultant (3 steps)",
-    steps: [
-      "+ New consultant",
-      "Add each consultant user (name + email)",
-      "Activate portal",
-    ],
     edit: "Edit consultant",
-    create: "Step 1 · New consultant",
+    create: "New consultant",
   },
 };
 
@@ -397,22 +373,14 @@ export function DirectoryCompaniesPanel({
 
       <div ref={formPanelRef}>
       {!selected && !creatingNew ? (
-        <Card className="!p-6 text-sm text-steel-muted space-y-3">
-          <p className="font-semibold text-ink">{addCopy.title}</p>
-          <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
-            <li>
-              Click <strong className="text-ink">{addCopy.steps[0]}</strong> and save the company name
-            </li>
-            <li>{addCopy.steps[1]}</li>
-            <li>
-              Click <strong className="text-ink">{addCopy.steps[2]}</strong> for every person who needs access
-            </li>
-          </ol>
+        <Card className="!p-6">
           {canEdit ? (
             <Button type="button" onClick={startNewCompany}>
               {addCopy.newLabel}
             </Button>
-          ) : null}
+          ) : (
+            <p className="text-sm text-steel-muted">Select a company.</p>
+          )}
         </Card>
       ) : (
       <Card>
@@ -420,11 +388,6 @@ export function DirectoryCompaniesPanel({
           <h3 className="font-semibold text-sm">
             {selected ? addCopy.edit : addCopy.create}
           </h3>
-          {selected ? (
-            <p className="text-[11px] text-steel-muted w-full basis-full -mt-1">
-              Step 2 below — add people, then start the portal for each person.
-            </p>
-          ) : null}
           {canEdit && selected ? (
             <Button
               type="button"
@@ -623,12 +586,7 @@ export default function CrmDirectoryPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader dense title={meta.title} subtitle={meta.subtitle} />
-      <p className="text-xs text-steel-muted max-w-3xl leading-relaxed -mt-2">
-        {formatUiText(
-          "Company master for the whole portal — clients, consultants, and vendors are managed here only. Project pages link companies from this list; they do not maintain a separate directory.",
-        )}
-      </p>
+      <PageHeader dense title={meta.title} />
       <DirectoryCompaniesPanel key={tab} tab={tab} token={token} canEdit={canEdit} />
     </div>
   );

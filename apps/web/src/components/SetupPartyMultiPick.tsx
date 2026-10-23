@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { useConsultantTypes } from "../lib/consultantTypes";
 import { SearchableCheckboxList } from "./SearchableCheckboxList";
 
 export type SetupVendor = {
@@ -23,8 +22,8 @@ type Props = {
   onCreated?: (vendor: SetupVendor) => void;
   onMsg?: (text: string) => void;
   busy?: boolean;
-  directoryHref: string;
-  directoryLabel: string;
+  directoryHref?: string;
+  directoryLabel?: string;
 };
 
 /** Which setup picker a company belongs to. Consultants whose trade is project management are listed under PMC. */
@@ -50,7 +49,6 @@ function noun(kind: QuickKind) {
 
 /** Tick companies from the CRM directory. New companies are added on the directory pages, not here. */
 export function SetupPartyMultiPick({
-  token,
   title,
   kind,
   vendors,
@@ -59,7 +57,6 @@ export function SetupPartyMultiPick({
   directoryHref,
   directoryLabel,
 }: Props) {
-  const { types } = useConsultantTypes(kind === "Consultant" ? token : null);
   const items = vendors.filter((v) => matchesKind(v, kind)).map((v) => ({
     id: v.id,
     label: v.name,
@@ -67,24 +64,28 @@ export function SetupPartyMultiPick({
     meta: v.email || undefined,
     trade: v.trade,
   }));
+  const directoryLink = directoryHref && directoryLabel ? directoryLabel : "";
 
   return (
     <div className="space-y-2 border border-line rounded-xl p-3">
       <div className="flex items-center justify-between gap-2">
         <h4 className="font-semibold text-sm">{title}</h4>
-        <Link to={directoryHref} className="text-[11px] font-semibold text-brand">
-          {directoryLabel}
-        </Link>
+        {directoryHref && directoryLabel ? (
+          <Link to={directoryHref} className="text-[11px] font-semibold text-brand">
+            {directoryLabel}
+          </Link>
+        ) : null}
       </div>
-      {kind === "Consultant" && types.length ? (
-        <p className="text-[11px] text-steel-muted">Tick from the consultant directory. Add a new firm on Consultants.</p>
-      ) : null}
       <SearchableCheckboxList
         items={items}
         selectedIds={selectedIds}
         onChange={onChange}
         placeholder={`Search ${noun(kind)}…`}
-        emptyMessage={`No ${noun(kind)} in the directory yet. Add them on ${directoryLabel.replace(" →", "")}.`}
+        emptyMessage={
+          directoryLink
+            ? `No ${noun(kind)} in the directory yet. Add them on ${directoryLink.replace(" →", "")}.`
+            : `No ${noun(kind)} in the directory yet.`
+        }
         maxHeightClass="max-h-40"
       />
     </div>

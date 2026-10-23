@@ -94,16 +94,14 @@ function LeadDetailBody({
             </>
           ) : leadProposal(lead) ? (
             <>
-              <p className="text-xs text-steel-muted">Proposal is on the register. Award it there to put a Planning job on Projects.</p>
               <Link to={`/crm/proposals/${leadProposal(lead)!.id}`}>
                 <Button type="button" className="w-full" variant="secondary">
-                  Open proposal (SharePoint + revisions)
+                  Open proposal
                 </Button>
               </Link>
             </>
           ) : (
             <>
-              <p className="text-xs text-steel-muted">Convert to a PMC proposal first. The client format is stored in SharePoint. Award later to open Project setup.</p>
               <Button type="button" className="w-full" onClick={() => onConvert(lead)}>
                 Convert to proposal
               </Button>
@@ -270,7 +268,7 @@ export function CrmLeadsRegister({
       </div>
 
       <RegisterSheetFrame
-        title="Market intelligence register"
+        title="Leads register"
         sheetLabel="Data - July 2026 · Project Details"
         rowCount={filtered.length}
         className="min-h-[480px] w-full"

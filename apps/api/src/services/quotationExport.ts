@@ -11,6 +11,7 @@ export type QuotationDoc = {
   clientName: string;
   clientAddress?: string | null;
   clientGst?: string | null;
+  referenceBy?: string | null;
   scopeSummary?: string | null;
   validityDays: number;
   quotationDate: Date | string;
@@ -60,6 +61,7 @@ export function quotationFromRecord(row: {
   clientName: string;
   clientAddress?: string | null;
   clientGst?: string | null;
+  referenceBy?: string | null;
   scopeSummary?: string | null;
   validityDays: number;
   quotationDate: Date;
@@ -158,6 +160,7 @@ export function renderQuotationHtml(doc: QuotationDoc): string {
     </div>
     <div class="meta">
       <div><b>Reference</b> ${esc(doc.referenceNo || doc.quotationNo)}</div>
+      <div><b>Reference by</b> ${esc(doc.referenceBy || "—")}</div>
       <div><b>Date</b> ${esc(fmtDate(doc.quotationDate))}</div>
       <div><b>Client</b> ${esc(doc.clientName)}</div>
       <div><b>GST</b> ${esc(doc.clientGst || "—")}</div>

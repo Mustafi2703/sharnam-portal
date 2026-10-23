@@ -18,6 +18,7 @@ type BidSlot = {
   bidPackageTitle: string;
   bidPackageStatus: string;
   revisionLabel: string;
+  dueDate?: string | null;
   projectNote?: string | null;
   projectId?: string | null;
   projectCode?: string | null;
@@ -125,6 +126,11 @@ function VendorPackageCard({
             <span className="ml-2 font-mono">· {summary.myVendorLabel}</span>
           )}
         </p>
+        {head?.dueDate ? (
+          <p className="text-xs text-ink mt-1">
+            Quote by {new Date(head.dueDate).toLocaleDateString("en-IN")} — upload the Excel BOQ (.xlsx). It is saved to SharePoint.
+          </p>
+        ) : null}
         {(isAwarded || summary?.myGrandTotal != null) && (
           <p className="text-[11px] text-steel-muted mt-1">
             {isAwarded && awardedLabel && (

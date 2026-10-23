@@ -72,12 +72,6 @@ export default function CrmProjectsPage() {
         <div>
           <p className="text-[10px] font-mono uppercase tracking-wide text-steel-muted">CRM · projects</p>
           <h2 className="font-display text-lg text-ink">Projects register</h2>
-          <p className="text-xs text-steel-muted mt-1 max-w-2xl leading-relaxed">
-            Delivery jobs and client cards. Award a proposal to land here as Planning, or use{" "}
-            <strong className="font-semibold text-ink">New project</strong> to open the project setup card directly.
-            Use <strong className="font-semibold text-ink">Edit setup</strong> for parties and staff,{" "}
-            <strong className="font-semibold text-ink">Open desk</strong> when live.
-          </p>
           {!canManage && (
             <p className="text-xs text-steel-muted mt-1">View only — office and admin can add, edit, or delete.</p>
           )}
