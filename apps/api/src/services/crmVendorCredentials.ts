@@ -39,7 +39,7 @@ type LoginDb = Prisma.TransactionClient | typeof prisma;
 export async function retirePortalLogin(
   db: LoginDb,
   userId: string,
-  opts?: { allowStaff?: boolean },
+  opts?: { allowStaff?: boolean; onlyCompanyId?: string },
 ): Promise<boolean> {
   const existing = await db.user.findUnique({
     where: { id: userId },
@@ -57,8 +57,12 @@ export async function retirePortalLogin(
   await db.attendance.deleteMany({ where: { userId } }).catch(() => undefined);
   await db.leaveRequest.deleteMany({ where: { userId } }).catch(() => undefined);
   await db.leaveBalance.deleteMany({ where: { userId } }).catch(() => undefined);
-  await db.vendorContact.deleteMany({ where: { email } }).catch(() => undefined);
-  await db.vendor.updateMany({ where: { email }, data: { email: null } }).catch(() => undefined);
+  // Retiring for one company's delete clears this person only on that company; other companies keep their contact.
+  const companyScope = opts?.onlyCompanyId ? { vendorId: opts.onlyCompanyId } : {};
+  await db.vendorContact.deleteMany({ where: { email, ...companyScope } }).catch(() => undefined);
+  await db.vendor
+    .updateMany({ where: { email, ...(opts?.onlyCompanyId ? { id: opts.onlyCompanyId } : {}) }, data: { email: null } })
+    .catch(() => undefined);
   await db.user.update({
     where: { id: userId },
     data: {
@@ -92,13 +96,15 @@ export async function retirePortalLoginsForVendor(
       NOT: { email: { startsWith: "deleted." } },
       OR: [{ vendorId: vendor.id }, ...(emails.length ? [{ email: { in: emails } }] : [])],
     },
-    select: { id: true, email: true, fullName: true, role: true },
+    select: { id: true, email: true, fullName: true, role: true, vendorId: true },
   });
   let retired = 0;
   for (const u of users) {
     if (isProtectedStaffLogin(u)) continue;
     if (u.role !== "vendor" && u.role !== "client" && u.role !== "employee") continue;
-    if (await retirePortalLogin(db, u.id)) retired++;
+    // A login that belongs to another company stays; the email only matched a contact row here.
+    if (u.vendorId && u.vendorId !== vendor.id) continue;
+    if (await retirePortalLogin(db, u.id, { onlyCompanyId: vendor.id })) retired++;
   }
   if (emails.length) {
     await db.vendorContact.deleteMany({ where: { vendorId: vendor.id, email: { in: emails } } }).catch(() => undefined);
@@ -128,6 +134,8 @@ export async function ensurePortalLogin(opts: {
   vendorId?: string | null;
   designation?: string | null;
   department?: string | null;
+  /** Explicit office "open portal" only: switch a deactivated login back on. Invites and syncs never do. */
+  reactivate?: boolean;
 }): Promise<PortalLoginResult | null> {
   const email = String(opts.email || "")
     .trim()
@@ -144,33 +152,31 @@ export async function ensurePortalLogin(opts: {
         role: existing.role as RoleKey,
       };
     }
-    const { portalForRole } = await import("@sharnam/shared");
+    // An existing login keeps its role, company and on/off state: a bid invite or matrix sync must not turn a
+    // consultant into a vendor, move a person to another company, or switch a deactivated login back on.
+    if (existing.role !== opts.role || existing.isActive === false) {
+      if (!(opts.reactivate && existing.isActive === false && existing.role === opts.role)) {
+        return { userId: existing.id, email, created: false, role: existing.role as RoleKey };
+      }
+    }
     const patch: {
       vendorId?: string;
-      role?: RoleKey;
-      portal?: string;
       isActive?: boolean;
       fullName?: string;
       phone?: string | null;
     } = {};
     if (opts.vendorId && !existing.vendorId) patch.vendorId = opts.vendorId;
-    if (!LOCKED_ROLES.has(existing.role) && existing.role !== opts.role) {
-      patch.role = opts.role;
-      patch.portal = portalForRole(opts.role);
-    }
     if (existing.isActive === false) patch.isActive = true;
     if (opts.fullName?.trim() && existing.fullName !== opts.fullName.trim()) patch.fullName = opts.fullName.trim();
     if (opts.phone !== undefined) patch.phone = opts.phone || null;
     if (Object.keys(patch).length) {
       await prisma.user.update({ where: { id: existing.id }, data: patch }).catch(() => {});
     }
-    await alignUserRole(existing.id, opts.role);
-    const refreshed = await prisma.user.findUnique({ where: { id: existing.id }, select: { id: true, role: true } });
     return {
       userId: existing.id,
       email,
       created: false,
-      role: (refreshed?.role || existing.role) as RoleKey,
+      role: existing.role as RoleKey,
     };
   }
 
@@ -423,14 +429,15 @@ export async function ensureVendorPortalLogin(vendor: {
     role: "vendor",
     phone: vendor.businessPhone,
   });
-  if (!login) return login;
+  if (!login || login.role !== "vendor") return login;
   const vendorId =
     vendor.vendorId ||
     (vendor.email
       ? (await prisma.vendor.findFirst({ where: { email: vendor.email.trim().toLowerCase() }, select: { id: true } }))?.id
       : null);
   if (vendorId) {
-    await prisma.user.update({ where: { id: login.userId }, data: { vendorId } }).catch(() => {});
+    // Link a vendor login that has no company yet; never move a login that already belongs to another company.
+    await prisma.user.updateMany({ where: { id: login.userId, vendorId: null }, data: { vendorId } }).catch(() => {});
   }
   return login;
 }
@@ -670,8 +677,8 @@ export async function ensureStakeholderPortalLogin(party: {
     role: "employee",
     phone: party.businessPhone,
   });
-  if (login && party.vendorId) {
-    await prisma.user.update({ where: { id: login.userId }, data: { vendorId: party.vendorId } }).catch(() => {});
+  if (login && login.role === "employee" && party.vendorId) {
+    await prisma.user.updateMany({ where: { id: login.userId, vendorId: null }, data: { vendorId: party.vendorId } }).catch(() => {});
   }
   return login;
 }
@@ -736,7 +743,11 @@ export async function provisionCompanyAccess(opts: {
     });
   }
   if (login) {
+    // Project setup is the explicit step where the company type decides the login's role.
     await alignUserRole(login.userId, role);
+    await prisma.user
+      .updateMany({ where: { id: login.userId, vendorId: null, role }, data: { vendorId: opts.vendor.id } })
+      .catch(() => {});
     login = { ...login, role };
   }
   await grantVendorProjectAccess({

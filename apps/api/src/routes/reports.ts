@@ -478,6 +478,8 @@ auditRouter.get("/", async (req, res) => {
 
 export const crmRouter = Router();
 crmRouter.use(requireAuth);
+// Leads, deals and PMC proposals (fees) are SPDC office-confidential — reads included.
+crmRouter.use(requireRoles("admin", "office"));
 
 crmRouter.get("/leads", async (_req, res) => {
   const leads = await prisma.lead.findMany({
@@ -867,6 +869,10 @@ crmRouter.post("/leads/:id/convert", requireRoles("admin", "office"), async (req
       bidDisciplinesJson,
       workPackages: workPackagesJson,
     });
+    if (!out.created) {
+      // Never attach a lead (and its team / vendors) to a project that already exists under this code.
+      return res.status(409).json({ error: `Project code ${code} is already used by "${out.project.name}". Enter a new code.` });
+    }
     project = out.project;
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : "Could not convert lead to project" });
@@ -1321,6 +1327,10 @@ crmRouter.post("/quotations/:id/award", requireRoles("admin", "office"), async (
         pmcName: "SPDC",
         status: "Planning",
       });
+      if (!out.created) {
+        // A typed code that is already taken must not attach this award to another job.
+        return res.status(409).json({ error: `Project code ${code} is already used by "${out.project.name}". Enter a new code.` });
+      }
       project = out.project;
       projectId = project.id;
     } catch (err) {
@@ -3420,7 +3430,9 @@ hrmRouter.post("/leave-balances", hrmDesk, async (req, res) => {
 
 /* ─── employee documents (metadata only for now; upload endpoint later) ─── */
 
-hrmRouter.get("/documents/:userId", async (req, res) => {
+hrmRouter.get("/documents/:userId", async (req: AuthedRequest, res) => {
+  const isHr = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "hr";
+  if (!isHr && req.user!.id !== req.params.userId) return res.status(403).json({ error: "Forbidden" });
   const rows = await prisma.employeeDocument.findMany({ where: { userId: req.params.userId }, orderBy: { createdAt: "desc" } });
   res.json(rows);
 });

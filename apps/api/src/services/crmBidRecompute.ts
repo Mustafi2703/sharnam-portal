@@ -366,17 +366,10 @@ export async function recomputeBidPackageComparative(
     });
   }
 
-  const hasAnyTotal = filledSlots > 0;
   await prisma.crmBidPackage.update({
     where: { id: pkgId },
     data: {
-      status: hasAnyTotal && filledSlots >= pkg.vendorBoqs.length
-        ? "Evaluation"
-        : pkg.status === "Awarded"
-          ? "Awarded"
-          : pkg.status === "Draft"
-            ? "Draft"
-            : "Open",
+      status: nextBidStatus(pkg.status, filledSlots, pkg.vendorBoqs.length),
       comparativeJson: lineComparative ? JSON.stringify(lineComparative) : pkg.comparativeJson,
       updatedAt: new Date(),
     },
@@ -384,6 +377,16 @@ export async function recomputeBidPackageComparative(
 
   return { summary, filledSlots, totalSlots: pkg.vendorBoqs.length };
 }
+
+/** An award is final; otherwise the bid moves to Evaluation once every invited vendor has quoted. */
+function nextBidStatus(current: string, filledSlots: number, totalSlots: number) {
+  if (current === "Awarded") return "Awarded";
+  if (filledSlots > 0 && filledSlots >= totalSlots) return "Evaluation";
+  return current === "Draft" ? "Draft" : "Open";
+}
+
+/** The R2 comparative needs rates from at least two vendors. */
+const MIN_QUOTES_FOR_COMPARATIVE = 2;
 
 export async function rebuildPackageBoqComparative(prisma: PrismaClient, pkgId: string) {
   const pkg = await prisma.crmBidPackage.findUnique({
@@ -398,9 +401,21 @@ export async function rebuildPackageBoqComparative(prisma: PrismaClient, pkgId: 
   const quotes = pkg.vendorBoqs
     .filter((slot) => slot.rateLinesJson)
     .map((slot) => ({ vendor: slot.vendorLabel, lines: JSON.parse(slot.rateLinesJson!) as BoqLine[] }));
+  const status = nextBidStatus(pkg.status, quotes.length, pkg.vendorBoqs.length);
+  if (quotes.length < MIN_QUOTES_FOR_COMPARATIVE) {
+    await prisma.crmBidPackage.update({
+      where: { id: pkg.id },
+      data: { comparativeJson: null, status },
+    });
+    return {
+      summary: null,
+      filledSlots: pkg.vendorBoqs.filter((slot) => slot.fileName || slot.uploadedAt).length,
+      totalSlots: pkg.vendorBoqs.length,
+    };
+  }
   const comparative = buildPackageComparative(blank, quotes);
   let sharePointUrl = pkg.comparativeSharePointUrl;
-  if (pkg.project?.code && quotes.length) {
+  if (pkg.project?.code) {
     const { CRM_SHAREPOINT, syncBufferToProjectSharePoint } = await import("./crmSharePoint.js");
     const fileName = `${pkg.title.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 60)}-Comparative.xlsx`;
     const buffer = await comparativeWorkbook(pkg.title, comparative);
@@ -426,6 +441,7 @@ export async function rebuildPackageBoqComparative(prisma: PrismaClient, pkgId: 
     data: {
       comparativeJson: JSON.stringify(comparative),
       comparativeSharePointUrl: sharePointUrl,
+      status,
     },
   });
   const summary = {

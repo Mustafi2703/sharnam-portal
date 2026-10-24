@@ -28,6 +28,19 @@ const WRITE_ROLES = ["admin", "office", "employee"] as const;
 /** Bid / CRM system sheets — hidden from the interactive Sheet Maker workspace. */
 const MAKER_HIDDEN_CATEGORIES = ["CRM Vendor BOQ", "Comparative statement", "Payment summary"] as const;
 
+/** Bid sheets carry vendors' rates. Only the SPDC office reads them; a vendor opens its own BOQ through its bid slot. */
+const BID_CONFIDENTIAL_CATEGORIES = new Set(["CRM Vendor BOQ", "CRM Comparative Summary", "CRM Comparative BOQ", "Comparative statement"]);
+
+function isBidOffice(role: string) {
+  return role === "admin" || role === "office";
+}
+
+/** True when this login may not open or change the sheet because it is a bid sheet. */
+async function bidSheetLocked(role: string, row: { id: string; category: string | null }) {
+  if (isBidOffice(role)) return false;
+  return BID_CONFIDENTIAL_CATEGORIES.has(row.category || "") || (await bidProtectedSheetIds()).has(row.id);
+}
+
 async function bidProtectedSheetIds(): Promise<Set<string>> {
   const pkgs = await prisma.crmBidPackage.findMany({
     select: {
@@ -256,18 +269,19 @@ customSheetsRouter.get("/masters/:masterId/lines", async (req, res) => {
   });
 });
 
-customSheetsRouter.get("/", async (req, res) => {
+customSheetsRouter.get("/", async (req: AuthedRequest, res) => {
   const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
   const makerWorkspace = req.query.maker === "1" || req.query.scope === "maker";
-  const protectedIds = makerWorkspace ? await bidProtectedSheetIds() : null;
+  const bidOffice = isBidOffice(req.user!.role);
+  const protectedIds = makerWorkspace || !bidOffice ? await bidProtectedSheetIds() : null;
   const rows = await prisma.customSheet.findMany({
     where: {
       ...(projectId ? { projectId } : {}),
-      ...(makerWorkspace
-        ? {
-            category: { notIn: [...MAKER_HIDDEN_CATEGORIES] },
-          }
-        : {}),
+      AND: [
+        ...(makerWorkspace ? [{ category: { notIn: [...MAKER_HIDDEN_CATEGORIES] } }] : []),
+        // Outside the office, bid sheets never list (uncategorised sheets still do).
+        ...(bidOffice ? [] : [{ OR: [{ category: null }, { category: { notIn: [...BID_CONFIDENTIAL_CATEGORIES] } }] }]),
+      ],
     },
     orderBy: { updatedAt: "desc" },
     select: {
@@ -337,10 +351,11 @@ customSheetsRouter.get("/:id", async (req: AuthedRequest, res) => {
   const role = req.user!.role;
   const isOffice = role === "admin" || role === "office" || role === "employee";
   let bidSlot = null;
-  if (!isOffice && row.category === "CRM Vendor BOQ") {
-    const vendor =
-      role === "vendor" ? await (await import("../services/vendorPortal.js")).resolveVendorForUser(req.user!) : null;
-    bidSlot = await findVendorBoqSlotForSheet(prisma, row.id, vendor);
+  if (await bidSheetLocked(role, row)) {
+    // Only a vendor may open a bid sheet outside the office — and only the BOQ on its own slot.
+    if (role !== "vendor") return res.status(403).json({ error: "Forbidden" });
+    const vendor = await (await import("../services/vendorPortal.js")).resolveVendorForUser(req.user!);
+    bidSlot = vendor ? await findVendorBoqSlotForSheet(prisma, row.id, vendor) : null;
     if (!bidSlot) return res.status(403).json({ error: "Forbidden" });
   }
 
@@ -470,6 +485,7 @@ customSheetsRouter.post("/blank", requireRoles(...WRITE_ROLES), async (req: Auth
 customSheetsRouter.post("/:id/clone", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   const src = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!src) return res.status(404).json({ error: "not found" });
+  if (await bidSheetLocked(req.user!.role, src)) return res.status(403).json({ error: "Forbidden" });
   const name = String(req.body.name || `${src.name} (copy)`).trim();
   const projectId = req.body.projectId !== undefined ? (req.body.projectId ? String(req.body.projectId) : null) : src.projectId;
   const row = await prisma.customSheet.create({
@@ -498,13 +514,16 @@ customSheetsRouter.put("/:id", async (req: AuthedRequest, res) => {
     existing.category === "CRM Vendor BOQ" &&
     (await vendorCanEditBoqSheet(prisma, role, req.user!, req.params.id));
   if (!isOffice && !vendorMayEdit) return res.status(403).json({ error: "Forbidden" });
+  if (!vendorMayEdit && (await bidSheetLocked(role, existing))) return res.status(403).json({ error: "Forbidden" });
 
   const rows = req.body.rows ? evaluateAllRows(migrateRows(req.body.rows)) : undefined;
+  // A vendor fills rates on its BOQ; it may not rename or re-categorise the bid sheet.
+  const vendorOnly = vendorMayEdit && !isOffice;
   const row = await prisma.customSheet.update({
     where: { id: req.params.id },
     data: {
-      name: req.body.name || undefined,
-      category: req.body.category || undefined,
+      name: vendorOnly ? undefined : req.body.name || undefined,
+      category: vendorOnly ? undefined : req.body.category || undefined,
       headersJson: req.body.headers ? JSON.stringify(req.body.headers) : undefined,
       rowsJson: rows ? JSON.stringify(rows) : undefined,
     },
@@ -530,6 +549,7 @@ customSheetsRouter.post("/:id/reimport", requireRoles(...WRITE_ROLES), upload.si
   if (!req.file) return res.status(400).json({ error: "file required" });
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
+  if (await bidSheetLocked(req.user!.role, row)) return res.status(403).json({ error: "Forbidden" });
   const sheetName = req.body.sheet ? String(req.body.sheet) : undefined;
   const wb = readWorkbook(req.file.buffer, req.file.originalname);
   const targetSheetName = sheetName && wb.Sheets[sheetName] ? sheetName : wb.SheetNames[0];
@@ -550,6 +570,7 @@ customSheetsRouter.post("/:id/reimport", requireRoles(...WRITE_ROLES), upload.si
 customSheetsRouter.post("/:id/export", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
+  if (await bidSheetLocked(req.user!.role, row)) return res.status(403).json({ error: "Forbidden" });
   const headers = JSON.parse(row.headersJson || "[]");
   const rows = parseRowsJson(row.rowsJson);
   const ws = buildWorksheet(headers, rows);
@@ -583,6 +604,7 @@ function csvEscape(value: unknown): string {
 customSheetsRouter.post("/:id/export.csv", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
   const row = await prisma.customSheet.findUnique({ where: { id: req.params.id } });
   if (!row) return res.status(404).json({ error: "not found" });
+  if (await bidSheetLocked(req.user!.role, row)) return res.status(403).json({ error: "Forbidden" });
   const headers = JSON.parse(row.headersJson || "[]") as string[];
   const rows = evaluateAllRows(parseRowsJson(row.rowsJson));
   const lines = [
@@ -602,6 +624,9 @@ customSheetsRouter.post("/:id/export.csv", requireRoles(...WRITE_ROLES), async (
 });
 
 customSheetsRouter.delete("/:id", requireRoles(...WRITE_ROLES), async (req: AuthedRequest, res) => {
+  const existing = await prisma.customSheet.findUnique({ where: { id: req.params.id }, select: { id: true, category: true } });
+  if (!existing) return res.status(404).json({ error: "not found" });
+  if (await bidSheetLocked(req.user!.role, existing)) return res.status(403).json({ error: "Forbidden" });
   await prisma.customSheet.delete({ where: { id: req.params.id } });
   await audit("customsheet.delete", { userId: req.user!.id, entity: "CustomSheet", entityId: req.params.id });
   res.json({ ok: true });

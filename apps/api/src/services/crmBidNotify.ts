@@ -204,11 +204,13 @@ export async function notifyBidPackageOpened(opts: {
         : emails[0];
 
     if (opts.createLogins !== false && loginTarget) {
-      const login = await ensureVendorPortalLogin({
+      const found = await ensureVendorPortalLogin({
         email: loginTarget,
         name: vendorName,
         vendorId: info.vendorId,
       }).catch(() => null);
+      // An email that already belongs to a client / consultant / staff login is not made a bidder.
+      const login = found?.role === "vendor" ? found : null;
       if (login) {
         portalEmail = login.email;
         loginCreated = login.created;

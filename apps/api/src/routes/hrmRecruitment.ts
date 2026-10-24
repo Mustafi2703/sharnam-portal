@@ -4,10 +4,11 @@
  */
 import fs from "fs";
 import path from "path";
-import { Router } from "express";
+import { Router, type NextFunction, type Response } from "express";
 import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
+import { isHrDeskOnly } from "../services/hrDesk.js";
 import { audit } from "../services/audit.js";
 import { errorDetail, pushRuntimeLog } from "../services/runtimeLog.js";
 import { isDemoSeedLoginEmail } from "../services/keepPortalUsers.js";
@@ -38,6 +39,29 @@ import {
 export const hrmRecruitmentRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 hrmRecruitmentRouter.use(requireAuth);
+
+function isHrDeskUser(user: { email: string; role: string }) {
+  return user.role === "admin" || user.role === "office" || user.role === "hr" || isHrDeskOnly(user.email, user.role);
+}
+
+/** Candidates, offers, CTC, pay hikes and staff files are HR desk data — never for vendor, client or consultant logins. */
+function hrDesk(req: AuthedRequest, res: Response, next: NextFunction) {
+  if (req.user && isHrDeskUser(req.user)) return next();
+  return res.status(403).json({ error: "HR desk only." });
+}
+
+/** HR desk, or the joiner the offer belongs to. */
+function offerAccess(param: "id" | "offerId") {
+  return async (req: AuthedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { canAccessOffer } = await import("../services/joiningPortal.js");
+      if (req.user && (await canAccessOffer(req.user, String(req.params[param] || "")))) return next();
+      return res.status(404).json({ error: "not found" });
+    } catch (err) {
+      return next(err);
+    }
+  };
+}
 
 function n(v: unknown): number | null {
   if (v === undefined || v === null || v === "") return null;
@@ -90,7 +114,7 @@ async function attachStaffNames<T extends { userId: string }>(rows: T[]) {
 
 /* ═════════════════════════════════════  MANPOWER REQUISITION  ═════════════════════════════════════ */
 
-hrmRecruitmentRouter.get("/requisitions", async (_req, res) => {
+hrmRecruitmentRouter.get("/requisitions", hrDesk, async (_req, res) => {
   await safeHrmList("requisitions", () =>
     prisma.manpowerRequisition.findMany({
       orderBy: { createdAt: "desc" },
@@ -335,7 +359,7 @@ hrmRecruitmentRouter.delete("/requisitions/:id", requireRoles("admin", "office",
 
 /* ═════════════════════════════════════  JOB POSTING  ═════════════════════════════════════ */
 
-hrmRecruitmentRouter.get("/postings", async (_req, res) => {
+hrmRecruitmentRouter.get("/postings", hrDesk, async (_req, res) => {
   await safeHrmList("job postings", () =>
     prisma.jobPosting.findMany({
       include: { requisition: { select: { requisitionNo: true, status: true } }, _count: { select: { candidates: true } } },
@@ -405,7 +429,7 @@ hrmRecruitmentRouter.delete("/postings/:id", requireRoles("admin", "office", "hr
 
 /* ═════════════════════════════════════  CANDIDATES (Resume DB)  ═════════════════════════════════════ */
 
-hrmRecruitmentRouter.get("/candidates", async (req, res) => {
+hrmRecruitmentRouter.get("/candidates", hrDesk, async (req, res) => {
   const status = req.query.status ? String(req.query.status) : undefined;
   const postingId = req.query.postingId ? String(req.query.postingId) : undefined;
   const search = req.query.q ? String(req.query.q).toLowerCase() : undefined;
@@ -752,7 +776,7 @@ async function resolveResumeOpen(candidate: { id: string; fullName: string; resu
   return null;
 }
 
-hrmRecruitmentRouter.get("/candidates/:id/resume", async (req, res) => {
+hrmRecruitmentRouter.get("/candidates/:id/resume", hrDesk, async (req, res) => {
   const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!candidate) return res.status(404).json({ error: "not found" });
   if (!candidate.resumeUrl) return res.status(404).json({ error: "No resume on file." });
@@ -762,7 +786,7 @@ hrmRecruitmentRouter.get("/candidates/:id/resume", async (req, res) => {
   return res.json({ kind: open.kind, url: open.url });
 });
 
-hrmRecruitmentRouter.get("/candidates/:id/resume/file", async (req, res) => {
+hrmRecruitmentRouter.get("/candidates/:id/resume/file", hrDesk, async (req, res) => {
   const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!candidate?.resumeUrl) return res.status(404).json({ error: "No resume on file." });
   const disk = locateResumeFile(candidate.resumeUrl, candidate.fullName);
@@ -1062,9 +1086,16 @@ hrmRecruitmentRouter.post("/candidates/:id/documents", requireRoles("admin", "of
 
 hrmRecruitmentRouter.get("/stored-file/:id", async (req: AuthedRequest, res) => {
   const staff = await prisma.employeeDocument.findUnique({ where: { id: req.params.id } });
-  const cand = staff ? null : await prisma.candidateDocument.findUnique({ where: { id: req.params.id } });
+  const cand = staff
+    ? null
+    : await prisma.candidateDocument.findUnique({ where: { id: req.params.id }, include: { candidate: { select: { email: true } } } });
   const row = staff || cand;
   if (!row) return res.status(404).json({ error: "not found" });
+  // KYC files: HR desk, the employee the file belongs to, or the candidate who uploaded it.
+  const ownFile = staff
+    ? staff.userId === req.user!.id
+    : !!cand?.candidate.email && cand.candidate.email.trim().toLowerCase() === req.user!.email.trim().toLowerCase();
+  if (!isHrDeskUser(req.user!) && !ownFile) return res.status(404).json({ error: "not found" });
   const name = storedFileName(row.storagePath, row.fileUrl, "file");
   const buf = await readStoredFile(row.storagePath);
   if (!buf) return res.status(404).json({ error: "File is not on SharePoint yet." });
@@ -1196,6 +1227,12 @@ hrmRecruitmentRouter.post("/candidates/:id/convert", requireRoles("admin", "offi
     select: { requisition: { select: { designation: true, department: true } }, currentDesign: true },
   });
   let user = await prisma.user.findUnique({ where: { email } });
+  if (user && (user.role === "vendor" || user.role === "client" || (user.role === "employee" && user.vendorId))) {
+    // Never hang an employee profile and KYC on a vendor, client or consultant portal login.
+    return res.status(409).json({
+      error: `${email} is already a ${user.role === "employee" ? "consultant" : user.role} portal login. Use the joiner's own email before converting them to an employee.`,
+    });
+  }
   let created = false;
   if (!user) {
     const bcrypt = await import("bcryptjs");
@@ -1508,7 +1545,7 @@ function interviewPublic(row: { panelJson?: string | null; candidate?: { id?: st
   return { ...row, ...panel, meetingType };
 }
 
-hrmRecruitmentRouter.get("/interviews", async (_req, res) => {
+hrmRecruitmentRouter.get("/interviews", hrDesk, async (_req, res) => {
   await safeHrmList("interviews", () =>
     prisma.interviewRound
       .findMany({
@@ -1664,7 +1701,7 @@ async function publishSelectionMatrix() {
   ]);
 }
 
-hrmRecruitmentRouter.get("/candidates/:id/interviews", async (req, res) => {
+hrmRecruitmentRouter.get("/candidates/:id/interviews", hrDesk, async (req, res) => {
   const candidate = await prisma.candidate.findUnique({
     where: { id: req.params.id },
     include: { posting: { select: { title: true } } },
@@ -1996,7 +2033,7 @@ hrmRecruitmentRouter.patch("/interviews/:id", requireRoles("admin", "office", "h
 
 /* ═════════════════════════════════════  OFFER LETTER  ═════════════════════════════════════ */
 
-hrmRecruitmentRouter.get("/offers", async (_req, res) => {
+hrmRecruitmentRouter.get("/offers", hrDesk, async (_req, res) => {
   const { isPreJoinReadyForAppointmentLetter } = await import("../services/joiningPortal.js");
   await safeHrmList("offers", async () => {
     const rows = await prisma.offer.findMany({
@@ -2369,14 +2406,14 @@ async function loadOfferForAnnexure(id: string): Promise<AnnexureLoad> {
   return { ok: true, breakdown: computeCtcBreakdown(inputs) };
 }
 
-hrmRecruitmentRouter.get("/offers/:id/annexure.html", async (req, res) => {
+hrmRecruitmentRouter.get("/offers/:id/annexure.html", offerAccess("id"), async (req, res) => {
   const out = await loadOfferForAnnexure(req.params.id);
   if (!out.ok) return res.status(out.status).json({ error: out.error });
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(buildAnnexureHtml(out.breakdown));
 });
 
-hrmRecruitmentRouter.get("/offers/:id/annexure.xlsx", async (req, res) => {
+hrmRecruitmentRouter.get("/offers/:id/annexure.xlsx", offerAccess("id"), async (req, res) => {
   const out = await loadOfferForAnnexure(req.params.id);
   if (!out.ok) return res.status(out.status).json({ error: out.error });
   const buf = await buildAnnexureXlsx(out.breakdown);
@@ -2811,7 +2848,7 @@ async function fileHrPolicyAcknowledgement(offerId: string, actorUserId: string)
   return { ok: true as const, acknowledged: true as const, url, folder, employeeName: offer.candidate.fullName, html };
 }
 
-hrmRecruitmentRouter.get("/onboarding/:offerId", async (req, res) => {
+hrmRecruitmentRouter.get("/onboarding/:offerId", offerAccess("offerId"), async (req, res) => {
   const offer = await prisma.offer.findUnique({ where: { id: req.params.offerId } });
   if (!offer) return res.status(404).json({ error: "not found" });
   const row = await prisma.onboardingChecklist.upsert({
@@ -2883,7 +2920,7 @@ hrmRecruitmentRouter.patch("/onboarding/:offerId", requireRoles("admin", "office
   });
 });
 
-hrmRecruitmentRouter.get("/onboarding/:offerId/hr-policy", async (req, res) => {
+hrmRecruitmentRouter.get("/onboarding/:offerId/hr-policy", offerAccess("offerId"), async (req, res) => {
   const offer = await prisma.offer.findUnique({
     where: { id: req.params.offerId },
     include: { candidate: true, onboard: true },
@@ -2915,7 +2952,7 @@ hrmRecruitmentRouter.post("/onboarding/:offerId/hr-policy", requireRoles("admin"
 
 /* ═════════════════════════════════════  PAY HIKE  ═════════════════════════════════════ */
 
-hrmRecruitmentRouter.get("/pay-hikes", async (req, res) => {
+hrmRecruitmentRouter.get("/pay-hikes", hrDesk, async (req, res) => {
   const userId = req.query.userId ? String(req.query.userId) : undefined;
   await safeHrmList("pay hikes", async () => {
     const rows = await prisma.payHike.findMany({
@@ -3012,11 +3049,13 @@ hrmRecruitmentRouter.delete("/pay-hikes/:id", requireRoles("admin", "office", "h
 /* ═════════════════════════════════════  PAYSLIP  ═════════════════════════════════════ */
 
 hrmRecruitmentRouter.get("/payslips", async (req: AuthedRequest, res) => {
-  const isAdmin = ["admin", "office", "hr"].includes(req.user!.role);
+  const isAdmin = isHrDeskUser(req.user!);
   const filters: Record<string, unknown> = {};
   if (req.query.year) filters.year = Number(req.query.year);
   if (req.query.month) filters.month = Number(req.query.month);
-  if (!isAdmin || req.query.userId) filters.userId = String(req.query.userId || req.user!.id);
+  // Staff only ever see their own payslips; HR may filter by any employee.
+  if (!isAdmin) filters.userId = req.user!.id;
+  else if (req.query.userId) filters.userId = String(req.query.userId);
   const rows = await prisma.payslip.findMany({ where: filters, orderBy: [{ year: "desc" }, { month: "desc" }] });
   res.json(await attachStaffNames(rows));
 });
@@ -3558,7 +3597,7 @@ hrmRecruitmentRouter.patch("/payslips/:id", requireRoles("admin", "office", "hr"
 /**
  * Timeline of every HRMS + portal action tied to an employee.
  */
-hrmRecruitmentRouter.get("/employees/:userId/timeline", async (req, res) => {
+hrmRecruitmentRouter.get("/employees/:userId/timeline", hrDesk, async (req, res) => {
   const userId = req.params.userId;
   const offerId = String(req.query.offerId || "");
   const candidateId = String(req.query.candidateId || "");

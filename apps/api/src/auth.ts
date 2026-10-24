@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import type { AuthUser, RoleKey, PortalKey, ModuleKey, PermissionAction } from "@sharnam/shared";
 import { DEFAULT_ROLE_PERMISSIONS, can } from "@sharnam/shared";
 import { hrDeskApiAllowed, isHrDeskOnly } from "./services/hrDesk.js";
+import { prisma } from "./prisma.js";
 
 import { randomBytes } from "node:crypto";
 
@@ -71,24 +72,63 @@ function clientWriteAllowed(method: string, url: string): boolean {
   return CLIENT_WRITE_ALLOW.some((re) => re.test(path));
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+type LiveAccount = { isActive: boolean; role: string; vendorId: string | null; at: number };
+const LIVE_ACCOUNT_TTL_MS = 15_000;
+const liveAccounts = new Map<string, LiveAccount>();
+
+/**
+ * The token is signed for 7 days, so re-read the account: a deactivated, removed or re-roled login
+ * must stop working within seconds, not when its token runs out. Cached briefly per user.
+ */
+async function liveAccount(userId: string): Promise<LiveAccount | null> {
+  const hit = liveAccounts.get(userId);
+  if (hit && Date.now() - hit.at < LIVE_ACCOUNT_TTL_MS) return hit;
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, role: true, vendorId: true },
+  });
+  if (!row) {
+    liveAccounts.delete(userId);
+    return null;
+  }
+  const live = { isActive: row.isActive !== false, role: row.role, vendorId: row.vendorId ?? null, at: Date.now() };
+  liveAccounts.set(userId, live);
+  return live;
+}
+
+export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const raw = tokenFromRequest(req);
   if (!raw) return res.status(401).json({ error: "Unauthorized" });
+  let user: AuthUser;
   try {
-    req.user = jwt.verify(raw, jwtSecret()) as AuthUser;
-    if (req.user.role === "client" && !clientWriteAllowed(req.method, req.originalUrl)) {
-      return res.status(403).json({ error: "Client logins are read-only. Raise an RFI or concern, or ask the Sharnam office to make the change." });
-    }
-    if (req.user.role === "employee" && req.user.vendorId && !stakeholderWriteAllowed(req.method, req.originalUrl)) {
-      return res.status(403).json({ error: "Consultant logins can raise and answer RFIs, work on design coordination and review drawings. Ask the Sharnam office for other changes." });
-    }
-    if (isHrDeskOnly(req.user.email, req.user.role) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
-      return res.status(403).json({ error: "This login is HR portal only — people management." });
-    }
-    next();
+    user = jwt.verify(raw, jwtSecret()) as AuthUser;
   } catch {
     return res.status(401).json({ error: "Invalid token" });
   }
+  let live: LiveAccount | null;
+  try {
+    live = await liveAccount(user.id);
+  } catch (err) {
+    console.error("requireAuth account check failed:", err);
+    return res.status(503).json({ error: "Database temporarily unavailable — please retry." });
+  }
+  if (!live || !live.isActive) {
+    return res.status(401).json({ error: "This login is no longer active. Ask the Sharnam office if you still need access." });
+  }
+  if (live.role !== user.role) {
+    return res.status(401).json({ error: "Your portal access changed. Sign in again." });
+  }
+  req.user = { ...user, vendorId: live.vendorId };
+  if (req.user.role === "client" && !clientWriteAllowed(req.method, req.originalUrl)) {
+    return res.status(403).json({ error: "Client logins are read-only. Raise an RFI or concern, or ask the Sharnam office to make the change." });
+  }
+  if (req.user.role === "employee" && req.user.vendorId && !stakeholderWriteAllowed(req.method, req.originalUrl)) {
+    return res.status(403).json({ error: "Consultant logins can raise and answer RFIs, work on design coordination and review drawings. Ask the Sharnam office for other changes." });
+  }
+  if (isHrDeskOnly(req.user.email, req.user.role) && !hrDeskApiAllowed(req.originalUrl, req.method)) {
+    return res.status(403).json({ error: "This login is HR portal only — people management." });
+  }
+  next();
 }
 
 export function requireRoles(...roles: RoleKey[]) {

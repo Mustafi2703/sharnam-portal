@@ -722,11 +722,13 @@ crmComparativeRouter.post("/bid-packages/:id/vendors", requireRoles("admin", "of
     for (const v of toAdd) {
       if (!v.email) continue;
       try {
-        const login = await ensureVendorPortalLogin({
+        const found = await ensureVendorPortalLogin({
           email: v.email,
           name: v.name,
           vendorId: v.id,
         });
+        // An email that already belongs to a client / consultant / staff login is not made a bidder.
+        const login = found?.role === "vendor" ? found : null;
         if (login && pkg.projectId) {
           await grantVendorProjectAccess({
             projectId: pkg.projectId,
@@ -789,7 +791,7 @@ crmComparativeRouter.post(
       const vendorUser = await resolveVendorForUser(req.user!);
       const ownsSlot =
         vendorUser &&
-        (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name || !slot.vendorId);
+        (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name);
       if (!ownsSlot) {
         return res.status(403).json({ error: "You can only upload BOQ for your assigned vendor slot" });
       }
@@ -931,7 +933,7 @@ crmComparativeRouter.delete("/bid-packages/:id/vendor-boq/:slotId", async (req: 
     const vendorUser = await resolveVendorForUser(req.user!);
     const ownsSlot =
       vendorUser &&
-      (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name || !slot.vendorId);
+      (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name);
     if (!ownsSlot) return res.status(403).json({ error: "You can only clear your own BOQ" });
     if (pkg.status !== "Open") return res.status(400).json({ error: "Package is not open for uploads" });
   } else if (!isOffice) {
@@ -968,7 +970,7 @@ crmComparativeRouter.get("/bid-packages/:id/sharepoint", async (req: AuthedReque
   });
   if (!pkg) return res.status(404).json({ error: "bid package not found" });
 
-  const isOffice = req.user!.role === "admin" || req.user!.role === "office" || req.user!.role === "employee";
+  const isOffice = req.user!.role === "admin" || req.user!.role === "office";
   let vendorLabel: string | null = null;
   if (!isOffice && req.user!.role === "vendor") {
     const vendor = await resolveVendorForUser(req.user!);
@@ -1008,13 +1010,20 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/sheet", async (re
     const slot = await prisma.crmVendorBoq.findUnique({ where: { id: req.params.slotId } });
     if (!slot || slot.bidPackageId !== pkg.id) return res.status(404).json({ error: "vendor slot not found" });
 
+    // Check access before creating anything: office, or the vendor this slot belongs to.
+    const role = req.user!.role;
+    const isOffice = role === "admin" || role === "office";
+    if (!isOffice) {
+      if (role !== "vendor") return res.status(403).json({ error: "Forbidden" });
+      const vendorUser = await resolveVendorForUser(req.user!);
+      const ownsSlot = vendorUser && (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name);
+      if (!ownsSlot) return res.status(403).json({ error: "Forbidden" });
+    }
+
     const { ensureVendorBoqSheet } = await import("../services/crmVendorBoqSeed.js");
     const out = await ensureVendorBoqSheet(prisma, req.params.id, req.params.slotId, req.user!.id);
 
-    const role = req.user!.role;
-    const isOffice = role === "admin" || role === "office" || role === "employee";
     if (!isOffice) {
-      if (role !== "vendor") return res.status(403).json({ error: "Forbidden" });
       const canEdit = await vendorCanEditBoqSheet(prisma, role, req.user!, out.sheetId);
       if (!canEdit) return res.status(403).json({ error: "Forbidden" });
     }
@@ -1331,9 +1340,10 @@ crmComparativeRouter.get("/my-bid-slots", async (req: AuthedRequest, res) => {
         projectId: s.bidPackage.project?.id || null,
         projectCode: s.bidPackage.project?.code || null,
         projectName: null,
-        comparativeSharePointUrl: s.bidPackage.comparativeSharePointUrl,
-        summarySheetId: s.bidPackage.summarySheetId,
-        comparativeSheetId: s.bidPackage.comparativeSheetId,
+        // The comparative holds every vendor's rates — never hand a vendor a way to open it.
+        comparativeSharePointUrl: role === "vendor" ? null : s.bidPackage.comparativeSharePointUrl,
+        summarySheetId: role === "vendor" ? null : s.bidPackage.summarySheetId,
+        comparativeSheetId: role === "vendor" ? null : s.bidPackage.comparativeSheetId,
         awardedVendorId: s.bidPackage.awardedVendorId,
         awardedVendorLabel:
           role === "vendor" && vendorId && s.bidPackage.awardedVendorId && s.bidPackage.awardedVendorId !== vendorId
@@ -1435,6 +1445,8 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
     ? Math.min(...Object.values(summary.grandTotals).filter((n) => Number.isFinite(n)))
     : undefined;
 
+  // While a bid is open a vendor can still change its rates, so it must not learn whether it is L1.
+  const revealRank = role !== "vendor" || pkg.status !== "Open";
   const vendorSafeSummary =
     role === "vendor" && summary && vendorName
       ? {
@@ -1444,7 +1456,7 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
             totals: { [vendorName]: row.totals?.[vendorName] ?? 0 },
           })),
           grandTotals: { [vendorName]: summary.grandTotals?.[vendorName] ?? 0 },
-          lowestVendor: summary.lowestVendor === vendorName ? vendorName : undefined,
+          lowestVendor: revealRank && summary.lowestVendor === vendorName ? vendorName : undefined,
         }
       : role === "vendor"
         ? null
@@ -1456,9 +1468,9 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
     revisionLabel: pkg.revisionLabel,
     status: pkg.status,
     project: pkg.project ? { id: pkg.project.id, code: pkg.project.code } : null,
-    comparativeSharePointUrl: pkg.comparativeSharePointUrl,
-    summarySheetId: pkg.summarySheetId,
-    comparativeSheetId: pkg.comparativeSheetId,
+    comparativeSharePointUrl: role === "vendor" ? null : pkg.comparativeSharePointUrl,
+    summarySheetId: role === "vendor" ? null : pkg.summarySheetId,
+    comparativeSheetId: role === "vendor" ? null : pkg.comparativeSheetId,
     summary: vendorSafeSummary,
     awardedVendorId: pkg.awardedVendorId,
     awardedVendorLabel:
@@ -1466,7 +1478,7 @@ crmComparativeRouter.get("/my-bid-packages/:id/summary", async (req: AuthedReque
         ? null
         : awardedVendor?.name || null,
     isAwardedToYou: !!(vendorId && pkg.awardedVendorId === vendorId),
-    isLowestBidder: !!(vendorName && summary?.lowestVendor === vendorName),
+    isLowestBidder: revealRank && !!(vendorName && summary?.lowestVendor === vendorName),
     myGrandTotal,
     lowestGrandTotal: role === "vendor" ? null : Number.isFinite(lowestTotal) ? lowestTotal : null,
     myVendorLabel: role === "vendor" ? vendorName : null,
@@ -1508,9 +1520,9 @@ crmComparativeRouter.get("/bid-packages/:id/vendor-boq/:slotId/template.xlsx", a
       const vendorUser = await resolveVendorForUser(req.user!);
       const ownsSlot =
         vendorUser &&
-        (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name || !slot.vendorId);
+        (slot.vendorId === vendorUser.id || slot.vendorLabel === vendorUser.name);
       if (!ownsSlot) return res.status(403).json({ error: "Forbidden" });
-    } else if (!isOffice && req.user!.role !== "employee") {
+    } else if (!isOffice) {
       return res.status(403).json({ error: "Forbidden" });
     }
 

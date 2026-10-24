@@ -99,9 +99,14 @@ export async function openPortalForMatrix(projectId: string, contactIds?: string
         const v = await prisma.vendor.findFirst({ where: { name: company || name, partyType: { in: ["Contractor", "Vendor"] } }, select: { id: true } });
         vendorId = v?.id || (await prisma.vendor.create({ data: { name: company || name, partyType: "Contractor", email, primaryContactName: name, createdVia: "Matrix" }, select: { id: true } })).id;
       }
-      const login = await ensurePortalLogin({ email, fullName: name, role, phone: c.mobile || undefined, vendorId });
+      // "Open portal" is the office's explicit step, so it may switch a deactivated login of the same role back on.
+      const login = await ensurePortalLogin({ email, fullName: name, role, phone: c.mobile || undefined, vendorId, reactivate: true });
       if (!login) {
         out.skipped.push({ email, reason: "login could not be created" });
+        continue;
+      }
+      if (login.role !== role) {
+        out.skipped.push({ email, reason: `already a ${login.role} portal login — use a separate email for this ${party} contact` });
         continue;
       }
       await prisma.projectMember.upsert({
