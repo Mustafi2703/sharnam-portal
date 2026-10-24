@@ -127,19 +127,6 @@ export async function publishDrawingRegistersToDrive(projectId: string) {
     "text/csv",
     { replace: true },
   );
-
-  const weekFolder = `${folder}/Weekly/${await drawingsWeekFolderStamp(projectId)}`;
-  await mockOneDrive.upload(project.code, weekFolder, "DRAWING-REGISTER-01.xlsx", registerXlsx, XLSX_MIME, {
-    replace: true,
-  });
-  await mockOneDrive.upload(project.code, weekFolder, "DRAWING-REGISTER-Dashboard.pdf", dashboardPdf, PDF_MIME, {
-    replace: true,
-  });
-  await mockOneDrive.upload(project.code, weekFolder, "Approval-GFC-Drawing-Log.xlsx", gfcXlsx, XLSX_MIME, {
-    replace: true,
-  });
-  await mockOneDrive.upload(project.code, weekFolder, "Master-Drawing-Register.pdf", masterPdf, PDF_MIME, { replace: true });
-  await mockOneDrive.upload(project.code, weekFolder, "Approval-GFC-Drawing-Log.pdf", gfcPdf, PDF_MIME, { replace: true });
 }
 
 export function drawingRegisterWeekStamp(d = new Date()) {

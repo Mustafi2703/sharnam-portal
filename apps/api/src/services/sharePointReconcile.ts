@@ -1,13 +1,13 @@
 /**
  * End-of-day reconcile: rewrite SharePoint registers from the database.
- * One live GFC log, one live drawing register, one live RFI register,
- * plus a week folder that is not overwritten by the next week.
+ * One live GFC log, one live drawing register, one live RFI register.
+ * Drawing and RFI registers stay in the open folder. They are not copied into Weekly.
  */
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
-import { drawingRegisterWeekStamp, drawingsWeekFolderStamp, publishDrawingRegistersToDrive } from "./drawingRegisterDrive.js";
-import { buildSpdcRfiXlsxBuffer } from "./spdcRfiForm.js";
+import { drawingRegisterWeekStamp, publishDrawingRegistersToDrive } from "./drawingRegisterDrive.js";
+import { buildSpdcRfiRegisterPdfBuffer, buildSpdcRfiXlsxBuffer } from "./spdcRfiForm.js";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -21,7 +21,6 @@ export async function reconcileProjectSharePoint(projectId: string) {
   await publishDrawingRegistersToDrive(projectId);
 
   const week = drawingRegisterWeekStamp();
-  const drawingsWeek = await drawingsWeekFolderStamp(projectId);
   try {
     const { publishQualityPackToDrive } = await import("./registerWorkbookPublish.js");
     await publishQualityPackToDrive(projectId, "system-reconcile");
@@ -55,11 +54,14 @@ export async function reconcileProjectSharePoint(projectId: string) {
   if (full) {
     const registerBuf = await buildSpdcRfiXlsxBuffer({ project: full, rfis, scope: "register" });
     const liveFolder = `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`;
-    const weekFolder = `${liveFolder}/Weekly/${week}`;
     await mockOneDrive.upload(project.code, liveFolder, "SPDC_RFI_Register.xlsx", registerBuf, XLSX_MIME, {
       replace: true,
     });
-    await mockOneDrive.upload(project.code, weekFolder, "SPDC_RFI_Register.xlsx", registerBuf, XLSX_MIME, {
+    await mockOneDrive.upload(project.code, liveFolder, "SPDC_RFI_Form_and_Register.xlsx", registerBuf, XLSX_MIME, {
+      replace: true,
+    });
+    const registerPdf = await buildSpdcRfiRegisterPdfBuffer({ project: full, rfis });
+    await mockOneDrive.upload(project.code, liveFolder, "SPDC_RFI_Register.pdf", registerPdf, "application/pdf", {
       replace: true,
     });
   }
@@ -75,13 +77,13 @@ export async function reconcileProjectSharePoint(projectId: string) {
       "04.02/Master-Drawing-Register.pdf",
       "04.02/Design-Coordination-Register.xlsx",
       "04.02/Design-Coordination-Register.pdf",
-      `04.02/Weekly/${drawingsWeek}/`,
+      "04.02/Filed-Checklists/",
       "08.01 Quality Assurance Plan + Weekly/",
       "08.03 Cube register + Weekly/",
       "08.01 Quality Dashboard + Weekly/",
       "08.06 Quality NCR/CAR forms (Drafts/Open/Closed) + _Registers/SPDC_NCR_CAR_Register.xlsx",
       "03.06/_Registers/SPDC_RFI_Register.xlsx",
-      `03.06/_Registers/Weekly/${week}/SPDC_RFI_Register.xlsx`,
+      "03.06/_Registers/SPDC_RFI_Register.pdf",
     ],
   };
 }

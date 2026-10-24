@@ -228,6 +228,31 @@ function writePivotBlock(
       row.getCell(ci + 1).border = BOX;
     });
   });
+  const valueCol = headers.length;
+  if (rows.length && rows.some((cells) => typeof cells[valueCol - 1] === "number")) {
+    const letter = String.fromCharCode(64 + valueCol);
+    const first = startRow + 2;
+    const last = startRow + 1 + rows.length;
+    try {
+      sheet.addConditionalFormatting({
+        ref: `${letter}${first}:${letter}${last}`,
+        rules: [
+          {
+            type: "dataBar",
+            cfvo: [
+              { type: "num", value: 0 },
+              { type: "max" },
+            ],
+            color: { argb: "FF1E3A5F" },
+            showValue: true,
+            gradient: false,
+          } as any,
+        ],
+      });
+    } catch {
+      /* chart bars are optional if this Excel build rejects the rule */
+    }
+  }
   return startRow + 2 + rows.length + 2;
 }
 

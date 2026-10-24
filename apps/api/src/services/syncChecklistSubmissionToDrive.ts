@@ -30,7 +30,65 @@ export function drawingRevisionChecklistFolder(drawingNumber: string, revisionNu
   return `${MODULE_TO_ISO_FOLDER.drawings}/${disc}/${seg(drawingNumber)}/${seg(revisionNumber)}/Checklist`;
 }
 
-export type ChecklistDriveExport = { kind: "xlsx" | "html"; path: string; url?: string | null };
+export type ChecklistDriveExport = { kind: "xlsx" | "html" | "pdf"; path: string; url?: string | null };
+
+async function buildChecklistPdfBuffer(
+  submission: {
+    status: string;
+    responsesJson: string;
+    revisionNumber?: string | null;
+    submittedBy?: { fullName?: string | null } | null;
+    assignment: { template: { name?: string | null; items?: { id: string; label?: string | null; question?: string | null }[] } };
+  },
+  project: { name?: string | null; code?: string | null },
+): Promise<Buffer> {
+  const PDFDocument = (await import("pdfkit")).default;
+  const { sharnamLogoPath } = await import("./brandedExport.js");
+  const logo = sharnamLogoPath();
+  let responses: Record<string, { answer?: string; remark?: string }> = {};
+  try {
+    responses = JSON.parse(submission.responsesJson || "{}");
+  } catch {
+    responses = {};
+  }
+  const items = submission.assignment.template.items || [];
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 36 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    if (logo) {
+      try {
+        doc.image(logo, 36, 28, { fit: [84, 34] });
+      } catch {
+        /* logo optional */
+      }
+    }
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#1e3a5f").text("SHARNAM PROJECT DEVELOPMENT CONSULTANTS & CO.", 130, 30, { width: 420 });
+    doc.font("Helvetica").fontSize(9).fillColor("#64748b").text(project.name || project.code || "Project", 130, 50);
+    doc.font("Helvetica-Bold").fontSize(13).fillColor("#1e3a5f").text(submission.assignment.template.name || "Checklist", 36, 78);
+    doc.font("Helvetica").fontSize(9).fillColor("#334155").text(
+      `${submission.status} · ${submission.submittedBy?.fullName || "Filler"}${submission.revisionNumber ? ` · ${submission.revisionNumber}` : ""}`,
+      36,
+      98,
+    );
+    let y = 122;
+    const lines = items.length ? items : Object.keys(responses).map((id) => ({ id, label: id, question: "" }));
+    for (const item of lines.slice(0, 40)) {
+      if (y > 760) {
+        doc.addPage();
+        y = 40;
+      }
+      const answer = responses[item.id]?.answer || "—";
+      doc.font("Helvetica").fontSize(8).fillColor("#64748b").text(item.label || item.question || "Line", 36, y, { width: 520 });
+      y = doc.y + 1;
+      doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a").text(String(answer), 36, y, { width: 520 });
+      y = doc.y + 8;
+    }
+    doc.end();
+  });
+}
 
 export async function syncChecklistSubmissionToDrive(
   submissionId: string
@@ -77,6 +135,16 @@ export async function syncChecklistSubmissionToDrive(
   const base = `${safeName(templateName)}_${safeName(submission.submittedBy?.fullName || "filler")}_${stamp}`;
 
   const exports: ChecklistDriveExport[] = [];
+  const folders = [folder];
+  if (besideFolder) folders.push(besideFolder);
+  if (checklistType === "DrawingCheck") folders.push(`${MODULE_TO_ISO_FOLDER.drawings}/Filed-Checklists`);
+
+  async function put(name: string, body: Buffer, mime: string, kind: ChecklistDriveExport["kind"]) {
+    for (const target of folders) {
+      const up = await mockOneDrive.upload(project.code, target, name, body, mime, { replace: true });
+      exports.push({ kind, path: up.sharePointPath || up.path, url: up.sharePointUrl || up.url });
+    }
+  }
 
   let dirSigns: Awaited<ReturnType<typeof import("./directorySignatures.js").getDirectorySignMap>> | undefined;
   if (project.id) {
@@ -86,25 +154,7 @@ export async function syncChecklistSubmissionToDrive(
 
   try {
     const xlsxBuf = await buildBrandedChecklistXlsxBuffer(submission as any, project);
-    const xlsx = await mockOneDrive.upload(
-      project.code,
-      folder,
-      `${base}.xlsx`,
-      xlsxBuf,
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    exports.push({ kind: "xlsx", path: xlsx.sharePointPath || xlsx.path, url: xlsx.sharePointUrl || xlsx.url });
-    if (besideFolder) {
-      const beside = await mockOneDrive.upload(
-        project.code,
-        besideFolder,
-        `${base}.xlsx`,
-        xlsxBuf,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        { replace: true }
-      );
-      exports.push({ kind: "xlsx", path: beside.sharePointPath || beside.path, url: beside.sharePointUrl || beside.url });
-    }
+    await put(base + ".xlsx", xlsxBuf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
   } catch (err) {
     console.warn("[checklist] XLSX drive sync failed:", err instanceof Error ? err.message : err);
   }
@@ -116,30 +166,63 @@ export async function syncChecklistSubmissionToDrive(
       `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`,
       dirSigns
     );
-    const htmlFile = await mockOneDrive.upload(project.code, folder, `${base}.html`, Buffer.from(html, "utf8"), "text/html");
-    exports.push({
-      kind: "html",
-      path: htmlFile.sharePointPath || htmlFile.path,
-      url: htmlFile.sharePointUrl || htmlFile.url,
-    });
-    if (besideFolder) {
-      const besideHtml = await mockOneDrive.upload(
-        project.code,
-        besideFolder,
-        `${base}.html`,
-        Buffer.from(html, "utf8"),
-        "text/html",
-        { replace: true }
-      );
-      exports.push({
-        kind: "html",
-        path: besideHtml.sharePointPath || besideHtml.path,
-        url: besideHtml.sharePointUrl || besideHtml.url,
-      });
-    }
+    await put(base + ".html", Buffer.from(html, "utf8"), "text/html", "html");
   } catch (err) {
     console.warn("[checklist] HTML drive sync failed:", err instanceof Error ? err.message : err);
   }
 
+  try {
+    const pdf = await buildChecklistPdfBuffer(submission as any, project);
+    await put(base + ".pdf", pdf, "application/pdf", "pdf");
+  } catch (err) {
+    console.warn("[checklist] PDF drive sync failed:", err instanceof Error ? err.message : err);
+  }
+
   return { exports };
+}
+
+export function extraChecklistIdsFromBody(body: { extraChecklistIds?: unknown } | null | undefined) {
+  const raw = body?.extraChecklistIds;
+  if (Array.isArray(raw)) return raw.map((id) => String(id).trim()).filter(Boolean);
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed.map((id) => String(id).trim()).filter(Boolean);
+  } catch {
+    /* comma separated */
+  }
+  return text.split(",").map((id) => id.trim()).filter(Boolean);
+}
+
+/** Link extra filled checklists (including a custom template) onto a drawing revision and file them. */
+export async function attachFilledChecklistsToRevision(opts: {
+  projectId: string;
+  drawingId: string;
+  revisionId: string;
+  revisionNumber: string;
+  assignmentIds: string[];
+}) {
+  const ids = [...new Set(opts.assignmentIds.map((id) => id.trim()).filter(Boolean))];
+  for (const assignmentId of ids) {
+    const assignment = await prisma.checklistAssignment.findFirst({
+      where: { id: assignmentId, projectId: opts.projectId },
+      select: { id: true },
+    });
+    if (!assignment) continue;
+    const latest = await prisma.checklistSubmission.findFirst({
+      where: { assignmentId },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!latest) continue;
+    await prisma.checklistSubmission.update({
+      where: { id: latest.id },
+      data: {
+        drawingId: opts.drawingId,
+        revisionId: opts.revisionId,
+        revisionNumber: opts.revisionNumber,
+      },
+    });
+    await syncChecklistSubmissionToDrive(latest.id);
+  }
 }

@@ -38,6 +38,7 @@ import {
 import { openChecklistFillWindow, openFamilyChecklistFill } from "../../lib/checklistFillWindow";
 import { getActiveWorkspace } from "../../workspaces";
 import { formatUiText } from "../../lib/formatUiText";
+import { ChecklistAttachPicker } from "../../components/ChecklistAttachPicker";
 
 type RfiKind = RfiKindFilter;
 
@@ -76,6 +77,51 @@ function withMatrixAssignee(r: any) {
   return { ...r, matrixAssignee: true, assignedTo: { fullName: r.assigneeName } };
 }
 
+function AttachedChecklistLinks({
+  projectId,
+  rfiNumber,
+  formDataJson,
+  assignments,
+}: {
+  projectId?: string;
+  rfiNumber: string;
+  formDataJson?: string | null;
+  assignments: any[];
+}) {
+  let ids: string[] = [];
+  try {
+    ids = String(JSON.parse(formDataJson || "{}").extraChecklistIds || "")
+      .split(",")
+      .map((row) => row.trim())
+      .filter(Boolean);
+  } catch {
+    ids = [];
+  }
+  if (!projectId || !ids.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {ids.map((assignmentId) => {
+        const row = assignments.find((item) => item.id === assignmentId);
+        return (
+          <Button
+            key={assignmentId}
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              openChecklistFillWindow(projectId, assignmentId, row?.template?.checklistType || "DrawingCheck", {
+                resumeDraft: true,
+                rfi: rfiNumber,
+              })
+            }
+          >
+            {formatUiText(row?.template?.name || "Open checklist")}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function RfisPage() {
   const { id } = useParams();
   const location = useLocation();
@@ -112,6 +158,7 @@ export default function RfisPage() {
     linkedDrawingId: "",
     linkedRevisionId: "",
     linkedAssignmentId: "",
+    extraChecklistIds: [] as string[],
     linkedChecklistItemId: "",
     responsibleVendorId: "",
     attachmentNote: "",
@@ -131,6 +178,7 @@ export default function RfisPage() {
   const [qiAssignments, setQiAssignments] = useState<any[]>([]);
   const [safetyAssignments, setSafetyAssignments] = useState<any[]>([]);
   const [activityAssignments, setActivityAssignments] = useState<any[]>([]);
+  const [allAssignments, setAllAssignments] = useState<any[]>([]);
   const [registerDetailOpen, setRegisterDetailOpen] = useState(false);
   const [projectMeta, setProjectMeta] = useState<{ name?: string; code?: string; clientName?: string | null } | null>(null);
 
@@ -155,7 +203,7 @@ export default function RfisPage() {
   const kindPills = rfiKindPillsForScope(moduleScope);
 
   const load = async () => {
-    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, v, overview, project, techContacts, commercialContacts] = await Promise.all([
+    const [rPayload, d, aSite, aDraw, aQi, aSaf, aAct, aAll, v, overview, project, techContacts, commercialContacts] = await Promise.all([
       api<any>(`/api/rfis/project/${id}`, { token }),
       api<any[]>(`/api/drawings/project/${id}`, { token }),
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=SiteExecution`, { token }).catch(() => ({
@@ -173,6 +221,7 @@ export default function RfisPage() {
       api<{ assignments: any[] }>(`/api/checklist/project/${id}?type=ActivityInspection`, { token }).catch(() => ({
         assignments: [],
       })),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}`, { token }).catch(() => ({ assignments: [] })),
       api<any[]>(`/api/vendors/project/${id}`, { token }).catch(() => []),
       api<{ members?: any[]; vendors?: any[] }>(`/api/directory/project/${id}/overview`, { token }).catch(() => null),
       api<{ name?: string; code?: string; clientName?: string | null }>(`/api/projects/${id}`, { token }).catch(() => null),
@@ -190,6 +239,7 @@ export default function RfisPage() {
     setQiAssignments(aQi.assignments || []);
     setSafetyAssignments(aSaf.assignments || []);
     setActivityAssignments(aAct.assignments || []);
+    setAllAssignments(aAll.assignments || []);
     const dirVendors = (overview?.vendors || []).map((row: any) => row.vendor || row).filter((row: any) => row?.id);
     const fromAssign = Array.isArray(v) ? v.map((row: any) => row.vendor || row) : [];
     const byId = new Map<string, any>();
@@ -322,6 +372,23 @@ export default function RfisPage() {
           : form.rfiKind === "ActivityInspection"
             ? activityAssignments
             : siteAssignments;
+  const attachOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const rows = allAssignments.length
+      ? allAssignments
+      : [...drawingAssignments, ...qiAssignments, ...safetyAssignments, ...activityAssignments, ...siteAssignments];
+    const out: { id: string; name: string; hint?: string }[] = [];
+    for (const row of rows) {
+      if (!row?.id || seen.has(row.id) || row.id === form.linkedAssignmentId) continue;
+      seen.add(row.id);
+      out.push({
+        id: row.id,
+        name: row.template?.name || "Checklist",
+        hint: row.template?.checklistType || "",
+      });
+    }
+    return out;
+  }, [allAssignments, drawingAssignments, qiAssignments, safetyAssignments, activityAssignments, siteAssignments, form.linkedAssignmentId]);
 
   const filtered = useMemo(() => {
     return rfis.filter((r) => {
@@ -635,7 +702,11 @@ export default function RfisPage() {
               }
               const assignment = checklistOptions.find((a) => a.id === form.linkedAssignmentId);
               const linkedDrawing = drawings.find((d) => d.id === form.linkedDrawingId);
-              const formDataJson =
+              const extraIds = form.extraChecklistIds.filter((rowId) => rowId && rowId !== form.linkedAssignmentId);
+              const extraNames = extraIds
+                .map((rowId) => attachOptions.find((row) => row.id === rowId)?.name || allAssignments.find((row) => row.id === rowId)?.template?.name)
+                .filter(Boolean);
+              let formDataJson: Record<string, string> | undefined =
                 moduleScope === "drawings" || form.rfiKind === "RequestForInformation" || form.rfiKind === "DrawingChecklist"
                   ? spdcFormDataFromCompose({
                       package: form.package,
@@ -650,6 +721,13 @@ export default function RfisPage() {
                       queryRaised: form.question,
                     })
                   : undefined;
+              if (extraIds.length) {
+                formDataJson = {
+                  ...(formDataJson || {}),
+                  extraChecklistIds: extraIds.join(","),
+                  extraChecklistNames: extraNames.join(", "),
+                };
+              }
               setComposeBusy(true);
               try {
                 const formBody: Record<string, unknown> = { ...form };
@@ -683,6 +761,7 @@ export default function RfisPage() {
                   subject: "",
                   question: "",
                   linkedAssignmentId: "",
+                  extraChecklistIds: [],
                   linkedChecklistItemId: "",
                   assigneeKey: "",
                   responsibleVendorId: "",
@@ -700,7 +779,7 @@ export default function RfisPage() {
               <Select
                 label="Request type"
                 value={form.rfiKind}
-                onChange={(e) => setForm({ ...form, rfiKind: e.target.value, linkedAssignmentId: "" })}
+                onChange={(e) => setForm({ ...form, rfiKind: e.target.value, linkedAssignmentId: "", extraChecklistIds: [] })}
               >
                 <option value="RequestForInformation">Ask - Request for Information (PMC)</option>
                 <option value="DrawingChecklist">Request drawing checklist fill</option>
@@ -830,6 +909,14 @@ export default function RfisPage() {
                     ))}
                   </Select>
                 )}
+                <div className="sm:col-span-2">
+                  <ChecklistAttachPicker
+                    options={attachOptions}
+                    selected={form.extraChecklistIds}
+                    onChange={(extraChecklistIds) => setForm({ ...form, extraChecklistIds })}
+                    label="Also attach checklists"
+                  />
+                </div>
                 {showChecklistPicker && (
                   <label className="ui-field">
                     <span className="ui-field__label">{formatUiText("Vendor from project directory")}</span>
@@ -1035,6 +1122,12 @@ export default function RfisPage() {
                 projectId={id}
                 onReload={load}
               />
+              <AttachedChecklistLinks
+                projectId={id}
+                rfiNumber={selected.number}
+                formDataJson={selected.formDataJson}
+                assignments={allAssignments}
+              />
             </div>
           )}
           {selected && !useSpdcForm && (
@@ -1070,6 +1163,12 @@ export default function RfisPage() {
                     <Badge tone="neutral">Matrix</Badge>
                   )}
                 </div>
+                <AttachedChecklistLinks
+                  projectId={id}
+                  rfiNumber={selected.number}
+                  formDataJson={selected.formDataJson}
+                  assignments={allAssignments}
+                />
               </div>
               {selectedProgress && (
                 <div>
@@ -1241,6 +1340,12 @@ export default function RfisPage() {
                     </div>
                   </div>
                 )}
+                <AttachedChecklistLinks
+                  projectId={id}
+                  rfiNumber={selected.number}
+                  formDataJson={selected.formDataJson}
+                  assignments={allAssignments}
+                />
               </div>
             </div>
           </div>,

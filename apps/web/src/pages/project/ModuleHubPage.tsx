@@ -49,9 +49,13 @@ export default function ModuleHubPage({ moduleKey: moduleKeyProp }: { moduleKey:
             <PageHeader
               eyebrow={`${meta.title} module · Tool desk`}
               title={meta.title}
-              subtitle={formatUiText(
-                `${meta.desc} Open a tool to add rows, edit, and save. Checklist fills open in a popup on this page.`
-              )}
+              subtitle={
+                moduleKey === "drawings"
+                  ? undefined
+                  : formatUiText(
+                      `${meta.desc} Open a tool to add rows, edit, and save. Checklist fills open in a popup on this page.`
+                    )
+              }
             />
           </div>
         </div>

@@ -13,6 +13,7 @@ import { IN_PAGE_OVERLAY_DISMISSED, type InPageOverlayDismissed } from "../../li
 import { formatUiText } from "../../lib/formatUiText";
 import { GFC_REF, GFC_SCREEN, GFC_TABLE } from "../../lib/drawingsLabels";
 import { DrawingIssueFields } from "../../components/DrawingIssueFields";
+import { ChecklistAttachPicker, type ChecklistAttachOption } from "../../components/ChecklistAttachPicker";
 import { RevisionIssueLogSummary } from "../../components/RevisionIssueLogSummary";
 import {
   appendIssueToFormData,
@@ -111,6 +112,8 @@ export default function DrawingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [drawings, setDrawings] = useState<any[]>([]);
+  const [checklistChoices, setChecklistChoices] = useState<ChecklistAttachOption[]>([]);
+  const [extraChecklistIds, setExtraChecklistIds] = useState<string[]>([]);
   const [drawingsLoaded, setDrawingsLoaded] = useState(false);
   const [filter, setFilter] = useState("All");
   const picklists = useDrawingPicklists(id, token);
@@ -177,8 +180,18 @@ export default function DrawingsPage() {
 
   const load = async () => {
     setDrawingsLoaded(false);
-    const d = await api<any[]>(`/api/drawings/project/${id}`, { token });
+    const [d, checks] = await Promise.all([
+      api<any[]>(`/api/drawings/project/${id}`, { token }),
+      api<{ assignments: any[] }>(`/api/checklist/project/${id}`, { token }).catch(() => ({ assignments: [] as any[] })),
+    ]);
     setDrawings(d);
+    setChecklistChoices(
+      (checks.assignments || []).map((row) => ({
+        id: row.id,
+        name: row.template?.name || "Checklist",
+        hint: row.template?.checklistType || "",
+      })),
+    );
     setDrawingsLoaded(true);
   };
 
@@ -549,6 +562,7 @@ export default function DrawingsPage() {
       for (const extra of extraPdfs) fd.append("extraPdf", extra);
       if (registerDwg) fd.append("dwg", registerDwg);
       appendIssueToFormData(fd, registerIssue);
+      if (extraChecklistIds.length) fd.append("extraChecklistIds", JSON.stringify(extraChecklistIds));
       await api<any>(`/api/drawings/project/${id}`, { method: "POST", token, body: fd });
       setForm({
         drawingNumber: "",
@@ -564,6 +578,7 @@ export default function DrawingsPage() {
       setRegisterDwg(null);
       setRegisterIssue(emptyDrawingIssueDraft());
       setUnlockToken(null);
+      setExtraChecklistIds([]);
       setShowRegister(false);
       setMsg(`Drawing saved to ${GFC_REF} (PDF + DWG).`);
       await load();
@@ -594,6 +609,7 @@ export default function DrawingsPage() {
     setRevUploadMode("new");
     setUploadStep("files");
     setRevReplaceRole("pdf");
+    setExtraChecklistIds([]);
     setFormError("");
   }
 
@@ -687,6 +703,7 @@ export default function DrawingsPage() {
         for (const extra of extraPdfs) fd.append("extraPdf", extra);
         if (revDwg) fd.append("dwg", revDwg);
         appendIssueToFormData(fd, revIssue);
+        if (extraChecklistIds.length) fd.append("extraChecklistIds", JSON.stringify(extraChecklistIds));
         const hadRev = (uploadTarget?.revisions || []).some(
           (r: any) => normalizeRevNumber(r.revisionNumber) === normalizeRevNumber(revForm.revisionNumber)
         );
@@ -1156,6 +1173,17 @@ export default function DrawingsPage() {
               value: actualDate,
               onChange: setActualDate,
               inputType: "date",
+            },
+            {
+              kind: "custom",
+              node: (
+                <ChecklistAttachPicker
+                  options={checklistChoices}
+                  selected={extraChecklistIds}
+                  onChange={setExtraChecklistIds}
+                  label="Also attach checklists"
+                />
+              ),
             },
             {
               kind: "checkbox",
@@ -1741,6 +1769,12 @@ export default function DrawingsPage() {
               kind: "custom" as const,
               node: (
                 <div className="space-y-3">
+                  <ChecklistAttachPicker
+                    options={checklistChoices}
+                    selected={extraChecklistIds}
+                    onChange={setExtraChecklistIds}
+                    label="Also attach checklists"
+                  />
                   {revUploadMode === "new" && !revUnlockToken && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
                       <p className="text-sm text-ink">

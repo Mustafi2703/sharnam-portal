@@ -410,9 +410,6 @@ function SideNavBody({
           {user?.fullName}
           {roleLabel ? <span className="side-nav__user-role"> · {roleLabel}</span> : null}
         </div>
-        <p className="text-[11px] leading-snug px-[0.7rem]" style={{ color: "var(--side-muted)" }} data-preserve-case>
-          Made by QRYX Tech PVT. LTD with ❤️
-        </p>
         <button
           type="button"
           className="side-nav__signout"

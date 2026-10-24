@@ -5,10 +5,10 @@
 import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
+import type PDFKit from "pdfkit";
 import { sharnamLogoDataUri, sharnamLogoPath } from "./brandedExport.js";
-import { detachSharedStyles, freezeSheetFormulas, keepOnlySheets } from "../lib/excelTemplate.js";
+import { detachSharedStyles } from "../lib/excelTemplate.js";
 
-const INPUT = "FFFFF2CC";
 const PMC_NAME = "Sharnam Project Development Consultants & Co., Vadodara";
 const FORM_NO = "SPDC/QMS/F-RFI-01";
 const FORM_REV = "R0";
@@ -22,6 +22,9 @@ const SLA_DAYS: Record<string, number> = {
 
 const REGISTER_START = 5;
 const REGISTER_SAMPLE_END = 12;
+/** Columns the template calculates from the row and the control sheet. Do not overwrite them. */
+const REGISTER_FORMULA_COLS = new Set([16, 17, 24, 25, 26]);
+const REGISTER_DATE_COLS = new Set([14, 19, 23]);
 
 export type SpdcRfiProject = {
   id: string;
@@ -251,55 +254,17 @@ export function fillSpdcRfiRow(r: SpdcRfiRecord): SpdcFilledRow {
     timeImpact: yesNo(form.timeImpact, r.scheduleImpact),
     estDelay: form.estDelayDays || "0",
     voRef: form.changeVoRef || form.voRef || "",
-    attachments: form.attachments || (r.attachmentsJson && !r.attachmentsJson.startsWith("[") ? r.attachmentsJson : "") || "",
+    attachments:
+      [form.attachments, form.extraChecklistNames, r.attachmentsJson && !r.attachmentsJson.startsWith("[") ? r.attachmentsJson : ""]
+        .filter(Boolean)
+        .join(", ") || "",
     pmcRemarks: form.pmcRemarks || form.remarks || "",
   };
-}
-
-function paint(ws: ExcelJS.Worksheet, row: number, col: number, value: string | number | null | undefined) {
-  const cell = ws.getCell(row, col);
-  cell.value = value == null || value === "" ? null : value;
-  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: INPUT } };
-  cell.font = { ...(cell.font || {}), color: { argb: "FF000000" }, size: cell.font?.size || 10 };
-  cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: "top" };
 }
 
 function writePlain(ws: ExcelJS.Worksheet, row: number, col: number, value: string | number | null | undefined) {
   const cell = ws.getCell(row, col);
   cell.value = value == null || value === "" ? null : value;
-}
-
-function embedLogo(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet) {
-  const logoFile = sharnamLogoPath();
-  if (!logoFile) return;
-  try {
-    const imgId = wb.addImage({
-      base64: fs.readFileSync(logoFile).toString("base64"),
-      extension: "png",
-    });
-    try {
-      ws.unMergeCells("A1:H1");
-    } catch {
-      /* already split */
-    }
-    try {
-      ws.mergeCells("B1:H1");
-    } catch {
-      /* already merged */
-    }
-    const title = ws.getCell("B1");
-    title.value = "SHARNAM PROJECT DEVELOPMENT CONSULTANTS & CO.";
-    title.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-    title.font = { ...(title.font || {}), bold: true, size: 14, color: { argb: "FFFFFFFF" } };
-    ws.getRow(1).height = 42;
-    ws.addImage(imgId, {
-      tl: { col: 0.12, row: 0.12 },
-      ext: { width: 118, height: 38 },
-      editAs: "oneCell",
-    });
-  } catch {
-    /* logo optional */
-  }
 }
 
 function fillControl(ws: ExcelJS.Worksheet, project: SpdcRfiProject, form: FormMap) {
@@ -324,6 +289,24 @@ function clearRegisterSample(ws: ExcelJS.Worksheet) {
   }
 }
 
+function excelDate(display: string): Date | null {
+  const match = display.match(/^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/);
+  if (!match) return null;
+  const months: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  };
+  const month = months[match[2]];
+  if (month == null) return null;
+  return new Date(Date.UTC(Number(match[3]), month, Number(match[1]), 12));
+}
+
+function readingHeight(texts: Array<string | number | null | undefined>, min: number, max: number) {
+  const longest = texts.reduce((n, text) => Math.max(n, String(text || "").length), 0);
+  const wraps = Math.max(1, Math.ceil(longest / 48));
+  return Math.min(max, Math.max(min, wraps * 15));
+}
+
 function writeRegisterRow(ws: ExcelJS.Worksheet, excelRow: number, row: SpdcFilledRow) {
   const vals: (string | number | null)[] = [
     row.number,
@@ -341,17 +324,17 @@ function writeRegisterRow(ws: ExcelJS.Worksheet, excelRow: number, row: SpdcFill
     row.originator,
     row.dateRaised,
     row.priority,
-    Number(row.slaDays) || slaDaysOf(row.priority),
-    row.replyRequiredBy,
+    null,
+    null,
     row.responsibleParty,
     row.dateResponded || null,
     row.response,
     row.respondedBy,
     row.status,
     row.dateClosed || null,
-    row.daysTaken ? Number(row.daysTaken) : null,
-    row.slaStatus,
-    row.ageBucket,
+    null,
+    null,
+    null,
     row.costImpact,
     row.estCost === "" ? null : Number(row.estCost) || row.estCost,
     row.timeImpact,
@@ -361,63 +344,55 @@ function writeRegisterRow(ws: ExcelJS.Worksheet, excelRow: number, row: SpdcFill
     row.pmcRemarks,
   ];
   for (let i = 0; i < vals.length; i++) {
-    const cell = ws.getCell(excelRow, i + 1);
-    cell.value = vals[i] == null || vals[i] === "" ? null : vals[i];
-    if (i === 5 || i === 10 || i === 11 || i === 19) {
-      cell.alignment = { ...(cell.alignment || {}), wrapText: true, vertical: "top" };
+    const col = i + 1;
+    if (REGISTER_FORMULA_COLS.has(col)) continue;
+    const cell = ws.getCell(excelRow, col);
+    const raw = vals[i];
+    if (raw == null || raw === "") {
+      cell.value = null;
+      continue;
     }
+    if (REGISTER_DATE_COLS.has(col) && typeof raw === "string") {
+      cell.value = excelDate(raw) || raw;
+      continue;
+    }
+    cell.value = raw;
   }
+  ws.getRow(excelRow).height = readingHeight(
+    [row.subject, row.query, row.proposedSolution, row.response, row.pmcRemarks],
+    42,
+    96,
+  );
 }
 
-function fillFormSheet(ws: ExcelJS.Worksheet, project: SpdcRfiProject, row: SpdcFilledRow, form: FormMap) {
-  paint(ws, 5, 3, row.number);
+/** The form sheet looks up this number on the register. Every other cell stays a formula. */
+function selectRfiOnForm(ws: ExcelJS.Worksheet, rfiNo: string, row: SpdcFilledRow) {
+  ws.getCell(5, 3).value = rfiNo;
+  fitBlock(ws, 24, 28, row.query);
+  fitBlock(ws, 31, 34, row.proposedSolution);
+  fitBlock(ws, 42, 47, row.response);
+  fitBlock(ws, 55, 56, row.pmcRemarks);
+  ws.pageSetup.fitToPage = true;
+  ws.pageSetup.fitToWidth = 1;
+  ws.pageSetup.fitToHeight = 0;
+  ws.pageSetup.orientation = "portrait";
+  ws.pageSetup.paperSize = 9;
+  ws.pageSetup.printArea = "A1:H64";
+  ws.pageSetup.horizontalCentered = true;
+}
 
-  paint(ws, 8, 3, project.name || project.code);
-  paint(ws, 9, 3, form.employerClient || project.clientName || "");
-  paint(ws, 9, 7, form.contractNo || project.code);
-  paint(ws, 10, 3, form.pmcName || PMC_NAME);
-  paint(ws, 10, 7, row.package);
+function fitBlock(ws: ExcelJS.Worksheet, from: number, to: number, text: string) {
+  const lines = String(text || "")
+    .split(/\n/)
+    .reduce((n, line) => n + Math.max(1, Math.ceil(line.length / 95) || 1), 0);
+  const rows = to - from + 1;
+  const each = Math.min(32, Math.max(15, Math.ceil((Math.max(1, lines) * 16) / rows)));
+  for (let r = from; r <= to; r++) ws.getRow(r).height = each;
+}
 
-  paint(ws, 13, 3, row.number);
-  paint(ws, 13, 7, row.rev);
-  paint(ws, 14, 3, row.dateRaised);
-  paint(ws, 14, 7, row.priority);
-  paint(ws, 15, 3, row.replyRequiredBy);
-  paint(ws, 15, 7, row.slaDays);
-  paint(ws, 16, 3, row.originator);
-  paint(ws, 16, 7, row.discipline);
-  paint(ws, 17, 3, row.category);
-  paint(ws, 17, 7, row.responsibleParty);
-  paint(ws, 18, 3, row.subject);
-  paint(ws, 19, 3, row.location);
-  paint(ws, 20, 3, row.drawingRef);
-  paint(ws, 20, 7, row.drawingRev);
-  paint(ws, 21, 3, row.specClause);
-
-  paint(ws, 24, 1, row.query);
-  paint(ws, 31, 1, row.proposedSolution);
-
-  paint(ws, 37, 3, row.costImpact);
-  paint(ws, 37, 7, row.estCost);
-  paint(ws, 38, 3, row.timeImpact);
-  paint(ws, 38, 7, row.estDelay);
-
-  paint(ws, 42, 1, row.response);
-  paint(ws, 49, 3, row.respondedBy);
-  paint(ws, 49, 7, row.dateResponded);
-
-  paint(ws, 52, 3, row.status);
-  paint(ws, 52, 7, row.dateClosed);
-  paint(ws, 53, 3, row.daysTaken);
-  paint(ws, 53, 7, row.slaStatus);
-  paint(ws, 54, 3, row.voRef);
-  paint(ws, 54, 7, row.attachments);
-  paint(ws, 55, 3, row.pmcRemarks);
-
-  paint(ws, 60, 1, row.originator ? `${row.originator}\n${row.dateRaised}` : "");
-  paint(ws, 60, 3, "SPDC PMC");
-  paint(ws, 60, 5, row.respondedBy ? `${row.respondedBy}\n${row.dateResponded}` : "");
-  paint(ws, 60, 7, row.status === "Closed" ? `SPDC PMC\n${row.dateClosed}` : "");
+function focusSheet(wb: ExcelJS.Workbook, name: string) {
+  const idx = wb.worksheets.findIndex((w) => w.name === name);
+  wb.views = [{ x: 0, y: 0, width: 0, height: 0, activeTab: Math.max(0, idx), firstSheet: 0, visibility: "visible" }];
 }
 
 /** Cache raw template bytes — re-reading + detachSharedStyles on every export was timing out gateways (~180s). */
@@ -435,7 +410,7 @@ async function loadTemplate(): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(cachedTemplateBytes);
   detachSharedStyles(wb);
-  if (wb.calcProperties) wb.calcProperties.fullCalcOnLoad = false;
+  if (wb.calcProperties) wb.calcProperties.fullCalcOnLoad = true;
   return wb;
 }
 
@@ -476,6 +451,76 @@ export function rfiEvidenceFiles(r: SpdcRfiRecord, extra?: RfiEvidenceFile[]): R
     if (file?.name) out.push(file);
   }
   return out;
+}
+
+function addRfiChartSheet(wb: ExcelJS.Workbook, rows: SpdcFilledRow[]) {
+  const ws = wb.addWorksheet("Charts", { properties: { tabColor: { argb: "FF1E3A5F" } } });
+  const logo = sharnamLogoPath();
+  if (logo) {
+    try {
+      const imgId = wb.addImage({ filename: logo, extension: "png" });
+      ws.addImage(imgId, { tl: { col: 0.15, row: 0.1 }, ext: { width: 110, height: 34 }, editAs: "oneCell" });
+    } catch {
+      /* logo optional */
+    }
+  }
+  ws.getCell(1, 2).value = "Sharnam · RFI summary";
+  ws.getCell(1, 2).font = { bold: true, size: 16, color: { argb: "FF1E3A5F" } };
+  ws.getRow(1).height = 24;
+  ws.getCell(3, 2).value = "Common RFI log";
+  ws.getCell(3, 2).font = { bold: true, size: 12, color: { argb: "FF1E3A5F" } };
+  const tally = (key: keyof SpdcFilledRow) => {
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      const label = String(row[key] || "—");
+      map.set(label, (map.get(label) || 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  let rowNo = 5;
+  for (const [title, pairs] of [
+    ["By status", tally("status")],
+    ["By priority", tally("priority")],
+    ["By discipline", tally("discipline")],
+  ] as const) {
+    ws.getCell(rowNo, 2).value = title;
+    ws.getCell(rowNo, 2).font = { bold: true, size: 12, color: { argb: "FF1E3A5F" } };
+    rowNo += 1;
+    const start = rowNo;
+    if (!pairs.length) {
+      ws.getCell(rowNo, 2).value = "None yet";
+      rowNo += 2;
+      continue;
+    }
+    pairs.forEach(([label, count]) => {
+      ws.getCell(rowNo, 2).value = label;
+      ws.getCell(rowNo, 3).value = count;
+      ws.getCell(rowNo, 3).font = { bold: true };
+      rowNo += 1;
+    });
+    try {
+      ws.addConditionalFormatting({
+        ref: `C${start}:C${rowNo - 1}`,
+        rules: [
+          {
+            type: "dataBar",
+            cfvo: [
+              { type: "num", value: 0 },
+              { type: "max" },
+            ],
+            color: { argb: "FF0B6A78" },
+            showValue: true,
+            gradient: false,
+          } as any,
+        ],
+      });
+    } catch {
+      /* bars are optional */
+    }
+    rowNo += 2;
+  }
+  ws.getColumn(2).width = 32;
+  ws.getColumn(3).width = 16;
 }
 
 function addEvidenceSheet(wb: ExcelJS.Workbook, files: RfiEvidenceFile[]) {
@@ -520,29 +565,31 @@ export async function buildSpdcRfiWorkbook(opts: {
 
   fillControl(control, opts.project, selectedForm);
 
-  if (scope === "register") {
-    clearRegisterSample(register);
-    const filled = opts.rfis.filter((r) => isSpdcRfiRegisterKind(r.rfiKind)).map(fillSpdcRfiRow);
-    filled.forEach((row, i) => writeRegisterRow(register, REGISTER_START + i, row));
-    freezeSheetFormulas(register);
-    keepOnlySheets(wb, ["04_RFI_REGISTER"]);
-    return wb;
+  const registerRows = (scope === "register" ? opts.rfis.filter((r) => isSpdcRfiRegisterKind(r.rfiKind)) : selected && isSpdcRfiRegisterKind(selected.rfiKind) ? [selected] : [])
+    .map(fillSpdcRfiRow);
+  if (selected && evidence.length) {
+    const hit = registerRows.find((row) => row.number === selected.number);
+    if (hit) hit.attachments = [hit.attachments, evidence.map((f) => f.name).join(", ")].filter(Boolean).join(", ");
   }
-
-  // Values are written onto the form, then lookups are frozen so the control,
-  // read-me, register, and dashboard sheets are not part of the download.
   clearRegisterSample(register);
-  if (selected && isSpdcRfiRegisterKind(selected.rfiKind)) {
-    writeRegisterRow(register, REGISTER_START, fillSpdcRfiRow(selected));
-  }
-  if (selected) {
-    const row = fillSpdcRfiRow(selected);
-    if (evidence.length) row.attachments = evidence.map((f) => f.name).join(", ");
-    fillFormSheet(formSheet, opts.project, row, selectedForm);
-  }
-  freezeSheetFormulas(formSheet);
-  keepOnlySheets(wb, ["03_RFI_FORM"]);
-  embedLogo(wb, formSheet);
+  registerRows.forEach((row, i) => writeRegisterRow(register, REGISTER_START + i, row));
+  const shown = (selected && registerRows.find((row) => row.number === selected.number)) || registerRows[registerRows.length - 1];
+  if (shown) selectRfiOnForm(formSheet, shown.number, shown);
+
+  register.pageSetup.orientation = "landscape";
+  register.pageSetup.fitToPage = true;
+  register.pageSetup.fitToWidth = 1;
+  register.pageSetup.fitToHeight = 0;
+  register.pageSetup.paperSize = 9;
+  register.pageSetup.printTitlesRow = "1:4";
+  const lastRow = Math.max(REGISTER_START, REGISTER_START + registerRows.length - 1);
+  register.pageSetup.printArea = `A1:AG${lastRow}`;
+
+  const readMe = sheet(wb, "00_READ_ME");
+  if (readMe) readMe.state = "hidden";
+  addRfiChartSheet(wb, registerRows);
+  if (wb.calcProperties) wb.calcProperties.fullCalcOnLoad = true;
+  focusSheet(wb, scope === "register" ? "04_RFI_REGISTER" : "03_RFI_FORM");
   addEvidenceSheet(wb, evidence);
   return wb;
 }
@@ -730,4 +777,117 @@ export function renderSpdcRfiFormHtml(opts: {
 
 export function safeRfiFilename(number: string, ext: string) {
   return `${String(number || "RFI").replace(/[^\w.-]+/g, "_")}-RFI-Form.${ext}`;
+}
+
+function pdfLine(doc: PDFKit.PDFDocument, label: string, value: string, y: number) {
+  if (y > 760) {
+    doc.addPage();
+    y = 40;
+  }
+  doc.font("Helvetica-Bold").fontSize(9).fillColor("#1e3a5f").text(label, 40, y, { width: 140 });
+  doc.font("Helvetica").fontSize(9).fillColor("#0f172a").text(value || "—", 190, y, { width: 360 });
+  return doc.y + 8;
+}
+
+/** Branded one-page RFI, including the official answer, for the SharePoint file. */
+export async function buildSpdcRfiPdfBuffer(opts: {
+  project: SpdcRfiProject;
+  rfi: SpdcRfiRecord;
+  evidence?: RfiEvidenceFile[];
+}): Promise<Buffer> {
+  const PDFDocument = (await import("pdfkit")).default;
+  const evidence = rfiEvidenceFiles(opts.rfi, opts.evidence);
+  const row = fillSpdcRfiRow(opts.rfi);
+  if (evidence.length) {
+    row.attachments = [row.attachments, evidence.map((file) => file.name).join(", ")].filter(Boolean).join(", ");
+  }
+  const logo = sharnamLogoPath();
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    if (logo) {
+      try {
+        doc.image(logo, 40, 32, { fit: [88, 36] });
+      } catch {
+        /* logo optional */
+      }
+    }
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#1e3a5f").text("SHARNAM PROJECT DEVELOPMENT CONSULTANTS & CO.", 140, 34, { width: 410 });
+    doc.font("Helvetica").fontSize(9).fillColor("#64748b").text(`Request for Information · ${FORM_NO}`, 140, 54);
+    let y = 92;
+    const lines: [string, string][] = [
+      ["Project", opts.project.name || opts.project.code],
+      ["RFI number", row.number],
+      ["Subject", row.subject],
+      ["Responsible party", row.responsibleParty],
+      ["Priority", `${row.priority} · ${row.slaDays} days`],
+      ["Status", row.status],
+      ["Query", row.query],
+      ["Proposed solution", row.proposedSolution],
+      ["Official response", row.response || "Waiting for the responsible party"],
+      ["Responded by", [row.respondedBy, row.dateResponded].filter(Boolean).join(" · ")],
+      ["Checklists", row.attachments],
+    ];
+    for (const [label, value] of lines) y = pdfLine(doc, label, value, y);
+    doc.font("Helvetica").fontSize(8).fillColor("#64748b").text(
+      "Sharnam Project Development Consultants & Co. · File this copy with the common RFI log.",
+      40,
+      800,
+      { width: 520 },
+    );
+    doc.end();
+  });
+}
+
+/** Branded common-log PDF stored next to the RFI register workbook. */
+export async function buildSpdcRfiRegisterPdfBuffer(opts: {
+  project: SpdcRfiProject;
+  rfis: SpdcRfiRecord[];
+}): Promise<Buffer> {
+  const PDFDocument = (await import("pdfkit")).default;
+  const rows = opts.rfis.filter((rfi) => isSpdcRfiRegisterKind(rfi.rfiKind)).map(fillSpdcRfiRow);
+  const logo = sharnamLogoPath();
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 32 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    if (logo) {
+      try {
+        doc.image(logo, 32, 24, { fit: [80, 32] });
+      } catch {
+        /* logo optional */
+      }
+    }
+    doc.font("Helvetica-Bold").fontSize(14).fillColor("#1e3a5f").text("Common RFI Log", 124, 28);
+    doc.font("Helvetica").fontSize(9).fillColor("#64748b").text(`${opts.project.name} · ${PMC_NAME}`, 124, 48);
+    let y = 72;
+    doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff");
+    doc.rect(32, y, 778, 16).fill("#1e3a5f");
+    doc.fillColor("#ffffff").text("Number", 36, y + 4, { width: 70 });
+    doc.text("Subject", 110, y + 4, { width: 220 });
+    doc.text("Responsible", 336, y + 4, { width: 120 });
+    doc.text("Status", 462, y + 4, { width: 70 });
+    doc.text("Official response", 538, y + 4, { width: 260 });
+    y += 20;
+    doc.fillColor("#0f172a").font("Helvetica").fontSize(8);
+    for (const row of rows) {
+      if (y > 540) {
+        doc.addPage();
+        y = 36;
+      }
+      doc.text(row.number, 36, y, { width: 70 });
+      doc.text(row.subject, 110, y, { width: 220 });
+      doc.text(row.responsibleParty || "—", 336, y, { width: 120 });
+      doc.text(row.status, 462, y, { width: 70 });
+      doc.text((row.response || "Waiting").slice(0, 180), 538, y, { width: 260 });
+      y = Math.max(doc.y, y + 14) + 4;
+    }
+    if (!rows.length) doc.text("No RFIs on this log yet.", 36, y);
+    doc.end();
+  });
 }

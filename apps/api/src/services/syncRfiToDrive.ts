@@ -5,9 +5,14 @@
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
-import { buildSpdcRfiXlsxBuffer, renderSpdcRfiFormHtml } from "./spdcRfiForm.js";
+import {
+  buildSpdcRfiPdfBuffer,
+  buildSpdcRfiRegisterPdfBuffer,
+  buildSpdcRfiXlsxBuffer,
+  renderSpdcRfiFormHtml,
+} from "./spdcRfiForm.js";
 
-export type RfiDriveExport = { kind: "xlsx" | "html"; path: string; url?: string | null };
+export type RfiDriveExport = { kind: "xlsx" | "html" | "pdf"; path: string; url?: string | null };
 
 function safeName(s: string) {
   return String(s || "RFI").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 72);
@@ -117,18 +122,36 @@ export async function syncRfiToDrive(rfiId: string): Promise<{ exports: RfiDrive
     );
     exports.push({ kind: "html", path: htmlFile.sharePointPath || htmlFile.path, url: htmlFile.sharePointUrl || htmlFile.url });
   } catch (err) {
-    console.warn("[rfi] HTML/PDF drive sync failed:", err instanceof Error ? err.message : err);
+    console.warn("[rfi] HTML drive sync failed:", err instanceof Error ? err.message : err);
   }
 
   try {
+    const pdf = await buildSpdcRfiPdfBuffer({ project, rfi, evidence });
+    const pdfFile = await mockOneDrive.upload(project.code, folder, `${base}.pdf`, pdf, "application/pdf");
+    exports.push({ kind: "pdf", path: pdfFile.sharePointPath || pdfFile.path, url: pdfFile.sharePointUrl || pdfFile.url });
+  } catch (err) {
+    console.warn("[rfi] PDF drive sync failed:", err instanceof Error ? err.message : err);
+  }
+
+  try {
+    const registerFolder = `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`;
     const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis, scope: "register" });
     const live = await mockOneDrive.upload(
       project.code,
-      `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`,
+      registerFolder,
       "SPDC_RFI_Register.xlsx",
       registerBuf,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
+    await mockOneDrive.upload(
+      project.code,
+      registerFolder,
+      "SPDC_RFI_Form_and_Register.xlsx",
+      registerBuf,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    const registerPdf = await buildSpdcRfiRegisterPdfBuffer({ project, rfis });
+    await mockOneDrive.upload(project.code, registerFolder, "SPDC_RFI_Register.pdf", registerPdf, "application/pdf");
     exports.push({ kind: "xlsx", path: live.sharePointPath || live.path, url: live.sharePointUrl || live.url });
   } catch (err) {
     console.warn("[rfi] Register drive sync failed:", err instanceof Error ? err.message : err);
@@ -142,12 +165,22 @@ export async function refreshRfiRegisterOnDrive(projectId: string): Promise<void
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
   const rfis = await prisma.rfi.findMany({ where: { projectId }, include: rfiInclude, orderBy: { createdAt: "asc" } });
+  const registerFolder = `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`;
   const registerBuf = await buildSpdcRfiXlsxBuffer({ project, rfis, scope: "register" });
   await mockOneDrive.upload(
     project.code,
-    `${MODULE_TO_ISO_FOLDER.rfiInformation}/_Registers`,
+    registerFolder,
     "SPDC_RFI_Register.xlsx",
     registerBuf,
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   );
+  await mockOneDrive.upload(
+    project.code,
+    registerFolder,
+    "SPDC_RFI_Form_and_Register.xlsx",
+    registerBuf,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  const registerPdf = await buildSpdcRfiRegisterPdfBuffer({ project, rfis });
+  await mockOneDrive.upload(project.code, registerFolder, "SPDC_RFI_Register.pdf", registerPdf, "application/pdf");
 }
