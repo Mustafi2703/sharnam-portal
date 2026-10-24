@@ -88,21 +88,8 @@ authRouter.post("/login", async (req, res) => {
   const lower = email.trim().toLowerCase();
 
   try {
+    // Logins are created only by the office (CRM → Activate portal, bid invite, matrix) — never from the sign-in form.
     let user = await findUserByLoginEmail(lower);
-
-    if (!user && portal === "vendor") {
-      const company = await findContractorByEmail(lower);
-      if (company && isContractorCompany(company.partyType)) {
-        const { ensureVendorPortalLogin } = await import("../services/crmVendorCredentials.js");
-        const login = await ensureVendorPortalLogin({
-          email: lower,
-          name: company.name,
-          businessPhone: company.businessPhone,
-          vendorId: company.id,
-        });
-        if (login) user = await prisma.user.findUnique({ where: { id: login.userId } });
-      }
-    }
 
     if (!user) {
       if (lower.endsWith("@sharnam.demo")) {
@@ -114,7 +101,7 @@ authRouter.post("/login", async (req, res) => {
       if (portal === "vendor") {
         return res.status(401).json({
           error:
-            "No contractor login for this email. Use the email on the vendor / contractor in the project directory, or ask office to create it in Access users. First password is Demo@1234.",
+            "No contractor login for this email. Ask the Sharnam office to activate your portal from the CRM directory.",
         });
       }
       return res.status(401).json({ error: "No account for this email. Check the address or ask office to create the login." });
@@ -140,26 +127,8 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
-    let roleAllowed = !Array.isArray(allowedRoles) || allowedRoles.length === 0 || allowedRoles.includes(user.role);
-    if (!roleAllowed && portal === "vendor") {
-      const company =
-        (user.vendorId
-          ? await prisma.vendor.findUnique({
-              where: { id: user.vendorId },
-              select: { id: true, partyType: true },
-            })
-          : null) || (await findContractorByEmail(user.email));
-      if (company && isContractorCompany(company.partyType)) {
-        roleAllowed = true;
-        if (user.role !== "vendor" && user.role !== "admin" && user.role !== "office" && user.role !== "site_employee") {
-          const { portalForRole: nextPortal } = await import("@sharnam/shared");
-          user = await prisma.user.update({
-            where: { id: user.id },
-            data: { role: "vendor", portal: nextPortal("vendor"), vendorId: company.id },
-          });
-        }
-      }
-    }
+    // A sign-in never changes the account's role; a login on the wrong portal is sent to its own.
+    const roleAllowed = !Array.isArray(allowedRoles) || allowedRoles.length === 0 || allowedRoles.includes(user.role);
 
     if (!roleAllowed) {
       return res.status(403).json({
@@ -174,9 +143,9 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
-    if (portal === "vendor" && !user.vendorId) {
+    if (portal === "vendor" && user.role === "vendor" && !user.vendorId) {
       const company = await findContractorByEmail(user.email);
-      if (company) {
+      if (company && isContractorCompany(company.partyType)) {
         user = await prisma.user.update({ where: { id: user.id }, data: { vendorId: company.id } });
       }
     }

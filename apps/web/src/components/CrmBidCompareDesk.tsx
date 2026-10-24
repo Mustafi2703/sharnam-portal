@@ -448,7 +448,7 @@ export function CrmBidCompareDesk(props: CrmBidDeskProps) {
                   )}
                   {!hasCompare && (
                     <p className="text-sm text-steel-muted">
-                      Upload vendor BOQs on the <button type="button" className="text-brand font-semibold" onClick={() => onMainTab("matrix")}>BOQ matrix</button> tab, then refresh comparative.
+                      Upload vendor BOQs on the <button type="button" className="text-brand font-semibold" onClick={() => onMainTab("matrix")}>BOQ matrix</button> tab, then refresh comparative. The comparative is built once at least two vendors have quoted.
                     </p>
                   )}
                 </div>

@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AuthUser, ModulePermissions } from "@sharnam/shared";
-import { api } from "./api";
+import { api, ApiError, SESSION_REJECTED_EVENT } from "./api";
 
 type AuthState = {
   token: string | null;
@@ -35,6 +35,22 @@ function readStoredToken(): string | null {
   }
 }
 
+/** Tool windows hold their own copy of the token; logging out in one window ends that same session in all of them. */
+const AUTH_CHANNEL = "sharnam-auth";
+
+/** Identifies a session without sending the token itself: the tail of the JWT signature. */
+function tokenFingerprint(token: string | null | undefined) {
+  return token ? token.split(".").pop()?.slice(-24) || "" : "";
+}
+
+function openAuthChannel(): BroadcastChannel | null {
+  try {
+    return typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(AUTH_CHANNEL);
+  } catch {
+    return null;
+  }
+}
+
 function persistToken(next: string | null) {
   try {
     if (next) sessionStorage.setItem(TOKEN_KEY, next);
@@ -55,29 +71,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [permissions, setPermissions] = useState<ModulePermissions | null>(null);
   const [loading, setLoading] = useState(true);
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+
+  const endSession = (broadcast: boolean) => {
+    const ended = tokenRef.current;
+    setToken(null);
+    setUser(null);
+    setPermissions(null);
+    if (broadcast && ended) {
+      const channel = openAuthChannel();
+      channel?.postMessage({ type: "logout", session: tokenFingerprint(ended) });
+      channel?.close();
+    }
+  };
 
   const refresh = async () => {
-    if (!token) {
+    const forToken = token;
+    if (!forToken) {
       setUser(null);
       setPermissions(null);
       setLoading(false);
       return;
     }
-    try {
-      const data = await api<{ user: AuthUser; permissions: ModulePermissions }>("/api/auth/me", { token });
-      setUser(data.user);
-      setPermissions(data.permissions);
-    } catch {
-      setToken(null);
-      setUser(null);
-    } finally {
-      setLoading(false);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const data = await api<{ user: AuthUser; permissions: ModulePermissions }>("/api/auth/me", { token: forToken });
+        if (tokenRef.current !== forToken) return;
+        setUser(data.user);
+        setPermissions(data.permissions);
+        break;
+      } catch (err) {
+        if (tokenRef.current !== forToken) return;
+        const status = err instanceof ApiError ? err.status : 0;
+        // A rejected token or a removed account ends the session; a network or database blip does not.
+        const rejected = status === 401 || status === 403 || status === 404;
+        if (rejected || attempt >= 2) {
+          if (rejected) setToken(null);
+          setUser(null);
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+      }
     }
+    setLoading(false);
   };
 
   useEffect(() => {
     void refresh();
   }, [token]);
+
+  useEffect(() => {
+    // The API turned this session's token away (expired, deactivated, role changed): sign out here too.
+    const onRejected = (event: Event) => {
+      const rejectedToken = (event as CustomEvent<{ token?: string }>).detail?.token;
+      if (rejectedToken && rejectedToken === tokenRef.current) endSession(true);
+    };
+    window.addEventListener(SESSION_REJECTED_EVENT, onRejected);
+    const channel = openAuthChannel();
+    if (channel) {
+      channel.onmessage = (event: MessageEvent<{ type?: string; session?: string }>) => {
+        const current = tokenFingerprint(tokenRef.current);
+        if (event.data?.type === "logout" && current && event.data.session === current) endSession(false);
+      };
+    }
+    return () => {
+      window.removeEventListener(SESSION_REJECTED_EVENT, onRejected);
+      channel?.close();
+    };
+  }, []);
 
   const value = useMemo<AuthState>(
     () => ({
@@ -98,9 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(nextUser);
       },
       logout: () => {
-        setToken(null);
-        setUser(null);
-        setPermissions(null);
+        endSession(true);
       },
       impersonate: async (userId) => {
         const data = await api<{ token: string; user: AuthUser; landingPath: string }>("/api/auth/impersonate", {

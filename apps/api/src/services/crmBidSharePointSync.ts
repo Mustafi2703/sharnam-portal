@@ -201,12 +201,17 @@ export async function listCrmBidSharePointTree(prisma: PrismaClient, pkgId: stri
 
   const vendorRoot = CRM_SHAREPOINT.vendorBoqRoot;
   const roots: CrmSharePointNode[] = [
-    {
-      name: "05.06 Comparative Statement (master)",
-      path: CRM_SHAREPOINT.comparative,
-      type: "folder",
-      children: listTree(pkg.project.code, CRM_SHAREPOINT.comparative),
-    },
+    // The comparative holds every vendor's rates — office view only.
+    ...(vendorLabel
+      ? []
+      : [
+          {
+            name: "05.06 Comparative Statement (master)",
+            path: CRM_SHAREPOINT.comparative,
+            type: "folder" as const,
+            children: listTree(pkg.project.code, CRM_SHAREPOINT.comparative),
+          },
+        ]),
     {
       name: "05.05 Vendor BOQs",
       path: vendorRoot,
@@ -219,7 +224,7 @@ export async function listCrmBidSharePointTree(prisma: PrismaClient, pkgId: stri
 
   return {
     projectCode: pkg.project.code,
-    comparativeSharePointUrl: pkg.comparativeSharePointUrl,
+    comparativeSharePointUrl: vendorLabel ? null : pkg.comparativeSharePointUrl,
     roots,
   };
 }

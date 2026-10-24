@@ -6,6 +6,9 @@ export function apiBase(): string {
   return API_BASE;
 }
 
+/** Fired when the API rejects the token a request carried, so the auth layer can end that session. */
+export const SESSION_REJECTED_EVENT = "sharnam:session-rejected";
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -47,6 +50,9 @@ export async function api<T = unknown>(
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 401 && opts.token && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(SESSION_REJECTED_EVENT, { detail: { token: opts.token } }));
+      }
       throw new ApiError(data.error || res.statusText || "Request failed", res.status);
     }
     return data as T;
