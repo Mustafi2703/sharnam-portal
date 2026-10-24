@@ -1029,6 +1029,19 @@ rfiRouter.post("/project/:projectId", requireRoles("admin", "office", "site_empl
       console.warn("[RFI] F-02 raise failed:", err instanceof Error ? err.message : err);
     }
   }
+  if (rfiKind === "SafetyIR") {
+    try {
+      const { attachSafetyActivityChecklist } = await import("../services/safetyIrChecklist.js");
+      const attached = await attachSafetyActivityChecklist(req.params.projectId, rfi.id);
+      if (attached) {
+        rfi.linkedAssignmentId = attached.assignmentId;
+        responseForm = attached.formDataJson || responseForm;
+        activityChecklist = { id: attached.assignmentId, number: attached.label };
+      }
+    } catch (err) {
+      console.warn("[RFI] F-03 link failed:", err instanceof Error ? err.message : err);
+    }
+  }
   await audit("rfi.create", {
     userId: req.user!.id,
     entity: "Rfi",
@@ -1483,6 +1496,17 @@ rfiRouter.post("/:id/respond", async (req: AuthedRequest, res) => {
   res.status(201).json(response);
 });
 
+rfiRouter.post("/:id/safety-checklist", async (req: AuthedRequest, res) => {
+  const existing = await prisma.rfi.findUnique({ where: { id: req.params.id }, select: { id: true, projectId: true, rfiKind: true } });
+  if (!existing || existing.rfiKind !== "SafetyIR") return res.status(404).json({ error: "Safety IR not found" });
+  const { attachSafetyActivityChecklist } = await import("../services/safetyIrChecklist.js");
+  const attached = await attachSafetyActivityChecklist(existing.projectId, existing.id);
+  if (!attached) {
+    return res.status(404).json({ error: "No F-03 activity checklist. Add SPDC/HSE/F-03 in Checklist Manager." });
+  }
+  res.json(attached);
+});
+
 rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
   const existing = await prisma.rfi.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: "RFI not found" });
@@ -1559,6 +1583,14 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       form.inspectedBy = form.inspectedBy || req.user!.fullName || req.user!.email;
       form.inspectedAt = form.inspectedAt || new Date().toISOString();
       clearanceStatus = /^S[12]/.test(String(form.clearanceResult)) ? "Approved" : "Rejected";
+    }
+    if (existing.rfiKind === "SafetyIR" && /^S[12]/.test(String(form.clearanceResult || ""))) {
+      const { safetyClearanceChecklistError } = await import("../services/safetyIrChecklist.js");
+      const checklistError = await safetyClearanceChecklistError(existing.projectId, existing.id, [
+        existing.number,
+        existing.irNumber || "",
+      ]);
+      if (checklistError) return res.status(400).json({ error: checklistError });
     }
     formDataJson = JSON.stringify(form);
   }

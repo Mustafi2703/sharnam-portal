@@ -322,19 +322,6 @@ function SideNavBody({
             <span className="side-nav__section-hint">Choose</span>
           </div>
           <div className="side-nav__project">
-            <select
-              className="side-nav__select"
-              value={projectId}
-              onChange={(e) => onSelectProject(e.target.value)}
-              aria-label="Select project"
-            >
-              {!projects.length && <option value="">No projects</option>}
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {p.name}
-                </option>
-              ))}
-            </select>
             {activeProject ? (
               <div className="side-nav__project-chip">
                 <span className="side-nav__project-dot" aria-hidden />
@@ -619,27 +606,24 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {hidden ? "Show nav" : "Hide nav"}
               </span>
             </button>
+            {roleLabel ? <span className="app-topbar__role-badge">{roleLabel}</span> : null}
+            <select
+              className="h-8 max-w-[16rem] rounded-lg border border-line bg-paper px-2 text-xs font-semibold text-ink"
+              value={projectId}
+              aria-label="Select Project"
+              onChange={(e) => selectProject(e.target.value)}
+            >
+              {!projects.length ? <option value="">No Projects</option> : null}
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} — {p.name}
+                </option>
+              ))}
+            </select>
 
             <Link to={homeTo} className="app-topbar__brand min-w-0 shrink-0" aria-label={`${BRAND_EN} home`}>
               <img src="/logo-transparent.png" alt={BRAND_EN} className="app-topbar__logo" width={160} height={76} />
             </Link>
-
-            <div className={`app-topbar__meta ${inProject ? "app-topbar__meta--slim" : ""}`}>
-              {roleLabel ? (
-                <span className="app-topbar__role-badge">{roleLabel}</span>
-              ) : null}
-              <div className="app-topbar__title truncate">
-                {inProject
-                  ? activeProject
-                    ? `${activeProject.code}`
-                    : "Project"
-                  : activeProject
-                    ? `${activeProject.code}`
-                    : hidden
-                      ? "Open left navigation to pick a project"
-                      : "Select a project in the sidebar"}
-              </div>
-            </div>
 
             <div className="ml-auto flex items-center gap-1.5">
               <SessionControls />

@@ -43,7 +43,7 @@ type GateTemplate = {
 };
 
 const SUBMIT_ROLES = ["admin", "office", "employee", "site_employee"];
-const SIGNER_LABEL = "SPDC project team";
+const SIGNER_LABEL = "Site Project Team";
 
 /**
  * Drawing Check Master - used as the GFC upload gate overlay (embed=1).
@@ -54,7 +54,6 @@ export default function DrawingPreCheckPage() {
   const { id: projectId } = useParams();
   const [searchParams] = useSearchParams();
   const embed = searchParams.get("embed") === "1";
-  const revisionMode = searchParams.get("mode") === "revision";
   const lockedDrawingId = searchParams.get("drawing") || "";
   const lockedRevisionId = searchParams.get("revision") || "";
   const lockedRevNumber = searchParams.get("rev") || "";
@@ -79,11 +78,26 @@ export default function DrawingPreCheckPage() {
   const [notice, setNotice] = useState("");
   const [done, setDone] = useState<{ unlockToken: string; name: string; reportNo?: string } | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [staffNames, setStaffNames] = useState<string[]>([]);
 
   const role = user?.role || "";
   const canFill = [...SUBMIT_ROLES, "vendor"].includes(role);
   const canSubmit = SUBMIT_ROLES.includes(role);
   const signerName = user?.fullName || user?.email || "";
+
+  useEffect(() => {
+    if (!token) return;
+    api<{ fullName?: string | null; role?: string | null }[]>("/api/users?kind=staff", { token })
+      .then((rows) => {
+        const names = (rows || [])
+          .filter((u) => !["client", "vendor"].includes(String(u.role || "")))
+          .map((u) => String(u.fullName || "").trim())
+          .filter(Boolean);
+        if (signerName && !names.includes(signerName)) names.unshift(signerName);
+        setStaffNames([...new Set(names)]);
+      })
+      .catch(() => setStaffNames(signerName ? [signerName] : []));
+  }, [token, signerName]);
 
   useEffect(() => {
     if (!projectId || !embed) return;
@@ -93,7 +107,7 @@ export default function DrawingPreCheckPage() {
     }
     Promise.all([
       api<GateTemplate>(
-        `/api/checklist/project/${projectId}/drawing-check-template?discipline=${encodeURIComponent(discipline)}`,
+        `/api/checklist/project/${projectId}/drawing-check-template?discipline=${encodeURIComponent(discipline)}${lockedDrawingId ? `&drawing=${encodeURIComponent(lockedDrawingId)}` : ""}`,
         { token },
       ),
       api<ChecklistDrawingOption[]>(`/api/drawings/project/${projectId}`, { token }).catch(() => []),
@@ -114,7 +128,7 @@ export default function DrawingPreCheckPage() {
             lockedRevisionId || dwgMatch?.revisions?.find((r) => r.published)?.id || dwgMatch?.revisions?.[0]?.id || "";
           setRevisionId(revId);
           const revNo = lockedRevNumber || dwgMatch?.revisions?.find((r) => r.id === revId)?.revisionNumber || "";
-          if (dwgMatch?.drawingNumber && revNo) boundRef = `${dwgMatch.drawingNumber} Rev ${revNo}`;
+          if (dwgMatch?.drawingNumber) boundRef = revNo ? `${dwgMatch.drawingNumber} ${revNo}` : dwgMatch.drawingNumber;
         }
         const meta: ChecklistFillMeta = { ...emptyChecklistMeta(), reportNo: t.nextReportNo || "", refDrawing: boundRef };
         const draft = t.myDraft;
@@ -215,7 +229,7 @@ export default function DrawingPreCheckPage() {
     const out = await api<{ assignmentId: string }>(`/api/checklist/project/${projectId}/drawing-check-template/assign`, {
       method: "POST",
       token,
-      body: JSON.stringify({ discipline, templateId: template.id }),
+      body: JSON.stringify({ discipline, templateId: template.id, drawingId: lockedDrawingId || drawingId }),
     });
     setAssignmentId(out.assignmentId);
     return out.assignmentId;
@@ -365,11 +379,7 @@ export default function DrawingPreCheckPage() {
       discipline={template?.discipline || discipline}
       eyebrow={eyebrow}
       title={template?.name || "Drawing Check Master"}
-      subtitle={
-        revisionMode
-          ? "This drawing and revision are already selected. Save a draft if it is not complete. When every line is answered, sign and submit."
-          : "Complete every line before the GFC file is uploaded. Save a draft if it is not ready; it stays in the fill log."
-      }
+      subtitle=""
       category="Drawing Check Master"
       items={items}
       sections={sections}
@@ -408,8 +418,8 @@ export default function DrawingPreCheckPage() {
       }}
       requireSignature
       signerLabel={SIGNER_LABEL}
+      staffNames={staffNames}
       signerName={signerName || undefined}
-      signerNameLocked
       submitBlockedReason={canSubmit ? undefined : "Only SPDC project team members can sign the Drawing Check. Save a draft instead."}
       minPhotos={0}
       photoTotal={photoTotal}

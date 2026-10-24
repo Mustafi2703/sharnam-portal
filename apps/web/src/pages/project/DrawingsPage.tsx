@@ -1,10 +1,9 @@
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { canManageDrawings, isClientViewOnly } from "../../permissions";
 import { Badge, Button, Card, Input, PageHeader, Select } from "../../components/ui";
-import { ReportExportButtons } from "../../components/ReportExportButtons";
 import { UploadModal } from "../../components/UploadModal";
 import { DrawingUploadFilePicker } from "../../components/DrawingUploadFilePicker";
 import { DrawingFileViewer } from "../../components/DrawingFileViewer";
@@ -13,8 +12,7 @@ import { IN_PAGE_OVERLAY_DISMISSED, type InPageOverlayDismissed } from "../../li
 import { formatUiText } from "../../lib/formatUiText";
 import { GFC_REF, GFC_SCREEN, GFC_TABLE } from "../../lib/drawingsLabels";
 import { DrawingIssueFields } from "../../components/DrawingIssueFields";
-import { ChecklistAttachPicker, type ChecklistAttachOption } from "../../components/ChecklistAttachPicker";
-import { RevisionIssueLogSummary } from "../../components/RevisionIssueLogSummary";
+import { ChecklistAttachPicker } from "../../components/ChecklistAttachPicker";
 import {
   appendIssueToFormData,
   emptyDrawingIssueDraft,
@@ -22,7 +20,6 @@ import {
   issueFromRevision,
 } from "../../lib/drawingIssueFields";
 import {
-  drawingFileKind,
   revisionPreviewFromRecord,
   type DrawingRevisionPreview,
 } from "../../lib/drawingPreview";
@@ -37,12 +34,36 @@ import {
   revisionUploadStatus,
 } from "../../lib/gfcRegister";
 import { drawingDisciplineOptions } from "../../lib/masterDrawingRegister";
-import { useDrawingPicklists } from "../../lib/drawingPicklists";
+import { useDrawingPicklists, withCurrent } from "../../lib/drawingPicklists";
+import {
+  checklistAssignmentsToAttachOptions,
+  filterAttachOptionsByDiscipline,
+} from "../../lib/checklistAttachOptions";
 import { DrawingPackMenu } from "../../components/DrawingPackMenu";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { StatusNote } from "../../components/StatusNote";
 
 const GFC_REVISION_CHOICES = ["R0", "R1", "R2", "R3", "R4", "R5", "R6"] as const;
+
+function revisionFileRows(rev: any): { kind: "pdf" | "dwg"; name: string; url?: string }[] {
+  const status = revisionUploadStatus(rev);
+  const rows: { kind: "pdf" | "dwg"; name: string; url?: string }[] = [];
+  if (status.pdf) {
+    rows.push({
+      kind: "pdf",
+      name: rev.pdfFileName || (/\.pdf$/i.test(rev.fileName || "") ? rev.fileName : "Drawing.pdf"),
+      url: status.pdfUrl || undefined,
+    });
+  }
+  if (status.dwg) {
+    rows.push({
+      kind: "dwg",
+      name: rev.dwgFileName || (/\.dwg$/i.test(rev.fileName || "") ? rev.fileName : "Drawing.dwg"),
+      url: status.dwgUrl || undefined,
+    });
+  }
+  return rows;
+}
 
 function RevisionShareLinks({
   rev,
@@ -50,51 +71,39 @@ function RevisionShareLinks({
   compact,
   onViewPdf,
   onOpenSharePoint,
+  onReplace,
 }: {
   rev: any;
   label?: string;
   compact?: boolean;
-  /** In-app PDF popup (preferred). */
   onViewPdf?: () => void;
-  /** SharePoint / DWG external open. */
   onOpenSharePoint?: (fileUrl?: string) => void;
+  onReplace?: (kind: "pdf" | "dwg") => void;
 }) {
-  const status = revisionUploadStatus(rev);
+  const files = revisionFileRows(rev);
+  if (!files.length) return <span className="text-[10px] text-steel-muted">—</span>;
   return (
-    <div className={`flex flex-col ${compact ? "items-center" : "items-start"} gap-0.5`}>
-      {label && <span className="text-[10px] font-mono text-steel-muted">{label}</span>}
-      {status.pdfUrl ? (
-        <button
-          type="button"
-          className="text-[10px] font-semibold text-brand hover:underline"
-          onClick={() => (onViewPdf ? onViewPdf() : onOpenSharePoint?.(status.pdfUrl || undefined))}
-        >
-          View PDF
-        </button>
-      ) : (
-        <span className="text-[10px] text-steel-muted">PDF not uploaded</span>
-      )}
-      {status.pdfUrl && onViewPdf && onOpenSharePoint ? (
-        <button
-          type="button"
-          className="text-[10px] text-steel-muted hover:underline"
-          onClick={() => onOpenSharePoint(status.pdfUrl || undefined)}
-        >
-          SharePoint
-        </button>
-      ) : null}
-      {status.dwgUrl ? (
-        <button
-          type="button"
-          className="text-[10px] font-semibold text-brand hover:underline"
-          onClick={() => onOpenSharePoint?.(status.dwgUrl || undefined)}
-        >
-          Open DWG
-        </button>
-      ) : (
-        <span className="text-[10px] text-steel-muted">DWG not uploaded</span>
-      )}
-    </div>
+    <ul className={`flex flex-col ${compact ? "items-center" : "items-center"} gap-1`}>
+      {label ? <li className="text-[10px] font-mono text-steel-muted">{label}</li> : null}
+      {files.map((file) => (
+        <li key={`${file.kind}-${file.name}`} className="flex flex-wrap items-center justify-center gap-1">
+          <button
+            type="button"
+            className="text-[10px] font-semibold text-brand hover:underline"
+            onClick={() =>
+              file.kind === "pdf" && onViewPdf ? onViewPdf() : onOpenSharePoint?.(file.url)
+            }
+          >
+            {file.name}
+          </button>
+          {onReplace ? (
+            <button type="button" className="text-[10px] font-semibold text-ink hover:underline" onClick={() => onReplace(file.kind)}>
+              {file.kind === "dwg" ? "Replace DWG" : "Replace PDF"}
+            </button>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -112,10 +121,12 @@ export default function DrawingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const [drawings, setDrawings] = useState<any[]>([]);
-  const [checklistChoices, setChecklistChoices] = useState<ChecklistAttachOption[]>([]);
+  const [checklistAssignments, setChecklistAssignments] = useState<any[]>([]);
   const [extraChecklistIds, setExtraChecklistIds] = useState<string[]>([]);
+  const attachDefaultsApplied = useRef(false);
   const [drawingsLoaded, setDrawingsLoaded] = useState(false);
   const [filter, setFilter] = useState("All");
+  const [packageFilter, setPackageFilter] = useState("All");
   const picklists = useDrawingPicklists(id, token);
   const firstDiscipline = picklists.lists.disciplines[0] || "";
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -139,6 +150,7 @@ export default function DrawingsPage() {
     drawingNumber: "",
     title: "",
     discipline: "",
+    projectPackage: "",
     buildingArea: "",
     tlNo: "",
     revisionNumber: "R0",
@@ -164,6 +176,7 @@ export default function DrawingsPage() {
     drawingNumber: string;
     title: string;
     discipline: string;
+    projectPackage: string;
     buildingArea: string;
     tlNo: string;
   } | null>(null);
@@ -172,9 +185,11 @@ export default function DrawingsPage() {
     drawingNumber: "",
     title: "",
     discipline: "",
+    projectPackage: "",
     buildingArea: "",
     tlNo: "",
   });
+  const [pickedPackage, setPickedPackage] = useState("");
   const canUpload = canManageDrawings(user?.role);
   const clientOnly = isClientViewOnly(user?.role);
 
@@ -185,15 +200,33 @@ export default function DrawingsPage() {
       api<{ assignments: any[] }>(`/api/checklist/project/${id}`, { token }).catch(() => ({ assignments: [] as any[] })),
     ]);
     setDrawings(d);
-    setChecklistChoices(
-      (checks.assignments || []).map((row) => ({
-        id: row.id,
-        name: row.template?.name || "Checklist",
-        hint: row.template?.checklistType || "",
-      })),
-    );
+    setChecklistAssignments(checks.assignments || []);
     setDrawingsLoaded(true);
   };
+
+  function drawingProjectPackage(d: { registerLine?: { projectPackage?: string | null } | null }) {
+    return (d.registerLine?.projectPackage || "").trim();
+  }
+
+  const packageTabs = useMemo(
+    () =>
+      withCurrent(
+        picklists.packages,
+        ...picklists.used.packages,
+        ...drawings.map((d) => drawingProjectPackage(d)),
+      ),
+    [picklists.packages, picklists.used.packages, drawings],
+  );
+
+  const checklistAttachAll = useMemo(
+    () => checklistAssignmentsToAttachOptions(checklistAssignments),
+    [checklistAssignments],
+  );
+
+  const checklistAttachForRegister = useMemo(
+    () => filterAttachOptionsByDiscipline(checklistAttachAll, form.discipline),
+    [checklistAttachAll, form.discipline],
+  );
 
   useEffect(() => {
     void load();
@@ -214,7 +247,17 @@ export default function DrawingsPage() {
     } else {
       setUnlockToken(tok);
       const gateDiscipline = precheckDisciplineRef.current;
-      if (gateDiscipline) setForm((f) => ({ ...f, discipline: gateDiscipline }));
+      if (gateDiscipline) {
+        setForm((f) => ({
+          ...f,
+          discipline: gateDiscipline,
+          projectPackage:
+            packageFilter !== "All"
+              ? packageFilter
+              : f.projectPackage || (packageTabs.length === 1 ? packageTabs[0] : ""),
+        }));
+      }
+      attachDefaultsApplied.current = false;
       setShowRegister(true);
       setMsg("Checklist unlocked. Finish the upload form.");
     }
@@ -258,6 +301,7 @@ export default function DrawingsPage() {
     const chosen = (discipline || (filter !== "All" ? filter : "")).trim();
     if (!chosen) {
       setPickedDiscipline((cur) => cur || picklists.lists.disciplines[0] || "");
+      setPickedPackage((cur) => cur || (packageFilter !== "All" ? packageFilter : packageTabs[0] || ""));
       setDisciplinePickerOpen(true);
       return;
     }
@@ -334,6 +378,7 @@ export default function DrawingsPage() {
         drawingNumber,
         title,
         discipline,
+        projectPackage: packageFilter !== "All" ? packageFilter : "",
         buildingArea: "",
         tlNo: "",
       });
@@ -344,6 +389,13 @@ export default function DrawingsPage() {
 
     startUploadFlow(gateDisciplineParam || undefined);
   }, [id, canUpload, searchParams, setSearchParams, drawings, drawingsLoaded, firstDiscipline]);
+
+  useEffect(() => {
+    if (!showRegister || !unlockToken || attachDefaultsApplied.current) return;
+    const defaults = checklistAttachForRegister.map((o) => o.id);
+    setExtraChecklistIds(defaults);
+    attachDefaultsApplied.current = true;
+  }, [showRegister, unlockToken, checklistAttachForRegister]);
 
   useEffect(() => {
     const projectId = id;
@@ -397,6 +449,7 @@ export default function DrawingsPage() {
           drawingNumber: addRowForm.drawingNumber.trim(),
           title: addRowForm.title.trim(),
           discipline: addRowForm.discipline,
+          projectPackage: addRowForm.projectPackage.trim() || undefined,
           buildingArea: addRowForm.buildingArea.trim() || undefined,
           tlNo: addRowForm.tlNo.trim() || undefined,
           revisionNumber: "R0",
@@ -408,6 +461,7 @@ export default function DrawingsPage() {
         drawingNumber: "",
         title: "",
         discipline: filter !== "All" ? filter : firstDiscipline,
+        projectPackage: packageFilter !== "All" ? packageFilter : addRowForm.projectPackage,
         buildingArea: "",
         tlNo: "",
       });
@@ -453,15 +507,23 @@ export default function DrawingsPage() {
   const filtered = useMemo(
     () => {
       const byDiscipline = filter === "All" ? drawings : drawings.filter((d) => d.discipline === filter);
-      if (rowFilter === "nofile") return byDiscipline.filter((d) => !hasDrawingFile(d));
-      if (rowFilter === "nocheck") return byDiscipline.filter((d) => !drawingCheckFilled(d));
-      return byDiscipline;
+      const byPackage =
+        packageFilter === "All"
+          ? byDiscipline
+          : byDiscipline.filter((d) => drawingProjectPackage(d) === packageFilter);
+      if (rowFilter === "nofile") return byPackage.filter((d) => !hasDrawingFile(d));
+      if (rowFilter === "nocheck") return byPackage.filter((d) => !drawingCheckFilled(d));
+      return byPackage;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [drawings, filter, rowFilter]
+    [drawings, filter, packageFilter, rowFilter]
   );
   const revSlots = useMemo(() => gfcRevSlots(drawings), [drawings]);
   const uploadTarget = drawings.find((d) => d.id === uploadForId);
+  const checklistAttachForRevision = useMemo(() => {
+    const disc = (uploadTarget?.discipline || "").trim();
+    return filterAttachOptionsByDiscipline(checklistAttachAll, disc);
+  }, [checklistAttachAll, uploadTarget]);
   const replaceRev = useMemo(() => {
     if (!uploadTarget || !replaceRevisionId) return null;
     return (uploadTarget.revisions || []).find((r: any) => r.id === replaceRevisionId) || null;
@@ -568,6 +630,7 @@ export default function DrawingsPage() {
         drawingNumber: "",
         title: "",
         discipline: form.discipline,
+        projectPackage: form.projectPackage,
         buildingArea: "",
         tlNo: "",
         revisionNumber: "R0",
@@ -803,97 +866,65 @@ export default function DrawingsPage() {
     <div className="space-y-4 min-w-0">
       <PageHeader
         dense
-        eyebrow="Drawings module · Approval & GFC"
+        eyebrow="Drawings Module · Approval & GFC"
         title={GFC_SCREEN}
-        subtitle={
-          clientOnly
-            ? "View published sheets and revision dates (Approval & GFC Drawing Log.xlsx layout)."
-            : "Upload PDF/DWG, revisions, and site receive/issue signatures — same columns as Approval & GFC Drawing Log.xlsx."
-        }
-        actions={
-          canUpload ? (
-            <>
-              <Link
-                to={`/projects/${id}/drawings/register/master`}
-                className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-2 text-xs font-semibold text-brand hover:bg-sand/60"
-              >
-                Master register →
-              </Link>
-              <Button type="button" variant="secondary" onClick={() => {
-                setAddRowForm((f) => ({
-                  ...f,
-                  discipline: filter !== "All" ? filter : f.discipline,
-                }));
-                setAddRowOpen(true);
-              }}>
-                + Add row
-              </Button>
-              {user?.role === "admin" || user?.role === "office" ? (
-                <label className="inline-flex cursor-pointer items-center rounded-lg border border-brand/40 bg-paper px-3 py-2 text-sm font-semibold text-brand hover:bg-sand/60" title="Import the Approval & GFC Drawing Log Excel — the register rows now, drawing files later">
-                  {dumpBusy ? "Importing…" : `Upload ${GFC_SCREEN} (Excel)`}
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="sr-only"
-                    disabled={dumpBusy}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (f) importGfcLog(f);
-                    }}
-                  />
-                </label>
-              ) : null}
-              <Button type="button" className="flex-1 sm:flex-none" onClick={() => startUploadFlow()}>
-                Upload drawing
-              </Button>
-            </>
-          ) : undefined
-        }
+        actions={undefined}
       />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-3 -mt-1">
-        <div
-          className="flex gap-1 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-0.5 min-w-0"
-          role="tablist"
-          aria-label="Filter by discipline"
-        >
-          {disciplines.map((d) => (
-            <button
-              key={d}
-              type="button"
-              role="tab"
-              aria-selected={filter === d}
-              onClick={() => setFilter(d)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border whitespace-nowrap ${
-                filter === d ? "bg-procore-navy text-white border-procore-navy" : "bg-paper text-ink border-line"
-              }`}
+        <div className="flex flex-col gap-2 min-w-0 flex-1">
+          <div
+            className="flex gap-1 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-0.5 min-w-0"
+            role="tablist"
+            aria-label="Filter by discipline"
+          >
+            {disciplines.map((d) => (
+              <button
+                key={d}
+                type="button"
+                role="tab"
+                aria-selected={filter === d}
+                onClick={() => setFilter(d)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border whitespace-nowrap ${
+                  filter === d ? "bg-procore-navy text-white border-procore-navy" : "bg-paper text-ink border-line"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          {packageTabs.length > 0 ? (
+            <div
+              className="flex gap-1 overflow-x-auto overscroll-x-contain -mx-1 px-1 pb-0.5 min-w-0"
+              role="tablist"
+              aria-label="Filter by package"
             >
-              {d}
-            </button>
-          ))}
+              {["All", ...packageTabs].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  role="tab"
+                  aria-selected={packageFilter === p}
+                  onClick={() => setPackageFilter(p)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border whitespace-nowrap ${
+                    packageFilter === p ? "bg-brand text-white border-brand" : "bg-paper text-ink border-line"
+                  }`}
+                >
+                  {p === "All" ? formatUiText("All Packages") : p}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <DrawingPackMenu projectId={id!} token={token} onMsg={setMsg} canPublish={canUpload} />
         <details className="relative shrink-0 self-stretch sm:self-auto">
           <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden h-full flex items-center">
             <span className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60">
-              Export & sync ▾
+              Export
             </span>
           </summary>
           <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-lg border border-line bg-paper shadow-lg p-2 space-y-1">
-            <ReportExportButtons projectId={id} kind="drawings" label="Register" menu />
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full !justify-start !text-sm !py-2"
-              onClick={(e) => {
-                void exportGfcExcel();
-                (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-              }}
-            >
-              Download GFC Excel
-            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -907,39 +938,19 @@ export default function DrawingsPage() {
             >
               Download GFC PDF
             </Button>
-            {canUpload && (
-              <>
-                {user?.role === "admin" || user?.role === "office" ? (
-                <label className="flex w-full cursor-pointer items-center rounded-lg px-3 py-2 text-sm font-semibold text-ink hover:bg-sand/60">
-                  {dumpBusy ? "Working…" : "Import GFC Excel"}
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="sr-only"
-                    disabled={dumpBusy}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-                      if (f) importGfcLog(f);
-                    }}
-                  />
-                </label>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full !justify-start !text-sm !py-2"
-                  disabled={dumpBusy}
-                  onClick={(e) => {
-                    void syncRegistersToDrive();
-                    (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-                  }}
-                >
-                  {dumpBusy ? "Syncing…" : "Sync to SharePoint"}
-                </Button>
-              </>
-            )}
+            {user?.role === "admin" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full !justify-start !text-sm !py-2"
+                onClick={(e) => {
+                  void exportGfcExcel();
+                  (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                }}
+              >
+                Download GFC Excel
+              </Button>
+            ) : null}
           </div>
         </details>
       </div>
@@ -968,8 +979,7 @@ export default function DrawingsPage() {
 
       {canUpload && precheckOpen && !unlockToken && precheckMode === "register" && (
         <Card className="border-warn/40 bg-[color-mix(in_srgb,var(--color-warn)_12%,var(--color-paper))]">
-          <div className="font-semibold text-ink">{formatUiText("Drawing Check not finished")}</div>
-          <p className="text-sm text-steel-muted mt-1">Finish the Drawing Check to unlock the upload, or cancel.</p>
+          <div className="font-semibold text-ink">{formatUiText("Drawing Check Not Finished")}</div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" onClick={() => startUploadFlow(precheckDiscipline || undefined)}>
               Re-open checklist window
@@ -1004,7 +1014,6 @@ export default function DrawingsPage() {
               </button>
             </div>
             <div className="register-modal__body space-y-3">
-              <p className="text-sm text-steel-muted">The Drawing Check for this discipline opens next.</p>
               <Select
                 label="Discipline"
                 value={pickedDiscipline}
@@ -1017,9 +1026,30 @@ export default function DrawingsPage() {
                   </option>
                 ))}
               </Select>
+              {packageTabs.length ? (
+                <Select
+                  label="Project Package"
+                  value={pickedPackage}
+                  onChange={(e) => setPickedPackage(e.target.value)}
+                >
+                  <option value="">{formatUiText("Select Package")}</option>
+                  {withCurrent(packageTabs, pickedPackage).map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
             </div>
             <div className="register-modal__foot flex flex-wrap gap-2">
-              <Button type="button" disabled={!pickedDiscipline} onClick={() => startUploadFlow(pickedDiscipline)}>
+              <Button
+                type="button"
+                disabled={!pickedDiscipline}
+                onClick={() => {
+                  if (pickedPackage) setPackageFilter(pickedPackage);
+                  startUploadFlow(pickedDiscipline);
+                }}
+              >
                 Open Drawing Check
               </Button>
               <Button type="button" variant="secondary" onClick={() => setDisciplinePickerOpen(false)}>
@@ -1032,10 +1062,7 @@ export default function DrawingsPage() {
 
       {canUpload && addRowOpen && (
         <Card className="border-brand/30">
-          <h3 className="font-semibold mb-1">{formatUiText(`Add ${GFC_SCREEN} row (no file yet)`)}</h3>
-          <p className="text-xs text-steel-muted mb-3">
-            Creates a discipline line on {GFC_REF} and mirrors it on the master drawing register. Upload PDF/DWG later via Drawing Check.
-          </p>
+          <h3 className="font-semibold mb-3">{formatUiText(`Add ${GFC_SCREEN} Row`)}</h3>
           <form className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3" onSubmit={addGfcRow}>
             <Input
               required
@@ -1048,7 +1075,7 @@ export default function DrawingsPage() {
             <Input
               required
               aria-required
-              label="Drawing title *"
+              label="Drawing Name *"
               placeholder="e.g. Ground floor plan"
               value={addRowForm.title}
               onChange={(e) => setAddRowForm({ ...addRowForm, title: e.target.value })}
@@ -1064,8 +1091,20 @@ export default function DrawingsPage() {
                 <option key={d} value={d}>{d}</option>
               ))}
             </Select>
+            {packageTabs.length ? (
+              <Select
+                label="Project Package"
+                value={addRowForm.projectPackage}
+                onChange={(e) => setAddRowForm({ ...addRowForm, projectPackage: e.target.value })}
+              >
+                <option value="">{formatUiText("Select Package")}</option>
+                {withCurrent(packageTabs, addRowForm.projectPackage).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </Select>
+            ) : null}
             <Input
-              label="Building / area"
+              label="Building"
               placeholder="e.g. Main plant"
               value={addRowForm.buildingArea}
               onChange={(e) => setAddRowForm({ ...addRowForm, buildingArea: e.target.value })}
@@ -1121,7 +1160,7 @@ export default function DrawingsPage() {
             {
               kind: "text",
               name: "title",
-              label: "Title",
+              label: "Drawing Name",
               required: true,
               placeholder: "Ground floor plan",
               value: form.title,
@@ -1132,9 +1171,24 @@ export default function DrawingsPage() {
               name: "discipline",
               label: "Discipline",
               value: form.discipline,
-              onChange: (v) => setForm({ ...form, discipline: v }),
+              onChange: (v) => {
+                setForm({ ...form, discipline: v });
+                attachDefaultsApplied.current = false;
+              },
               options: drawingDisciplineOptions(drawings.map((d) => d.discipline), form.discipline, picklists.lists.disciplines),
             },
+            ...(packageTabs.length
+              ? [
+                  {
+                    kind: "select" as const,
+                    name: "projectPackage",
+                    label: "Project Package",
+                    value: form.projectPackage,
+                    onChange: (v: string) => setForm({ ...form, projectPackage: v }),
+                    options: withCurrent(packageTabs, form.projectPackage),
+                  },
+                ]
+              : []),
             {
               kind: "text",
               name: "buildingArea",
@@ -1153,7 +1207,7 @@ export default function DrawingsPage() {
             {
               kind: "select",
               name: "revisionNumber",
-              label: "Revision — several drawings can use the same one",
+              label: "Revision",
               value: form.revisionNumber,
               onChange: (v) => setForm({ ...form, revisionNumber: v }),
               options: [...GFC_REVISION_CHOICES],
@@ -1161,10 +1215,10 @@ export default function DrawingsPage() {
             {
               kind: "text",
               name: "plannedDate",
-              label: "Planned submission date (optional — master register date is used if blank)",
+              label: "Planned Submission Date",
               value: plannedDate,
               onChange: setPlannedDate,
-              inputType: "date",
+              inputType: "date" as const,
             },
             {
               kind: "text",
@@ -1172,16 +1226,15 @@ export default function DrawingsPage() {
               label: "Revision / receipt date",
               value: actualDate,
               onChange: setActualDate,
-              inputType: "date",
+              inputType: "date" as const,
             },
             {
               kind: "custom",
               node: (
                 <ChecklistAttachPicker
-                  options={checklistChoices}
+                  options={checklistAttachForRegister}
                   selected={extraChecklistIds}
                   onChange={setExtraChecklistIds}
-                  label="Also attach checklists"
                 />
               ),
             },
@@ -1203,30 +1256,43 @@ export default function DrawingsPage() {
       )}
 
       <Card padding={false} className="overflow-hidden drawings-register">
-        <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between gap-2">
-          <div>
-            <div className="text-sm font-semibold">{GFC_TABLE}</div>
-            <div className="text-[11px] text-white/70">Discipline · Area · TL · DWG · R0–Rn · upload log &amp; signatures</div>
-          </div>
-          <Badge tone="neutral">{drawings.filter((d) => d.isPublished).length} published</Badge>
+        <div className="px-4 py-3 border-b border-line bg-procore-navy text-white flex justify-between items-center gap-2">
+          <div className="text-sm font-semibold">{GFC_TABLE}</div>
+          {canUpload ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="!text-xs !py-1"
+              onClick={() => {
+                setAddRowForm((f) => ({
+                  ...f,
+                  discipline: filter !== "All" ? filter : f.discipline,
+                  projectPackage: packageFilter !== "All" ? packageFilter : f.projectPackage,
+                }));
+                setAddRowOpen(true);
+              }}
+            >
+              + Add Row
+            </Button>
+          ) : null}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1100px]">
-            <thead className="bg-sand text-left text-[10px] uppercase tracking-wide text-steel-muted">
+          <table className="w-full text-sm min-w-[1100px] text-center">
+            <thead className="bg-sand text-center text-xs font-semibold text-steel-muted">
               <tr>
-                <th className="px-2 py-2">Discipline</th>
-                <th className="px-2 py-2">Building/Area</th>
-                <th className="px-2 py-2">TL No</th>
-                <th className="px-2 py-2">DWG. No.</th>
-                <th className="px-2 py-2">Title</th>
-                <th className="px-2 py-2">Browse</th>
+                <th className="px-2 py-2 text-center">Discipline</th>
+                <th className="px-2 py-2 text-center">Building</th>
+                <th className="px-2 py-2 text-center">TL No</th>
+                <th className="px-2 py-2 text-center">DWG. No.</th>
+                <th className="px-2 py-2 text-center">Drawing Name</th>
+                <th className="px-2 py-2 text-center">Browse</th>
                 {revSlots.map((r) => (
                   <th key={r} className="px-2 py-2 text-center">
                     {r}
                   </th>
                 ))}
                 <th className="px-2 py-2 text-center">Total</th>
-                <th className="px-2 py-2 text-right">Actions</th>
+                <th className="px-2 py-2 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1238,14 +1304,14 @@ export default function DrawingsPage() {
                 return (
                   <Fragment key={d.id}>
                     <tr className={`border-t border-line ${open ? "bg-brand-soft/30" : "hover:bg-sand/40"}`}>
-                      <td className="px-2 py-2 text-xs">{d.discipline}</td>
-                      <td className="px-2 py-2 text-xs">{d.buildingArea || "—"}</td>
-                      <td className="px-2 py-2 text-xs font-mono">{d.tlNo || "—"}</td>
-                      <td className="px-2 py-2 font-mono text-xs text-brand font-semibold">
+                      <td className="px-2 py-2 text-xs text-center">{d.discipline}</td>
+                      <td className="px-2 py-2 text-xs text-center">{d.buildingArea || "—"}</td>
+                      <td className="px-2 py-2 text-xs font-mono text-center">{d.tlNo || "—"}</td>
+                      <td className="px-2 py-2 font-mono text-xs text-brand font-semibold text-center">
                         {latest && revisionHasFiles(latest) && revisionUploadStatus(latest).pdf ? (
                           <button
                             type="button"
-                            className="hover:underline text-left"
+                            className="hover:underline"
                             title="View drawing in popup"
                             onClick={() => openLatestViewer(d)}
                           >
@@ -1255,8 +1321,8 @@ export default function DrawingsPage() {
                           d.drawingNumber
                         )}
                       </td>
-                      <td className="px-2 py-2 font-medium max-w-[180px]">{d.title}</td>
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 font-medium max-w-[180px] text-center">{d.title}</td>
+                      <td className="px-2 py-2 text-center">
                         {latest ? (
                           <RevisionShareLinks
                             rev={latest}
@@ -1319,19 +1385,19 @@ export default function DrawingsPage() {
                         );
                       })}
                       <td className="px-2 py-2 text-center font-mono text-xs">{revsByNum.length}</td>
-                      <td className="px-2 py-2">
-                        <div className="flex flex-wrap justify-end gap-1">
+                      <td className="px-2 py-2 text-center">
+                        <div className="flex flex-wrap justify-center gap-1">
                           {latest && revisionHasFiles(latest) && revisionUploadStatus(latest).pdf ? (
                             <Button type="button" variant="primary" className="!px-2 !py-1 !text-xs" onClick={() => openLatestViewer(d)}>
                               View drawing
                             </Button>
                           ) : null}
                           <Button type="button" variant="ghost" className="!px-2 !py-1 !text-xs" onClick={() => setExpandedId(open ? null : d.id)}>
-                            {open ? "Hide log" : "Log"}
+                            {open ? "Hide Logs" : "View Logs"}
                           </Button>
                           {canUpload && (
                             <Button type="button" variant={hasDrawingFile(d) ? "secondary" : "primary"} className="!px-2 !py-1 !text-xs" onClick={() => openUploadRev(d)}>
-                              {hasDrawingFile(d) ? "Upload rev" : "Upload drawing"}
+                              {hasDrawingFile(d) ? "Upload Revision" : "Upload Drawing"}
                             </Button>
                           )}
                           {canUpload && (
@@ -1345,6 +1411,7 @@ export default function DrawingsPage() {
                                   drawingNumber: d.drawingNumber || "",
                                   title: d.title || "",
                                   discipline: d.discipline || firstDiscipline,
+                                  projectPackage: drawingProjectPackage(d),
                                   buildingArea: d.buildingArea || "",
                                   tlNo: d.tlNo || "",
                                 })
@@ -1391,7 +1458,6 @@ export default function DrawingsPage() {
                               Publish
                             </Button>
                           )}
-                          {d.isPublished && <Badge tone="ok">Pub</Badge>}
                         </div>
                       </td>
                     </tr>
@@ -1399,8 +1465,8 @@ export default function DrawingsPage() {
                       <tr className="border-t border-line bg-[#f8fafc]">
                         <td colSpan={colSpan} className="px-4 py-4">
                           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                            <h4 className="text-xs font-mono uppercase tracking-wide text-steel-muted">
-                              Upload log — {d.drawingNumber} · current {d.currentRev || "—"}
+                            <h4 className="text-xs font-semibold text-steel-muted">
+                              {formatUiText("Upload Log")} — {d.drawingNumber} · {formatUiText("Current")} {d.currentRev || "—"}
                             </h4>
                             {canUpload && (
                               <Button type="button" className="!text-xs !py-1" onClick={() => openUploadRev(d)}>
@@ -1408,9 +1474,6 @@ export default function DrawingsPage() {
                               </Button>
                             )}
                           </div>
-                          <p className="text-xs text-steel-muted mb-3">
-                            Update the same revision many times — replace PDF/DWG or re-upload with the same rev number. Register columns and current rev stay in sync.
-                          </p>
                           <ul className="space-y-2">
                             {revsByNum.map((r: any, idx: number) => (
                               <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2.5 text-sm">
@@ -1432,76 +1495,18 @@ export default function DrawingsPage() {
                                       setViewer(previewFromRev(d, r));
                                     }}
                                     onOpenSharePoint={(fileUrl) => void openRevisionSharePoint(r.id, fileUrl)}
+                                    onReplace={canUpload ? (kind) => openReplaceRevision(d, r, kind) : undefined}
                                   />
                                   {extraFileList(r).map((f) => (
-                                    <div key={f.fileUrl} className="text-[11px] font-mono flex flex-wrap gap-2 mt-0.5">
-                                      <span>PDF · {f.fileName}</span>
+                                    <div key={f.fileUrl} className="text-[11px] font-mono mt-0.5">
                                       <button type="button" className="text-brand font-semibold" onClick={() => {
                                         setViewerRevId(r.id);
                                         setViewer(previewFromRev(d, { ...r, pdfFileUrl: f.fileUrl, pdfFileName: f.fileName }));
                                       }}>
-                                        View
-                                      </button>
-                                      <button type="button" className="text-brand font-semibold" onClick={() => void openRevisionSharePoint(r.id, f.fileUrl)}>
-                                        SharePoint
+                                        {f.fileName || "Drawing.pdf"}
                                       </button>
                                     </div>
                                   ))}
-                                  {!r.pdfFileName && !r.dwgFileName && r.fileName && (
-                                    <div className="text-[11px] font-mono mt-0.5">{r.fileName}</div>
-                                  )}
-                                  <RevisionIssueLogSummary rev={r} />
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Badge tone={r.published ? "ok" : "neutral"}>{r.published ? "Live" : "Draft"}</Badge>
-                                  {revisionUploadStatus(r).pdf && <Badge tone="ok">PDF</Badge>}
-                                  {revisionUploadStatus(r).dwg && <Badge tone="ok">DWG</Badge>}
-                                  {!revisionUploadStatus(r).pdf && !revisionUploadStatus(r).dwg && (
-                                    <Badge tone="neutral">No file</Badge>
-                                  )}
-                                  {revisionHasFiles(r) && revisionUploadStatus(r).pdf && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="!text-xs !px-2 !py-1"
-                                      onClick={() => {
-                                        setViewerRevId(r.id);
-                                        setViewer(previewFromRev(d, r));
-                                      }}
-                                    >
-                                      Preview PDF
-                                    </Button>
-                                  )}
-                                  {canUpload && (
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      className="!text-xs !px-2 !py-1"
-                                      onClick={() => openUpdateRevision(d, r)}
-                                    >
-                                      Update files
-                                    </Button>
-                                  )}
-                                  {canUpload && (r.pdfFileUrl || drawingFileKind(r.fileName || r.fileUrl) === "pdf") && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="!text-xs !px-2 !py-1"
-                                      onClick={() => openReplaceRevision(d, r, "pdf")}
-                                    >
-                                      Replace PDF
-                                    </Button>
-                                  )}
-                                  {canUpload && (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="!text-xs !px-2 !py-1"
-                                      onClick={() => openReplaceRevision(d, r, "dwg")}
-                                    >
-                                      Replace DWG
-                                    </Button>
-                                  )}
                                 </div>
                               </li>
                             ))}
@@ -1537,13 +1542,7 @@ export default function DrawingsPage() {
                 ? "Update same revision"
                 : "Upload revision"
           }
-          context={
-            revUploadMode === "replace"
-              ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · ${revReplaceRole.toUpperCase()} only`
-              : revUploadMode === "update"
-                ? `${uploadTarget.drawingNumber} · ${revForm.revisionNumber} · same revision, one signature and the files`
-                : `${uploadTarget.drawingNumber} · new ${revForm.revisionNumber} · checklist, one signature, then upload`
-          }
+          context={`${uploadTarget.drawingNumber} · ${revForm.revisionNumber || "Revision"}`}
           file={revPdf || revDwg}
           onFile={() => undefined}
           canSubmit={
@@ -1558,15 +1557,13 @@ export default function DrawingsPage() {
           filePicker={
             uploadStep === "confirm" ? (
               <div className="rounded-xl border border-line bg-sand/40 p-3 text-sm space-y-1">
-                <p className="font-medium text-ink">Confirm this revision, then the checklist opens</p>
                 <p><span className="text-steel-muted">Drawing no.</span> {uploadTarget.drawingNumber || "—"}</p>
-                <p><span className="text-steel-muted">Title</span> {uploadTarget.title || "—"}</p>
+                <p><span className="text-steel-muted">Drawing Name</span> {uploadTarget.title || "—"}</p>
                 <p><span className="text-steel-muted">Drawing type</span> {uploadTarget.discipline || "—"}</p>
                 <p><span className="text-steel-muted">Building</span> {uploadTarget.buildingArea || uploadTarget.building || "—"}</p>
                 <div className="grid sm:grid-cols-3 gap-2 pt-2">
                   <Select
                     label="Revision"
-                    hint={`Suggested: ${gfcNextRevisionNumber(uploadTarget.revisions || [])}`}
                     value={revForm.revisionNumber}
                     onChange={(e) =>
                       setRevForm({
@@ -1590,15 +1587,11 @@ export default function DrawingsPage() {
                   />
                   <Input
                     label="Planned date"
-                    hint="Blank = master register date"
                     type="date"
                     value={plannedDate}
                     onChange={(e) => setPlannedDate(e.target.value)}
                   />
                 </div>
-                <p className="text-xs text-steel-muted pt-1">
-                  Confirm opens the checklist on this page. Save a draft if it is not finished. Confirm again to continue that draft, then sign once and upload the PDF and DWG.
-                </p>
               </div>
             ) : revUploadMode === "replace" && revReplaceRole === "dwg" ? (
               <DrawingUploadFilePicker
@@ -1669,7 +1662,7 @@ export default function DrawingsPage() {
                       label: "Planned date",
                       value: plannedDate,
                       onChange: setPlannedDate,
-                      placeholder: "YYYY-MM-DD",
+                      inputType: "date" as const,
                     },
                     {
                       kind: "text" as const,
@@ -1677,7 +1670,7 @@ export default function DrawingsPage() {
                       label: "Actual date",
                       value: actualDate,
                       onChange: setActualDate,
-                      placeholder: "YYYY-MM-DD",
+                      inputType: "date" as const,
                     },
                     {
                       kind: "checkbox" as const,
@@ -1744,7 +1737,7 @@ export default function DrawingsPage() {
                       label: "Planned date",
                       value: plannedDate,
                       onChange: setPlannedDate,
-                      placeholder: "YYYY-MM-DD",
+                      inputType: "date" as const,
                     },
                     {
                       kind: "text" as const,
@@ -1752,7 +1745,7 @@ export default function DrawingsPage() {
                       label: "Actual date",
                       value: actualDate,
                       onChange: setActualDate,
-                      placeholder: "YYYY-MM-DD",
+                      inputType: "date" as const,
                     },
                     {
                       kind: "checkbox" as const,
@@ -1769,36 +1762,11 @@ export default function DrawingsPage() {
               kind: "custom" as const,
               node: (
                 <div className="space-y-3">
-                  <ChecklistAttachPicker
-                    options={checklistChoices}
-                    selected={extraChecklistIds}
-                    onChange={setExtraChecklistIds}
-                    label="Also attach checklists"
-                  />
                   {revUploadMode === "new" && !revUnlockToken && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-                      <p className="text-sm text-ink">
-                        This revision still needs the Drawing Check. Save a draft if it is not complete. After you submit and sign once, upload the files.
-                      </p>
-                      <Button type="button" className="mt-2 !bg-amber-500 !font-medium" onClick={() => launchDrawingCheck("revision", uploadTarget, revForm.revisionNumber)}>
-                        Open Drawing Check
-                      </Button>
-                    </div>
+                    <Button type="button" className="!bg-amber-500 !font-medium" onClick={() => launchDrawingCheck("revision", uploadTarget, revForm.revisionNumber)}>
+                      Open Drawing Check
+                    </Button>
                   )}
-                  {revUploadMode === "new" && revUnlockToken && (
-                    <p className="text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
-                      Checklist complete for {revForm.revisionNumber}. One signature is on the check. Upload the PDF and DWG. The filled checklist is saved in the same drive folder.
-                    </p>
-                  )}
-                  <DrawingIssueFields
-                    projectId={id!}
-                    token={token}
-                    value={revIssue}
-                    onChange={setRevIssue}
-                    existingClientSignUrl={replaceRev?.clientSignUrl}
-                    existingPmcSignUrl={replaceRev?.pmcSignUrl}
-                    existingSiteEngineerSignUrl={replaceRev?.siteEngineerSignUrl}
-                  />
                 </div>
               ),
             },
@@ -1822,6 +1790,7 @@ export default function DrawingsPage() {
                   body: JSON.stringify({
                     title: editRow.title.trim(),
                     discipline: editRow.discipline,
+                    projectPackage: editRow.projectPackage.trim() || null,
                     buildingArea: editRow.buildingArea,
                     tlNo: editRow.tlNo,
                   }),
@@ -1838,10 +1807,9 @@ export default function DrawingsPage() {
           >
             <div>
               <h2 className="font-display text-xl text-ink">Edit {editRow.drawingNumber}</h2>
-              <p className="text-sm text-steel-muted">Drawing number stays as logged. Title, type, building, and TL update the GFC row and the master register.</p>
             </div>
             <label className="block text-xs text-steel-muted">
-              Title
+              Drawing Name
               <Input className="mt-1" value={editRow.title} onChange={(e) => setEditRow({ ...editRow, title: e.target.value })} required />
             </label>
             <label className="block text-xs text-steel-muted">
@@ -1852,8 +1820,23 @@ export default function DrawingsPage() {
                 ))}
               </Select>
             </label>
+            {packageTabs.length ? (
+              <label className="block text-xs text-steel-muted">
+                Project Package
+                <Select
+                  className="mt-1"
+                  value={editRow.projectPackage}
+                  onChange={(e) => setEditRow({ ...editRow, projectPackage: e.target.value })}
+                >
+                  <option value="">{formatUiText("Select Package")}</option>
+                  {withCurrent(packageTabs, editRow.projectPackage).map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </Select>
+              </label>
+            ) : null}
             <label className="block text-xs text-steel-muted">
-              Building / area
+              Building
               <Input className="mt-1" value={editRow.buildingArea} onChange={(e) => setEditRow({ ...editRow, buildingArea: e.target.value })} />
             </label>
             <label className="block text-xs text-steel-muted">

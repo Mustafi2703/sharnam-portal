@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { formatUiText } from "../lib/formatUiText";
 import { Badge, Button } from "./ui";
 import { packageClass, delayClass as regDelayClass, disciplineClass } from "../lib/registerTableTheme";
 import { uniqSorted } from "../lib/masterDrawingRegister";
@@ -87,7 +88,7 @@ export function MasterDrawingRegisterTable({
       </div>
 
       <div className="sheet-register__filter-bar px-4 py-3 border-b border-line space-y-3 shrink-0">
-        <p className="reg-filter-label text-[10px] font-mono uppercase tracking-wider">Filter table</p>
+        <p className="reg-filter-label text-xs font-semibold">{formatUiText("Filter Table")}</p>
         <div className="flex flex-wrap gap-1.5">
           {packageOptions.map((p) => (
             <button
@@ -152,7 +153,7 @@ export function MasterDrawingRegisterTable({
               <th>Building</th>
               <th>Discipline</th>
               <th>Drawing no.</th>
-              <th>Drawing title</th>
+              <th>Drawing Name</th>
               <th>Type</th>
               <th>Consultant</th>
               <th>Rev</th>

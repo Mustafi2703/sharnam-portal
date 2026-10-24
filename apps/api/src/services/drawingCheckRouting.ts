@@ -50,7 +50,37 @@ export function drawingCheckReportPrefix(projectCode: string, discipline: string
 }
 
 export function noDrawingCheckTemplateMessage(discipline: string) {
-  return `No Drawing Check template for ${discipline}. Add one in Checklist Manager.`;
+  return `No Drawing Check template for ${discipline}. Set that discipline or package on a Drawing Check in Checklist Manager.`;
+}
+
+function normDisc(value: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Civil / Structural / MEPF aliases so a package name set in Checklist Manager still opens the right check. */
+function discFamily(value: string) {
+  const n = normDisc(value);
+  if (!n) return "";
+  if (n === "architecture" || n === "architectural") return "architecture";
+  if (n === "mep" || n === "mepf") return "mep";
+  if (n === "civil" || n === "structural" || n === "civil and structural" || n === "civil structural") return "civil";
+  return n;
+}
+
+function sameDiscipline(want: string, have: string) {
+  const a = normDisc(want);
+  const b = normDisc(have);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const fa = discFamily(want);
+  const fb = discFamily(have);
+  return Boolean(fa && fa === fb);
 }
 
 /**
@@ -71,6 +101,25 @@ export async function resolveDrawingCheckTemplate(db: PrismaClient, projectId: s
   const named = await db.checklistTemplate.findFirst({ where: base, include, orderBy: { createdAt: "asc" } });
   if (named) return named;
 
+  // Package name on the template (Civil, MEPF, Architectural) may not be the exact pick-list string.
+  const tagged = await db.checklistTemplate.findMany({
+    where: { checklistType: "DrawingCheck", isActive: true, NOT: [{ discipline: null }, { discipline: "" }] },
+    include,
+    orderBy: { createdAt: "asc" },
+  });
+  const loose = tagged.filter((t) => t.discipline && sameDiscipline(discipline, t.discipline));
+  if (loose.length) {
+    const assignedIds = new Set(
+      (
+        await db.checklistAssignment.findMany({
+          where: { projectId, templateId: { in: loose.map((t) => t.id) } },
+          select: { templateId: true },
+        })
+      ).map((a) => a.templateId),
+    );
+    return loose.find((t) => assignedIds.has(t.id)) || loose[0];
+  }
+
   // Deploy window: the column exists but is still null until the backfill script runs.
   // Infer from the template name. Never use another discipline's checklist.
   const want = discipline.trim().toLowerCase();
@@ -90,6 +139,31 @@ export async function resolveDrawingCheckTemplate(db: PrismaClient, projectId: s
     ).map((a) => a.templateId),
   );
   return matches.find((t) => assignedIds.has(t.id)) || matches[0];
+}
+
+/**
+ * Package on the master register wins when Checklist Manager has a Drawing Check for that package.
+ * Otherwise the drawing discipline is used.
+ */
+export async function resolveDrawingCheckForUpload(
+  db: PrismaClient,
+  projectId: string,
+  discipline: string,
+  drawingId?: string | null,
+) {
+  const id = String(drawingId || "").trim();
+  if (id) {
+    const line = await db.drawingRegisterLine.findFirst({
+      where: { projectId, drawingId: id },
+      select: { projectPackage: true },
+    });
+    const pkg = String(line?.projectPackage || "").trim();
+    if (pkg && !sameDiscipline(pkg, discipline)) {
+      const byPackage = await resolveDrawingCheckTemplate(db, projectId, pkg);
+      if (byPackage) return byPackage;
+    }
+  }
+  return resolveDrawingCheckTemplate(db, projectId, discipline);
 }
 
 /** Report numbers already used on submitted Drawing Checks for this project and prefix. */

@@ -158,6 +158,7 @@ export function toAuthUser(
     role: string;
     portal: string;
     vendorId?: string | null;
+    designation?: string | null;
   },
   impersonatedBy?: { id: string; email: string; fullName: string } | null,
   joining?: { joiningOfferId?: string | null; preJoinComplete?: boolean } | null
@@ -169,6 +170,7 @@ export function toAuthUser(
     role: u.role as RoleKey,
     portal: u.portal as PortalKey,
     vendorId: u.vendorId ?? null,
+    designation: u.designation ?? null,
     hrDeskOnly: isHrDeskOnly(u.email, u.role),
     joiningOfferId: joining?.joiningOfferId ?? null,
     preJoinComplete: joining?.preJoinComplete ?? false,

@@ -451,6 +451,18 @@ html.is-standalone-form #root {
   display: block;
   overflow: visible;
 }
+@media print {
+  .pie-card {
+    overflow: visible;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none;
+  }
+  .pie-card svg {
+    max-width: 100% !important;
+    height: auto;
+  }
+}
 .pie-card__accent {
   position: absolute;
   inset: 0 0 auto 0;
@@ -10950,10 +10962,16 @@ tbody td.boq-actions-col {
   }
 }
 
-/* ═══ Futuristic auth — mesh, glass, teal glow (no photo backgrounds) ═══ */
+/* ═══ Login — full-bleed photo, frosted panels that blend into it ═══ */
 .auth-layout--futura {
-  background: #050608;
+  background: #1a2228;
   overflow: hidden;
+  --auth-photo-brightness: 1;
+  --auth-photo-saturate: 1;
+  --auth-photo-contrast: 1.02;
+  --auth-shade-left: 0.34;
+  --auth-shade-mid: 0.22;
+  --auth-shade-right: 0.38;
 }
 
 .auth-fx {
@@ -11038,44 +11056,22 @@ tbody td.boq-actions-col {
 }
 
 .auth-layout__brand--futura {
-  background: #0c0e12;
+  background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 4px 0 0 var(--portal-accent, #0b6a78);
+  border-bottom: none;
+  box-shadow: none;
   overflow: hidden;
 }
 
-.auth-layout__brand--futura::before {
-  display: block;
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: radial-gradient(ellipse 95% 85% at 50% 42%, black 12%, transparent 78%);
-  -webkit-mask-image: radial-gradient(ellipse 95% 85% at 50% 42%, black 12%, transparent 78%);
-  pointer-events: none;
-  z-index: 0;
-}
-
+.auth-layout__brand--futura::before,
 .auth-layout__brand--futura::after {
-  display: block;
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 75% 60% at 18% 22%, rgba(11, 106, 120, 0.32) 0%, transparent 58%),
-    radial-gradient(ellipse 55% 48% at 82% 78%, rgba(99, 102, 241, 0.14) 0%, transparent 52%),
-    linear-gradient(180deg, rgba(8, 10, 12, 0.15) 0%, rgba(8, 10, 12, 0.45) 100%);
-  pointer-events: none;
-  z-index: 0;
+  display: none;
 }
 
 .auth-layout__main--futura {
   background: transparent;
+  color: #f4f7f8;
 }
 
 .auth-layout__portal-chip--futura {
@@ -11102,71 +11098,119 @@ tbody td.boq-actions-col {
 }
 
 .auth-signin--futura {
-  max-width: min(480px, 94vw);
-  background: #101418;
+  width: 100%;
+  max-width: min(400px, 94vw);
+  background: #ffffff;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  contain: layout style paint;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 0 0 1px rgba(11, 106, 120, 0.15),
-    0 24px 64px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  color: #f1f5f9;
-  padding: clamp(1.5rem, 3.5vw, 2.1rem);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(8, 12, 16, 0.28);
+  color: var(--color-ink);
+  padding: 1.6rem 1.5rem 1.35rem;
+  text-align: left;
+}
+
+.auth-signin__portal {
+  margin: 0 0 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-brand-dark);
 }
 
 .auth-signin--futura .auth-signin__title {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.45rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  color: #f8fafc;
+  color: var(--color-ink);
+  text-align: left;
 }
 
-.auth-signin--futura .auth-signin__sub {
-  color: rgba(148, 163, 184, 0.95);
-  font-size: 0.78rem;
+.auth-signin__lead {
+  margin: 0.35rem 0 1.15rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #5c6570;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.auth-signin__badge--futura {
-  background: rgba(11, 106, 120, 0.2);
-  border: 1px solid rgba(11, 106, 120, 0.45);
-  color: #99f6e4;
+.auth-signin__note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #5c6570;
 }
 
 .auth-signin--futura .auth-signin__field span {
-  color: rgba(203, 213, 225, 0.9);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: var(--color-steel-2);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-.auth-signin--futura .auth-signin__field input {
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #f8fafc;
-  border-radius: 10px;
+.auth-signin__reveal {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--color-brand);
+  cursor: pointer;
+}
+
+.auth-signin__reveal:hover {
+  color: var(--color-brand-dark);
+}
+
+.auth-layout--futura .auth-signin__field input,
+.auth-signin--futura .auth-signin__field input,
+[data-theme="dark"] .auth-layout--futura .auth-signin__field input,
+[data-theme="dark"] .auth-layout--futura .auth-signin__field input:focus {
+  background: #ffffff;
+  border: 1px solid #d5dadd;
+  color: var(--color-ink);
+  border-radius: 8px;
+  min-height: 42px;
+  padding: 0.6rem 0.75rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-signin--futura .auth-signin__field input::placeholder {
+  color: #8b939c;
 }
 
 .auth-signin--futura .auth-signin__field input:focus {
   outline: none;
-  border-color: var(--portal-accent, #0b6a78);
-  box-shadow: 0 0 0 3px rgba(11, 106, 120, 0.25);
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 18%, transparent);
+  background: var(--color-paper);
 }
 
 .auth-signin--futura .auth-signin__submit {
-  background: linear-gradient(135deg, var(--portal-accent, #0b6a78) 0%, #085560 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 28px rgba(11, 106, 120, 0.35);
+  margin-top: 0.25rem;
+  min-height: 44px;
+  background: var(--color-brand);
+  border: none;
+  border-radius: 8px;
+  box-shadow: none;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  letter-spacing: 0;
+  color: #fff;
+  transition: background 0.12s ease;
 }
 
 .auth-signin--futura .auth-signin__submit:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 32px rgba(11, 106, 120, 0.45);
+  transform: none;
+  filter: none;
+  background: var(--color-brand-dark);
+  box-shadow: none;
 }
 
 .auth-signin--futura .auth-signin__demo {
@@ -11207,38 +11251,63 @@ tbody td.boq-actions-col {
 }
 
 .auth-hub__header--futura {
-  background: #101418;
+  background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  border: none;
+  box-shadow: none;
+  padding-inline: 0.15rem;
 }
 
 .auth-hub__header--futura .auth-hub__title {
-  color: #f8fafc;
+  color: #f7fafb;
+  text-shadow: 0 1px 8px rgba(8, 12, 16, 0.45);
 }
 
 .auth-hub__header--futura .auth-hub__sub {
-  color: rgba(148, 163, 184, 0.9);
+  color: rgba(244, 247, 248, 0.86);
 }
 
 .auth-hub-card--futura {
-  background: #101418;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  background: rgba(244, 247, 248, 0.58);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-left: 3px solid var(--portal-accent, var(--color-brand));
+  border-radius: var(--ui-radius);
+  box-shadow: 0 10px 28px rgba(8, 12, 16, 0.16);
+  color: var(--color-ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 .auth-hub-card--futura:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--portal-accent) 55%, white);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4), 0 0 24px color-mix(in srgb, var(--portal-accent) 25%, transparent);
+  transform: none;
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.7);
+  border-left-color: var(--portal-accent, var(--color-brand));
+  box-shadow: 0 14px 32px rgba(8, 12, 16, 0.22);
+}
+
+.auth-layout--futura .auth-hub-card__label {
+  color: var(--color-ink);
+}
+
+.auth-layout--futura .auth-hub-card__hint {
+  color: var(--login-panel-muted);
+}
+
+.auth-layout--futura .auth-hub-card__icon {
+  background: color-mix(in srgb, var(--portal-accent, var(--color-brand)) 12%, var(--color-paper));
+  color: var(--portal-accent, var(--color-brand));
+  box-shadow: none;
+}
+
+.auth-layout--futura .auth-hub-card__arrow {
+  color: var(--color-steel-muted);
 }
 
 .auth-hub-card__icon--futura {
-  box-shadow: 0 0 20px color-mix(in srgb, var(--portal-accent) 30%, transparent);
+  box-shadow: none;
 }
 
 .auth-mobile-intro--futura .auth-layout__portal-headline {
@@ -11256,6 +11325,7 @@ tbody td.boq-actions-col {
   .auth-layout--futura.auth-layout--hub .auth-layout__brand--futura {
     align-items: center;
     text-align: center;
+    border-right: none;
   }
 }
 
@@ -11279,11 +11349,14 @@ tbody td.boq-actions-col {
 }
 
 .auth-brand__logo--hero {
-  width: min(100%, 480px);
+  width: min(100%, 420px);
   margin-inline: auto;
-  filter:
-    drop-shadow(0 10px 32px rgba(11, 106, 120, 0.38))
-    drop-shadow(0 4px 14px rgba(0, 0, 0, 0.42));
+  background: transparent;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 10px rgba(8, 12, 16, 0.55));
 }
 
 .auth-brand--center .auth-brand__tagline {
@@ -11463,6 +11536,25 @@ tbody td.boq-actions-col {
   z-index: 1;
 }
 
+.auth-layout--futura .auth-mobile-brand {
+  max-width: none;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--ui-radius);
+  background: transparent;
+}
+
+.auth-layout--futura .auth-mobile-brand::before {
+  background-image: var(--auth-hero, url("/auth/hero-hub.jpg?v=13"));
+  background-size: cover;
+  background-position: center 40%;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+.auth-layout--futura .auth-mobile-brand::after {
+  background: linear-gradient(180deg, rgba(8, 12, 16, 0.12) 0%, rgba(8, 12, 16, 0.42) 100%);
+}
+
 .auth-hub__header--futura {
   padding: 0.65rem 0.85rem;
   margin-bottom: 0.75rem;
@@ -11525,12 +11617,23 @@ tbody td.boq-actions-col {
     padding-top: max(0.75rem, env(safe-area-inset-top));
   }
 
+  .auth-mobile-brand .auth-brand-panel,
+  .auth-mobile-brand .auth-brand-panel__copy,
+  .auth-mobile-brand .auth-bullets--panel {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
   .auth-mobile-brand .auth-brand__logo--hero {
-    width: min(100%, 380px);
+    width: min(100%, 240px);
+    max-width: 100%;
+    height: auto;
   }
 
   .auth-mobile-brand .auth-brand-panel__copy {
-    font-size: 0.92rem;
+    font-size: 0.88rem;
+    padding-inline: 0.35rem;
   }
 
   .auth-hub__stack {

@@ -163,7 +163,7 @@ export const HUB_PORTALS: (keyof typeof PORTAL_LOGINS)[] = [
   "site",
 ];
 
-/** Cinematic hero per portal — each login gets a distinct construction / PMC photo */
+/** Photographic hero per portal — full-bleed login background */
 const PORTAL_HERO: Record<string, string> = {
   hub: "/auth/hero-hub.jpg",
   master: "/auth/hero-master.jpg",
@@ -171,6 +171,7 @@ const PORTAL_HERO: Record<string, string> = {
   site: "/auth/hero-site.jpg",
   vendor: "/auth/hero-vendor.jpg",
   client: "/auth/hero-client.jpg",
+  stakeholder: "/auth/hero-office.jpg",
   drawings: "/auth/hero-drawings.jpg",
   quality: "/auth/hero-quality.jpg",
   comms: "/auth/hero-comms.jpg",
@@ -180,7 +181,11 @@ const PORTAL_HERO: Record<string, string> = {
 
 function portalHero(key: string) {
   const base = PORTAL_HERO[key] ?? "/auth/hero-construction-wide.jpg";
-  return `${base}?v=12`;
+  return `${base}?v=13`;
+}
+
+function authHeroStyle(key: string): CSSProperties {
+  return { ["--auth-hero" as string]: `url("${portalHero(key)}")` };
 }
 
 function portalDisplayName(key: string, shortLabel: string) {
@@ -239,14 +244,11 @@ function AuthLeftPanel({ cfg }: { cfg: PortalConfig }) {
   );
 }
 
-function AuthFuturisticBackdrop() {
+function AuthScene() {
   return (
-    <div className="auth-fx" aria-hidden>
-      <div className="auth-fx__mesh" />
-      <div className="auth-fx__grid" />
-      <div className="auth-fx__orb auth-fx__orb--a" />
-      <div className="auth-fx__orb auth-fx__orb--b" />
-      <div className="auth-fx__orb auth-fx__orb--c" />
+    <div className="auth-scene" aria-hidden>
+      <div className="auth-scene__photo" />
+      <div className="auth-scene__shade" />
     </div>
   );
 }
@@ -301,21 +303,9 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
 
   return (
     <div className="auth-signin auth-signin--solo auth-signin--futura" style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}>
-      <div className="auth-signin__mark">
-        <img
-          src="/logo-transparent.png?v=10"
-          alt="शरणम्"
-          className="auth-signin__mark-logo"
-          width={168}
-          height={81}
-          decoding="async"
-        />
-      </div>
-      <div className="auth-signin__badge auth-signin__badge--futura">
-        <span className="auth-signin__badge-icon" aria-hidden>{cfg.icon}</span>
-        <span>{portalDisplayName(cfg.key, cfg.shortLabel)}</span>
-      </div>
+      <p className="auth-signin__portal">{portalDisplayName(cfg.key, cfg.shortLabel)}</p>
       <h2 className="auth-signin__title">Sign in</h2>
+      <p className="auth-signin__lead">{cfg.subtitle}</p>
 
       <form className="auth-signin__form" onSubmit={onSubmit}>
           <label className="auth-signin__field">
@@ -335,7 +325,7 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
               <button
                 type="button"
                 onClick={() => setShowPwd((v) => !v)}
-                className="text-[10px] uppercase tracking-wide opacity-70 hover:opacity-100"
+                className="auth-signin__reveal"
                 tabIndex={-1}
                 aria-label={showPwd ? "Hide password" : "Show password"}
               >
@@ -356,9 +346,8 @@ function SignInCard({ cfg }: { cfg: PortalConfig }) {
             )}
           </label>
           {cfg.key === "vendor" && (
-            <p className="text-[11px] text-steel-muted leading-relaxed">
-              Use the email on your company in the project directory or Access users. First password is{" "}
-              <strong>Demo@1234</strong> — not vendor@sharnam.demo on the live portal.
+            <p className="auth-signin__note">
+              Use the email on your company in the project directory. The first password is Demo@1234.
             </p>
           )}
           {error && <p className="auth-signin__error" role="alert">{error}</p>}
@@ -419,9 +408,9 @@ export function PortalLoginPage({ portalKey }: { portalKey: keyof typeof PORTAL_
     <div
       className="auth-layout auth-layout--portal auth-layout--futura"
       data-portal={portalKey}
-      style={{ ["--portal-accent" as string]: cfg.tone } as CSSProperties}
+      style={{ ["--portal-accent" as string]: cfg.tone, ...authHeroStyle(portalKey) } as CSSProperties}
     >
-      <AuthFuturisticBackdrop />
+      <AuthScene />
       <AuthMobileNav backTo="/login" />
       <aside className="auth-layout__brand auth-layout__brand--portal auth-layout__brand--futura">
         <AuthLeftPanel cfg={cfg} />
@@ -464,9 +453,9 @@ export function LoginHubPage() {
   return (
     <div
       className="auth-layout auth-layout--hub auth-layout--futura"
-      style={{ ["--portal-accent" as string]: "#0B6A78" } as CSSProperties}
+      style={{ ["--portal-accent" as string]: "#0B6A78", ...authHeroStyle("hub") } as CSSProperties}
     >
-      <AuthFuturisticBackdrop />
+      <AuthScene />
       <AuthMobileNav />
       <aside className="auth-layout__brand auth-layout__brand--hub auth-layout__brand--futura">
         <AuthBrandPanel tagline={HUB_LEFT_TAGLINE} bullets={HUB_LEFT_BULLETS} />

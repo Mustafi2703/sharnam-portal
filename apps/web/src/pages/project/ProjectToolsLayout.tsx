@@ -230,19 +230,9 @@ export default function ProjectToolsLayout() {
 
           <div className="flex items-center gap-2 shrink-0 ml-auto">
             {toolWin ? (
-              <>
-                <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo(hubHref)}>
-                  Back to {moduleLabel} hub
-                </Button>
-                {activeMod !== "home" && (
-                  <Button type="button" variant="ghost" className="!text-sm" onClick={() => closeToolWindowOrGo(projectHomeHref)}>
-                    Back to project home
-                  </Button>
-                )}
-                <Button type="button" variant="ghost" className="!text-sm" onClick={() => window.close()}>
-                  Close window
-                </Button>
-              </>
+              <Button type="button" variant="secondary" className="!text-sm" onClick={() => closeToolWindowOrGo(activeMod === "home" ? projectHomeHref : hubHref)}>
+                Back
+              </Button>
             ) : (
             <Button
               type="button"
@@ -273,11 +263,6 @@ export default function ProjectToolsLayout() {
             <Badge tone="ok">{gate.publishedCount} drawings</Badge>
           </div>
         </div>
-        {toolWin && activeTool !== "hub" && (
-          <div className="px-3 sm:px-5 pb-2.5 text-xs text-steel-muted">
-            Editing <strong className="text-ink">{toolLabel}</strong> — add a row or section, save, then return to the hub.
-          </div>
-        )}
 
         {showModuleNav && (
           <div className="tool-strip px-2 sm:px-4 py-2 border-t border-line bg-paper">

@@ -148,10 +148,6 @@ export function DrawingCheckModal({
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-3 bg-paper text-ink">
-          <p className="text-sm text-ink/80 leading-relaxed">
-            Complete Yes / No / N.A. for each item. Upload stays on this page — no separate window.
-          </p>
-
           {loading && <p className="text-sm text-ink/70 py-8 text-center">Loading checklist…</p>}
           {error && (
             <p className="text-sm text-danger border border-[color-mix(in_srgb,var(--color-danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-danger)_10%,var(--color-paper))] rounded-xl px-3 py-2">

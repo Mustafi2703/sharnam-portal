@@ -185,7 +185,6 @@ export default function DrawingSettingsPage() {
       <PageHeader
         eyebrow="Drawings module · Settings"
         title="Drawing settings"
-        subtitle="Pick-lists for the register, RFIs and design coordination; load the client's reference workbooks; save the generated sheets to SharePoint."
       />
       <StatusNote msg={msg} />
 

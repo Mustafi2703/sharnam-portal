@@ -213,9 +213,6 @@ function DrawingRegisterDashboard({ data, projectId, token }: { data: any; proje
             ) : null}
           </>
         ) : null}
-        <p className="text-xs text-steel-muted max-w-xl">
-          {range.label}. Counts come from GFC uploads and the master register. A new week folder is filed on SharePoint for the WPR and DPR.
-        </p>
       </Card>
       <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {[
@@ -226,7 +223,7 @@ function DrawingRegisterDashboard({ data, projectId, token }: { data: any; proje
           ["Delayed", delayed],
         ].map(([l, v]) => (
           <Card key={l as string} className="!p-4">
-            <div className="text-[10px] uppercase text-steel-muted font-mono">{l}</div>
+            <div className="text-xs font-semibold text-steel-muted">{formatUiText(String(l))}</div>
             <div className="text-2xl font-display mt-1">{v as string | number}</div>
           </Card>
         ))}
@@ -255,14 +252,10 @@ export default function DrawingRegisterPage() {
   const [filterBuilding, setFilterBuilding] = useState("All");
   const [filterDiscipline, setFilterDiscipline] = useState("All");
   const [filterCritical, setFilterCritical] = useState("All");
-  const [publishBusy, setPublishBusy] = useState(false);
-  const [importBusy, setImportBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [lineModal, setLineModal] = useState(false);
   const [savingLine, setSavingLine] = useState(false);
   const canEdit = ["admin", "office", "employee", "site_employee"].includes(user?.role || "");
-  /** Import (bulk overwrite from Excel) is an office task; everyone who can view can export. */
-  const isOffice = user?.role === "admin" || user?.role === "office";
 
   const load = async () => {
     const res = await api(`/api/drawings/project/${id}/register-dashboard`, { token });
@@ -316,34 +309,6 @@ export default function DrawingRegisterPage() {
     }
   }
 
-  async function importRegisterFile(file: File | null) {
-    if (!file || !id) return;
-    setImportBusy(true);
-    setMsg("Importing master register from Excel…");
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const out = await api<{ lines: number; source: string; warnings?: string[] }>(`/api/drawings/project/${id}/register/import`, {
-        method: "POST",
-        token,
-        body: fd,
-        timeoutMs: 180_000,
-      });
-      const warnings = out.warnings || [];
-      setMsg(
-        `Imported ${out.lines} master lines from ${out.source}. Charts refresh below.` +
-          (warnings.length
-            ? ` ${warnings.length} warning${warnings.length === 1 ? "" : "s"}: ${warnings.slice(0, 5).join("; ")}${warnings.length > 5 ? "; and more" : ""}.`
-            : ""),
-      );
-      await load();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Import failed");
-    } finally {
-      setImportBusy(false);
-    }
-  }
-
   const lines = data?.lines || [];
 
   const filteredLines = useMemo(() => {
@@ -369,11 +334,7 @@ export default function DrawingRegisterPage() {
       <PageHeader
         eyebrow="Drawings module"
         title={sheetView.label}
-        subtitle={
-          sheetKey === "master"
-            ? "Every GFC upload updates its line here. Set the planned submission date and criticality — delay counts from the planned date until the drawing is submitted (red = late). Download as Sharnam-branded Excel or PDF; the same files are kept on SharePoint."
-            : "DRAWING REGISTER - 01.xlsx Dashboard. Charts fill from GFC uploads and the master register. Pick a week or dates. Each week is filed for the WPR and DPR."
-        }
+        subtitle={sheetKey === "master" ? undefined : data?.weekLabel}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="brand">{data?.totals?.lines ?? 0} lines</Badge>
@@ -439,42 +400,6 @@ export default function DrawingRegisterPage() {
               </>
             )}
             {id && <DrawingPackMenu projectId={id} token={token} onMsg={setMsg} canPublish={canEdit} />}
-            {canEdit && id && (
-              <>
-                {isOffice ? (
-                <label className="inline-flex items-center rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-sand/60 cursor-pointer">
-                  {importBusy ? "Importing…" : "Import Excel"}
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="sr-only"
-                    disabled={importBusy}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] || null;
-                      e.target.value = "";
-                      void importRegisterFile(f);
-                    }}
-                  />
-                </label>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="!text-xs"
-                  disabled={publishBusy}
-                  onClick={() => {
-                    setPublishBusy(true);
-                    setMsg("Syncing the database into the SharePoint sheets…");
-                    void api(`/api/drawings/project/${id}/publish-registers`, { method: "POST", token, timeoutMs: 180_000 })
-                      .then(() => setMsg("SharePoint synced — live sheets plus this week’s folder for the WPR and DPR."))
-                      .catch((err) => setMsg(err instanceof Error ? err.message : "Publish failed"))
-                      .finally(() => setPublishBusy(false));
-                  }}
-                >
-                  {publishBusy ? "Syncing…" : "Sync to SharePoint"}
-                </Button>
-              </>
-            )}
             {sheetKey === "" && (
               <Link to={`/projects/${id}/drawings/register/master`} className="text-sm font-semibold text-brand">
                 Master register →
@@ -515,7 +440,6 @@ export default function DrawingRegisterPage() {
           >
             + Add master register line
           </Button>
-          <span className="text-xs text-steel-muted">Opens a form with every register column; required fields are marked *.</span>
         </div>
       )}
 
@@ -577,17 +501,6 @@ export default function DrawingRegisterPage() {
         </div>
       )}
 
-      {sheetKey === "" && (
-        <Card className="text-sm text-steel-muted">
-          <p>
-            Counts and charts above come from master register lines on this project. Use <strong>Master register</strong> for DCI columns, then upload on{" "}
-            <Link to={`/projects/${id}/drawings`} className="text-brand font-semibold">
-              Approval & GFC Log
-            </Link>{" "}
-            after Drawing Check Master unlocks. Publish writes the formatted Excel and PDF to the project drawings folder on SharePoint.
-          </p>
-        </Card>
-      )}
     </div>
   );
 }

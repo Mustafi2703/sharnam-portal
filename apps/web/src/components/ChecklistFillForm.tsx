@@ -6,6 +6,21 @@ import { StandaloneFormHeader } from "./StandaloneFormHeader";
 import { StatusNote } from "./StatusNote";
 import { formatUiText } from "../lib/formatUiText";
 
+function displayTitle(raw: string) {
+  return raw
+    .split(/(\s+|&)/)
+    .map((part) => {
+      if (!/[A-Za-z]/.test(part)) return part;
+      const word = part.replace(/[^A-Za-z0-9.]/g, "");
+      if (/^(PDF|DWG|GFC|RFI|SPDC|PMC|NCR|QAP|HSE|NA)$/i.test(word)) {
+        return word.toUpperCase() === "NA" ? "N.A." : word.toUpperCase();
+      }
+      const lower = part.toLowerCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join("");
+}
+
 export type ChecklistFillItem = {
   id: string;
   itemCode?: string;
@@ -166,6 +181,8 @@ type Props = {
   signerLabel?: string;
   /** First signer name is fixed (e.g. the logged in user). */
   signerNameLocked?: boolean;
+  /** Sharnam staff names for the Site Project Team sign-off box. */
+  staffNames?: string[];
   /** When set, submit stays disabled and this reason shows under the button. */
   submitBlockedReason?: string;
 };
@@ -229,6 +246,7 @@ export function ChecklistFillForm({
   requireSignature = false,
   signerLabel,
   signerNameLocked = false,
+  staffNames = [],
   submitBlockedReason,
 }: Props) {
   const [hasSignature, setHasSignature] = useState(false);
@@ -329,15 +347,17 @@ export function ChecklistFillForm({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             {category ? (
-              <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-steel-muted">{category}</p>
+              <p className={family === "DrawingCheck" ? "text-xs font-semibold text-steel-muted" : "text-[10px] font-mono uppercase tracking-[0.16em] text-steel-muted"}>
+                {family === "DrawingCheck" ? displayTitle(category) : category}
+              </p>
             ) : null}
-            <h1 className="font-display text-xl text-ink mt-0.5">{title}</h1>
+            <h1 className="font-display text-xl text-ink mt-0.5">{family === "DrawingCheck" ? displayTitle(title) : title}</h1>
+            {family === "DrawingCheck" ? null : (
             <p className="text-sm text-steel-muted mt-1">
-              {family === "DrawingCheck"
-                ? "Yes / No / N.A. on every line. Items are managed in Drawing checklist master — no photos or links on this gate."
-                : "Yes / No / N.A. on every line. Photos and files are optional unless the template requires them."}
+              Yes / No / N.A. on every line. Photos and files are optional unless the template requires them.
               {evidenceOn && minPhotos > 0 ? ` At least ${minPhotos} photos required (${photoTotal} attached).` : ""}
             </p>
+            )}
           </div>
           <div className="text-right space-y-1">
             <div className="text-2xl font-display text-brand">
@@ -422,13 +442,13 @@ export function ChecklistFillForm({
             </h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <label className="block text-sm">
-                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Report no.</span>
+                <span className="text-xs font-semibold text-steel-muted">{formatUiText("Report No.")}</span>
                 <Input className="mt-1 bg-sand/50" value={fillMeta.reportNo} readOnly aria-readonly="true" placeholder="Auto" />
                 <span className="text-[11px] text-steel-muted">{formatUiText("Auto-generated")}</span>
               </label>
               <label className="block text-sm">
-                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">
-                  Ref. drawing{refDrawingLocked ? "" : " *"}
+                <span className="text-xs font-semibold text-steel-muted">
+                  {formatUiText("Drawing Number")}{refDrawingLocked ? "" : " *"}
                 </span>
                 {refDrawingLocked ? (
                   <Input
@@ -450,17 +470,17 @@ export function ChecklistFillForm({
                 )}
               </label>
               <label className="block text-sm">
-                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Building / area</span>
+                <span className="text-xs font-semibold text-steel-muted">{formatUiText("Building")}</span>
                 <Input
                   className="mt-1"
-                  placeholder="Building or area"
+                  placeholder="Building"
                   value={fillMeta.location}
                   onChange={(e) => onFillMeta({ ...fillMeta, location: e.target.value })}
                   disabled={!editable}
                 />
               </label>
               <div className="block text-sm">
-                <span className="text-xs font-mono uppercase tracking-wider text-steel-muted">Discipline</span>
+                <span className="text-xs font-semibold text-steel-muted">{formatUiText("Discipline")}</span>
                 <div className="mt-2">
                   <Badge tone="brand">{discipline || "Not set"}</Badge>
                 </div>
@@ -518,11 +538,14 @@ export function ChecklistFillForm({
         <form onSubmit={onSubmit} className="surface brand-frame p-5 sm:p-7 space-y-6">
           <div className="pb-4 border-b border-line flex flex-wrap gap-3 justify-between">
             <div>
-              <div className="text-xs font-mono uppercase text-steel-muted">{sectionNo("lines")}. Checklist lines</div>
+              <div className={drawingHeader ? "text-xs font-semibold text-steel-muted" : "text-xs font-mono uppercase text-steel-muted"}>
+                {sectionNo("lines")}. {drawingHeader ? formatUiText("Checklist Lines") : "Checklist lines"}
+              </div>
               <div className="font-semibold mt-1">
-                {drawingHeader ? formatUiText("Answer each line") : "Answer each line · photos, files, or SharePoint links"}
+                {drawingHeader ? formatUiText("Answer Each Line") : "Answer each line · photos, files, or SharePoint links"}
               </div>
             </div>
+            {drawingHeader ? null : (
             <Input
               className="max-w-xs"
               value={remarks}
@@ -530,12 +553,15 @@ export function ChecklistFillForm({
               placeholder="Overall remarks"
               disabled={!editable}
             />
+            )}
           </div>
 
           <div className="space-y-8">
             {sections.map((section) => (
               <section key={section} className="space-y-4">
-                <h3 className="font-mono text-[11px] uppercase tracking-[0.2em] text-mark">{section}</h3>
+                <h3 className={drawingHeader ? "text-sm font-semibold text-ink" : "font-mono text-[11px] uppercase tracking-[0.2em] text-mark"}>
+                  {drawingHeader ? displayTitle(section) : section}
+                </h3>
                 {items
                   .filter((i) => (i.section || "General") === section)
                   .map((item, idx) => {
@@ -677,9 +703,21 @@ export function ChecklistFillForm({
             ))}
           </div>
 
+          {drawingHeader ? (
+            <div className="pt-4 border-t border-line">
+              <TextArea
+                label={formatUiText("Overall Remarks")}
+                value={remarks}
+                onChange={(e) => onRemarks(e.target.value)}
+                disabled={!editable}
+                rows={3}
+              />
+            </div>
+          ) : null}
+
           <div className="pt-4 border-t border-line space-y-4">
             {drawingHeader ? (
-              <div className="text-xs font-mono uppercase text-steel-muted">{sectionNo("signoff")}. Sign-off</div>
+              <div className="text-xs font-semibold text-steel-muted">{sectionNo("signoff")}. {formatUiText("Sign-off")}</div>
             ) : null}
             <div className="grid md:grid-cols-2 gap-4">
               {evidenceOn && (
@@ -725,6 +763,21 @@ export function ChecklistFillForm({
               >
                 {!clientSignOnly ? (
                   <div className="space-y-2">
+                    {drawingHeader && staffNames.length ? (
+                      <Select
+                        label={signerLabel ? `${signerLabel} - Name` : formatUiText("Site Project Team - Name")}
+                        value={signMeta.inspectorName}
+                        onChange={(e) => patchSign({ inspectorName: e.target.value })}
+                        disabled={!editable}
+                      >
+                        <option value="">{formatUiText("Select Employee")}</option>
+                        {staffNames.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
                     <Input
                       label={signerLabel ? `${signerLabel} - name` : "Inspector / site engineer - name"}
                       value={signerNameLocked ? signerName || signMeta.inspectorName : signMeta.inspectorName}
@@ -734,6 +787,7 @@ export function ChecklistFillForm({
                       className={signerNameLocked ? "bg-sand/50" : undefined}
                       placeholder="Name of person who filled this"
                     />
+                    )}
                     <SignaturePad
                       onCapture={captureSignature}
                       personName={signerNameLocked ? signerName || signMeta.inspectorName : signMeta.inspectorName}

@@ -1,10 +1,13 @@
 import { type CSSProperties } from "react";
 import { Outlet } from "react-router-dom";
+import { useAuth } from "../../auth";
+import { HrmOrgProvider } from "../../lib/hrmOrg";
 import HrmsToolNav from "./HrmsToolNav";
 import { HRMS_ACCENT, HRMS_SOFT } from "./hrmsNav";
 
 /** HRMS content — section tool strip only (title lives in the portal top bar). */
 export default function HrmsLayout() {
+  const { token } = useAuth();
   return (
     <div
       className="hrms-module flex flex-col gap-4 pb-8 min-w-0 w-full"
@@ -22,7 +25,9 @@ export default function HrmsLayout() {
         </div>
       </div>
       <div className="hrms-module__outlet min-w-0 w-full">
-        <Outlet />
+        <HrmOrgProvider token={token}>
+          <Outlet />
+        </HrmOrgProvider>
       </div>
     </div>
   );

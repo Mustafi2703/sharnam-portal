@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SPDC_HIRING_ROLES, scorecardRoleForDesignation } from "@sharnam/shared";
 import { api } from "../api";
 
@@ -19,28 +19,67 @@ export const LOGIN_TYPE_OPTIONS = [
   { value: "site_employee", label: "Site login" },
 ] as const;
 
-/** Open departments and roles from HRMS · Masters, for every picker in HRMS. */
-export function useHrmOrg(token: string | null | undefined, opts: { includeClosedRoles?: boolean } = {}) {
+type HrmOrgStore = {
+  departments: HrmDepartmentRow[];
+  designations: HrmDesignationRow[];
+  loaded: boolean;
+  reload: () => Promise<void>;
+};
+
+const HrmOrgContext = createContext<HrmOrgStore | null>(null);
+
+function useHrmOrgLoader(token: string | null | undefined, enabled: boolean): HrmOrgStore {
   const [departments, setDepartments] = useState<HrmDepartmentRow[]>([]);
   const [designations, setDesignations] = useState<HrmDesignationRow[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const all = opts.includeClosedRoles ? "?all=1" : "";
 
   const reload = useCallback(async () => {
+    if (!token) {
+      setDepartments([]);
+      setDesignations([]);
+      setLoaded(true);
+      return;
+    }
     const [d, r] = await Promise.all([
       api<HrmDepartmentRow[]>("/api/hrm/departments", { token }).catch(() => []),
-      api<HrmDesignationRow[]>(`/api/hrm/designations${all}`, { token }).catch(() => []),
+      api<HrmDesignationRow[]>("/api/hrm/designations?all=1", { token }).catch(() => []),
     ]);
     setDepartments(d);
     setDesignations(r);
     setLoaded(true);
-  }, [token, all]);
+  }, [token]);
 
   useEffect(() => {
+    if (!enabled) return;
     void reload();
-  }, [reload]);
+  }, [enabled, reload]);
 
   return { departments, designations, loaded, reload };
+}
+
+/** One org fetch for the whole HRMS desk — avoids empty flash when switching Recruitment ↔ Masters. */
+export function HrmOrgProvider({ token, children }: { token: string | null | undefined; children: ReactNode }) {
+  const value = useHrmOrgLoader(token, true);
+  return <HrmOrgContext.Provider value={value}>{children}</HrmOrgContext.Provider>;
+}
+
+/** Open departments and roles from HRMS · Masters, for every picker in HRMS. */
+export function useHrmOrg(token: string | null | undefined, opts: { includeClosedRoles?: boolean } = {}) {
+  const ctx = useContext(HrmOrgContext);
+  const local = useHrmOrgLoader(token, !ctx);
+  const source = ctx ?? local;
+
+  const designations = useMemo(() => {
+    if (opts.includeClosedRoles) return source.designations;
+    return source.designations.filter((d) => d.isActive);
+  }, [source.designations, opts.includeClosedRoles]);
+
+  return {
+    departments: source.departments,
+    designations,
+    loaded: source.loaded,
+    reload: source.reload,
+  };
 }
 
 /** Open roles under a department; keeps the current value listed so older records still show it. */

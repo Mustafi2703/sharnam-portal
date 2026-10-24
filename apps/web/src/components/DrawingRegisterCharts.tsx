@@ -113,7 +113,7 @@ export function DrawingRegisterCharts({ lines }: { lines: RegisterDashLine[] }) 
   return (
     <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
       <div className="md:col-span-2">
-        <ColumnChart title="Location wise drawings submitted" subtitle="Building / area by discipline" items={locationRows} series={discSeries} yLabel="Drawings" />
+        <ColumnChart title="Location wise drawings submitted" subtitle="Building by discipline" items={locationRows} series={discSeries} yLabel="Drawings" />
       </div>
       <PieChart title="Total drawings submitted" items={byDiscipline} />
       <PieChart title="Total critical drawings" items={critical} />

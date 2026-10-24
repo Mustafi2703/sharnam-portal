@@ -2010,11 +2010,16 @@ checklistRouter.post(
     const discipline = String(req.body?.discipline || "").trim();
     if (!discipline) return res.status(400).json({ error: "discipline is required for the Drawing Check." });
     const {
-      resolveDrawingCheckTemplate,
+      resolveDrawingCheckForUpload,
       noDrawingCheckTemplateMessage,
       confirmDrawingCheckReportNo,
     } = await import("../services/drawingCheckRouting.js");
-    const template = await resolveDrawingCheckTemplate(prisma, projectId, discipline);
+    const template = await resolveDrawingCheckForUpload(
+      prisma,
+      projectId,
+      discipline,
+      String(req.body?.drawingId || ""),
+    );
     if (!template) return res.status(404).json({ error: noDrawingCheckTemplateMessage(discipline) });
     const sentTemplateId = String(req.body?.templateId || "").trim();
     if (!sentTemplateId) return res.status(400).json({ error: "templateId is required. Reload the Drawing Check and try again." });
@@ -2170,10 +2175,11 @@ checklistRouter.get("/project/:projectId/drawing-check-template", async (req: Au
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { code: true } });
   if (!project) return res.status(404).json({ error: "Project not found" });
 
-  const { resolveDrawingCheckTemplate, noDrawingCheckTemplateMessage, nextDrawingCheckReportNo } = await import(
+  const { resolveDrawingCheckForUpload, noDrawingCheckTemplateMessage, nextDrawingCheckReportNo } = await import(
     "../services/drawingCheckRouting.js"
   );
-  const template = await resolveDrawingCheckTemplate(prisma, projectId, discipline);
+  const drawingId = typeof req.query.drawing === "string" ? req.query.drawing.trim() : "";
+  const template = await resolveDrawingCheckForUpload(prisma, projectId, discipline, drawingId);
   if (!template) return res.status(404).json({ error: noDrawingCheckTemplateMessage(discipline) });
 
   const assignment = await prisma.checklistAssignment.findUnique({
@@ -2214,8 +2220,13 @@ checklistRouter.post(
     const projectId = req.params.projectId;
     const discipline = String(req.body?.discipline || "").trim();
     if (!discipline) return res.status(400).json({ error: "discipline is required." });
-    const { resolveDrawingCheckTemplate, noDrawingCheckTemplateMessage } = await import("../services/drawingCheckRouting.js");
-    const template = await resolveDrawingCheckTemplate(prisma, projectId, discipline);
+    const { resolveDrawingCheckForUpload, noDrawingCheckTemplateMessage } = await import("../services/drawingCheckRouting.js");
+    const template = await resolveDrawingCheckForUpload(
+      prisma,
+      projectId,
+      discipline,
+      String(req.body?.drawingId || ""),
+    );
     if (!template) return res.status(404).json({ error: noDrawingCheckTemplateMessage(discipline) });
     const sentTemplateId = String(req.body?.templateId || "").trim();
     if (sentTemplateId && sentTemplateId !== template.id) {

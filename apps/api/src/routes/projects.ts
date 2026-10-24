@@ -199,6 +199,7 @@ async function syncMasterRegisterFromRevision(opts: {
   title?: string;
   discipline?: string | null;
   buildingArea?: string | null;
+  projectPackage?: string | null;
   revisionNumber: string;
   revisionLabel?: string | null;
   plannedDate?: Date | null;
@@ -225,6 +226,7 @@ async function syncMasterRegisterFromRevision(opts: {
         drawingTitle: opts.title || opts.drawingNumber,
         discipline: opts.discipline || "Architecture",
         building: opts.buildingArea || null,
+        projectPackage: opts.projectPackage?.trim() || null,
         drawingType: "Good For Construction (GFC)",
         revisionNumber: opts.revisionNumber,
         latestRevision: "Yes",
@@ -260,6 +262,9 @@ async function syncMasterRegisterFromRevision(opts: {
       remarks: opts.issueRemarks ?? line.remarks,
       discipline: opts.discipline || line.discipline,
       building: opts.buildingArea || line.building,
+      ...(opts.projectPackage !== undefined && opts.projectPackage !== null
+        ? { projectPackage: opts.projectPackage.trim() || null }
+        : {}),
     },
   });
   publishDrawingRegistersInBackground(opts.projectId);
@@ -2046,6 +2051,7 @@ drawingsRouter.get("/project/:projectId", async (req, res) => {
   const drawings = await prisma.drawing.findMany({
     where: { projectId: req.params.projectId },
     include: {
+      registerLine: { select: { projectPackage: true } },
       revisions: {
         orderBy: { createdAt: "asc" },
         include: revisionInclude,
@@ -2201,9 +2207,17 @@ drawingsRouter.post(
     });
     if (!unlock.ok) return res.status(400).json({ error: unlock.error });
 
-    const { drawingNumber, title, discipline, revisionNumber, publish, buildingArea, tlNo, plannedDate, actualDate } =
+    const { drawingNumber, title, discipline, revisionNumber, publish, buildingArea, tlNo, plannedDate, actualDate, projectPackage } =
       req.body;
     if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
+
+    const pkgUpload = String(projectPackage || "").trim();
+    if (pkgUpload) {
+      const { projectPackageNames, packageNotAllowed } = await import("../services/workPackageCatalog.js");
+      const allowed = await projectPackageNames(project.id);
+      const packageError = packageNotAllowed(pkgUpload, allowed, []);
+      if (packageError) return res.status(400).json({ error: packageError, fields: { projectPackage: packageError } });
+    }
 
     const { pdf, extraPdfs, dwg } = drawingUploadFiles(req);
     if (!pdf && !dwg && !extraPdfs.length) return res.status(400).json({ error: "At least one of PDF or DWG required after checklist" });
@@ -2364,6 +2378,7 @@ drawingsRouter.post(
         title: fresh.title,
         discipline: fresh.discipline,
         buildingArea: fresh.buildingArea,
+        projectPackage: pkgUpload || null,
         revisionNumber: latestRev.revisionNumber,
         revisionLabel: latestRev.revisionLabel,
         plannedDate: latestRev.plannedDate,
@@ -2385,8 +2400,16 @@ drawingsRouter.post(
     const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
     if (!project) return res.status(404).json({ error: "Not found" });
 
-    const { drawingNumber, title, discipline, buildingArea, tlNo, revisionNumber } = req.body || {};
+    const { drawingNumber, title, discipline, buildingArea, tlNo, revisionNumber, projectPackage } = req.body || {};
     if (!drawingNumber || !title) return res.status(400).json({ error: "drawingNumber and title required" });
+
+    const pkg = String(projectPackage || "").trim();
+    if (pkg) {
+      const { projectPackageNames, packageNotAllowed } = await import("../services/workPackageCatalog.js");
+      const allowed = await projectPackageNames(project.id);
+      const packageError = packageNotAllowed(pkg, allowed, []);
+      if (packageError) return res.status(400).json({ error: packageError, fields: { projectPackage: packageError } });
+    }
 
     const rev = revisionNumber || "R0";
     const drawing = await prisma.drawing.upsert({
@@ -2430,6 +2453,7 @@ drawingsRouter.post(
       title: drawing.title,
       discipline: drawing.discipline,
       buildingArea: drawing.buildingArea,
+      projectPackage: pkg || null,
       revisionNumber: rev,
     });
     res.status(201).json(drawing);
@@ -2666,6 +2690,19 @@ drawingsRouter.patch(
     }
     if (body.isPublished !== undefined) data.isPublished = Boolean(body.isPublished);
     const updated = await prisma.drawing.update({ where: { id: drawing.id }, data });
+    if (body.projectPackage !== undefined) {
+      const pkg = String(body.projectPackage || "").trim();
+      if (pkg) {
+        const { projectPackageNames, packageNotAllowed } = await import("../services/workPackageCatalog.js");
+        const allowed = await projectPackageNames(drawing.projectId);
+        const line = await prisma.drawingRegisterLine.findFirst({
+          where: { drawingId: drawing.id },
+          select: { projectPackage: true },
+        });
+        const packageError = packageNotAllowed(pkg, allowed, line?.projectPackage ? [line.projectPackage] : []);
+        if (packageError) return res.status(400).json({ error: packageError, fields: { projectPackage: packageError } });
+      }
+    }
     await prisma.drawingRegisterLine
       .updateMany({
         where: { drawingId: drawing.id },
@@ -2673,6 +2710,7 @@ drawingsRouter.patch(
           ...(body.title != null ? { drawingTitle: String(body.title) } : {}),
           ...(body.discipline != null ? { discipline: String(body.discipline) } : {}),
           ...(body.buildingArea != null ? { building: String(body.buildingArea) } : {}),
+          ...(body.projectPackage !== undefined ? { projectPackage: String(body.projectPackage || "").trim() || null } : {}),
         },
       })
       .catch(() => undefined);

@@ -19,6 +19,7 @@ export function openChecklistFillWindow(
     drawingId?: string;
     revisionId?: string;
     rfi?: string;
+    section?: string;
   }
 ) {
   openInPageOverlay({
@@ -31,6 +32,7 @@ export function openChecklistFillWindow(
     drawingId: opts?.drawingId,
     revisionId: opts?.revisionId,
     rfi: opts?.rfi,
+    section: opts?.section,
   });
   return window;
 }

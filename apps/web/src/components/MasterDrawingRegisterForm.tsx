@@ -108,28 +108,13 @@ export function MasterDrawingRegisterForm({
   return (
     <div className={inModal ? "" : "sheet-register overflow-hidden"}>
       <datalist id="master-pick-building">{buildingOptions.map((v) => <option key={v} value={v} />)}</datalist>
-      {inModal ? (
-        <p className="text-xs text-steel-muted">
-          Fields marked * are required. After saving, upload the PDF/DWG on the{" "}
-          <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">Approval & GFC Log</Link> with the same drawing number.
-        </p>
-      ) : (
+      {!inModal ? (
       <div className="sheet-register__head flex-col sm:flex-row sm:items-start gap-2">
-        <div>
-          <div className="font-display text-sm text-ink">
-            {editingId ? `Edit master line · ${form.drawingNumber || "…"}` : "Add master register line"}
-          </div>
-          <p className="text-xs font-normal text-steel-muted mt-1 max-w-2xl">
-            Full DCI row from <strong>Master Drawing Register</strong> sheet — separate from GFC file upload. After
-            saving, upload PDF/DWG on{" "}
-            <Link to={`/projects/${projectId}/drawings`} className="text-brand font-semibold">
-              Approval & GFC Log
-            </Link>{" "}
-            with the same drawing number to link files.
-          </p>
+        <div className="font-display text-sm text-ink">
+          {editingId ? `Edit Master Line · ${form.drawingNumber || "…"}` : "Add Master Register Line"}
         </div>
       </div>
-      )}
+      ) : null}
 
       <form id={formId} className={inModal ? "space-y-4" : "p-4 space-y-4 bg-paper"} onSubmit={submit}>
         <Section title="Drawing identity" tint="border-line bg-gradient-to-br from-sky-50/80 to-white">
@@ -192,7 +177,7 @@ export function MasterDrawingRegisterForm({
               className="font-mono"
             />
           </Field>
-          <Field label="Drawing title *" className="lg:col-span-2">
+          <Field label="Drawing Name *" className="lg:col-span-2">
             <Input
               value={form.drawingTitle}
               onChange={(e) => set({ drawingTitle: e.target.value })}

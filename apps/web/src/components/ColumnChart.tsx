@@ -124,7 +124,7 @@ export function ColumnChart({
 
   return (
     <Frame title={title} subtitle={subtitle} legend={ser}>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto print:overflow-visible">
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title} className="max-w-none">
           {ticks.map((t) => (
             <g key={t}>
@@ -211,7 +211,7 @@ export function LineChart({
   const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
   return (
     <Frame title={title} subtitle={subtitle} legend={series}>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto print:overflow-visible">
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title} className="max-w-none">
           {ticks.map((t) => (
             <g key={t}>

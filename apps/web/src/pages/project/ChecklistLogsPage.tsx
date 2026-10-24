@@ -272,7 +272,6 @@ export default function ChecklistLogsPage({ lockedFamily }: { lockedFamily?: str
       ) : (
       <PageHero
         title={title}
-        subtitle="Information log of completed / in-progress checklist fills linked to RFIs and IRs. Raise and fill on the module register — not here."
         actions={
           <div className="flex flex-wrap gap-2">
             {id && (

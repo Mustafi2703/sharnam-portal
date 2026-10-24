@@ -174,11 +174,16 @@ export async function loadRegisterPivotBundle(projectId: string): Promise<Regist
 
 function stampWorkbookBrand(sheet: ExcelJS.Worksheet, title: string, projectName: string, lastCol = 8) {
   const logo = sharnamLogoPath();
-  sheet.getRow(1).height = 36;
+  sheet.getRow(1).height = 48;
+  sheet.getColumn(1).width = Math.max(Number(sheet.getColumn(1).width) || 0, 18);
   if (logo) {
     try {
       const imgId = sheet.workbook.addImage({ filename: logo, extension: "png" });
-      sheet.addImage(imgId, { tl: { col: 0.15, row: 0.08 }, ext: { width: 120, height: 36 }, editAs: "oneCell" });
+      sheet.addImage(imgId, {
+        tl: { col: 0.15, row: 0.2 },
+        ext: { width: 108, height: 34 },
+        editAs: "oneCell",
+      });
     } catch {
       /* logo optional */
     }
@@ -200,11 +205,23 @@ function stampWorkbookBrand(sheet: ExcelJS.Worksheet, title: string, projectName
 function styleHeaderRow(row: ExcelJS.Row) {
   row.eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    cell.font = { name: "Arial", bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
     cell.border = BOX;
-    cell.alignment = { vertical: "middle", wrapText: true };
+    cell.alignment = { vertical: "middle", wrapText: true, horizontal: "center" };
   });
-  row.height = 22;
+  row.height = 36;
+}
+
+function printableSheet(sheet: ExcelJS.Worksheet) {
+  sheet.pageSetup = {
+    orientation: "landscape",
+    paperSize: 8 as ExcelJS.PaperSize,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  };
 }
 
 function writePivotBlock(
@@ -221,14 +238,32 @@ function writePivotBlock(
     h.getCell(i + 1).value = text;
   });
   styleHeaderRow(h);
+  const valueCol = headers.length;
+  const maxVal = Math.max(
+    1,
+    ...rows.map((cells) => {
+      const n = Number(cells[valueCol - 1]);
+      return Number.isFinite(n) ? n : 0;
+    }),
+  );
+  const barCols = 12;
+  for (let b = 0; b < barCols; b++) sheet.getColumn(valueCol + 1 + b).width = 2.2;
   rows.forEach((cells, ri) => {
     const row = sheet.getRow(startRow + 2 + ri);
     cells.forEach((c, ci) => {
       row.getCell(ci + 1).value = c;
       row.getCell(ci + 1).border = BOX;
     });
+    const n = Number(cells[valueCol - 1]);
+    const filled = Number.isFinite(n) && n > 0 ? Math.max(1, Math.round((n / maxVal) * barCols)) : 0;
+    for (let b = 0; b < barCols; b++) {
+      const cell = row.getCell(valueCol + 1 + b);
+      if (b < filled) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A5F" } };
+      }
+    }
+    row.height = 18;
   });
-  const valueCol = headers.length;
   if (rows.length && rows.some((cells) => typeof cells[valueCol - 1] === "number")) {
     const letter = String.fromCharCode(64 + valueCol);
     const first = startRow + 2;
@@ -287,12 +322,12 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
     views: [{ showGridLines: false }],
     properties: { defaultRowHeight: 18 },
   });
-  dash.getColumn(1).width = 22;
-  dash.getColumn(2).width = 18;
-  dash.getColumn(3).width = 18;
-  dash.getColumn(4).width = 14;
-
-  stampWorkbookBrand(dash, `Drawing Register Dashboard — ${bundle.weekLabel}`, bundle.project.name);
+  stampWorkbookBrand(dash, `Drawing Register Dashboard — ${bundle.weekLabel}`, bundle.project.name, 6);
+  dash.getColumn(1).width = 36;
+  dash.getColumn(2).width = 28;
+  dash.getColumn(3).width = 22;
+  dash.getColumn(4).width = 18;
+  printableSheet(dash);
 
   const kpis = [
     ["Total drawings", bundle.totals.lines],
@@ -436,9 +471,12 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
       const cell = row.getCell(ci + 1);
       cell.value = v;
       cell.border = BOX;
-      cell.alignment = { vertical: "middle", wrapText: ci === 5 || ci === 10 || ci === 20 };
+      cell.font = { name: "Arial", size: 10 };
+      cell.alignment = { vertical: "middle", wrapText: true };
       if (idx % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4F0E6" } };
     });
+    const titleLen = String(line.drawingTitle || "").length;
+    row.height = titleLen > 48 ? 36 : 22;
     // Delay (col 15): red when late, with a "running" note while still not submitted.
     const delayCell = row.getCell(15);
     if ((line.submissionDelayDays ?? 0) > 0) {
@@ -453,10 +491,12 @@ export async function buildDrawingRegisterWorkbookXlsx(projectId: string): Promi
       c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
     }
   });
-  [6, 10, 12, 14, 18, 36, 24, 26, 12, 13, 30, 10, 14, 14, 12, 18, 18, 13, 10, 10, 30].forEach((w, i) => {
+  [8, 18, 18, 16, 24, 46, 18, 28, 14, 16, 36, 12, 18, 18, 14, 22, 22, 16, 12, 14, 36].forEach((w, i) => {
     master.getColumn(i + 1).width = w;
   });
   master.autoFilter = { from: { row: 5, column: 1 }, to: { row: 5, column: masterHeaders.length } };
+  printableSheet(master);
+  master.pageSetup.printTitlesRow = "1:5";
 
   const buf = await wb.xlsx.writeBuffer();
   return Buffer.from(buf);
@@ -553,36 +593,53 @@ export async function buildApprovalGfcLogXlsx(projectId: string): Promise<Buffer
   return Buffer.from(buf);
 }
 
-function drawBarChart(
+function paintBarChart(
   doc: PDFKit.PDFDocument,
-  x: number,
-  y: number,
-  w: number,
   title: string,
   points: { label: string; value: number }[],
+  yStart: number,
 ) {
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#1e3a5f").text(title, x, y, { width: w });
-  y += 16;
-  const max = Math.max(1, ...points.map((p) => p.value));
-  const barH = 14;
-  const gap = 6;
-  for (const p of points.slice(0, 8)) {
-    const bw = (p.value / max) * (w - 120);
-    doc.font("Helvetica").fontSize(8).fillColor("#334155").text(p.label.slice(0, 28), x, y + 2, { width: 100 });
-    doc.rect(x + 105, y, Math.max(bw, 2), barH).fill("#445469");
-    doc.fillColor("#0f172a").text(String(p.value), x + 110 + bw, y + 2);
-    y += barH + gap;
+  const left = 36;
+  const pageW = doc.page.width - 72;
+  const pageBottom = doc.page.height - 48;
+  const rowH = 20;
+  const rows = points.filter((p) => p.value > 0).slice(0, 16);
+  let y = yStart;
+  const need = 26 + Math.max(rows.length, 1) * rowH;
+  if (y + Math.min(need, 80) > pageBottom) {
+    doc.addPage();
+    y = 40;
   }
-  return y + 8;
+  doc.font("Helvetica-Bold").fontSize(12).fillColor("#1e3a5f").text(title, left, y, { width: pageW });
+  y += 22;
+  if (!rows.length) {
+    doc.font("Helvetica").fontSize(10).fillColor("#64748b").text("None in this period.", left, y);
+    return y + 28;
+  }
+  const max = Math.max(1, ...rows.map((p) => p.value));
+  const labelW = 220;
+  const barMax = Math.max(40, pageW - labelW - 48);
+  for (const p of rows) {
+    if (y + rowH > pageBottom) {
+      doc.addPage();
+      y = 40;
+    }
+    doc.font("Helvetica").fontSize(9).fillColor("#1e293b").text(p.label, left, y + 3, { width: labelW - 10, height: rowH - 2, ellipsis: true });
+    const bw = Math.max(3, (p.value / max) * barMax);
+    doc.roundedRect(left + labelW, y + 2, bw, 14, 2).fill("#1e3a5f");
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a").text(String(p.value), left + labelW + bw + 8, y + 4, { lineBreak: false });
+    y += rowH;
+  }
+  return y + 18;
 }
 
-/** Dashboard PDF for SharePoint — KPIs + bar charts (discipline / critical). */
+/** Dashboard PDF — A3 landscape, one chart block per row, a new page when the next bar would clip. */
 export async function buildDrawingRegisterDashboardPdf(projectId: string): Promise<Buffer> {
   const bundle = await loadRegisterPivotBundle(projectId);
   const logo = sharnamLogoPath();
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36 });
+    const doc = new PDFDocument({ size: "A3", layout: "landscape", margin: 36, bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -590,52 +647,67 @@ export async function buildDrawingRegisterDashboardPdf(projectId: string): Promi
 
     if (logo) {
       try {
-        doc.image(logo, 36, 28, { fit: [90, 50] });
+        doc.image(logo, 36, 28, { fit: [110, 48] });
       } catch {
         /* optional */
       }
     }
 
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(16)
-      .fillColor("#1e3a5f")
-      .text(`Drawing Register Dashboard — ${bundle.weekLabel}`, 140, 36);
-    doc
-      .font("Helvetica")
-      .fontSize(10)
-      .fillColor("#64748b")
-      .text(`${bundle.project.name} · ${SPDC_PMC_NAME}`, 140, 58);
+    const pageW = doc.page.width - 72;
+    doc.font("Helvetica-Bold").fontSize(18).fillColor("#1e3a5f").text(`Drawing Register Dashboard — ${bundle.weekLabel}`, 160, 32, { width: pageW - 130 });
+    doc.font("Helvetica").fontSize(11).fillColor("#64748b").text(`${bundle.project.name} · ${SPDC_PMC_NAME}`, 160, 58, { width: pageW - 130 });
 
     let x = 36;
-    let y = 96;
-    const cardW = 130;
-    for (const [label, val] of [
-      ["Total drawings", bundle.totals.lines],
-      ["GFC type", bundle.totals.gfc],
+    let y = 100;
+    const cards = [
+      ["Total Drawings", bundle.totals.lines],
+      ["GFC Type", bundle.totals.gfc],
       ["Critical", bundle.totals.critical],
       ["Linked GFC", bundle.totals.linkedGfc],
       ["Delayed", bundle.totals.delayed],
-    ] as const) {
-      doc.roundedRect(x, y, cardW, 52, 4).stroke("#cbd5e1");
-      doc.font("Helvetica").fontSize(8).fillColor("#64748b").text(label, x + 8, y + 10, { width: cardW - 16 });
-      doc.font("Helvetica-Bold").fontSize(18).fillColor("#1e3a5f").text(String(val), x + 8, y + 26);
+    ] as const;
+    const cardW = Math.min(180, (pageW - (cards.length - 1) * 12) / cards.length);
+    for (const [label, val] of cards) {
+      doc.roundedRect(x, y, cardW, 56, 4).lineWidth(1).strokeColor("#cbd5e1").stroke();
+      doc.font("Helvetica").fontSize(9).fillColor("#64748b").text(label, x + 10, y + 10, { width: cardW - 20 });
+      doc.font("Helvetica-Bold").fontSize(20).fillColor("#1e3a5f").text(String(val), x + 10, y + 26, { width: cardW - 20 });
       x += cardW + 12;
     }
 
-    y = 168;
-    drawBarChart(doc, 36, y, 360, "Total drawings submitted", bundle.pivots.byDiscipline);
-    drawBarChart(doc, 420, y, 360, "Total critical drawings", bundle.pivots.byCritical);
-    y = 360;
-    drawBarChart(
+    y = 176;
+    const location = bundle.pivots.byBuildingDiscipline.map((p) => ({
+      label: `${p.building} · ${p.discipline}`,
+      value: p.count,
+    }));
+    y = paintBarChart(doc, "Location Wise Drawings Submitted", location, y);
+    y = paintBarChart(doc, "Total Drawings Submitted", bundle.pivots.byDiscipline, y);
+    y = paintBarChart(doc, "Total Critical Drawings", bundle.pivots.byCritical, y);
+    y = paintBarChart(doc, "Drawings by Package", bundle.pivots.byPackage, y);
+    y = paintBarChart(doc, "Drawing Type", bundle.pivots.byDrawingType, y);
+    y = paintBarChart(doc, "Drawings Submitted by Organisation", bundle.pivots.byConsultant, y);
+    paintBarChart(
       doc,
-      36,
-      y,
-      360,
-      "Submission delay in days",
+      "Submission Delay in Days",
       bundle.pivots.delayByResponsibility.map((p) => ({ label: p.label, value: p.days })),
+      y,
     );
-    drawBarChart(doc, 420, y, 360, "Drawings submitted by org", bundle.pivots.byConsultant);
+
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      const savedBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#64748b")
+        .text(`Page ${i - range.start + 1} of ${range.count} · ${SPDC_PMC_NAME}`, 36, doc.page.height - 28, {
+          width: doc.page.width - 72,
+          align: "center",
+          lineBreak: false,
+        });
+      doc.page.margins.bottom = savedBottom;
+    }
 
     doc.end();
   });
@@ -670,8 +742,8 @@ function renderBrandedTablePdf(opts: {
     const scale = pageW / totalW;
     const cols = opts.columns.map((c) => ({ ...c, w: c.width * scale }));
     const bottom = doc.page.height - 40;
-    const fontSize = 7.5;
-    const pad = 3;
+    const fontSize = 8.5;
+    const pad = 4;
 
     const drawBand = () => {
       if (logo) {
@@ -687,8 +759,17 @@ function renderBrandedTablePdf(opts: {
       return 82;
     };
 
+    const headerHeight = () => {
+      doc.font("Helvetica-Bold").fontSize(fontSize);
+      const tallest = Math.max(
+        ...cols.map((c) => doc.heightOfString(c.header, { width: Math.max(8, c.w - pad * 2) })),
+        fontSize + 2,
+      );
+      return Math.min(52, Math.max(28, tallest + 10));
+    };
+
     const drawHeader = (y: number) => {
-      const h = 26;
+      const h = headerHeight();
       let x = left;
       doc.rect(left, y, pageW, h).fill("#1e3a5f");
       for (const c of cols) {
@@ -696,7 +777,7 @@ function renderBrandedTablePdf(opts: {
           .font("Helvetica-Bold")
           .fontSize(fontSize)
           .fillColor("#ffffff")
-          .text(c.header, x + pad, y + 5, { width: c.w - pad * 2, align: c.align || "left", height: h - 6, ellipsis: true });
+          .text(c.header, x + pad, y + 4, { width: Math.max(8, c.w - pad * 2), align: c.align || "left" });
         x += c.w;
       }
       return y + h;

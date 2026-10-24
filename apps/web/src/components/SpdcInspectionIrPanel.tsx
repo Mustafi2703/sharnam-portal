@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { QUALITY_DECLARATIONS, QUALITY_ENCLOSURE_OPTIONS, QUALITY_RESULTS, requiredEnclosures, truthyFlag } from "@sharnam/shared";
 import { Badge, Button, Input, Select, TextArea } from "./ui";
@@ -14,6 +14,7 @@ import {
   type InspectionFormRef,
 } from "../lib/inspectionRequestForms";
 import { openChecklistFillWindow } from "../lib/checklistFillWindow";
+import { formatUiText } from "../lib/formatUiText";
 import { canonicalRfiKind } from "../lib/rfiModuleScope";
 import { FilePickButton } from "./FilePickButton";
 
@@ -181,6 +182,15 @@ export function SpdcInspectionIrPanel({
   useEffect(() => {
     setLinkId(rfi.linkedAssignmentId || "");
   }, [rfi.id, rfi.linkedAssignmentId]);
+
+  const safetyLinkTried = useRef("");
+  useEffect(() => {
+    if (!isSafety || !token || rfi.linkedAssignmentId || safetyLinkTried.current === rfi.id) return;
+    safetyLinkTried.current = rfi.id;
+    void api(`/api/rfis/${rfi.id}/safety-checklist`, { method: "POST", token })
+      .then(() => onUpdated?.())
+      .catch(() => undefined);
+  }, [isSafety, token, rfi.id, rfi.linkedAssignmentId]);
 
   useEffect(() => {
     if (!activeAssignmentId || !token) {
@@ -432,6 +442,12 @@ export function SpdcInspectionIrPanel({
               </Select>
               <Input label="Valid up to" type="datetime-local" value={clr.validUpTo} onChange={(e) => setClr({ ...clr, validUpTo: e.target.value })} />
               <Input label="Conditions / action required" value={clr.actionRequired} onChange={(e) => setClr({ ...clr, actionRequired: e.target.value })} />
+              {isSafety ? (
+                <p className="sm:col-span-3 text-xs text-ink">
+                  {formatUiText(form.activitySection ? `Activity Checklist · ${form.activitySection}` : "Activity Checklist")}
+                  {fillStatus ? ` · ${fillStatus}` : ""}
+                </p>
+              ) : null}
               <div className="sm:col-span-3 flex items-center gap-2">
                 <Button
                   type="button"
@@ -1024,7 +1040,7 @@ export function SpdcInspectionIrPanel({
                   {activeAssignmentId ? (
                     <>
                       {" "}
-                      <button type="button" className="text-brand font-semibold underline" onClick={() => openChecklistFillWindow(projectId, activeAssignmentId, checklistFamily)}>
+                      <button type="button" className="text-brand font-semibold underline" onClick={() => openChecklistFillWindow(projectId, activeAssignmentId, checklistFamily, { rfi: rfi.irNumber || rfi.number, section: isSafety ? form.activitySection : undefined })}>
                         Open the activity checklist fill
                       </button>
                     </>
@@ -1065,7 +1081,7 @@ export function SpdcInspectionIrPanel({
             ) : null}
           </div>
           {activeAssignmentId ? (
-            <Button type="button" className="!text-sm" onClick={() => openChecklistFillWindow(projectId, activeAssignmentId, checklistFamily)}>
+            <Button type="button" className="!text-sm" onClick={() => openChecklistFillWindow(projectId, activeAssignmentId, checklistFamily, { rfi: rfi.irNumber || rfi.number, section: isSafety ? form.activitySection : undefined })}>
               Fill linked checklist →
             </Button>
           ) : null}

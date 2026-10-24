@@ -12,7 +12,8 @@ export function OfficeClockInCard() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const isOffice = user?.role === "admin" || user?.role === "office";
+  const isDirector = /director/i.test(user?.designation || "");
+  const isOffice = (user?.role === "admin" || user?.role === "office") && !isDirector;
   const load = useCallback(async () => {
     const today = await api<any>("/api/hrm/attendance/today", { token }).catch(() => null);
     setRow(today);

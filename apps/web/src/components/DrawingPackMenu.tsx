@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api } from "../api";
 import { Button } from "./ui";
+import { useAuth } from "../auth";
 import { downloadAuthFile } from "../lib/downloadReport";
 
 type Sheet = { key: string; title: string; hint: string; kind: "xlsx" | "pdf"; path: (id: string) => string; file: string };
@@ -33,6 +33,8 @@ export function DrawingPackMenu({
   /** Show the sheets as an always-open panel (settings page) instead of a drop-down. */
   panel?: boolean;
 }) {
+  const { user } = useAuth();
+  const sheets = DRAWING_SHEETS.filter((sh) => sh.key !== "gfc-x" || user?.role === "admin");
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -82,18 +84,7 @@ export function DrawingPackMenu({
       setBusy("");
     }
   }
-  async function publish() {
-    setBusy("sync");
-    say("Generating the registers and saving them to SharePoint…");
-    try {
-      await api(`/api/drawings/project/${projectId}/publish-registers`, { method: "POST", token, timeoutMs: 180_000 });
-      say("Registers generated and saved to the project's SharePoint folders.");
-    } catch (err) {
-      say(err instanceof Error ? err.message : "Could not save to SharePoint");
-    } finally {
-      setBusy("");
-    }
-  }
+  void canPublish;
 
   const body = (
     <div className={panel ? "space-y-3" : "space-y-1"}>
@@ -101,14 +92,9 @@ export function DrawingPackMenu({
         <Button type="button" className={panel ? "" : "w-full !justify-start !text-sm !py-2"} disabled={Boolean(busy)} onClick={() => void pack()}>
           {busy === "pack" ? "Generating pack…" : "Download the whole pack (ZIP)"}
         </Button>
-        {canPublish ? (
-          <Button type="button" variant="secondary" className={panel ? "" : "w-full !justify-start !text-sm !py-2"} disabled={Boolean(busy)} onClick={() => void publish()}>
-            {busy === "sync" ? "Saving…" : "Save the set to SharePoint"}
-          </Button>
-        ) : null}
       </div>
       <div className={panel ? "grid sm:grid-cols-2 lg:grid-cols-3 gap-2" : "space-y-0.5 border-t border-line pt-1"}>
-        {DRAWING_SHEETS.map((sh) =>
+        {sheets.map((sh) =>
           panel ? (
             <div key={sh.key} className="rounded-lg border border-line bg-white px-3 py-2 flex items-center justify-between gap-2">
               <div className="min-w-0">

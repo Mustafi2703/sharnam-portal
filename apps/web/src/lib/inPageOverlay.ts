@@ -30,6 +30,7 @@ export type InPageOverlay =
       drawingId?: string;
       revisionId?: string;
       rfi?: string;
+      section?: string;
     }
   | {
       kind: "checklist-log";

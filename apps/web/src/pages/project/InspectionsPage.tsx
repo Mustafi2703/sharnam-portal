@@ -244,7 +244,6 @@ export default function InspectionsPage() {
     selected.status !== "Closed" &&
     (canManage || selected.assignedToId === user?.id || selected.assignedTo?.id === user?.id);
   const pageTitle = sheetView.label;
-  const pageSubtitle = `${sheetView.sheet} — Quality Dashboard / NCR / Cube register layout. Checklist fills map to DPR Quality section.`;
 
   const isQualityRegister = QUALITY_REGISTER_SHEETS.has(sheetKey);
   const useQualityPageScroll = QUALITY_PAGE_SCROLL_SHEETS.has(sheetKey);
@@ -334,7 +333,6 @@ export default function InspectionsPage() {
         dense={isQualityRegister}
         eyebrow="Quality module"
         title={pageTitle}
-        subtitle={sheetKey === "cube-test" ? "SPDC cube register — project, PMC and client are editable in the sheet header." : pageSubtitle}
       />
       </div>
 
@@ -569,7 +567,6 @@ export default function InspectionsPage() {
             <div className="grid md:grid-cols-2 gap-4 items-start">
               <ColumnChart
                 title="Observations this week — open vs closed"
-                subtitle="SOR log: site observations, instructions, NCR / CAR"
                 items={dash.weekCharts?.sorOpenClosed || []}
                 series={[
                   { key: "open", label: "Open", color: CHART_COLORS.red },
@@ -580,7 +577,6 @@ export default function InspectionsPage() {
               />
               <LineChart
                 title="Cube compressive strength — 7 days"
-                subtitle="Set average (3 cubes) against the 7-day limit, N/mm²"
                 items={dash.weekCharts?.cubeSeries || []}
                 series={[
                   { key: "strength", label: "Compressive strength", color: CHART_COLORS.navy },
@@ -591,7 +587,6 @@ export default function InspectionsPage() {
               />
               <ColumnChart
                 title="Cube compressive strength — 28 days"
-                subtitle="Set average against the grade (fck), N/mm²"
                 items={dash.weekCharts?.cubeSets28 || []}
                 series={[
                   { key: "avg28", label: "28-day average", color: CHART_COLORS.navy },

@@ -265,7 +265,6 @@ export default function InspectionRegisterPage() {
         <PageHeader
           eyebrow="Inspection overview"
           title="Inspection desk"
-          subtitle="Overview only. Raise, answer and close on the Quality or Safety registers — those own the live logs and checklist fills."
         />
         {fillTotals ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -319,15 +318,8 @@ export default function InspectionRegisterPage() {
             </Link>
           ))}
         </div>
-        <p className="text-xs text-steel-muted">
-          Checklist fill counts by type:{" "}
-          <Link className="text-brand font-semibold" to={`/projects/${id}/inspections?sheet=checklist-summary`}>
-            Quality · Checklist summary →
-          </Link>
-        </p>
         <Card>
-          <h3 className="font-semibold mb-2">All inspection requests (read-only overview)</h3>
-          <p className="text-xs text-steel-muted mb-3">Click a row’s module link to work it in the owning register.</p>
+          <h3 className="font-semibold mb-2">All Inspection Requests</h3>
           <ul className="divide-y divide-line text-sm">
             {rows.length === 0 && <li className="py-4 text-steel-muted">No inspection requests yet.</li>}
             {rows.map((r) => {
@@ -396,7 +388,9 @@ export default function InspectionRegisterPage() {
           status: payload.rfiKind === "QualityIR" ? "Draft" : payload.status,
         }),
       });
-      if (created.activityChecklist?.number) {
+      if (created.activityChecklist?.number && payload.rfiKind === "SafetyIR") {
+        window.alert(`Safety IR saved. The ${created.activityChecklist.number} activity checklist is linked. Fill it before clearance.`);
+      } else if (created.activityChecklist?.number) {
         window.alert(`Quality IR saved. Activity checklist ${created.activityChecklist.number} (F-02) was raised for this line.`);
       }
       await load();
@@ -419,11 +413,6 @@ export default function InspectionRegisterPage() {
               : tab === "activity-checklist"
                 ? "Activity checklist register (F-02)"
                 : "Request for Inspection register (F-01)"
-        }
-        subtitle={
-          lock === "safety"
-            ? "Safety owns this log. Clearances and HSE findings stay here — not on Drawings or Quality."
-            : "Quality owns this log. F-01 offers work for inspection; F-02 is the contractor self-check enclosure."
         }
       />
 

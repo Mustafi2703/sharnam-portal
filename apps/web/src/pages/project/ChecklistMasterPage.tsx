@@ -277,19 +277,6 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                   ? "Site checklist master"
                   : "Create, upload & choose checklists"
         }
-        subtitle={
-          effectiveLock === "DrawingCheck"
-            ? "Yes/No/N.A. items only — no photos or links. Edit lines here; fills unlock GFC upload. Quality and Safety templates live in their own modules."
-            : effectiveLock === "Safety"
-              ? "Safety checklist types (HIRA, HSE pack, custom). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Safety IR register — the fill log is information only."
-              : effectiveLock === "QualityInspection"
-                ? "Quality checklist types (Civil, HVAC, Electrical, ELV, Fire, interiors…). Create a new type here; demo pack load is on Admin → UAT Data. Fill from the Quality IR register."
-                : effectiveLock === "SiteExecution" || effectiveLock === "ActivityInspection"
-                  ? "Site / field checklist types (SPDC Activity format). Create or edit here; fill from the Quality register — not mixed with Safety masters."
-                  : id
-                    ? "Templates are org-wide — assign to this project after editing. Pick Quality or Safety family below."
-                    : "Org-wide checklist line items — reused package- and discipline-wise on every project. Assign from each project's checklist master."
-        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {id && (family === "QualityInspection" || family === "Safety" || family === "SiteExecution") && (
@@ -747,7 +734,7 @@ export default function ChecklistMasterPage({ lockedFamily }: { lockedFamily?: F
                 {family === "DrawingCheck" ? (
                   <Select
                     label="Discipline"
-                    hint="The upload gate opens this checklist for drawings of this discipline."
+                    hint="Matches the drawing discipline or package."
                     value={detail.discipline || ""}
                     onChange={(e) => setDetail({ ...detail, discipline: e.target.value || null })}
                     disabled={!canEdit}

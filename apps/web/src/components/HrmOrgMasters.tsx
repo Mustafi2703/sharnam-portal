@@ -2,13 +2,14 @@ import { useMemo, useState, type FormEvent } from "react";
 import { SPDC_HIRING_ROLES } from "@sharnam/shared";
 import { api } from "../api";
 import { Button, Card, Input, Select } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 import { LOGIN_TYPE_OPTIONS, useHrmOrg, type HrmDepartmentRow, type HrmDesignationRow } from "../lib/hrmOrg";
 
 const loginLabel = (v: string) => LOGIN_TYPE_OPTIONS.find((o) => o.value === v)?.label || v;
 
 /** HRMS · Masters — open, rename and close departments and the roles under them. */
 export function HrmOrgMasters({ token, canManage }: { token: string | null | undefined; canManage: boolean }) {
-  const { departments, designations, reload } = useHrmOrg(token, { includeClosedRoles: true });
+  const { departments, designations, loaded, reload } = useHrmOrg(token, { includeClosedRoles: true });
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState("");
   const [deptForm, setDeptForm] = useState({ name: "", headName: "" });
@@ -156,7 +157,11 @@ export function HrmOrgMasters({ token, canManage }: { token: string | null | und
                 </li>
               );
             })}
-            {!departments.length && <li className="px-3 py-2 text-steel-muted">No departments yet.</li>}
+            {!loaded && !departments.length ? (
+              <li className="px-3 py-2 text-steel-muted">{formatUiText("Loading…")}</li>
+            ) : !departments.length ? (
+              <li className="px-3 py-2 text-steel-muted">{formatUiText("No Departments Yet.")}</li>
+            ) : null}
           </ul>
         </div>
 

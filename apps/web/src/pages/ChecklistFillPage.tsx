@@ -31,6 +31,7 @@ export default function ChecklistFillPage() {
   const queryDrawingId = search.get("drawing") || "";
   const queryRevisionId = search.get("revision") || "";
   const queryRfi = search.get("rfi") || "";
+  const querySection = search.get("section") || "";
   const { token, user } = useAuth();
   const [editingSubmissionId, setEditingSubmissionId] = useState<string | null>(null);
   const [assignment, setAssignment] = useState<any>(null);
@@ -80,6 +81,15 @@ export default function ChecklistFillPage() {
       a.myDraft ||
       a.latestFill ||
       null;
+    if (queryRfi && prior?.responsesJson) {
+      try {
+        const savedMeta = JSON.parse(prior.responsesJson)?._meta;
+        const stamped = String(savedMeta?.rfiNumber || "");
+        if (stamped && stamped !== queryRfi) prior = null;
+      } catch {
+        prior = null;
+      }
+    }
     if (resumeSubmissionId && (!prior || prior.id !== resumeSubmissionId)) {
       prior = await api<any>(`/api/checklist/submissions/${resumeSubmissionId}`, { token }).catch(() => prior);
     }
@@ -143,7 +153,16 @@ export default function ChecklistFillPage() {
 
   useStandaloneFormPage();
 
-  const items: ChecklistFillItem[] = assignment?.template?.items || [];
+  const allItems: ChecklistFillItem[] = assignment?.template?.items || [];
+  const items = useMemo(() => {
+    const want = querySection.trim().toLowerCase();
+    if (!want) return allItems;
+    const hit = allItems.filter((item) => {
+      const section = (item.section || "").toLowerCase();
+      return section.includes(want) || want.includes(section.slice(0, 12));
+    });
+    return hit.length ? hit : allItems;
+  }, [allItems, querySection]);
   const sections = useMemo(() => Array.from(new Set(items.map((i) => i.section || "General"))), [items]);
   const answered = Object.values(responses).filter((r) => r.answer).length;
   const linkEvidence = Object.values(responses).reduce((s, r) => s + (r.evidenceLinks?.filter(Boolean).length || 0), 0);

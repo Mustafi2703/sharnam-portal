@@ -42,6 +42,7 @@ function overlaySrc(o: InPageOverlay) {
     if (o.drawingId) q.set("drawing", o.drawingId);
     if (o.revisionId) q.set("revision", o.revisionId);
     if (o.rfi) q.set("rfi", o.rfi);
+    if (o.section) q.set("section", o.section);
     return `${checklistFillUrl(o.projectId, o.assignmentId, o.family).split("?")[0]}?${q.toString()}`;
   }
   if (o.kind === "checklist-log") {

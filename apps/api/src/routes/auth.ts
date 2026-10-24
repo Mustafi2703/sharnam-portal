@@ -151,7 +151,8 @@ authRouter.post("/login", async (req, res) => {
     }
 
     const joining = await joiningMetaForUser(user.id, user.email);
-    const authUser = toAuthUser(user, undefined, joining);
+    const profile = await prisma.employeeProfile.findUnique({ where: { userId: user.id }, select: { designation: true } });
+    const authUser = toAuthUser({ ...user, designation: profile?.designation || null }, undefined, joining);
     const token = signToken(authUser);
     await audit("login", { userId: user.id, meta: { portal: portal || "general" } });
     res.json({ token, user: authUser });
@@ -185,9 +186,10 @@ authRouter.get("/me", requireAuth, async (req: AuthedRequest, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) return res.status(404).json({ error: "Not found" });
     const joining = await joiningMetaForUser(user.id, user.email);
+    const profile = await prisma.employeeProfile.findUnique({ where: { userId: user.id }, select: { designation: true } });
     const roleDef = await prisma.roleDefinition.findUnique({ where: { key: user.role } });
     res.json({
-      user: toAuthUser(user, req.user!.impersonatedBy, joining),
+      user: toAuthUser({ ...user, designation: profile?.designation || null }, req.user!.impersonatedBy, joining),
       permissions: roleDef ? JSON.parse(roleDef.permissions) : DEFAULT_ROLE_PERMISSIONS[user.role as RoleKey],
     });
   } catch (err) {

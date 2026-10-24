@@ -155,9 +155,8 @@ export function CoordinationPage() {
     user?.role === "site_employee";
   const missingFields = [
     !form.title.trim() ? "Issue" : "",
-    !form.discipline ? "Drawing type" : "",
+    !form.linkedDrawingId ? "GFC Drawing" : "",
     !form.assignedToEmail ? "Assignee" : "",
-    !form.linkedDrawingId ? "GFC drawing" : "",
   ].filter(Boolean);
 
   const load = async () => {
@@ -336,12 +335,7 @@ export function CoordinationPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Drawings module"
-        title={logView ? "Coordination log" : "Design coordination"}
-        subtitle={
-          logView
-            ? "Every coordination issue on this project. Select an issue to follow up, reassign, escalate to an RFI or close it."
-            : "Log the issue against a GFC drawing. Send 5 follow-ups, then raise it to an RFI."
-        }
+        title={logView ? "Coordination Log" : "Design Coordination"}
         actions={
           <div className="flex flex-wrap gap-2 items-center">
             <Badge tone="warn">{openCount} open</Badge>
@@ -428,10 +422,7 @@ export function CoordinationPage() {
       <>
       {canEdit && drawingsLoaded && !drawings.length && (
         <Card className="border-amber-300 bg-amber-50">
-          <h3 className="font-semibold text-amber-900">{formatUiText("Add a GFC drawing first")}</h3>
-          <p className="text-sm text-amber-900 mt-1">
-            A coordination issue is always raised against a GFC drawing. This project has none on the Approval & GFC Log yet.
-          </p>
+          <h3 className="font-semibold text-amber-900">{formatUiText("Add a GFC Drawing First")}</h3>
           <Link to={`/projects/${id}/drawings`} className="inline-block mt-3">
             <Button type="button">Open Approval & GFC Log</Button>
           </Link>
@@ -453,10 +444,14 @@ export function CoordinationPage() {
               setLogBusy(true);
               setMsg("");
               try {
+                const sheet = drawings.find((d) => d.id === form.linkedDrawingId);
                 const created = await api<any>(`/api/directory/project/${id}/coordination`, {
                   method: "POST",
                   token,
-                  body: JSON.stringify(form),
+                  body: JSON.stringify({
+                    ...form,
+                    discipline: sheet?.discipline || form.discipline || "Architecture",
+                  }),
                 });
                 if (markupDraft && created?.id) {
                   const fd = new FormData();
@@ -481,7 +476,7 @@ export function CoordinationPage() {
                 });
                 await load();
                 if (created?.id) setSelectedId(created.id);
-                setMsg("Issue logged. Send 5 follow-ups, then use Raise to RFI on the issue.");
+                setMsg("Issue logged.");
               } catch (err) {
                 setMsg(err instanceof Error ? err.message : "Could not log the issue");
               } finally {
@@ -490,62 +485,34 @@ export function CoordinationPage() {
             }}
           >
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Issue *")}</span>
+              <span className="text-xs font-semibold text-ink block mb-1.5">{formatUiText("Issue *")}</span>
               <Input
                 required
                 aria-required
-                placeholder="e.g. Duct clashes with beam at grid C4"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </label>
-            <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Drawing type *")}</span>
-              <Select
-                required
-                aria-required
-                value={form.discipline}
-                onChange={(e) => setForm({ ...form, discipline: e.target.value })}
-              >
-                {!form.discipline ? <option value="">{formatUiText("Select drawing type")}</option> : null}
-                {withCurrent(picklists.lists.disciplines, form.discipline).map((d) => (
-                  <option key={d}>{d}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Priority")}</span>
-              <Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                {withCurrent(picklists.lists.coordinationPriorities, form.priority).map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Location / grid")}</span>
-              <Input placeholder="e.g. Grid C4, Level +3.00" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            </label>
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("GFC drawing *")}</span>
+              <span className="text-xs font-semibold text-ink block mb-1.5">{formatUiText("GFC Drawing *")}</span>
               <SearchableSelect
                 required
                 options={gfcOptions}
                 value={form.linkedDrawingId}
-                placeholder={form.discipline ? `Select a drawing (${form.discipline})` : "Select a drawing"}
-                searchPlaceholder="Drawing number or title"
+                placeholder="Select a Drawing"
+                searchPlaceholder="Drawing Number or Title"
                 onChange={(value) => {
                   const sheet = drawings.find((d) => d.id === value);
                   setForm({
                     ...form,
                     linkedDrawingId: value,
-                    discipline: sheet?.discipline || form.discipline,
+                    discipline: sheet?.discipline || form.discipline || "Architecture",
                   });
                 }}
               />
-              <p className="text-xs text-steel-muted mt-1">Every sheet on the Approval & GFC Log. The issue stays linked to the one you pick.</p>
             </label>
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Assignee *")}</span>
+              <span className="text-xs font-semibold text-ink block mb-1.5">{formatUiText("Assignee *")}</span>
               <Select
                 required
                 aria-required
@@ -559,7 +526,7 @@ export function CoordinationPage() {
                   });
                 }}
               >
-                <option value="">{formatUiText("Select vendor, consultant, or SPDC staff")}</option>
+                <option value="">{formatUiText("Select Vendor, Contractor, or Consultant")}</option>
                 {COORDINATION_ASSIGNEE_GROUPS.map((group) => {
                   const people = matrixPeople.filter((c) => c.group === group);
                   if (!people.length) return null;
@@ -574,43 +541,20 @@ export function CoordinationPage() {
                   );
                 })}
               </Select>
-              <p className="text-xs text-steel-muted mt-1">
-                From the communication matrix and the project directory. Entries marked (no email) cannot be emailed until an email is added on the{" "}
-                <Link to={`/projects/${id}/comms?tab=matrix`} className="font-semibold text-brand underline">
-                  {formatUiText("communication matrix")}
-                </Link>
-                .
-              </p>
-            </label>
-            <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Due date")}</span>
-              <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-            </label>
-            <label className="block">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Ball in court")}</span>
-              <Select value={form.ballInCourt} onChange={(e) => setForm({ ...form, ballInCourt: e.target.value })}>
-                {["Assignee", "Creator", "Consultant", "Contractor", "PMC"].map((b) => (
-                  <option key={b}>{b}</option>
-                ))}
-              </Select>
             </label>
             <label className="block sm:col-span-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-steel-muted block mb-1.5">{formatUiText("Description")}</span>
+              <span className="text-xs font-semibold text-ink block mb-1.5">{formatUiText("Question")}</span>
               <TextArea
                 rows={2}
-                placeholder="e.g. What is clashing, and what should change"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
             </label>
-            <div className="sm:col-span-2 rounded-lg border border-line p-3 space-y-2">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-steel-muted">{formatUiText("Marked-up drawing")}</div>
-              <p className="text-xs text-steel-muted">
-                Separate from the GFC sheet. A PDF, image, or DWG already marked up is filed in this issue’s folder when you log it. You can then mark that PDF from the issue.
-              </p>
+            <div className="sm:col-span-2 rounded-lg border border-line bg-paper p-3 space-y-2">
+              <div className="text-xs font-semibold text-ink">{formatUiText("Marked-up Drawing")}</div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="secondary" className="!text-xs" onClick={() => setMarkupModal(true)}>
-                  {markupDraft ? "Change marked-up file" : "Upload marked-up drawing"}
+                  {markupDraft ? "Change Marked-up File" : "Attach Marked-up Drawing"}
                 </Button>
                 {markupDraft ? <span className="text-xs text-ink">{markupDraft.name}</span> : null}
                 {markupDraft ? (
@@ -621,11 +565,8 @@ export function CoordinationPage() {
               </div>
             </div>
             <div className="sm:col-span-2 space-y-2">
-              <p className="text-xs text-steel-muted">
-                Logging sends email to the assignee and copies the communication-matrix To and Cc.
-              </p>
               <Button type="submit" disabled={logBusy || missingFields.length > 0} className="!bg-sky-600 !font-medium">
-                {logBusy ? "Logging…" : "Log issue"}
+                {logBusy ? "Logging…" : "Log Issue"}
               </Button>
               {missingFields.length ? (
                 <p className="text-xs text-amber-800" role="status">
@@ -637,7 +578,7 @@ export function CoordinationPage() {
           <UploadModal
             open={markupModal}
             title="Upload marked-up drawing"
-            context="Filed in the issue folder under Design Coordination when you log the issue. This does not replace the GFC sheet."
+            context=""
             file={markupDraft}
             onFile={setMarkupDraft}
             accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,application/pdf,image/*"

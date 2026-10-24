@@ -216,6 +216,8 @@ export type AuthUser = {
   vendorId?: string | null;
   /** HR Head — HRMS only, no project / CRM / DMS desk. */
   hrDeskOnly?: boolean;
+  /** Company role from the employee profile. Directors do not see attendance punch. */
+  designation?: string | null;
   /** Active accepted offer — new joiner pre-joining desk. */
   joiningOfferId?: string | null;
   preJoinComplete?: boolean;

@@ -76,7 +76,6 @@ export default function ChecklistAssignPage() {
       <PageHeader
         eyebrow="Quality · Procore-style"
         title="Assign checklist type"
-        subtitle="Add checklist types to this project. Quality fills use per-line instructions and site observations — they do not wait for a published drawing."
         actions={
           <Link to={`/projects/${id}/checklist`}>
             <Button type="button" variant="secondary">
