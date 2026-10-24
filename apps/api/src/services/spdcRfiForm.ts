@@ -302,7 +302,7 @@ function excelDate(display: string): Date | null {
 }
 
 function readingHeight(texts: Array<string | number | null | undefined>, min: number, max: number) {
-  const longest = texts.reduce((n, text) => Math.max(n, String(text || "").length), 0);
+  const longest = texts.reduce<number>((n, text) => Math.max(n, String(text ?? "").length), 0);
   const wraps = Math.max(1, Math.ceil(longest / 48));
   return Math.min(max, Math.max(min, wraps * 15));
 }
