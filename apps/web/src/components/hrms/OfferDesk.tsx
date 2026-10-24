@@ -4,6 +4,7 @@ import { api, apiBase } from "../../api";
 import { downloadAuthFile } from "../../lib/downloadReport";
 import { rolesForDepartment, useHrmOrg, withCurrentOption } from "../../lib/hrmOrg";
 import { Badge, Button, Card, Input, Select, TextArea } from "../ui";
+import { formatUiText } from "../../lib/formatUiText";
 
 const CTC_DEFAULTS = {
   basicPctOfGross: 0.5,
@@ -220,6 +221,7 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
   const org = useHrmOrg(token);
   const [sp] = useSearchParams();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [hourOptions, setHourOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [projectsReady, setProjectsReady] = useState(false);
   const queryApplied = useRef(false);
   const [form, setForm] = useState(FORM_BLANK);
@@ -240,6 +242,13 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
       return;
     }
     let live = true;
+    api<{ id: string; label: string }[]>("/api/hrm/working-hours", { token })
+      .then((rows) => {
+        if (live) setHourOptions(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (live) setHourOptions([]);
+      });
     api<ProjectRow[]>("/api/projects", { token })
       .then((rows) => {
         if (live) setProjects(Array.isArray(rows) ? rows : []);
@@ -625,7 +634,19 @@ export function OfferDesk({ candidates, offers, canManage, reload, setMsg, token
                   <option>Female</option>
                 </Select>
                 {L("phone", "Mobile")}
-                {L("workingHours", "Working hours")}
+                <Select
+                  label="Working hours"
+                  value={letter.workingHours}
+                  onChange={(e) => setLetter({ ...letter, workingHours: e.target.value })}
+                >
+                  <option value="">{formatUiText("Select working hours")}</option>
+                  {hourOptions.map((row) => (
+                    <option key={row.id} value={row.label}>{row.label}</option>
+                  ))}
+                  {letter.workingHours && !hourOptions.some((row) => row.label === letter.workingHours) ? (
+                    <option value={letter.workingHours}>{letter.workingHours}</option>
+                  ) : null}
+                </Select>
                 {L("reportingTime", "Reporting time on day 1")}
                 <TextArea label="Candidate address" rows={2} fieldClassName="md:col-span-2" value={letter.address} onChange={(e) => setLetter({ ...letter, address: e.target.value })} />
                 <TextArea label="Reporting address on day 1" rows={2} fieldClassName="md:col-span-2" value={letter.reportingAddress} onChange={(e) => setLetter({ ...letter, reportingAddress: e.target.value })} />

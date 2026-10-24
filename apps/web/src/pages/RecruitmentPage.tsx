@@ -24,6 +24,11 @@ import { formatUiText } from "../lib/formatUiText";
  * All routes: /api/hrm/{requisitions,postings,candidates,interviews,offers}
  */
 
+function formatMeetWhen(value: string | null | undefined) {
+  if (!value) return "Unscheduled";
+  return new Date(value).toLocaleString("en-IN", { hour12: true }).replace(/\b(am|pm)\b/gi, (part) => part.toUpperCase());
+}
+
 const TABS = [
   { id: "requisitions", label: "Requisition" },
   { id: "candidates", label: "Resumes" },
@@ -98,7 +103,7 @@ function ResumePick({ file, onFile }: { file: File | null; onFile: (file: File |
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" variant="secondary" onClick={() => ref.current?.click()}>
-        Upload resume
+        + Upload Resume
       </Button>
       {file ? <span className="text-xs text-steel-muted" data-preserve-case>{file.name}</span> : null}
       <input
@@ -179,7 +184,7 @@ export default function RecruitmentPage() {
       <StatusNote msg={loadError} tone="danger" />
       <StatusNote msg={msg} onClose={() => setMsg("")} />
 
-      {tab === "requisitions" && <RequisitionsTab reqs={reqs} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
+      {tab === "requisitions" && <RequisitionsTab reqs={reqs} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "candidates" && <CandidatesTab reqs={reqs} candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "compare" && <CompareTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
       {tab === "interviews" && <InterviewsTab candidates={candidates} staff={staff} canManage={canManage} reload={reload} setMsg={setMsg} token={token || ""} />}
@@ -190,7 +195,7 @@ export default function RecruitmentPage() {
 
 /* ────────────────────────────  1  Requisitions  ──────────────────────────── */
 
-function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
+function RequisitionsTab({ reqs, staff, canManage, reload, setMsg, token }: any) {
   const blank = { department: "", designation: "", count: 1, employmentType: "Permanent", reportingManager: "", justification: "", urgency: "Normal", ctcRangeMin: "", ctcRangeMax: "", location: "" };
   const [form, setForm] = useState(blank);
   const [editId, setEditId] = useState<string | null>(null);
@@ -265,7 +270,19 @@ function RequisitionsTab({ reqs, canManage, reload, setMsg, token }: any) {
             <Select label="Employment type" value={form.employmentType} onChange={(e) => setForm({ ...form, employmentType: e.target.value })}>
               {["Permanent", "Contract", "Consultant", "Intern"].map((v) => <option key={v}>{v}</option>)}
             </Select>
-            <Input label="Reporting manager" placeholder="Name" value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })} />
+            <Select label="Reporting manager" value={form.reportingManager} onChange={(e) => setForm({ ...form, reportingManager: e.target.value })}>
+              <option value="">{formatUiText("Select SPDC employee")}</option>
+              {(staff || [])
+                .filter((person: any) => person?.fullName)
+                .map((person: any) => (
+                  <option key={person.id || person.fullName} value={person.fullName}>
+                    {person.fullName}
+                  </option>
+                ))}
+              {form.reportingManager && !(staff || []).some((person: any) => person.fullName === form.reportingManager) ? (
+                <option value={form.reportingManager}>{form.reportingManager}</option>
+              ) : null}
+            </Select>
             <Input label="Location" placeholder="Office / site" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
             <Select label="Urgency" value={form.urgency} onChange={(e) => setForm({ ...form, urgency: e.target.value })}>
               {["Normal", "Priority", "Critical"].map((v) => <option key={v}>{v}</option>)}
@@ -509,7 +526,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
     try {
       const r = await api<{ url: string; kind: "local" | "sharepoint" | "file" }>(`/api/hrm/candidates/${c.id}/resume`, { token });
       if (r.kind === "sharepoint") {
-        window.open(r.url, "_blank", "noopener,noreferrer");
+        window.open(`${apiBase()}/api/hrm/candidates/${c.id}/resume/file?token=${encodeURIComponent(token)}`, "_blank", "noopener,noreferrer");
         return;
       }
       if (r.kind === "file") {
@@ -547,17 +564,6 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
     }
   }
 
-  async function clearRegisters() {
-    const ok = window.confirm("Delete all recruitment data? Requisitions, resumes, interviews, offers, and letters are removed. Staff logins and projects stay. This cannot be undone.");
-    if (!ok) return;
-    try {
-      await api("/api/hrm/registers/clear", { method: "POST", token, body: JSON.stringify({ confirm: "CLEAR" }) });
-      setMsg("HR registers cleared. Add one candidate, then schedule one interview — the scorecard opens on that round.");
-      await reload();
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not clear registers");
-    }
-  }
   function openEdit(c: any) {
     setOpenId(c.id);
     setEditFile(null);
@@ -747,6 +753,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                   <th>Stage</th>
                   <th className="text-right">Best score</th>
                   <th>Decision</th>
+                  <th>Skills</th>
                 </tr>
               </thead>
               <tbody>
@@ -761,10 +768,11 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       <td>{candidateStageLabel(c.status)}</td>
                       <td className="text-right">{best ? `${best}%` : "—"}</td>
                       <td>{decision || "—"}</td>
+                      <td>{c.skills || "—"}</td>
                     </tr>
                   );
                 })}
-                {!compared.length && <tr><td colSpan={5} className="py-4 text-center text-steel-muted">No resumes on this requisition yet.</td></tr>}
+                {!compared.length && <tr><td colSpan={6} className="py-4 text-center text-steel-muted">No resumes on this requisition yet.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -841,7 +849,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                       Documents{docCount ? ` (${docCount})` : ""}
                     </Button>
                   )}
-                  {canManage && onboardReady(c) && (
+                  {canManage && onboardReady(c, staff) && (
                     <Button type="button" className={rowBtn} onClick={() => void goOnboard(c)}>Onboard</Button>
                   )}
                   {lettersReady ? (
@@ -868,7 +876,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                         {isHrImage(d) ? (
                           <img src={hrFileContentUrl(d.id, token)} alt={d.category} className="h-10 w-10 rounded border border-line object-cover bg-sand" />
                         ) : null}
-                        <a href={isHrImage(d) ? hrFileContentUrl(d.id, token) : mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
+                        <a href={hrFileContentUrl(d.id, token)} target="_blank" rel="noreferrer" className={linkBtn}>{d.category}</a>
                         {canManage && (
                           <Button type="button" variant="danger" className={rowBtn} onClick={() => void removeDocument(c, d)}>Delete</Button>
                         )}
@@ -903,6 +911,7 @@ function CandidatesTab({ reqs, candidates, staff, canManage, reload, setMsg, tok
                     <Input value={edit.location} onChange={(e) => setEdit({ ...edit, location: e.target.value })} placeholder="Location" />
                     <Input type="number" value={edit.experienceYears} onChange={(e) => setEdit({ ...edit, experienceYears: e.target.value })} placeholder="Experience (yrs)" />
                     <Input type="number" value={edit.expectedCtc} onChange={(e) => setEdit({ ...edit, expectedCtc: e.target.value })} placeholder="Expected CTC" />
+                    <TextArea rows={2} placeholder="Skills (comma-separated)" value={edit.skills || ""} onChange={(e) => setEdit({ ...edit, skills: e.target.value })} className="md:col-span-4" />
                     <Select value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })}>
                       {CANDIDATE_STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </Select>
@@ -968,7 +977,15 @@ function roundsByCode(interviews: any[]) {
   return [...best.values()];
 }
 
-function onboardReady(c: any) {
+function alreadyOnboarded(c: any, staff?: any[]) {
+  if (["Onboarded", "Joined", "Converted"].includes(String(c?.status || ""))) return true;
+  const email = String(c?.email || "").toLowerCase();
+  if (!email) return false;
+  return (staff || []).some((person) => String(person?.email || "").toLowerCase() === email);
+}
+
+function onboardReady(c: any, staff?: any[]) {
+  if (alreadyOnboarded(c, staff)) return false;
   if (c.status === "Rejected" || c.status === "Withdrawn") return false;
   const sat = roundsByCode(c.interviews || []).filter((r) => scheduledRoundId(String(r.roundType || "")));
   if (!sat.length) return false;
@@ -1091,7 +1108,7 @@ function CompareTab({ candidates, staff, canManage, reload, setMsg, token }: any
                       <span className="text-xs text-steel-muted">Decision {decision || "—"}</span>
                       <div className="flex flex-wrap gap-1.5">
                           <Link to={`/hrm/recruitment?tab=interviews&candidateId=${c.id}`} className={linkBtn}>Scorecard</Link>
-                          {canManage && onboardReady(c) && (
+                          {canManage && onboardReady(c, staff) && (
                             <Button type="button" className={rowBtn} onClick={() => void openOnboardingDesk(c.id, token).then((desk) => {
                               if (desk.empCode) setMsg(`Employee Code ${desk.empCode}`);
                               navigate(`/hrm/onboarding/${desk.offerId}`);
@@ -1259,7 +1276,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                 </div>
               </div>
               <div className="text-xs text-right">
-                <div>{r.scheduledAt ? new Date(r.scheduledAt).toLocaleString("en-IN") : "Unscheduled"}</div>
+                <div>{formatMeetWhen(r.scheduledAt)}</div>
                 {r.meetingLink ? (
                   <a href={r.meetingLink} target="_blank" rel="noreferrer" className="text-brand font-semibold">
                     Join
@@ -1343,7 +1360,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
             <div className="space-y-2">
               <div className="text-[11px] font-semibold text-steel-muted" data-preserve-case>Interviewers</div>
               {form.interviewers.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem_auto] items-end gap-2">
+                <div key={idx} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem_auto] items-start gap-2">
                   <SearchableSelect
                     className="min-w-0 w-full"
                     options={staffOptions}
@@ -1371,7 +1388,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                   </Select>
                   <button
                     type="button"
-                    className="text-xs text-danger"
+                    className="text-xs text-danger pt-2"
                     onClick={() => setForm({ ...form, interviewers: form.interviewers.filter((_, i) => i !== idx) })}
                     disabled={form.interviewers.length === 1}
                   >
@@ -1402,7 +1419,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                   <div>
                     <span className="font-semibold">{SCHEDULE_ROUNDS.find((opt) => opt.id === scheduledRoundId(String(r.roundType || "")))?.label || `Round ${r.roundNumber} · ${r.roundType}`}</span>
                     <span className="text-xs text-steel-muted ml-2">
-                      {r.scheduledAt ? new Date(r.scheduledAt).toLocaleString("en-IN") : "Unscheduled"} · {r.durationMins}m · {r.mode}
+                      {formatMeetWhen(r.scheduledAt)} · {r.durationMins}m · {r.mode}
                     </span>
                   </div>
                   <Badge tone={r.status === "Completed" ? "ok" : r.status === "Cancelled" ? "danger" : "brand"}>{r.status}</Badge>
@@ -1454,7 +1471,7 @@ function InterviewsTab({ candidates, staff, canManage, reload, setMsg, token }: 
                       <Button type="button" className={decisionBtn} onClick={() => updateRound(r.id, { status: "Completed", decision: "Hold" })} variant="secondary">Hold</Button>
                       <Button type="button" className={decisionBtn} onClick={() => updateRound(r.id, { status: "Completed", decision: "Reject" })} variant="secondary">Reject</Button>
                     </div>
-                    {onboardReady(candidate) && canManage && (
+                    {onboardReady(candidate, staff) && canManage && (
                       <div className="md:col-span-4">
                         <Button
                           type="button"

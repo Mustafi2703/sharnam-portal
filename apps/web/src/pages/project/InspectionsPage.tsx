@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api, mediaUrl } from "../../api";
-import { downloadAuthFile } from "../../lib/downloadReport";
+import { downloadAuthFile, openAuthPreview } from "../../lib/downloadReport";
 import { projectWeekNumber } from "@sharnam/shared";
 import { ProjectWeekPicker } from "../../components/ProjectWeekPicker";
 import { useAuth } from "../../auth";
@@ -795,7 +795,21 @@ export default function InspectionsPage() {
                   const compliance = ncrComplianceSummary(n.formDataJson);
                   return (
                   <tr key={n.id}>
-                    <td className="text-left font-mono text-xs">{n.number}</td>
+                    <td className="text-left font-mono text-xs">
+                      <div>{n.number}</div>
+                      <button
+                        type="button"
+                        className="font-sans font-semibold text-brand"
+                        onClick={() =>
+                          id &&
+                          void openAuthPreview(`/api/checklist/project/${id}/ncr/${n.id}/export.pdf`, token).catch((err) =>
+                            setMsg(err instanceof Error ? err.message : "Could not open the PDF"),
+                          )
+                        }
+                      >
+                        Preview PDF
+                      </button>
+                    </td>
                     <td className="text-left text-xs whitespace-nowrap">
                       {n.issueDate ? String(n.issueDate).slice(0, 10) : "—"}
                     </td>
@@ -936,8 +950,7 @@ export default function InspectionsPage() {
         >
           <form ref={ncrAddFormRef} className="ncr01-raise space-y-3" onSubmit={submitNcrAdd}>
             <p className="text-xs text-steel-muted leading-relaxed">
-              Matches <strong>NCR 01.xlsx · NCR CAR</strong> sheet.{" "}
-              <strong>NCR</strong> = Non-Conformance Report · <strong>CAR</strong> = Corrective Action Request.
+              The PMC raises an NCR when a non-conformance is found. The contractor selected from the communication matrix addresses it.
             </p>
             <div className="grid sm:grid-cols-2 gap-3">
               <label className="ncr01-field">
@@ -962,48 +975,34 @@ export default function InspectionsPage() {
                 <span>Date by which action must be completed</span>
                 <Input type="date" value={ncrForm.plannedClosure} onChange={(e) => setNcrForm({ ...ncrForm, plannedClosure: e.target.value })} />
               </label>
-              <label className="ncr01-field">
-                <span>To (company on notice)</span>
+              <label className="ncr01-field sm:col-span-2">
+                <span>Contractor — from the communication matrix (addresses this {ncrForm.kind})</span>
                 <Select
-                  value={ncrForm.contractorVendorId}
+                  value={ncrForm.toContactId}
                   onChange={(e) => {
-                    const vid = e.target.value;
-                    const link = projectVendors.find((v) => v.vendorId === vid);
-                    const name = link?.vendor?.name || ncrForm.contractor;
+                    const contact = matrixContacts.find((c) => c.id === e.target.value);
+                    const company = contact?.company || contact?.orgName || contact?.personName || "";
+                    const vendor = projectVendors.find(
+                      (v) => String(v.vendor?.name || "").trim().toLowerCase() === company.trim().toLowerCase(),
+                    );
                     setNcrForm({
                       ...ncrForm,
-                      contractorVendorId: vid,
-                      contractor: name,
-                      toParty: name,
+                      toContactId: e.target.value,
+                      contractor: company,
+                      toParty: company,
+                      contractorVendorId: vendor?.vendorId || "",
                     });
                   }}
                   required={!ncrForm.contractor.trim()}
                 >
-                  <option value="">Select contractor…</option>
-                  {projectVendors.map((pv) => (
-                    <option key={pv.vendorId} value={pv.vendorId}>
-                      {pv.vendor?.name || pv.vendorId}
-                      {pv.vendor?.email ? ` · ${pv.vendor.email}` : ""}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="ncr01-field">
-                <span>To — name if not in list</span>
-                <Input
-                  value={ncrForm.contractor}
-                  onChange={(e) => setNcrForm({ ...ncrForm, contractor: e.target.value, toParty: e.target.value })}
-                  placeholder="Contractor / agency name"
-                />
-              </label>
-              <label className="ncr01-field sm:col-span-2">
-                <span>Attention to — concerned individual on the communication matrix (receives the {ncrForm.kind} by email)</span>
-                <Select value={ncrForm.toContactId} onChange={(e) => setNcrForm({ ...ncrForm, toContactId: e.target.value })}>
-                  <option value="">Company mailbox only (no individual)</option>
-                  {matrixContacts.map((c) => (
+                  <option value="">Select contractor from the communication matrix…</option>
+                  {(matrixContacts.filter((c) => /contractor/i.test(`${c.orgSection || ""} ${c.company || ""} ${c.orgName || ""}`)).length
+                    ? matrixContacts.filter((c) => /contractor/i.test(`${c.orgSection || ""} ${c.company || ""} ${c.orgName || ""}`))
+                    : matrixContacts
+                  ).map((c) => (
                     <option key={c.id} value={c.id}>
                       {[c.personName, c.designation, c.company || c.orgName].filter(Boolean).join(" · ")}
-                      {c.email ? ` — ${c.email}` : " — no email on matrix"}
+                      {c.email ? ` — ${c.email}` : ""}
                     </option>
                   ))}
                 </Select>
@@ -1070,9 +1069,9 @@ export default function InspectionsPage() {
                 onChange={(e) => setNcrForm({ ...ncrForm, actionRequired: e.target.value })}
               />
             </label>
-            {!projectVendors.length && (
+            {!matrixContacts.length && (
               <p className="text-xs text-steel-muted bg-sand/60 border border-line rounded-lg px-3 py-2">
-                Assign contractors under Project → Vendors first — they receive the form link by email when raised.
+                Add the contractor on the communication matrix first. They receive the form when an email is on the matrix.
               </p>
             )}
           </form>

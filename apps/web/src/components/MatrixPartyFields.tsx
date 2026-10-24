@@ -527,7 +527,7 @@ export function MatrixPartyFields({
           </p>
         ) : (
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Party</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Party</span>
           <Select value={form.orgSection} onChange={(e) => changeSection(e.target.value)}>
             {MATRIX_ORG_SECTIONS.map((s) => (
               <option key={s} value={s}>
@@ -538,7 +538,7 @@ export function MatrixPartyFields({
         </label>
         )}
         <label className="block space-y-1 sm:col-span-1 lg:col-span-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company · search {noun}s</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Company · search {noun}s</span>
           <SearchableSelect
             key={`co-${form.orgSection}`}
             options={sectionVendors.map((v) => ({
@@ -568,7 +568,7 @@ export function MatrixPartyFields({
           />
         </label>
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Name · search people</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Name · search people</span>
           <SearchableSelect
             key={`nm-${form.orgSection}-${pickVendorId}`}
             options={peopleOptions}
@@ -580,12 +580,12 @@ export function MatrixPartyFields({
         </label>
         {!hideManualFields ? (
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Name (editable)</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Name (editable)</span>
           <Input placeholder="Name" value={form.personName} onChange={(e) => onChange({ ...form, personName: e.target.value })} />
         </label>
         ) : null}
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Designation</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Designation</span>
           <SearchableSelect
             key={`des-${form.orgSection}`}
             options={designationOptions(form.orgSection, form.designation)}
@@ -599,16 +599,16 @@ export function MatrixPartyFields({
         </label>
         {!hideManualFields ? (
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company (editable)</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Company (editable)</span>
           <Input placeholder="Company" value={form.company} onChange={(e) => onChange({ ...form, company: e.target.value, orgName: e.target.value })} />
         </label>
         ) : null}
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Mobile</span>
+          <span className="text-[11px] font-semibold text-steel-muted">Mobile</span>
           <Input placeholder="Mobile" value={form.mobile} onChange={(e) => onChange({ ...form, mobile: e.target.value })} />
         </label>
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">E-mail · search people</span>
+          <span className="text-[11px] font-semibold text-steel-muted">E-mail · search people</span>
           <SearchableSelect
             options={(() => {
               const seen = new Set<string>();
@@ -637,7 +637,7 @@ export function MatrixPartyFields({
           />
         </label>
         <label className="block space-y-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">General mail</span>
+          <span className="text-[11px] font-semibold text-steel-muted">General mail</span>
           <Select value={form.mailRole} onChange={(e) => onChange({ ...form, mailRole: e.target.value })}>
             <option value="TO">TO</option>
             <option value="CC">CC</option>
@@ -645,7 +645,7 @@ export function MatrixPartyFields({
         </label>
         {!editing ? (
           <label className="block space-y-1 sm:col-span-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-steel-muted">Company office address · used when the company has none yet</span>
+            <span className="text-[11px] font-semibold text-steel-muted">Company office address · used when the company has none yet</span>
             <Input placeholder="Office address" value={form.officeAddress} onChange={(e) => onChange({ ...form, officeAddress: e.target.value })} />
           </label>
         ) : null}

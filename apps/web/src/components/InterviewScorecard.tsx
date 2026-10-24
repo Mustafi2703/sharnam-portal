@@ -143,11 +143,11 @@ export function InterviewScorecard({
       </div>
       <div className="max-h-64 overflow-auto border border-line rounded">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-white">
+          <thead className="sticky top-0 z-10 bg-paper">
             <tr>
-              <th className="text-left px-2 py-1 bg-white">{formatUiText("Parameter")}</th>
-              <th className="text-left px-2 py-1 bg-white">{formatUiText("Weight")}</th>
-              <th className="text-left px-2 py-1 bg-white">{formatUiText("Score 1-5")}</th>
+              <th className="text-left px-2 py-1 bg-paper">{formatUiText("Parameter")}</th>
+              <th className="text-left px-2 py-1 bg-paper">{formatUiText("Weight")}</th>
+              <th className="text-left px-2 py-1 bg-paper">{formatUiText("Score 1-5")}</th>
             </tr>
           </thead>
           <tbody>

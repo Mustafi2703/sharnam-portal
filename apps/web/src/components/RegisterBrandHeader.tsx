@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useClientLogo } from "../lib/useClientLogo";
 import { RegisterSheetCell } from "./RegisterSheetCell";
 import { Button } from "./ui";
+import { formatUiText } from "../lib/formatUiText";
 
 export type RegisterBrandProject = {
   id?: string;
@@ -76,6 +77,15 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
 
   async function uploadLogo(file: File) {
     if (!project?.id || !token) return;
+    const okType = file.type === "image/png" || file.type === "image/jpeg" || /\.(png|jpe?g)$/i.test(file.name);
+    if (!okType) {
+      setErr("Use a PNG or JPG logo.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setErr("Logo must be 2 MB or smaller.");
+      return;
+    }
     setBusy(true);
     setErr("");
     try {
@@ -107,7 +117,7 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
           {logoSrc ? (
             <img src={logoSrc} alt="Client logo" className="max-h-14 max-w-[6.5rem] object-contain" />
           ) : (
-            <span className="text-[10px] font-semibold text-steel-muted uppercase tracking-wide text-center">Client LOGO</span>
+            <span className="text-[10px] font-semibold text-steel-muted text-center">{formatUiText("Client Logo")}</span>
           )}
           {canEdit && project?.id && (
             <>
@@ -131,6 +141,7 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
               >
                 {project?.clientLogoUrl ? "Change logo" : "Upload logo"}
               </Button>
+              <span className="text-[10px] text-steel-muted text-center">{formatUiText("PNG or JPG, up to 2 MB")}</span>
             </>
           )}
         </div>
@@ -150,7 +161,7 @@ export function RegisterBrandHeader({ title, project, token, canEdit, onProjectU
             {canEdit && project?.id ? (
               <RegisterSheetCell
                 value={meta[f.key]}
-                className="spdc-register-meta__value !font-semibold min-w-[8rem]"
+                className="spdc-register-meta__value !font-semibold"
                 placeholder={f.placeholder}
                 onCommit={(v) => void patchField(f.key, v)}
               />

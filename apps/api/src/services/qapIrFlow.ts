@@ -14,7 +14,7 @@ import {
   lineIrType,
   type QapRoleRow,
 } from "./qapSignoff.js";
-import { prefillFromLine } from "./qapQuality.js";
+import { ensureQapLines, prefillFromLine, refreshQapWeek } from "./qapQuality.js";
 import {
   QUALITY_CLIENT_PATCH_KEYS,
   QUALITY_CONTRACTOR_PATCH_KEYS,
@@ -401,6 +401,19 @@ export async function applyQualityIrPatch(opts: {
     nextStatus = "Open";
   }
 
+  const closingNow = closed || patch.closedBy !== undefined;
+  if (closingNow && existing.linkedAssignmentId) {
+    const submitted = await prisma.checklistSubmission.count({
+      where: { assignmentId: existing.linkedAssignmentId, status: "Submitted" },
+    });
+    if (!submitted) {
+      return {
+        error: "Fill and submit the linked checklist before this inspection can be closed.",
+        status: 400,
+      };
+    }
+  }
+
   return { formDataJson: JSON.stringify(form), nextStatus, closed, notifyClient };
 }
 
@@ -459,4 +472,103 @@ export async function createReoffer(opts: { projectId: string; rfiId: string; us
     },
   });
   return { rfi: created };
+}
+
+/**
+ * When a QAP activity is added, raise one draft inspection for that plan line
+ * and link the activity checklist so the team can fill it.
+ */
+export async function raiseDraftQualityIrForActivity(opts: {
+  projectId: string;
+  userId: string;
+  activityId: string;
+}): Promise<{ id: string; number: string; already: boolean } | null> {
+  await ensureQapLines(opts.projectId);
+  const activity = await prisma.qapActivity.findFirst({
+    where: { id: opts.activityId, projectId: opts.projectId },
+  });
+  if (!activity?.qapLineId) return null;
+  const line = await prisma.qapLine.findFirst({
+    where: { id: activity.qapLineId, projectId: opts.projectId },
+  });
+  if (!line || line.isHeader) return null;
+
+  const existing = await prisma.rfi.findFirst({
+    where: { projectId: opts.projectId, rfiKind: "QualityIR", qapLineId: line.id },
+    select: { id: true, number: true },
+  });
+  if (existing) return { id: existing.id, number: existing.number, already: true };
+
+  const usedRows = await prisma.rfi.findMany({
+    where: { projectId: opts.projectId },
+    select: { number: true },
+  });
+  const used = new Set(usedRows.map((row) => row.number));
+  let n = usedRows.length + 1;
+  let number = `IR-QA-${String(n).padStart(3, "0")}`;
+  while (used.has(number)) {
+    n += 1;
+    number = `IR-QA-${String(n).padStart(3, "0")}`;
+  }
+
+  const prefill = prefillFromLine(line);
+  const linkedAssignmentId = await ensureActivityChecklist(opts.projectId, line.section || line.activity || line.description || "");
+  const role = line.contractorPerformer
+    ? await prisma.qapRoleAssignment.findFirst({
+        where: { projectId: opts.projectId, party: "Contractor", roleLabel: line.contractorPerformer },
+        include: { contact: { select: { id: true, email: true, personName: true } }, user: { select: { id: true, fullName: true, email: true } } },
+      })
+    : null;
+  const subject = [line.section, line.description || line.activity].filter(Boolean).join(" — ").slice(0, 240) || "Quality inspection";
+  const created = await prisma.rfi.create({
+    data: {
+      projectId: opts.projectId,
+      number,
+      subject,
+      question: `Request for inspection raised from the quality assurance plan${line.srNo ? ` (Sr ${line.srNo})` : ""}. ${subject}`,
+      rfiKind: "QualityIR",
+      status: "Draft",
+      ballInCourt: "Assignee",
+      createdById: opts.userId,
+      qapLineId: line.id,
+      linkedAssignmentId,
+      assignedToId: role?.userId || null,
+      assigneeContactId: role?.contactId || null,
+      assigneeEmail: role?.user?.email || role?.contact?.email || null,
+      assigneeName: role?.user?.fullName || role?.contact?.personName || null,
+      responsibleVendorId: role?.vendorId || null,
+      dueDate: new Date(Date.now() + 14 * 86400000),
+      formDataJson: JSON.stringify({
+        activityDescription: prefill.activityDescription,
+        itpRef: prefill.itpRef,
+        discipline: prefill.discipline,
+        specClause: prefill.specClause,
+        irType: prefill.irType,
+        qapLineId: line.id,
+        autoRaised: "true",
+      }),
+    },
+  });
+  await raiseActivityChecklistForIr({
+    projectId: opts.projectId,
+    userId: opts.userId,
+    qualityIr: {
+      id: created.id,
+      projectId: created.projectId,
+      number: created.number,
+      irNumber: created.irNumber,
+      status: created.status,
+      formDataJson: created.formDataJson,
+      qapLineId: created.qapLineId,
+      subject: created.subject,
+      assignedToId: created.assignedToId,
+      assigneeContactId: created.assigneeContactId,
+      assigneeEmail: created.assigneeEmail,
+      assigneeName: created.assigneeName,
+      responsibleVendorId: created.responsibleVendorId,
+      linkedAssignmentId: created.linkedAssignmentId,
+    },
+  }).catch(() => undefined);
+  await refreshQapWeek(opts.projectId, activity.weekLabel).catch(() => undefined);
+  return { id: created.id, number: created.number, already: false };
 }

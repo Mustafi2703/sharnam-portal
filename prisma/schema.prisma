@@ -2039,6 +2039,8 @@ model QapLine {
   pmcRole             String?
   clientRole          String?
   records             String?  @db.Text
+  /// Activity documents uploaded against this plan line [{url, sharePointUrl, name, uploadedAt, uploadedBy}]
+  documentsJson       String?  @db.LongText
   discipline          String?
   isHeader            Boolean  @default(false)
   sortOrder           Int

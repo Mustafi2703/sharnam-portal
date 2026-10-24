@@ -6,6 +6,7 @@ const ACRONYMS = new Set([
   "DPR",
   "WPR",
   "RFI",
+  "IR",
   "RFIs",
   "QI",
   "QAP",

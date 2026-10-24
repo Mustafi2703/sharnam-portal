@@ -319,7 +319,7 @@ export function CommsMatrixPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
           <div className="text-center flex-1 min-w-[180px]">
-            <div className="font-display text-lg text-ink uppercase tracking-wide">{matrixKind} Communication Matrix</div>
+            <div className="font-display text-lg text-ink">{formatUiText(`${matrixKind} Communication Matrix`)}</div>
             <div className="text-xs text-steel-muted mt-1">
               <span data-preserve-case>{matrixSubtitle(project)}</span>
             </div>
@@ -358,10 +358,7 @@ export function CommsMatrixPanel({
 
       {canEdit && !editingId && (
         <Card id="matrix-add-person">
-          <h3 className="font-semibold text-sm mb-1">Add contact</h3>
-          <p className="text-[11px] text-steel-muted mb-3">
-            Names added on the CRM company (client, consultant, PMC, vendor) are in the name list for that party. Missing a company? Add it here — you stay on this matrix.
-          </p>
+          <h3 className="font-semibold text-sm mb-3">Add Contact</h3>
           <form className="space-y-3" onSubmit={(e) => void addContact(e)}>
             {fields}
             <label className="flex items-center gap-2 text-xs text-steel-muted">

@@ -2661,7 +2661,18 @@ checklistRouter.post(
       },
     });
     republishQapIso(req.params.projectId, req.user!.id);
-    res.status(201).json(row);
+    let inspectionRequest: { id: string; number: string; already: boolean } | null = null;
+    try {
+      const { raiseDraftQualityIrForActivity } = await import("../services/qapIrFlow.js");
+      inspectionRequest = await raiseDraftQualityIrForActivity({
+        projectId: req.params.projectId,
+        userId: req.user!.id,
+        activityId: row.id,
+      });
+    } catch (err) {
+      console.warn("[qap] inspection raise:", err instanceof Error ? err.message : err);
+    }
+    res.status(201).json({ ...row, inspectionRequest });
   }
 );
 
@@ -3689,8 +3700,16 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.html", async (req: Au
     select: { name: true, code: true, clientName: true },
   });
   const { buildQualityNcrHtml, qualityNcrSigns } = await import("../services/ncrFormExport.js");
+  const { clientLogoPathForProject, clientLogoDataUri } = await import("../services/clientLogo.js");
+  const partyFile = await clientLogoPathForProject(req.params.projectId);
   const webOrigin = process.env.WEB_ORIGIN || process.env.VITE_WEB_ORIGIN || "https://portal.spdc.in";
-  const html = buildQualityNcrHtml(row, project || undefined, `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`, await qualityNcrSigns(req.params.projectId, row));
+  const html = buildQualityNcrHtml(
+    row,
+    project || undefined,
+    `${webOrigin.replace(/\/$/, "")}/logo-transparent.png`,
+    await qualityNcrSigns(req.params.projectId, row),
+    { logoUrl: clientLogoDataUri(partyFile) || null, name: row.contractor || "" },
+  );
   await audit("quality.ncr.downloaded", {
     userId: req.user?.id,
     entity: "QualityNcr",
@@ -3711,7 +3730,12 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req: Aut
     select: { name: true, code: true, clientName: true },
   });
   const { buildQualityNcrPdf, qualityNcrSigns } = await import("../services/ncrFormExport.js");
-  const buf = await buildQualityNcrPdf(row, project || undefined, await qualityNcrSigns(req.params.projectId, row));
+  const { clientLogoPathForProject } = await import("../services/clientLogo.js");
+  const partyFile = await clientLogoPathForProject(req.params.projectId);
+  const buf = await buildQualityNcrPdf(row, project || undefined, await qualityNcrSigns(req.params.projectId, row), {
+    logoPath: partyFile,
+    name: row.contractor || "",
+  });
   const name = `${row.number || "NCR"}.pdf`.replace(/[^\w.-]+/g, "_");
   await audit("quality.ncr.downloaded", {
     userId: req.user?.id,
@@ -3720,7 +3744,7 @@ checklistRouter.get("/project/:projectId/ncr/:ncrId/export.pdf", async (req: Aut
     meta: { projectId: req.params.projectId, format: "pdf", number: row.number },
   });
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+  res.setHeader("Content-Disposition", `inline; filename="${name}"`);
   res.send(buf);
 });
 
@@ -4276,10 +4300,11 @@ checklistRouter.post(
     const sectionsBefore = new Set((await prisma.qapActivity.findMany({ where: { projectId: req.params.projectId, weekLabel }, select: { section: true } })).map((r) => r.section));
     const srNo = t(b.srNo) || (existing ? null : String(sectionsBefore.size + 1));
     let created = 0;
+    const createdIds: string[] = [];
     for (const [i, l] of lines.entries()) {
       const description = t(l.description);
       if (!description) continue;
-      await prisma.qapActivity.create({
+      const added = await prisma.qapActivity.create({
         data: {
           projectId: req.params.projectId,
           weekLabel,
@@ -4303,11 +4328,26 @@ checklistRouter.post(
           status: "Open",
         },
       });
+      createdIds.push(added.id);
       created++;
     }
     republishQapIso(req.params.projectId, req.user!.id);
-    await audit("qap.lines.bulk", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { weekLabel, section, created } });
-    res.status(201).json({ ok: true, created });
+    let inspectionsRaised = 0;
+    try {
+      const { raiseDraftQualityIrForActivity } = await import("../services/qapIrFlow.js");
+      for (const activityId of createdIds) {
+        const ir = await raiseDraftQualityIrForActivity({
+          projectId: req.params.projectId,
+          userId: req.user!.id,
+          activityId,
+        });
+        if (ir && !ir.already) inspectionsRaised += 1;
+      }
+    } catch (err) {
+      console.warn("[qap] inspection raise:", err instanceof Error ? err.message : err);
+    }
+    await audit("qap.lines.bulk", { userId: req.user!.id, entity: "Project", entityId: req.params.projectId, meta: { weekLabel, section, created, inspectionsRaised } });
+    res.status(201).json({ ok: true, created, inspectionsRaised });
   },
 );
 

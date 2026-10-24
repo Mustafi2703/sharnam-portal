@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, mediaUrl } from "../api";
+import { api } from "../api";
 import { useAuth } from "../auth";
 import { Badge, Button, Card, Input, Select, TextArea } from "../components/ui";
 import { formatUiText } from "../lib/formatUiText";
 import { canManageHrms } from "../lib/portalAccounts";
-import { HR_FILE_KINDS, hrFileContentUrl, isHrImage } from "../lib/hrFileView";
+import { hrFileContentUrl, isHrImage } from "../lib/hrFileView";
 import { StatusNote } from "../components/StatusNote";
 
 /**
@@ -436,6 +436,27 @@ function OfferOnboardingPage() {
         token,
         body: fd,
       });
+      const have = new Set(vaultDocs.map((doc) => doc.category));
+      have.add(category);
+      const required = ["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank"];
+      const onboardFlags: Record<string, boolean> = {};
+      if (/pan|aadhaar/i.test(category)) onboardFlags.panAadhaarDone = true;
+      if (/bank/i.test(category)) onboardFlags.bankDetailsDone = true;
+      if (required.every((name) => have.has(name))) {
+        onboardFlags.docVerificationDone = true;
+        await api(`/api/hrm/pre-joining/${offerId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify({ docCollectionDone: true }),
+        });
+      }
+      if (Object.keys(onboardFlags).length) {
+        await api(`/api/hrm/onboarding/${offerId}`, {
+          method: "PATCH",
+          token,
+          body: JSON.stringify(onboardFlags),
+        });
+      }
       setMsg(`${r.uploaded} file(s) uploaded to your HR folder (${category}).`);
       await load();
     } catch (err) {
@@ -452,6 +473,7 @@ function OfferOnboardingPage() {
     hrOnly?: boolean;
     candidate?: boolean;
     picker?: string[];
+    statusPick?: boolean;
     text?: boolean;
     boolTextKey?: string;
     afterLetter?: boolean;
@@ -459,15 +481,14 @@ function OfferOnboardingPage() {
 
   const preJoinItems = useMemo((): PreJoinItem[] => {
     return [
-      { key: "docCollectionDone", label: "1 · Document collection", candidate: true },
+      { key: "docCollectionDone", label: "1 · Document collection", statusPick: true },
       { key: "bgvStatus", label: "2 · Background verification", hrOnly: true, picker: ["Pending", "In-Progress", "Cleared", "Failed"] },
       { key: "medicalStatus", label: "3 · Medical fitness", hrOnly: true, picker: ["Pending", "In-Progress", "Cleared", "Failed", "Not-Applicable"] },
       { key: "empCodeGenerated", label: "4 · Employee code generated", hrOnly: true, text: true },
-      { key: "appointmentLetterUrl", label: "5 · Appointment letter", hrOnly: true, text: true },
-      { key: "itAssetRequested", label: "6 · IT asset allocation request", candidate: true },
-      { key: "emailCreated", label: "7 · Email ID created", hrOnly: true, text: true, boolTextKey: "emailAddress" },
-      { key: "idCardRequested", label: "8 · ID card request", candidate: true },
-      { key: "welcomeKitPrepared", label: "9 · Welcome kit ready", hrOnly: true },
+      { key: "itAssetRequested", label: "5 · IT asset allocation", statusPick: true },
+      { key: "emailCreated", label: "6 · Email ID created", hrOnly: true, text: true, boolTextKey: "emailAddress" },
+      { key: "idCardRequested", label: "7 · ID card request", statusPick: true },
+      { key: "welcomeKitPrepared", label: "8 · Welcome kit ready", statusPick: true },
     ];
   }, []);
 
@@ -482,7 +503,6 @@ function OfferOnboardingPage() {
       preJoin.bgvStatus === "Cleared",
       preJoin.medicalStatus === "Cleared" || preJoin.medicalStatus === "Not-Applicable",
       !!preJoin.empCodeGenerated,
-      !!preJoin.appointmentLetterUrl,
       preJoin.itAssetRequested,
       preJoin.emailCreated,
       preJoin.idCardRequested,
@@ -545,7 +565,6 @@ function OfferOnboardingPage() {
         form.bgvStatus === "Cleared",
         form.medicalStatus === "Cleared" || form.medicalStatus === "Not-Applicable",
         !!form.empCodeGenerated,
-        !!form.appointmentLetterUrl,
         form.itAssetRequested,
         form.emailCreated || !!form.emailAddress,
         form.idCardRequested,
@@ -554,7 +573,7 @@ function OfferOnboardingPage() {
     : 0;
 
   const onboardDone = day1 ? onboardItems.filter((i) => day1[i.key]).length : 0;
-  const preTotal = 9;
+  const preTotal = 8;
   const onboardTotal = onboardItems.length;
 
   return (
@@ -614,19 +633,31 @@ function OfferOnboardingPage() {
 
       {canHrWrite && form ? (
         <Card>
-          <h3 className="font-semibold text-sm mb-1">Upload pre-joining documents</h3>
-          <p className="text-[11px] text-steel-muted mb-3">
-            PAN, Aadhaar, bank proof, education certificates, photo. Each file is stored in this person’s folder under the requisition, and in their employee file.
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="text-xs flex flex-col gap-1">
-              <span className="text-steel-muted">Category</span>
-              <select id="prejoin-doc-category" defaultValue="PAN" className="border border-line rounded px-2 py-1.5 text-sm">
-                {HR_FILE_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>{kind}</option>
-                ))}
-              </select>
-            </label>
+          <h3 className="font-semibold text-sm mb-3">Upload pre-joining documents</h3>
+          <ul className="space-y-2">
+            {["PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Photo", "Bank"].map((kind) => {
+              const filed = vaultDocs.find((doc) => doc.category === kind);
+              return (
+                <li key={kind} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className={filed ? "text-emerald-700" : "text-red-700"}>{kind}</span>
+                  <Button type="button" variant="secondary" disabled={uploadBusy} onClick={() => {
+                    const input = docUploadRef.current;
+                    if (!input) return;
+                    input.dataset.category = kind;
+                    input.click();
+                  }}>
+                    {filed ? "Replace" : "Upload"}
+                  </Button>
+                  {filed ? (
+                    <a href={hrFileContentUrl(filed.id, token)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">
+                      Open
+                    </a>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden">
             <input
               ref={docUploadRef}
               type="file"
@@ -634,18 +665,26 @@ function OfferOnboardingPage() {
               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
               hidden
               onChange={(e) => {
-                const cat = (document.getElementById("prejoin-doc-category") as HTMLSelectElement)?.value || "Pre-join";
+                const cat = docUploadRef.current?.dataset.category || "Other";
                 void uploadPreJoinDocs(e.target.files, cat);
               }}
             />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={uploadBusy}
-              onClick={() => docUploadRef.current?.click()}
-            >
-              {uploadBusy ? "Uploading…" : "Choose files"}
-            </Button>
+          </div>
+          <div className="mt-4 border-t border-line pt-3 flex flex-wrap items-center gap-3">
+            <span className="text-sm">Signed Appointment Letter</span>
+            <label className="text-xs">
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                className="hidden"
+                disabled={uploadBusy}
+                onChange={(e) => void fileSignedAppointment(e.target.files?.[0] || null)}
+              />
+              <span className="inline-flex items-center rounded-md border border-line px-2 py-1 cursor-pointer">
+                {uploadBusy ? "Filing…" : formatUiText("File Signed Copy")}
+              </span>
+            </label>
+            {signedFiled ? <span className="text-xs text-emerald-700">{formatUiText("Signed Copy Has Been Filed.")}</span> : null}
           </div>
           {vaultDocs.length ? (
             <div className="mt-4 border-t border-line pt-3">
@@ -662,7 +701,7 @@ function OfferOnboardingPage() {
                         <span className="text-steel-muted">{d.title}</span>
                       </span>
                     </span>
-                    <a href={isHrImage(d) ? hrFileContentUrl(d.id, token) : mediaUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-brand underline shrink-0">
+                    <a href={hrFileContentUrl(d.id, token)} target="_blank" rel="noreferrer" className="text-brand underline shrink-0">
                       Open
                     </a>
                   </li>
@@ -685,10 +724,7 @@ function OfferOnboardingPage() {
         </Card>
 
         <Card className="lg:col-span-2">
-          <h3 className="font-semibold text-sm mb-1">2 · Pre-Joining Process</h3>
-          <p className="text-[11px] text-steel-muted mb-3">
-            Document collection · BGV · medical · employee code · appointment letter · IT asset · email · ID card · welcome kit
-          </p>
+          <h3 className="font-semibold text-sm mb-3">2 · Pre-Joining Process</h3>
           {!form && (
             <div className="space-y-2">
               <p className="text-sm text-steel-muted">Loading pre-joining checklist…</p>
@@ -701,31 +737,6 @@ function OfferOnboardingPage() {
             <ul className="space-y-2 text-sm">
               {preJoinItems.map((item) => {
                 const editable = canEditPreJoinItem(item);
-                if (item.key === "appointmentLetterUrl") {
-                  return (
-                    <li key={item.key} className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
-                      <span className="flex-1">{item.label}</span>
-                      {form.appointmentLetterUrl ? (
-                        <>
-                          <a href={mediaUrl(form.appointmentLetterUrl)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand">Open letter</a>
-                          <label className="text-xs">
-                            <input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                              className="hidden"
-                              disabled={uploadBusy}
-                              onChange={(e) => void fileSignedAppointment(e.target.files?.[0] || null)}
-                            />
-                            <span className="inline-flex items-center rounded-md border border-line px-2 py-1 cursor-pointer">{uploadBusy ? "Filing…" : formatUiText("File Signed Copy")}</span>
-                          </label>
-                          {signedFiled ? <StatusNote compact msg={formatUiText("Signed Copy Has Been Filed.")} /> : null}
-                        </>
-                      ) : (
-                        <span className="text-xs text-steel-muted">Generate the letter first. File the signed copy after they return it.</span>
-                      )}
-                    </li>
-                  );
-                }
                 if (item.key === "emailCreated") {
                   return (
                     <li key={item.key} className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
@@ -757,6 +768,23 @@ function OfferOnboardingPage() {
                         disabled={!editable}
                         className="max-w-[10rem]"
                       />
+                    </li>
+                  );
+                }
+                if (item.statusPick) {
+                  const done = !!form[item.key];
+                  return (
+                    <li key={item.key} className="flex items-center gap-3 border-t border-line pt-2">
+                      <span className="flex-1">{item.label}</span>
+                      <select
+                        value={done ? "Done" : "Pending"}
+                        onChange={(e) => setForm({ ...form, [item.key]: e.target.value === "Done" })}
+                        disabled={!editable}
+                        className="border border-line rounded px-2 py-1 text-xs"
+                      >
+                        <option>Pending</option>
+                        <option>Done</option>
+                      </select>
                     </li>
                   );
                 }

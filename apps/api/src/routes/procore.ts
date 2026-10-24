@@ -1260,6 +1260,7 @@ rfiRouter.post(
         recordKey: req.body?.recordKey ? String(req.body.recordKey) : undefined,
         files,
         kindHint,
+        phase: req.body?.phase === "close" ? "close" : req.body?.phase === "open" ? "open" : undefined,
       });
       await audit("rfi.ir.attachments", {
         userId: req.user!.id,
@@ -1267,6 +1268,12 @@ rfiRouter.post(
         entityId: req.params.id,
         meta: { added: out.added.length, folder: out.folder },
       });
+      if (out.rfi) {
+        const { syncQualityIrNotes } = await import("../services/irEvidence.js");
+        await syncQualityIrNotes(out.rfi.id, req.user!.id).catch((err) =>
+          console.warn("[IR] note sync after photo:", err instanceof Error ? err.message : err),
+        );
+      }
       res.json({
         ok: true,
         attachments: out.attachments,
@@ -1603,6 +1610,12 @@ rfiRouter.patch("/:id", async (req: AuthedRequest, res) => {
       closedAt: qualityClosed || req.body.status === "Closed" ? new Date() : undefined,
     },
   });
+  if (existing.rfiKind === "QualityIR" && formDataJson) {
+    const { syncQualityIrNotes } = await import("../services/irEvidence.js");
+    await syncQualityIrNotes(rfi.id, req.user!.id).catch((err) =>
+      console.warn("[IR] note sync:", err instanceof Error ? err.message : err),
+    );
+  }
   if (notifyClient && existing.qapLineId) {
     const line = await prisma.qapLine.findUnique({ where: { id: existing.qapLineId } });
     if (line) {

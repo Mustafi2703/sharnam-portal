@@ -790,11 +790,21 @@ hrmRecruitmentRouter.get("/candidates/:id/resume/file", hrDesk, async (req, res)
   const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
   if (!candidate?.resumeUrl) return res.status(404).json({ error: "No resume on file." });
   const disk = locateResumeFile(candidate.resumeUrl, candidate.fullName);
-  if (!disk) return res.status(404).json({ error: "Resume file was not found." });
-  const name = path.basename(disk).replace(/"/g, "");
+  if (disk) {
+    const name = path.basename(disk).replace(/"/g, "");
+    res.setHeader("Content-Type", mimeForFileName(name));
+    res.setHeader("Content-Disposition", `inline; filename="${name}"`);
+    res.send(fs.readFileSync(disk));
+    return;
+  }
+  const rel = resumeRelFromStored(candidate.resumeUrl);
+  const sandbox = rel ? `${SHAREPOINT_SANDBOX_ROOT}/${rel}` : sharePointPathFromWebUrl(candidate.resumeUrl || "");
+  const remote = sandbox ? await downloadDriveFile(sandbox).catch(() => null) : null;
+  if (!remote) return res.status(404).json({ error: "Resume file was not found. Upload it again." });
+  const name = storedFileName(sandbox, candidate.resumeUrl, "resume.pdf");
   res.setHeader("Content-Type", mimeForFileName(name));
   res.setHeader("Content-Disposition", `inline; filename="${name}"`);
-  res.send(fs.readFileSync(disk));
+  res.send(remote);
 });
 
 const BGV_CATEGORIES = ["Passport photo", "Photo", "PAN", "Aadhaar", "Education", "Experience", "Salary slips", "Address proof", "Bank", "PF-ESIC", "Medical", "BGV", "Other"] as const;

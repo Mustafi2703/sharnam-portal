@@ -222,6 +222,10 @@ export type SelectionMatrixRow = {
   decision?: string;
 };
 
+function ascii(value: string) {
+  return String(value || "").replace(/[^\x20-\x7E]/g, " ").trim();
+}
+
 function fmtDay(value?: Date | string | null) {
   if (!value) return "";
   const d = new Date(value);
@@ -271,7 +275,7 @@ async function pdfDoc() {
   return { doc, done };
 }
 
-/** Print of one round. Filed beside the scorecard workbook. */
+/** Print of one round, same columns as the scorecard sheet. Filed beside the workbook. */
 export async function buildScorecardPdf(
   candidateName: string,
   result: ScorecardResult,
@@ -279,26 +283,71 @@ export async function buildScorecardPdf(
 ): Promise<Buffer> {
   const { doc, done } = await pdfDoc();
   const name = String(candidateName || "Candidate").replace(/[^\x20-\x7E]/g, " ");
-  doc.font("Helvetica-Bold").fontSize(13).text("Candidate interview scorecard");
-  doc.moveDown(0.4);
-  doc.font("Helvetica").fontSize(9);
-  doc.text(`Candidate: ${name}`);
-  doc.text(`Position: ${result.position}`);
-  doc.text(`Round: ${ROUND_LABEL[scorecardRoundId(result.round)] || result.round}`);
-  doc.text(`Date: ${fmtDay(meta?.interviewDate) || "-"}`);
-  if (meta?.panelists?.length) doc.text(`Panel: ${meta.panelists.join(", ").replace(/[^\x20-\x7E]/g, " ")}`);
-  doc.moveDown(0.6);
-  doc.font("Helvetica");
-  for (const line of result.lines) {
-    if (!line.average) continue;
-    const score = Math.round(line.average * 10) / 10;
-    const weight = Math.round(line.weight * 1000) / 10;
-    doc.text(`${line.parameter.slice(0, 70)}    ${score} / 5    weight ${weight}%`);
+  try {
+    const { sharnamLogoPath } = await import("./brandedExport.js");
+    const logo = sharnamLogoPath();
+    if (logo && fs.existsSync(logo)) doc.image(logo, 36, 28, { fit: [88, 30] });
+  } catch {
+    /* logo is optional */
   }
-  doc.moveDown(0.6);
-  doc.font("Helvetica-Bold").text(`Overall score: ${result.percent}%    Grade ${result.grade}`);
-  doc.text(result.knockout ? "Knock-out: Yes" : "Knock-out: No");
-  doc.text(`Decision: ${result.decision}`);
+  doc.fillColor("#111").font("Helvetica-Bold").fontSize(14).text("Candidate Interview Scorecard", 136, 32, { width: 420 });
+  let y = 72;
+  const facts: [string, string][] = [
+    ["Candidate", name],
+    ["Position", ascii(result.position)],
+    ["Round", ascii(ROUND_LABEL[scorecardRoundId(result.round)] || result.round)],
+    ["Date", fmtDay(meta?.interviewDate) || "-"],
+  ];
+  if (meta?.panelists?.length) facts.push(["Panel", ascii(meta.panelists.join(", "))]);
+  doc.fontSize(9);
+  for (const [label, value] of facts) {
+    doc.font("Helvetica-Bold").text(label, 36, y, { width: 78 });
+    doc.font("Helvetica").text(value || "-", 118, y, { width: 440 });
+    y += 14;
+  }
+  y += 8;
+  const widths = [300, 70, 70, 83];
+  const tableW = widths.reduce((sum, w) => sum + w, 0);
+  const headers = ["Parameter", "Weight", "Score", "Weighted"];
+  const paintHead = () => {
+    doc.rect(36, y, tableW, 16).fill("#445469");
+    doc.fillColor("#fff").font("Helvetica-Bold").fontSize(8);
+    let x = 40;
+    headers.forEach((header, i) => {
+      doc.text(header, x, y + 4, { width: widths[i] - 8 });
+      x += widths[i];
+    });
+    y += 16;
+  };
+  paintHead();
+  const lines = result.lines.filter((line) => line.weight > 0);
+  lines.forEach((line, index) => {
+    if (y > 760) {
+      doc.addPage();
+      y = 36;
+      paintHead();
+    }
+    const rowH = 16;
+    if (index % 2 === 0) doc.rect(36, y, tableW, rowH).fill("#f4f7fb");
+    const score = line.average ? `${Math.round(line.average * 10) / 10} / 5` : "-";
+    const weight = `${Math.round(line.weight * 1000) / 10}%`;
+    const weighted = line.weighted ? String(Math.round(line.weighted * 1000) / 10) : "-";
+    const cells = [ascii(line.parameter).slice(0, 72), weight, score, weighted];
+    doc.fillColor("#111").font("Helvetica").fontSize(8);
+    let x = 40;
+    cells.forEach((cell, i) => {
+      doc.text(cell, x, y + 4, { width: widths[i] - 8 });
+      x += widths[i];
+    });
+    y += rowH;
+  });
+  y += 14;
+  doc.fillColor("#111").font("Helvetica-Bold").fontSize(10);
+  doc.text(`Overall Score: ${result.percent}%`, 36, y, { width: 180 });
+  doc.text(`Grade: ${result.grade || "-"}`, 230, y, { width: 120 });
+  doc.text(`Decision: ${result.decision || "-"}`, 360, y, { width: 180 });
+  y += 16;
+  doc.font("Helvetica").fontSize(9).text(result.knockout ? "Knock-out: Yes" : "Knock-out: No", 36, y);
   doc.end();
   return done;
 }

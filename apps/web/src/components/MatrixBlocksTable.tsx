@@ -24,13 +24,16 @@ type Props = {
 /** BPCL Communication Matrix_BPCL (2).xlsx column widths, A–I. */
 const SHEET_WIDTHS = [10.8, 27.1, 27.8, 23.3, 24.3, 25.3, 37.7, 31, 30.3];
 const SHEET_TOTAL = SHEET_WIDTHS.reduce((a, b) => a + b, 0);
-const HEADERS = ["SR.NO", "NAME", "DESIGNATION", "NAME OF COMPANY", "SINGLE POINT OF CONTACT", "MOBILE", "E-MAIL", "GENERAL MAIL COMMUNICATION", "OFFICE ADD."];
+const HEADERS = ["Sr. No", "Name", "Designation", "Name of Company", "Single Point of Contact", "Mobile", "E-Mail", "General Mail Communication", "Office Address"];
 const GRID = "border border-[#445469]";
 const CELL = `${GRID} px-2 py-2 align-middle font-semibold text-[13px] text-[#111]`;
 
 /** Sheet-style BPCL matrix: one lettered row per company; company, SPOC and office address merged down that company's people. */
 export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditPerson, onDeleteRow, onEditCompany, onAddPerson, onDeleteCompany, onClearPeople, emptyText }: Props) {
-  const blocks = useMemo(() => buildMatrixBlocks(contacts as (MatrixContact & { id: string })[], { keepEmpty: true }), [contacts]);
+  const blocks = useMemo(
+    () => buildMatrixBlocks(contacts as (MatrixContact & { id: string })[], { keepEmpty: false }).filter((block) => block.people.length > 0),
+    [contacts],
+  );
   const people = blocks.reduce((n, b) => n + b.people.length, 0);
   const width = HEADERS.length + (canEdit ? 1 : 0);
 
@@ -47,7 +50,7 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
           ) : null}
         </span>
       </div>
-      <table className="w-full min-w-[1180px] table-fixed border-collapse bg-white" style={{ fontFamily: "Calibri, 'Segoe UI', system-ui, sans-serif" }}>
+      <table className="w-full min-w-[1180px] table-fixed border-collapse bg-white" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
         <colgroup>
           {SHEET_WIDTHS.map((w, i) => (
             <col key={i} style={{ width: `${((w / SHEET_TOTAL) * (canEdit ? 88 : 100)).toFixed(2)}%` }} />
@@ -57,8 +60,8 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
         <thead>
           <tr>
             {HEADERS.map((h) => (
-              <th key={h} className={`${GRID} bg-[#445469] px-2 py-3 text-center text-[12px] font-bold uppercase leading-tight text-white`}>
-                {h}
+              <th key={h} className={`${GRID} bg-[#445469] px-2 py-3 text-center text-[12px] font-bold leading-tight text-white`}>
+                {formatUiText(h)}
               </th>
             ))}
             {canEdit ? <th className="border border-line bg-sand px-2 py-3 text-[11px] font-semibold text-steel-muted">Actions</th> : null}
@@ -76,7 +79,7 @@ export function MatrixBlocksTable({ contacts, matrixKind, canEdit, busy, onEditP
             <tbody key={block.key}>
               <tr className="bg-[#e8eef8]">
                 <td className={`${CELL} text-center`}>{block.letter}</td>
-                <td className={`${CELL} uppercase`} colSpan={HEADERS.length - 1} data-preserve-case>
+                <td className={CELL} colSpan={HEADERS.length - 1} data-preserve-case>
                   {block.company}
                 </td>
                 {canEdit ? (

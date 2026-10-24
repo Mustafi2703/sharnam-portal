@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { Badge, Button, Card, Input, PageHeader } from "../../components/ui";
@@ -174,7 +174,7 @@ export default function LiveProjectSetupPage() {
       <PageHeader
         eyebrow="Live project"
         title={summary ? `Set up ${summary.project.code}` : "Project setup"}
-        subtitle="Fill the header, tick packages, pick client / consultants / vendors, assign SPDC staff from HRMS, then launch when ready."
+        subtitle={undefined}
       />
       <StatusNote msg={msg} />
       {status && (
@@ -192,17 +192,9 @@ export default function LiveProjectSetupPage() {
         <Card className="!p-4 space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-sm">Project · design · PMC header</h3>
-              <p className="text-xs text-steel-muted mt-0.5">
-                These names print at the top of QAP, cube, and quality registers. Keep them short and complete.
-              </p>
+              <h3 className="font-semibold text-sm">Project · Design · PMC Header</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link to={`/projects/${projectId}`}>
-                <Button type="button" variant="secondary">
-                  Open project desk
-                </Button>
-              </Link>
               <ProjectManageActions project={card} token={token} showEdit={false} onChanged={() => void load()} />
             </div>
           </div>

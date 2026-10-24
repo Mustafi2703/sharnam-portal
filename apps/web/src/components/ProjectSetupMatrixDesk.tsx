@@ -460,7 +460,7 @@ export function ProjectSetupMatrixDesk({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <img src="/logo-transparent.png" alt="SPDC" className="h-12 w-auto object-contain" />
           <div className="text-center flex-1 min-w-[180px]">
-            <div className="font-display text-lg text-ink uppercase tracking-wide">{matrixKind} Communication Matrix</div>
+            <div className="font-display text-lg text-ink">{formatUiText(`${matrixKind} Communication Matrix`)}</div>
             <div className="text-xs text-steel-muted mt-1">
               <span data-preserve-case>{matrixSubtitle(project)}</span>
             </div>

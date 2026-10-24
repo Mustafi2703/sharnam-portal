@@ -619,7 +619,7 @@ function ncrHtmlShell(
   logoUrl: string,
   bodyRows: [string, string][],
   status: string,
-  meta?: { projectName?: string; clientName?: string; docNo?: string },
+  meta?: { projectName?: string; clientName?: string; docNo?: string; partyLogoUrl?: string; partyName?: string },
   signs?: NcrSign[]
 ) {
   const signHtml = signs?.length
@@ -641,8 +641,13 @@ function ncrHtmlShell(
         `<tr><th style="text-align:left;padding:8px;border:1px solid #ccc;background:#f2f2f2;width:34%">${escapeHtml(k)}</th><td style="padding:8px;border:1px solid #ccc;white-space:pre-wrap">${escapeHtml(v)}</td></tr>`
     )
     .join("");
+  const partyLogo = meta?.partyLogoUrl
+    ? `<div style="margin-left:auto;text-align:right"><img src="${escapeHtml(meta.partyLogoUrl)}" alt="${escapeHtml(meta.partyName || "Contractor")}" height="52" style="max-width:140px;object-fit:contain;background:#fff;padding:4px"/><div style="font-size:10px;color:#334155;margin-top:4px">${escapeHtml(meta.partyName || "Contractor")}</div></div>`
+    : meta?.partyName
+      ? `<div style="margin-left:auto;border:1px solid #1e3a5f;padding:8px 12px;min-width:120px;text-align:center"><div style="font-size:10px;letter-spacing:.04em;color:#1e3a5f">Contractor</div><div style="font-size:13px;font-weight:700;color:#1e3a5f;margin-top:4px">${escapeHtml(meta.partyName)}</div></div>`
+      : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escapeHtml(title)}</title>
-<style>@media print{body{margin:12mm}.no-print{display:none}} body{font-family:"Segoe UI",system-ui,sans-serif;color:#1a1a1a;padding:28px;max-width:920px;margin:0 auto}
+<style>@media print{body{margin:12mm}.no-print{display:none}} body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;padding:28px;max-width:920px;margin:0 auto}
 .band{background:#1e3a5f;color:#fff;padding:10px 14px;font-size:11px;letter-spacing:.04em;margin:-28px -28px 18px}
 .header{display:flex;align-items:flex-start;gap:16px;border-bottom:3px solid #1e3a5f;padding-bottom:14px;margin-bottom:18px}
 .meta{font-size:12px;color:#334155;line-height:1.45;margin-top:6px}
@@ -651,11 +656,11 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{width:32%;background:#eef2f7;color:#1e3a5f;font-weight:600}
 .foot{margin-top:28px;padding-top:12px;border-top:1px solid #cbd5e1;font-size:10px;color:#64748b}</style></head><body>
 <div class="band">शरणम् · ${escapeHtml(SPDC_PMC_NAME)} · Doc ${docNo}</div>
-<div class="header"><img src="${escapeHtml(logoUrl)}" alt="Sharnam" height="52"/><div>
+<div class="header"><img src="${escapeHtml(logoUrl)}" alt="Sharnam" height="52"/><div style="flex:1">
 <h1 style="margin:0;font-size:20px;color:#1e3a5f">${escapeHtml(title)}</h1>
 <div class="meta">${projectLine ? `<div><strong>Project:</strong> ${projectLine}</div>` : ""}${clientLine ? `<div><strong>Client:</strong> ${clientLine}</div>` : ""}<div><strong>PMC:</strong> ${escapeHtml(SPDC_PMC_NAME)}</div></div>
 <span class="badge" style="margin-top:8px">${escapeHtml(status)}</span>
-</div></div>
+</div>${partyLogo}</div>
 <table>${rows}</table>
 ${signHtml}
 <p class="foot">${escapeHtml(SPDC_OFFICE_FOOTER)} · Branded NCR 01 from Sharnam portal · Print → Save as PDF</p>
@@ -666,7 +671,8 @@ export function buildQualityNcrHtml(
   row: Parameters<typeof buildQualityNcrXlsxBuffer>[0],
   project?: Parameters<typeof buildQualityNcrXlsxBuffer>[1],
   logoUrl = "/logo-transparent.png",
-  signs?: NcrSign[]
+  signs?: NcrSign[],
+  party?: { logoUrl?: string | null; name?: string | null }
 ) {
   const f = parseQualityFormData(row.formDataJson);
   const pairs: [string, string][] = [
@@ -702,6 +708,8 @@ export function buildQualityNcrHtml(
       projectName: f.projectName || project?.name || project?.code || "",
       clientName: project?.clientName || "",
       docNo: isCar ? "SPDC/QA/CAR-01" : "SPDC/QA/NCR-01",
+      partyLogoUrl: party?.logoUrl || "",
+      partyName: party?.name || row.contractor || "",
     },
     signs,
   );
@@ -740,7 +748,12 @@ type QualityNcrRow = Parameters<typeof buildQualityNcrXlsxBuffer>[0];
 type QualityNcrProject = Parameters<typeof buildQualityNcrXlsxBuffer>[1];
 
 /** Branded A4 PDF for Quality NCR / CAR (SPDC NCR 01). */
-export async function buildQualityNcrPdf(row: QualityNcrRow, project?: QualityNcrProject, signs?: NcrSign[]): Promise<Buffer> {
+export async function buildQualityNcrPdf(
+  row: QualityNcrRow,
+  project?: QualityNcrProject,
+  signs?: NcrSign[],
+  party?: { logoPath?: string | null; name?: string | null }
+): Promise<Buffer> {
   const f = parseQualityFormData(row.formDataJson);
   const isCar = /^CAR/i.test(row.number || "");
   const title = isCar ? "Corrective Action Request (NCR 01)" : "Non-Conformance Report (NCR 01)";
@@ -774,6 +787,8 @@ export async function buildQualityNcrPdf(row: QualityNcrRow, project?: QualityNc
     status: row.status || "Open",
     pairs,
     signs,
+    partyLogoPath: party?.logoPath || null,
+    partyName: party?.name || row.contractor || "",
   });
 }
 
@@ -812,6 +827,8 @@ async function renderNcrPdf(opts: {
   status: string;
   pairs: [string, string][];
   signs?: NcrSign[];
+  partyLogoPath?: string | null;
+  partyName?: string | null;
 }): Promise<Buffer> {
   const PDFDocument = (await import("pdfkit")).default;
   return new Promise((resolve, reject) => {
@@ -834,15 +851,30 @@ async function renderNcrPdf(opts: {
     const logo = sharnamLogoPath();
     if (logo) {
       try {
-        doc.image(logo, 48, y, { fit: [120, 40] });
+        doc.image(logo, 48, y, { fit: [110, 40] });
       } catch {
         /* optional */
       }
     }
+    const partyName = String(opts.partyName || "").trim();
+    if (opts.partyLogoPath) {
+      try {
+        doc.image(opts.partyLogoPath, pageW - 168, y, { fit: [110, 40] });
+      } catch {
+        /* optional */
+      }
+    } else if (partyName) {
+      doc.rect(pageW - 188, y, 140, 42).strokeColor("#1e3a5f").lineWidth(0.8).stroke();
+      doc.fillColor("#1e3a5f").font("Helvetica").fontSize(8).text("Contractor", pageW - 180, y + 6, { width: 124, align: "center" });
+      doc.font("Helvetica-Bold").fontSize(9).text(partyName, pageW - 180, y + 18, { width: 124, align: "center" });
+    }
     doc.fillColor("#1e3a5f").font("Helvetica-Bold").fontSize(14);
-    doc.text(opts.title, 180, y + 4, { width: pageW - 228 });
+    doc.text(opts.title, 170, y + 4, { width: pageW - 360 });
     doc.font("Helvetica").fontSize(10).fillColor("#334155");
-    doc.text(`Status: ${opts.status}`, 180, y + 24, { width: pageW - 228 });
+    doc.text(`Status: ${opts.status}`, 170, y + 24, { width: pageW - 360 });
+    if (partyName && opts.partyLogoPath) {
+      doc.font("Helvetica").fontSize(8).fillColor("#334155").text(partyName, pageW - 188, y + 44, { width: 140, align: "right" });
+    }
     y = 110;
     doc.moveTo(48, y).lineTo(pageW - 48, y).strokeColor("#1e3a5f").lineWidth(2).stroke();
     y += 14;

@@ -1027,6 +1027,7 @@ function ClientLogoUpload({
       <Button type="button" variant="secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
         {busy ? "Uploading…" : logoUrl ? "Replace Client Logo" : "Upload Client Logo On The Project Card"}
       </Button>
+      <span className="text-[11px] text-steel-muted">{uiCopy("PNG or JPG, up to 2 MB")}</span>
       {err ? <span className="text-[11px] text-danger">{err}</span> : null}
     </div>
   );

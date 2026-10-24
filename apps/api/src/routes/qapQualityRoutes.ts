@@ -2,8 +2,33 @@
  * QAP plan lines, role map, IR list and re-offer. Mounted on the checklist router.
  */
 import type { Router } from "express";
+import multer from "multer";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRoles, type AuthedRequest } from "../auth.js";
+import { mockOneDrive } from "../services/mockOneDrive.js";
+
+const qapDocUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+type QapDoc = { url: string; sharePointUrl?: string | null; name: string; uploadedAt: string; uploadedBy?: string | null };
+
+function parseQapDocs(raw: string | null | undefined): QapDoc[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x) => x && typeof x === "object" && x.url)
+      .map((x) => ({
+        url: String(x.url),
+        sharePointUrl: x.sharePointUrl ? String(x.sharePointUrl) : null,
+        name: String(x.name || "file"),
+        uploadedAt: String(x.uploadedAt || ""),
+        uploadedBy: x.uploadedBy ? String(x.uploadedBy) : null,
+      }));
+  } catch {
+    return [];
+  }
+}
 import { listQapLines, qpiForRange, refreshQapWeek, weekRange } from "../services/qapQuality.js";
 import { createReoffer } from "../services/qapIrFlow.js";
 import { rowIsHeader } from "../services/qapQuality.js";
@@ -262,4 +287,46 @@ export function mountQapQuality(router: Router) {
       qpi: qpiWeeks,
     });
   });
+
+  router.get("/project/:projectId/qap/line/:lineId/documents", requireAuth, async (req: AuthedRequest, res) => {
+    const line = await prisma.qapLine.findFirst({
+      where: { id: req.params.lineId, projectId: req.params.projectId },
+      select: { id: true, documentsJson: true },
+    });
+    if (!line) return res.status(404).json({ error: "QAP line not found" });
+    res.json({ documents: parseQapDocs(line.documentsJson) });
+  });
+
+  router.post(
+    "/project/:projectId/qap/line/:lineId/documents",
+    requireRoles(...SPDC),
+    qapDocUpload.array("files", 12),
+    async (req: AuthedRequest, res) => {
+      const line = await prisma.qapLine.findFirst({
+        where: { id: req.params.lineId, projectId: req.params.projectId },
+      });
+      if (!line) return res.status(404).json({ error: "QAP line not found" });
+      const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { code: true } });
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      const files = ((req as AuthedRequest & { files?: Express.Multer.File[] }).files || []) as Express.Multer.File[];
+      if (!files.length) return res.status(400).json({ error: "Choose at least one document." });
+      const existing = parseQapDocs(line.documentsJson);
+      const added: QapDoc[] = [];
+      const folder = `08_QUALITY_HSE_AND_ENVIRONMENT/QAP_Line_Documents/${String(line.srNo || line.id).replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40)}`;
+      for (const f of files.slice(0, 12)) {
+        const safe = f.originalname.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
+        const saved = await mockOneDrive.upload(project.code, folder, `${Date.now()}-${safe}`, f.buffer, f.mimetype || "application/octet-stream");
+        added.push({
+          url: saved.url,
+          sharePointUrl: saved.sharePointUrl || null,
+          name: f.originalname,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: req.user!.fullName || null,
+        });
+      }
+      const documents = [...existing, ...added].slice(-40);
+      await prisma.qapLine.update({ where: { id: line.id }, data: { documentsJson: JSON.stringify(documents) } });
+      res.status(201).json({ documents, added });
+    },
+  );
 }

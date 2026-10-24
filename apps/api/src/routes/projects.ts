@@ -1558,6 +1558,7 @@ projectsRouter.post(
   upload.single("file"),
   async (req: AuthedRequest, res) => {
     if (!req.file?.buffer) return res.status(400).json({ error: "Image file required (PNG/JPG)" });
+    if (req.file.size > 2 * 1024 * 1024) return res.status(400).json({ error: "Logo must be 2 MB or smaller. Use PNG or JPG." });
     const { invalidateClientLogo, sniffLogoExt } = await import("../services/clientLogo.js");
     const kind = sniffLogoExt(req.file.buffer);
     if (!kind) return res.status(400).json({ error: "Upload a PNG or JPG logo." });

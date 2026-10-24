@@ -49,6 +49,22 @@ export async function downloadAuthFile(path: string, token: string | null, filen
   URL.revokeObjectURL(url);
 }
 
+/** Open an authenticated PDF or HTML file in a new tab. */
+export async function openAuthPreview(path: string, token: string | null) {
+  installDownloadNotice();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new DownloadError(text || `Preview failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export type ExportModule =
   | "rfis"
   | "comms"

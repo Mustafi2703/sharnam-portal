@@ -2,7 +2,7 @@
  * Photos + site-instruction docs on Quality/Safety IRs → SharePoint Evidence folder,
  * and optional log into Site Observation / Site Instruction registers.
  */
-import { enclosureFileName } from "@sharnam/shared";
+import { enclosureFileName, QUALITY_DECLARATIONS, truthyFlag } from "@sharnam/shared";
 import { prisma } from "../prisma.js";
 import { mockOneDrive } from "./mockOneDrive.js";
 import { MODULE_TO_ISO_FOLDER } from "./graph.js";
@@ -16,6 +16,8 @@ export type IrAttachment = {
   uploadedBy?: string | null;
   recordKey?: string | null;
   recordLabel?: string | null;
+  /** open = pre-inspection / site instruction, close = close-out / site observation */
+  phase?: "open" | "close" | null;
 };
 
 const IR_KINDS = new Set(["QualityIR", "SafetyIR", "ActivityInspection", "QualityInspection", "SafetyChecklist"]);
@@ -40,6 +42,7 @@ export function parseIrAttachments(raw: string | null | undefined): IrAttachment
         uploadedBy: x.uploadedBy ? String(x.uploadedBy) : null,
         recordKey: x.recordKey ? String(x.recordKey) : null,
         recordLabel: x.recordLabel ? String(x.recordLabel) : null,
+        phase: x.phase === "close" ? "close" : x.phase === "open" ? "open" : null,
       }));
   } catch {
     return [];
@@ -60,6 +63,7 @@ export async function addIrAttachments(opts: {
   kindHint?: "photo" | "doc" | "site_instruction";
   recordLabel?: string;
   recordKey?: string;
+  phase?: "open" | "close";
 }) {
   const rfi = await prisma.rfi.findUnique({ where: { id: opts.rfiId } });
   if (!rfi) throw new Error("Inspection request not found");
@@ -98,6 +102,7 @@ export async function addIrAttachments(opts: {
       uploadedBy: opts.userName || null,
       recordKey: opts.recordKey || null,
       recordLabel: opts.recordLabel || null,
+      phase: opts.phase || (kind === "photo" ? "open" : null),
     });
     if (kind === "photo") {
       const day = new Date().toISOString().slice(0, 10);
@@ -233,4 +238,124 @@ export async function logIrToSiteRegister(opts: {
     },
   });
   return { register: "quality", record: row };
+}
+
+function photoJson(att: IrAttachment[], phase: "open" | "close") {
+  const rows = att.filter((a) => a.kind === "photo" && (a.phase === phase || (phase === "open" && !a.phase)));
+  return JSON.stringify(rows.slice(-12).map((a) => ({ url: a.url, sharePointUrl: a.sharePointUrl, name: a.name })));
+}
+
+async function upsertQualityNote(opts: {
+  projectId: string;
+  recordType: "Site Observation" | "Site Instruction";
+  source: string;
+  title: string;
+  description: string;
+  location: string;
+  userId: string;
+  issuedTo: string | null;
+  photosJson: string;
+}) {
+  const existing = await prisma.qualitySiteRecord.findFirst({
+    where: { projectId: opts.projectId, recordType: opts.recordType, source: opts.source },
+  });
+  if (existing) {
+    return prisma.qualitySiteRecord.update({
+      where: { id: existing.id },
+      data: {
+        title: opts.title,
+        description: opts.description,
+        location: opts.location || existing.location,
+        photosJson: opts.photosJson,
+        issuedTo: opts.issuedTo || existing.issuedTo,
+      },
+    });
+  }
+  return prisma.qualitySiteRecord.create({
+    data: {
+      projectId: opts.projectId,
+      recordType: opts.recordType,
+      title: opts.title,
+      description: opts.description,
+      location: opts.location || null,
+      severity: "Medium",
+      status: "Open",
+      issuedTo: opts.issuedTo,
+      reportedById: opts.userId,
+      source: opts.source,
+      photosJson: opts.photosJson,
+    },
+  });
+}
+
+/** Section 3 declaration → site instruction. Section 5 close-out → site observation. */
+export async function syncQualityIrNotes(rfiId: string, userId: string) {
+  const rfi = await prisma.rfi.findUnique({
+    where: { id: rfiId },
+    include: { assignedTo: { select: { fullName: true } } },
+  });
+  if (!rfi || rfi.rfiKind !== "QualityIR") return;
+  let form: Record<string, unknown> = {};
+  try {
+    form = rfi.formDataJson ? JSON.parse(rfi.formDataJson) : {};
+  } catch {
+    form = {};
+  }
+  const att = parseIrAttachments(rfi.attachmentsJson);
+  const bits = formBits(rfi);
+  const ref = rfi.irNumber || rfi.number;
+  const checked = QUALITY_DECLARATIONS.filter((d) => truthyFlag(form[d.key]));
+  if (checked.length) {
+    const description = [
+      `Linked IR: ${ref}`,
+      "Contractor pre-inspection declaration:",
+      ...checked.map((d) => d.text),
+      form.elementOrLot ? `Element or lot: ${form.elementOrLot}` : "",
+      form.source ? `Source: ${form.source}` : "",
+      form.raisedBy ? `Raised by: ${form.raisedBy}` : "",
+      form.verifiedBy ? `Verified by: ${form.verifiedBy}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 4000);
+    await upsertQualityNote({
+      projectId: rfi.projectId,
+      recordType: "Site Instruction",
+      source: `IR:${rfi.number}:pre-inspection`,
+      title: `Pre-inspection declaration — ${ref}`.slice(0, 200),
+      description,
+      location: bits.location,
+      userId,
+      issuedTo: rfi.assignedTo?.fullName || null,
+      photosJson: photoJson(att, "open"),
+    });
+  }
+  const actionTaken = String(form.actionTaken || "").trim();
+  const closedBy = String(form.closedBy || "").trim();
+  const observations = String(form.observations || "").trim();
+  if (actionTaken || closedBy || observations) {
+    const description = [
+      `Linked IR: ${ref}`,
+      "Close-out of observations / re-inspection:",
+      observations ? `Observations: ${observations}` : "",
+      actionTaken ? `Action taken: ${actionTaken}` : "",
+      closedBy ? `Closed by: ${closedBy}` : "",
+      form.closedAt ? `Closed at: ${form.closedAt}` : "",
+      form.reinspectionBy ? `Re-inspection by: ${form.reinspectionBy}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 4000);
+    await upsertQualityNote({
+      projectId: rfi.projectId,
+      recordType: "Site Observation",
+      source: `IR:${rfi.number}:close-out`,
+      title: `Close-out — ${ref}`.slice(0, 200),
+      description,
+      location: bits.location,
+      userId,
+      issuedTo: rfi.assignedTo?.fullName || null,
+      photosJson: photoJson(att, "close"),
+    });
+  }
 }

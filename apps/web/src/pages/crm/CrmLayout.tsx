@@ -49,7 +49,7 @@ export default function CrmLayout() {
     document.querySelectorAll(".app-frame__scroll").forEach((node) => {
       node.scrollTop = 0;
     });
-  }, [loc.pathname]);
+  }, [loc.pathname, loc.search]);
 
   const onBidDetail = /\/crm\/bids\/[^/]+/.test(loc.pathname);
   const onProposalEdit = /\/crm\/proposals\/(new|[^/]+)/.test(loc.pathname);

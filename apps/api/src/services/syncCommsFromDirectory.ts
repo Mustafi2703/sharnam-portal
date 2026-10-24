@@ -238,11 +238,10 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
             const generic = ["", "member", "team member", "site engineer", "quality lead", "viewer", "project manager"].includes(current);
             if (generic && current !== person.designation.trim().toLowerCase()) patch.designation = person.designation;
           }
-          const seededMobiles = new Set(["8160757201", "9106945294", "+919876543210", "9876543210"]);
           const digits = (value: string) => value.replace(/[^\d]/g, "");
           const rowDigits = digits(row.mobile || "");
           const nextDigits = digits(person.mobile || "");
-          if (nextDigits && rowDigits !== nextDigits && (!rowDigits || seededMobiles.has(rowDigits))) {
+          if (nextDigits && rowDigits !== nextDigits) {
             patch.mobile = person.mobile;
           }
           const companyNow = (row.company || "").trim().toLowerCase();
@@ -280,6 +279,17 @@ export async function syncCommsContactsFromDirectory(projectId: string): Promise
       result.created += 1;
       if (kind === "TECHNICAL") result.technical += 1;
       else result.commercial += 1;
+    }
+
+    for (const header of existing.filter((r) => r.isSectionHeader)) {
+      const sectionWord = String(header.orgSection || "").trim().toLowerCase();
+      const headerName = String(header.orgName || "").trim().toLowerCase();
+      if (headerName && headerName !== sectionWord) continue;
+      const real = uniquePeople.find(
+        (p) => p.orgSection === header.orgSection && p.company && p.company.trim().toLowerCase() !== sectionWord,
+      );
+      if (!real) continue;
+      await prisma.communicationContact.update({ where: { id: header.id }, data: { orgName: real.company } });
     }
 
     const companies = new Map<string, { orgSection: OrgSection; company: string; officeAddress: string }>();

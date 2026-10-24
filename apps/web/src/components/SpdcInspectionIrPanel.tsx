@@ -33,6 +33,7 @@ type IrAttachment = {
   uploadedAt?: string;
   recordKey?: string | null;
   recordLabel?: string | null;
+  phase?: "open" | "close" | null;
 };
 
 type ChecklistAssignmentOpt = {
@@ -338,6 +339,7 @@ export function SpdcInspectionIrPanel({
     files: FileList | File[],
     kind: "photo" | "doc" | "site_instruction",
     record?: { recordKey: string; recordLabel: string },
+    phase?: "open" | "close",
   ) {
     const list = Array.from(files).slice(0, 8);
     if (!list.length) return;
@@ -348,6 +350,7 @@ export function SpdcInspectionIrPanel({
       fd.append("kind", kind);
       if (record?.recordKey) fd.append("recordKey", record.recordKey);
       if (record?.recordLabel) fd.append("recordLabel", record.recordLabel);
+      if (phase) fd.append("phase", phase);
       for (const f of list) {
         fd.append(kind === "photo" ? "photos" : kind === "site_instruction" ? "site_instruction" : "docs", f);
       }
@@ -687,7 +690,7 @@ export function SpdcInspectionIrPanel({
                     setQualityMsg("");
                     try {
                       await api(`/api/rfis/${rfi.id}`, { method: "PATCH", token, body: JSON.stringify({ formPatch: contractorPatch() }) });
-                      setQualityMsg("Declaration saved.");
+                      setQualityMsg("Declaration saved on the site instruction register for this inspection.");
                       await onUpdated?.();
                     } catch (err) {
                       setQualityMsg(err instanceof Error ? err.message : "Could not save the declaration");
@@ -727,6 +730,28 @@ export function SpdcInspectionIrPanel({
                 ) : null}
               </div>
             ) : null}
+            {canAttach ? (
+              <FilePickButton
+                accept="image/*"
+                multiple
+                disabled={attachBusy}
+                onPick={(files) => void uploadFiles(files, "photo", undefined, "open")}
+              >
+                {attachBusy ? "Uploading…" : "Upload Open Photos"}
+              </FilePickButton>
+            ) : null}
+            {attachments.some((a) => a.kind === "photo" && a.phase !== "close") ? (
+              <ul className="flex flex-wrap gap-2">
+                {attachments
+                  .filter((a) => a.kind === "photo" && a.phase !== "close")
+                  .map((a) => (
+                    <li key={a.url}>
+                      <img src={mediaUrl(a.url)} alt={a.name} className="h-14 w-14 object-cover rounded border border-line" />
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+            <p className="text-[11px] text-steel-muted">These declaration points are filed on the site instruction register for this inspection.</p>
           </div>
 
           <div className="rounded-lg border border-line bg-white p-4 space-y-3">
@@ -913,7 +938,7 @@ export function SpdcInspectionIrPanel({
                     setQualityMsg("");
                     try {
                       await api(`/api/rfis/${rfi.id}`, { method: "PATCH", token, body: JSON.stringify({ formPatch: { actionTaken: sec3.actionTaken } }) });
-                      setQualityMsg("Action taken saved.");
+                      setQualityMsg("Action taken saved on the site observation register.");
                       await onUpdated?.();
                     } catch (err) {
                       setQualityMsg(err instanceof Error ? err.message : "Could not save action taken");
@@ -931,6 +956,10 @@ export function SpdcInspectionIrPanel({
                   className="!text-xs"
                   disabled={secBusy || !closedBy.trim()}
                   onClick={async () => {
+                    if (activeAssignmentId && fillStatus && fillStatus !== "Submitted") {
+                      setQualityMsg("Fill and submit the linked checklist before this inspection can be closed.");
+                      return;
+                    }
                     setSecBusy(true);
                     setQualityMsg("");
                     try {
@@ -939,7 +968,7 @@ export function SpdcInspectionIrPanel({
                         token,
                         body: JSON.stringify({ formPatch: { closedBy: closedBy.trim(), closedAt: new Date().toISOString() } }),
                       });
-                      setQualityMsg("Close-out saved.");
+                      setQualityMsg("Close-out saved on the site observation register.");
                       await onUpdated?.();
                     } catch (err) {
                       setQualityMsg(err instanceof Error ? err.message : "Could not save close-out");
@@ -952,6 +981,30 @@ export function SpdcInspectionIrPanel({
                 </Button>
               ) : null}
             </div>
+            {canAttach ? (
+              <FilePickButton
+                accept="image/*"
+                multiple
+                disabled={attachBusy}
+                onPick={(files) => void uploadFiles(files, "photo", undefined, "close")}
+              >
+                {attachBusy ? "Uploading…" : "Upload Close Photos"}
+              </FilePickButton>
+            ) : null}
+            {attachments.some((a) => a.kind === "photo" && a.phase === "close") ? (
+              <ul className="flex flex-wrap gap-2">
+                {attachments
+                  .filter((a) => a.kind === "photo" && a.phase === "close")
+                  .map((a) => (
+                    <li key={a.url}>
+                      <img src={mediaUrl(a.url)} alt={a.name} className="h-14 w-14 object-cover rounded border border-line" />
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+            <p className="text-[11px] text-steel-muted">
+              Close-out points are filed on the site observation register. The linked checklist must be submitted before this inspection can be closed.
+            </p>
             <div className="text-xs text-steel">
               <div className="font-semibold mb-1">Site instructions for this activity</div>
               {siteInstructions && siteInstructions.length ? (

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { Badge, Button, Card, PageHeader } from "../../components/ui";
-import { downloadAuthFile } from "../../lib/downloadReport";
+import { Badge, Button, Card, PageHeader, Select } from "../../components/ui";
+import { downloadAuthFile, openAuthPreview } from "../../lib/downloadReport";
 import { openNcrFormWindow } from "../../lib/ncrFormFields";
 import { StatusNote } from "../../components/StatusNote";
 
@@ -34,6 +34,9 @@ export default function NcrFillLogPage() {
   const [busy, setBusy] = useState(true);
   const [msg, setMsg] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
+  const [matrixContacts, setMatrixContacts] = useState<
+    { id: string; personName?: string | null; designation?: string | null; company?: string | null; orgName?: string | null; orgSection?: string | null; email?: string | null }[]
+  >([]);
   const canFill = ["admin", "office", "site_employee", "employee", "vendor"].includes(user?.role || "");
   const canSyncAll = user?.role === "admin" || user?.role === "office";
 
@@ -53,6 +56,10 @@ export default function NcrFillLogPage() {
 
   useEffect(() => {
     void load();
+    if (!id) return;
+    api<typeof matrixContacts>(`/api/comms/contacts/${id}?kind=TECHNICAL`, { token })
+      .then((list) => setMatrixContacts((Array.isArray(list) ? list : []).filter((c) => c.personName || c.email)))
+      .catch(() => setMatrixContacts([]));
   }, [id, token]);
 
   useEffect(() => {
@@ -105,7 +112,7 @@ export default function NcrFillLogPage() {
       <PageHeader
         eyebrow="Quality · NCR 01"
         title="NCR / CAR fill log"
-        subtitle="NCR = Non-Conformance Report · CAR = Corrective Action Request. Fill from this log (like drawing checklists). Save drafts — they sync to SharePoint Drafts. Nightly job re-syncs all forms + register."
+        subtitle="The PMC raises an NCR when a non-conformance is found. The contractor selected from the communication matrix addresses it from this log."
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +160,44 @@ export default function NcrFillLogPage() {
                   <td>
                     <Badge tone={n.kind === "CAR" ? "brand" : "neutral"}>{n.kind}</Badge>
                   </td>
-                  <td className="text-xs">{n.contractor || "—"}</td>
+                  <td className="text-xs min-w-[12rem]">
+                    {canSyncAll && n.fillPhase !== "Closed" ? (
+                      <Select
+                        value={matrixContacts.find((c) => (c.company || c.orgName) === n.contractor)?.id || ""}
+                        onChange={(e) => {
+                          const contact = matrixContacts.find((c) => c.id === e.target.value);
+                          if (!contact || !id) return;
+                          const company = contact.company || contact.orgName || contact.personName || "";
+                          void api(`/api/checklist/project/${id}/ncr/${n.id}`, {
+                            method: "PATCH",
+                            token,
+                            body: JSON.stringify({
+                              contractor: company,
+                              formDataJson: {
+                                toParty: company,
+                                toName: contact.personName || "",
+                                toEmail: contact.email || "",
+                              },
+                            }),
+                          })
+                            .then(() => load())
+                            .catch((err) => setMsg(err instanceof Error ? err.message : "Could not assign the contractor"));
+                        }}
+                      >
+                        <option value="">{n.contractor || "Select contractor"}</option>
+                        {(matrixContacts.some((c) => /contractor/i.test(`${c.orgSection || ""} ${c.company || ""}`))
+                          ? matrixContacts.filter((c) => /contractor/i.test(`${c.orgSection || ""} ${c.company || ""} ${c.orgName || ""}`))
+                          : matrixContacts
+                        ).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {[c.personName, c.company || c.orgName].filter(Boolean).join(" · ")}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      n.contractor || "—"
+                    )}
+                  </td>
                   <td className="max-w-xs text-xs">{n.description}</td>
                   <td>
                     <div className="font-mono text-xs">{n.progress?.label || "—"}</div>
@@ -192,6 +236,19 @@ export default function NcrFillLogPage() {
                         {n.fillPhase === "Draft" ? "Resume fill" : n.fillPhase === "Closed" ? "View form" : "Open fill"}
                       </Button>
                     )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!text-xs !py-1.5 mr-1"
+                      onClick={() =>
+                        id &&
+                        void openAuthPreview(`/api/checklist/project/${id}/ncr/${n.id}/export.pdf`, token).catch((err) =>
+                          setMsg(err instanceof Error ? err.message : "Could not open the PDF"),
+                        )
+                      }
+                    >
+                      Preview PDF
+                    </Button>
                     <Button
                       type="button"
                       variant="secondary"

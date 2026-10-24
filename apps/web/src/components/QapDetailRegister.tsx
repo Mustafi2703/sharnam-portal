@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, Fragment } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
+import { api, mediaUrl } from "../api";
+import { FilePickButton } from "./FilePickButton";
 import {
   QAP_LEGENDS,
   qapStatusRowClass,
@@ -61,6 +62,8 @@ type QapRow = {
     qapLineId?: string | null;
   } | null;
 };
+
+type QapDoc = { url: string; sharePointUrl?: string | null; name: string; uploadedAt?: string; uploadedBy?: string | null };
 
 type QapRoleName = {
   roleLabel: string;
@@ -174,6 +177,9 @@ export function QapDetailRegister({
   const [irDrawer, setIrDrawer] = useState<{ lineId: string; title: string } | null>(null);
   const [irList, setIrList] = useState<LineIr[]>([]);
   const [irBusy, setIrBusy] = useState(false);
+  const [docsFor, setDocsFor] = useState<{ lineId: string; title: string } | null>(null);
+  const [docs, setDocs] = useState<QapDoc[]>([]);
+  const [docsBusy, setDocsBusy] = useState(false);
 
   useEffect(() => {
     if (initialStatus) setStatusFilter(initialStatus);
@@ -328,6 +334,46 @@ export function QapDetailRegister({
       setIrDrawer(null);
     } finally {
       setIrBusy(false);
+    }
+  }
+
+  async function openDocs(row: QapRow) {
+    const lineId = row.qapLineId || row.ir?.qapLineId;
+    if (!lineId) return;
+    setDocsFor({
+      lineId,
+      title: [row.section || row.activity, row.description].filter(Boolean).join(" — ") || "QAP line",
+    });
+    setDocsBusy(true);
+    setDocs([]);
+    try {
+      const out = await api<{ documents?: QapDoc[] }>(`/api/checklist/project/${projectId}/qap/line/${lineId}/documents`, { token });
+      setDocs(out.documents || []);
+    } catch (err) {
+      setPatchErr(err instanceof Error ? err.message : "Could not load documents");
+      setDocsFor(null);
+    } finally {
+      setDocsBusy(false);
+    }
+  }
+
+  async function uploadDocs(files: File[]) {
+    if (!docsFor || !files.length) return;
+    setDocsBusy(true);
+    setPatchErr("");
+    try {
+      const fd = new FormData();
+      for (const f of files.slice(0, 12)) fd.append("files", f);
+      const out = await api<{ documents?: QapDoc[] }>(`/api/checklist/project/${projectId}/qap/line/${docsFor.lineId}/documents`, {
+        method: "POST",
+        token,
+        body: fd,
+      });
+      setDocs(out.documents || []);
+    } catch (err) {
+      setPatchErr(err instanceof Error ? err.message : "Could not upload documents");
+    } finally {
+      setDocsBusy(false);
     }
   }
 
@@ -665,11 +711,21 @@ export function QapDetailRegister({
                                 {latest}
                               </Badge>
                               {lineId ? (
-                                <Link to={`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality&qapLineId=${lineId}`}>
-                                  <Button type="button" variant="secondary" className="!py-0.5 !px-1 !text-[9px]">
-                                    Raise IR
+                                <>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="!py-0.5 !px-1 !text-[9px]"
+                                    onClick={() => void openDocs(q)}
+                                  >
+                                    Documents
                                   </Button>
-                                </Link>
+                                  <Link to={`/projects/${projectId}/inspection-register?tab=quality-ir&lock=quality&qapLineId=${lineId}`}>
+                                    <Button type="button" variant="secondary" className="!py-0.5 !px-1 !text-[9px]">
+                                      Raise IR
+                                    </Button>
+                                  </Link>
+                                </>
                               ) : null}
                             </div>
                           )}
@@ -791,6 +847,47 @@ export function QapDetailRegister({
               ))}
             </div>
           </aside>
+        </div>
+      )}
+
+      {docsFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Activity documents">
+          <button type="button" className="absolute inset-0 bg-black/30" aria-label="Close" onClick={() => setDocsFor(null)} />
+          <div className="relative w-full max-w-lg bg-white border border-line rounded-xl shadow-xl flex flex-col max-h-[80vh]">
+            <div className="px-4 py-3 border-b border-line flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-ink">Activity Documents</div>
+                <div className="text-xs text-steel-muted truncate">{docsFor.title}</div>
+              </div>
+              <Button type="button" variant="secondary" className="!text-xs" onClick={() => setDocsFor(null)}>
+                Close
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {docsBusy ? <p className="text-sm text-steel-muted">Working…</p> : null}
+              {!docsBusy && !docs.length ? <p className="text-sm text-steel-muted">No documents on this activity yet.</p> : null}
+              <ul className="space-y-2">
+                {docs.map((d) => {
+                  const href = d.sharePointUrl || mediaUrl(d.url);
+                  return (
+                    <li key={d.url} className="flex items-center justify-between gap-2 text-sm border border-line rounded-lg px-3 py-2">
+                      <span className="truncate">{d.name}</span>
+                      {href ? (
+                        <a href={href} target="_blank" rel="noreferrer" className="text-brand font-semibold text-xs shrink-0">
+                          Open
+                        </a>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              {canEdit ? (
+                <FilePickButton accept=".pdf,.doc,.docx,.xlsx,.xls,.png,.jpg,.jpeg" multiple disabled={docsBusy} onPick={(files) => void uploadDocs(files)}>
+                  {docsBusy ? "Uploading…" : "Upload Documents"}
+                </FilePickButton>
+              ) : null}
+            </div>
+          </div>
         </div>
       )}
     </>

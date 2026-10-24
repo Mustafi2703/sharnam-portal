@@ -494,8 +494,8 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                 Close
               </Button>
             </div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
-              Quotation no
+            <label className="block text-xs font-semibold text-steel-muted">
+              Quotation No
               <Input
                 className="mt-1 font-mono"
                 value={createQuotationNo}
@@ -503,8 +503,8 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                 placeholder="SPDC/26-27/INQ/79"
               />
             </label>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
-              Client name
+            <label className="block text-xs font-semibold text-steel-muted">
+              Client Name
               <div className="mt-1 normal-case font-normal tracking-normal">
                 <ProposalPartySelect
                   token={token}
@@ -522,8 +522,8 @@ export function CrmProposalsRegister({ quotations, canWrite, onRefresh }: Props)
                 />
               </div>
             </label>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-steel-muted">
-              Reference by
+            <label className="block text-xs font-semibold text-steel-muted">
+              Reference By
               <Input
                 className="mt-1"
                 value={createReferenceBy}
